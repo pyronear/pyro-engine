@@ -46,7 +46,7 @@ setup(
     author='PyroNear Contributors',
     author_email='pyronear.d4g@gmail.com',
     maintainer='Pyronear',
-    description='Datasets and models for wildfire detection in PyTorch',
+    description='Pyronear Engine is a repository that aims to deploy pyronear',
     long_description=readme,
     long_description_content_type="text/markdown",
     url='https://github.com/pyronear//PyronearEngine',

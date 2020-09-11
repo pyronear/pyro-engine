@@ -34,7 +34,7 @@ class PyronearEngine:
         self.imgsFolder = imgsFolder
 
         # Model definition
-        self.model = torchvision.models.resnet18(pretrained=True)
+        self.model = torchvision.models.resnet18(pretrained=False)
 
         # Change fc
         in_features = getattr(self.model, 'fc').in_features
@@ -88,7 +88,7 @@ def sendAlert():
     port = 587  # For starttls
     smtp_server = "smtp.gmail.com"
     sender_email = "test.pyronear@gmail.com"  # Enter your address
-    receiver_email = "mateo.lostanlen@gmail.com"  # Enter receiver address
+    receiver_email = ""  # Enter receiver address
     # password = ""  # uncomment and add your password
     message = """\
     Subject: FIRE
