@@ -40,7 +40,7 @@ class PyronearEngine:
         in_features = getattr(self.model, 'fc').in_features
         setattr(self.model, 'fc', nn.Linear(in_features, 2))
 
-        self.model.load_state_dict(torch.load("model/model_resnet18.txt", map_location=torch.device('cpu')))
+        self.model.load_state_dict(torch.load("model/pyronear.pth", map_location=torch.device('cpu')))
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
