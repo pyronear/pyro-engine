@@ -1,0 +1,25 @@
+name: python-package
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+jobs:
+  flake8-py3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.6
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.6
+          architecture: x64
+      - name: Run flake8
+        run: |
+          pip install -r .github/workflows/requirements.txt
+          flake8 --version
+          flake8 ./
