@@ -25,7 +25,7 @@ class PyronearEngine:
     pyronearEngine = PyronearEngine()
     pyronearEngine.run(30)  # For a prediction every 30s
     """
-    def __init__(self, imgsFolder):
+    def __init__(self, imgsFolder, checkpointPath):
         # Camera
         self.camera = PiCamera()
         self.camera.rotation = 270
@@ -40,7 +40,7 @@ class PyronearEngine:
         in_features = getattr(self.model, 'fc').in_features
         setattr(self.model, 'fc', nn.Linear(in_features, 2))
 
-        self.model.load_state_dict(torch.load("model/pyronear.pth", map_location=torch.device('cpu')))
+        self.model.load_state_dict(torch.load(checkpointPath, map_location=torch.device('cpu')))
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
@@ -106,5 +106,5 @@ def sendAlert():
 
 if __name__ == "__main__":
 
-    pyronearEngine = PyronearEngine('DS')
+    pyronearEngine = PyronearEngine('DS', "model/pyronear.pth")
     pyronearEngine.run(5)  # For a prediction every 5s
