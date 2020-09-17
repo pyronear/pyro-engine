@@ -1,7 +1,7 @@
 import streamlit as st
 from PIL import Image
 import numpy as np
-from PyronearEngine.inference.pyronearPredict import PyronearPredictor
+from pyronearEngine.inference.pyronearPredict import PyronearPredictor
 
 pyronearPredictor = PyronearPredictor("model/pyronearModel.pth")
 
