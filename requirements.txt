@@ -1,3 +1,6 @@
+gpiozero>=1.5.1
+pandas>=0.25.2
+psutil
 PyYAML>=5.1.2
 torch>=1.2.0
 torchvision>=0.4.0
