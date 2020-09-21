@@ -59,10 +59,9 @@ class MonitorPiTester(unittest.TestCase):
     @patch('pyronearEngine.raspberryPi.monitorPi.psutil')
     def test_MonitorPi_update_logFile(self, mock_psutil):
         with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
-            with patch('pyronearEngine.raspberryPi.monitorPi.strftime') as mock_strftime:
-                mock_psutil.cpu_percent.return_value = 11
-                mock_psutil.virtual_memory().available = 99 * 1024 ** 3
-                self.get_test_record(self)
+            mock_psutil.cpu_percent.return_value = 11
+            mock_psutil.virtual_memory().available = 99 * 1024 ** 3
+            self.get_test_record(self)
 
         the_record = pd.read_csv(self.path_file)
 
