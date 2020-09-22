@@ -7,11 +7,7 @@
 from picamera import PiCamera
 from time import sleep
 import glob
-import torchvision
-import torch
-from torch import nn
 from PIL import Image
-from torchvision import transforms
 import smtplib
 import ssl
 
@@ -22,7 +18,7 @@ class PyronearEngine:
        not based on this image.
     Example
     -------
-    pyronearEngine = PyronearEngine()
+    pyronearEngine = PyronearEngine("model/pyronearModel.pth")
     pyronearEngine.run(30)  # For a prediction every 30s
     """
     def __init__(self, imgsFolder, checkpointPath):
@@ -33,20 +29,8 @@ class PyronearEngine:
         # Images Folder
         self.imgsFolder = imgsFolder
 
-        # Model definition
-        self.model = torchvision.models.resnet18(pretrained=False)
-
-        # Change fc
-        in_features = getattr(self.model, 'fc').in_features
-        setattr(self.model, 'fc', nn.Linear(in_features, 2))
-
-        self.model.load_state_dict(torch.load(checkpointPath, map_location=torch.device('cpu')))
-
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-        self.tf = transforms.Compose([transforms.Resize((224, 224)),
-                                      transforms.ToTensor(),
-                                      normalize])
+        # Pyronear Predictor
+        self.pyronearPredictor = PyronearPredictor(checkpointPath)
 
     def run(self, timeStep):
 
@@ -71,13 +55,9 @@ class PyronearEngine:
 
     def predict(self, imagePath):
         im = Image.open(imagePath)
-        imT = self.tf(im)
+        pred = self.pyronearPredictor(im)
 
-        self.model.eval()
-        with torch.no_grad():
-            pred = self.model(imT.unsqueeze(0))
-
-        if pred[0, 0] > pred[0, 1]:
+        if pred[0] > 0.5:
             return "no fire"
         else:
             sendAlert()
@@ -106,5 +86,5 @@ def sendAlert():
 
 if __name__ == "__main__":
 
-    pyronearEngine = PyronearEngine('DS', "model/pyronear.pth")
+    pyronearEngine = PyronearEngine('DS', "model/pyronearModel.pth")
     pyronearEngine.run(5)  # For a prediction every 5s
