@@ -5,4 +5,3 @@
 # See the LICENSE file in the root of this repository for complete details.
 
 from .version import __version__
-from pyronearEngine import inference

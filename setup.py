@@ -14,8 +14,8 @@ import subprocess
 from setuptools import setup, find_packages
 
 
-package_name = 'pyronearEngine'
-with open(os.path.join('pyronearEngine', 'version.py')) as version_file:
+package_name = 'pyroengine'
+with open(os.path.join('pyroengine', 'version.py')) as version_file:
     version = version_file.read().strip()
 sha = 'Unknown'
 
@@ -49,8 +49,8 @@ setup(
     description='Pyronear Engine is a repository that aims at deploying pyronear',
     long_description=readme,
     long_description_content_type="text/markdown",
-    url='https://github.com/pyronear//PyronearEngine',
-    download_url='https://github.com/pyronear/PyronearEngine/tags',
+    url='https://github.com/pyronear//pyro-engine',
+    download_url='https://github.com/pyronear/pyro-engine/tags',
     license='CeCILL-2.1 or AGPLv3',
     classifiers=[
         'Development Status :: 4 - Beta',
