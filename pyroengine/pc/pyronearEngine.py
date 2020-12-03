@@ -52,7 +52,7 @@ class PyronearEngine:
             _, frame = cap.read()
             frameNb += 1
 
-            if frame.any():  
+            if frame.any():
                 im = Image.fromarray(frame[:, :, ::-1])
                 res = self.pyronearPredictor.predict(im)
 
