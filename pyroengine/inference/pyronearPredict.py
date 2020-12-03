@@ -3,6 +3,9 @@ import torch
 from torch import nn
 from PIL import Image
 from torchvision import transforms
+from pyroengine.configManager import read_config_file
+from pyrovision.models.utils import cnn_model
+import holocron
 
 
 class PyronearPredictor:
@@ -11,31 +14,69 @@ class PyronearPredictor:
     -------
     pyronearPredictor = PyronearPredictor("model/pyronear.pth")
     res = pyronearPredictor.predict(im)
-    print(res) #res[0,1]=fire probability
+    print(res) #res=fire probability
     """
-    def __init__(self, checkpointPath):
+    def __init__(self, configFile, checkpointPath=None):
+
+        # Load config file
+        self.config = read_config_file(configFile)
+        if checkpointPath:
+            self.config['checkpoint'] = checkpointPath
+
         # Model definition
-        self.model = torchvision.models.resnet18()
+        self.model = self.get_model()
 
-        # Change fc
-        in_features = getattr(self.model, 'fc').in_features
-        setattr(self.model, 'fc', nn.Linear(in_features, 2))
+        # Transform definition
+        self.transforms = self.get_transforms()
 
-        self.model.load_state_dict(torch.load(checkpointPath))
+        self.sigmoid = nn.Sigmoid()
 
+    def get_transforms(self):
+        """Transforms definition"""
+        size = self.config['imageSize']
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-        self.tf = transforms.Compose([transforms.Resize((224, 224)),
-                                      transforms.ToTensor(),
-                                      normalize])
+        if self.config['use_CenterCrop']:
+            tf = transforms.Compose([transforms.Resize(size=(size)),
+                                     transforms.CenterCrop(size=size),
+                                     transforms.ToTensor(),
+                                     normalize
+                                     ])
+        else:
+            tf = transforms.Compose([transforms.Resize(size=(size)),
+                                     transforms.ToTensor(),
+                                     normalize
+                                     ])
 
-        self.softmax = nn.Softmax(dim=1)
+        return tf
+
+    def get_model(self):
+        """Model definition"""
+        # Get backbone
+        base = holocron.models.__dict__[self.config['backbone']](False, num_classes=self.config['num_classes'])
+        # Change head
+        if self.config['nb_features']:
+            model = cnn_model(base, self.config['cut'], nb_features=self.config['nb_features'],
+                              num_classes=self.config['num_classes'])
+        else:
+            model = base
+        # Load Weight
+        model.load_state_dict(torch.load(self.config['checkpoint'], map_location=torch.device('cpu')))
+        # Move to gpu
+        if self.config['device'] == 'cuda' and torch.cuda.is_available():
+            model = model.to('cuda:0')
+
+        return model.eval()
 
     def predict(self, im):
-        imT = self.tf(im)
-
-        self.model.eval()
+        # Get Data
+        im = self.transforms(im)
+        if self.config['device'] == 'cuda' and torch.cuda.is_available():
+            im = im.to('cuda:0')
+        im = im.unsqueeze(0)
+        # Predict
         with torch.no_grad():
-            pred = self.model(imT.unsqueeze(0))
+            res = self.model(im)
+            res = self.sigmoid(res)
 
-        return self.softmax(pred).squeeze().numpy()
+        return res.item()
