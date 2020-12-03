@@ -3,19 +3,23 @@ import torch
 from torch import nn
 from PIL import Image
 from torchvision import transforms
-from pyroengine.configManager import read_config_file
+from pyroengine.inference.configManager import read_config_file
 from pyrovision.models.utils import cnn_model
 import holocron
 
 
 class PyronearPredictor:
     """This class use the last pyronear model to predict if a sigle frame contain a fire or not
-    Example
-    -------
-    pyronearPredictor = PyronearPredictor("model/pyronear.pth")
-    res = pyronearPredictor.predict(im)
-    print(res) #res=fire probability
+
+    Parameters
+    ----------
+    configFile: str
+        Path to the configuration file
+
+    checkpointPath: str,
+        Path to model checkpoint, if you give an path here it will overwrite the one in the config file
     """
+
     def __init__(self, configFile, checkpointPath=None):
 
         # Load config file
@@ -33,10 +37,10 @@ class PyronearPredictor:
 
     def get_transforms(self):
         """Transforms definition"""
-        size = self.config['imageSize']
+        size = int(self.config['image_size'])
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-        if self.config['use_CenterCrop']:
+        if self.config['use_center_crop']:
             tf = transforms.Compose([transforms.Resize(size=(size)),
                                      transforms.CenterCrop(size=size),
                                      transforms.ToTensor(),
@@ -53,11 +57,11 @@ class PyronearPredictor:
     def get_model(self):
         """Model definition"""
         # Get backbone
-        base = holocron.models.__dict__[self.config['backbone']](False, num_classes=self.config['num_classes'])
+        base = holocron.models.__dict__[self.config['backbone']](False, num_classes=int(self.config['num_classes']))
         # Change head
         if self.config['nb_features']:
-            model = cnn_model(base, self.config['cut'], nb_features=self.config['nb_features'],
-                              num_classes=self.config['num_classes'])
+            model = cnn_model(base, int(self.config['cut']), nb_features=int(self.config['nb_features']),
+                              num_classes=int(self.config['num_classes']))
         else:
             model = base
         # Load Weight
