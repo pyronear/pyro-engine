@@ -8,7 +8,6 @@ import holocron
 
 
 class PyronearPredictor:
-
     """Class used the last pyronear model to predict if a sigle frame contain a fire or not.
 
     Parameters
