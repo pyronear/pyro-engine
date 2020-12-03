@@ -37,7 +37,7 @@ class PyronearEngine:
 
         """
         if logo:
-            logo = cv2.imread(str)
+            logo = cv2.imread(logo)
             logo = cv2.resize(logo, (150, 30))
         else:
             logo = 255 * np.ones((30, 150, 3))
@@ -67,7 +67,6 @@ class PyronearEngine:
                         # Send alert to api
                         self.call_api(res)
                         break
-
 
                     cv2.imshow('frame', frame)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
