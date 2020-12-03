@@ -15,7 +15,6 @@ def read_config_file(filename):
 
 def write_config_file(filename='inference.cfg'):
     """Use config parser to save config file."""
-
     config = configparser.ConfigParser()
     config['MODEL'] = {'backbone': 'rexnet1_0x',
                        'num_classes': 1,

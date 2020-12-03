@@ -1,4 +1,3 @@
-import torchvision
 import torch
 from torch import nn
 from PIL import Image
@@ -9,7 +8,9 @@ import holocron
 
 
 class PyronearPredictor:
-    """This class use the last pyronear model to predict if a sigle frame contain a fire or not
+
+    """
+    Class used the last pyronear model to predict if a sigle frame contain a fire or not.
 
     Parameters
     ----------
@@ -18,10 +19,11 @@ class PyronearPredictor:
 
     checkpointPath: str,
         Path to model checkpoint, if you give an path here it will overwrite the one in the config file
+
     """
 
     def __init__(self, configFile, checkpointPath=None):
-
+        """Init Pyronear Predictor."""
         # Load config file
         self.config = read_config_file(configFile)
         if checkpointPath:
@@ -36,7 +38,7 @@ class PyronearPredictor:
         self.sigmoid = nn.Sigmoid()
 
     def get_transforms(self):
-        """Transforms definition"""
+        """Define Transforms definition."""
         size = int(self.config['image_size'])
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
@@ -55,7 +57,7 @@ class PyronearPredictor:
         return tf
 
     def get_model(self):
-        """Model definition"""
+        """Model definition."""
         # Get backbone
         base = holocron.models.__dict__[self.config['backbone']](False, num_classes=int(self.config['num_classes']))
         # Change head
@@ -73,6 +75,7 @@ class PyronearPredictor:
         return model.eval()
 
     def predict(self, im):
+        """Predict if there is a fire on the image."""
         # Get Data
         im = self.transforms(im)
         if self.config['device'] == 'cuda' and torch.cuda.is_available():
