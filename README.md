@@ -33,8 +33,6 @@ pyroengine aims to deploy pyrovision wildfire detection system
 * [Getting Started](#getting-started)
   * [Prerequisites](#prerequisites)
   * [Installation](#installation)
-* [Usage](#usage)
-* [References](#references)
 * [Documentation](#documentation)
 * [Contributing](#contributing)
 * [Credits](#credits)
