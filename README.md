@@ -3,8 +3,8 @@
 <p align="center">
     <a href="LICENSE" alt="License">
         <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" /></a>
-    <a href="https://www.codacy.com/manual/frgfm/pyronear?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pyronear/pyro-engine&amp;utm_campaign=Badge_Grade">
-        <img src="https://app.codacy.com/project/badge/Grade/55423de221b14b18a5e35804574d5d5a"/></a>
+    <a href="https://app.codacy.com/gh/pyronear/pyro-engine?utm_source=github.com&utm_medium=referral&utm_content=pyronear/pyro-engine&utm_campaign=Badge_Grade_Settings">
+        <img src="ttps://api.codacy.com/project/badge/Grade/d7f62736901d4e5c97c744411d8e02e3"/></a>
     <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Apython-package">
         <img src="https://github.com/pyronear/pyro-engine/workflows/python-package/badge.svg" /></a>
     <a href="https://codecov.io/gh/pyronear/pyro-engine">
