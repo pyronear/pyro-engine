@@ -10,9 +10,10 @@ from pyroengine.engine import PyronearEngine
 
 
 class PcEngine(PyronearEngine):
-    """This class is the Pyronear Engine. This engine manage the whole Fire Detection
-       process by capturing and saving the image and by predicting if there is a fire or
-       not based on this image.
+    """
+    This class is the Pyronear Engine for pc. This engine manage the whole Fire Detection
+    process by capturing and saving the image and by predicting if there is a fire or
+    not based on this image.
     Example
     -------
     # For a prediction every 5 frame
