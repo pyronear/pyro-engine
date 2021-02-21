@@ -5,7 +5,6 @@
 
 from pyrovision.models.rexnet import rexnet1_0x
 from torchvision import transforms
-from PIL import Image
 import torch
 
 

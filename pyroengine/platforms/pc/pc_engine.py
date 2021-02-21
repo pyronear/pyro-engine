@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 import cv2
-import time
 import sys
 from PIL import Image
 from pyroengine.engine import PyronearEngine
