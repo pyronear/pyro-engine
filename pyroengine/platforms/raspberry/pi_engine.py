@@ -34,9 +34,11 @@ class PiEngine(PyronearEngine):
 
 
 if __name__ == "__main__":
-
+    # Get inputs
     api_login = sys.argv[1]
     api_password = sys.argv[2]
     sleep_time = sys.argv[3]
+    # Create Engine
     pi_engine = PiEngine(api_login, api_password)
-    pi_engine.run(5)
+    # Run
+    pi_engine.run(sleep_time)
