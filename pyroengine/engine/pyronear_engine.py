@@ -9,6 +9,7 @@ from pyroclient import client
 
 api_url = "http://pyronear-api.herokuapp.com"
 
+
 class PyronearEngine:
     """This class is the Pyronear Engine. This engine manage the whole Fire Detection
        process by capturing and saving the image and by predicting if there is a fire or
