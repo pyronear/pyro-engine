@@ -3,5 +3,4 @@
 # This program is licensed under the GNU Affero General Public License version 3.
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
-from .pyronear_predictor import PyronearPredictor
-from .pyronear_engine import PyronearEngine
+from .pc_engine import PcEngine
