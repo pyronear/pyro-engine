@@ -3,9 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Model checkpoints
-*.pth
-
 # C extensions
 *.so
 
@@ -106,3 +103,4 @@ venv.bak/
 # mypy
 .mypy_cache/
 data/
+test/fixtures/videos/
