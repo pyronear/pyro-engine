@@ -27,10 +27,12 @@ class PcEngine(PyronearEngine):
         while(True):
             # Capture frame-by-frame
             _, frame = cap.read()
+            frame_nb += 1
             if frame_nb % every_n_frame == 0:
                 # Predict
                 frame = Image.fromarray(frame[:, :, ::-1])  # from BGR numpy to RGB pillow
                 self.predict(frame)
+                frame_nb = 0
 
 
 if __name__ == "__main__":
