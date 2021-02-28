@@ -5,6 +5,7 @@
 
 from .predictor import PyronearPredictor
 from pyroclient import client
+import io
 
 
 api_url = "http://pyronear-api.herokuapp.com"
@@ -25,6 +26,7 @@ class PyronearEngine:
 
         # API Setup
         self.create_device(api_login, api_password)
+        self.image = io.BytesIO()
 
     def run(self):
         """Should be implemented for each patform, with an adapted image capture method"""
@@ -34,8 +36,8 @@ class PyronearEngine:
 
         res = self.pyronearPredictor.predict(frame)
         if res > 0.5:
-            print('Fire detected !!!')
-            frame.save('fire.jpg')
+            print(f"Wildfire detection ({res:.2%})")
+            frame.save(self.image, format='JPEG')
             # Send alert to api
             self.send_alert()
 
@@ -49,6 +51,4 @@ class PyronearEngine:
         media_id = self.api_client.create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
         self.api_client.send_alert_from_device(lat=9, lon=9, event_id=self.event_id, media_id=media_id)
-        with open('fire.jpg', 'rb') as f:
-            bytestring = f.read()
-        self.api_client.upload_media(media_id=media_id, image_data=bytestring)
+        self.api_client.upload_media(media_id=media_id, image_data=self.image)
