@@ -15,10 +15,9 @@ class PyronearEngine:
     This class is the Pyronear Engine. This engine manage the whole Fire Detection
     process by capturing and saving the image and by predicting if there is a fire or
     not based on this image.
-    Example
-    -------
-    pyroEngine = PyronearEngine(api_login, api_password)
-    pyroEngine.run()
+    Examples:
+        >>> pyroEngine = PyronearEngine(api_login, api_password)
+        >>> pyroEngine.run()
     """
     def __init__(self, api_login, api_password):
         # Pyronear Predictor
