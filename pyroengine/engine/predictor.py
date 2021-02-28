@@ -17,8 +17,7 @@ class PyronearPredictor:
     """
     def __init__(self):
         # Model definition
-        self.model = rexnet1_0x(pretrained=True)
-        self.model.eval()
+        self.model = rexnet1_0x(pretrained=True).eval()
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         img_size = 448
