@@ -7,6 +7,8 @@ import cv2
 import sys
 from PIL import Image
 from pyroengine.engine import PyronearEngine
+import os
+from dotenv import load_dotenv
 
 
 class PcEngine(PyronearEngine):
@@ -17,7 +19,7 @@ class PcEngine(PyronearEngine):
     Example
     -------
     # For a prediction every 5 frame
-    python pi_engine.py api_login, api_password 5
+    python pi_engine.py 5
     """
     def run(self, every_n_frame=10):
 
@@ -31,16 +33,20 @@ class PcEngine(PyronearEngine):
             if frame_nb % every_n_frame == 0:
                 # Predict
                 frame = Image.fromarray(frame[:, :, ::-1])  # from BGR numpy to RGB pillow
+
                 self.predict(frame)
                 frame_nb = 0
 
 
 if __name__ == "__main__":
-    # Get inputs
-    api_login = sys.argv[1]
-    api_password = sys.argv[2]
-    sleep_time = sys.argv[3]
+    # API
+    load_dotenv()
+    api_url = os.getenv('api_url')
+    api_login = os.getenv('api_login')
+    api_password = os.getenv('api_password')
+
+    sleep_time = int(sys.argv[1])
     # Create Engine
-    pi_engine = PiEngine(api_login, api_password)
+    pi_engine = PcEngine(api_url, api_login, api_password)
     # Run
     pi_engine.run(sleep_time)

@@ -8,6 +8,8 @@ import time
 import sys
 from PIL import Image
 from pyroengine.engine import PyronearEngine
+import os
+from dotenv import load_dotenv
 
 
 class PiEngine(PyronearEngine):
@@ -18,7 +20,7 @@ class PiEngine(PyronearEngine):
     Example
     -------
     # For a prediction every 5s
-    python pi_engine.py api_login, api_password 5
+    python pi_engine.py 5
     """
     def run(self, sleep_time=10):
 
@@ -35,11 +37,14 @@ class PiEngine(PyronearEngine):
 
 
 if __name__ == "__main__":
-    # Get inputs
-    api_login = sys.argv[1]
-    api_password = sys.argv[2]
-    sleep_time = sys.argv[3]
+    # API
+    load_dotenv()
+    api_url = os.getenv('api_url')
+    api_login = os.getenv('api_login')
+    api_password = os.getenv('api_password')
+
+    sleep_time = int(sys.argv[1])
     # Create Engine
-    pi_engine = PiEngine(api_login, api_password)
+    pi_engine = PiEngine(api_url, api_login, api_password)
     # Run
     pi_engine.run(sleep_time)
