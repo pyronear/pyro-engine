@@ -1,3 +1,4 @@
 sphinx<3.5.0
 sphinx-rtd-theme==0.4.3
 pyrovision
+python-dotenv >= 0.15.0
