@@ -31,7 +31,16 @@ class MetricOut(MetricIn):
 # Inference
 class InferenceIn(_CreatedAt, _Id):
 	#not sure about the format yet
+	# multipart/form-data ? 
+	# https://pydantic-docs.helpmanual.io/usage/types/#pydantic-types. ---> PyObject
+	# create custom data type ? https://pydantic-docs.helpmanual.io/usage/types/#custom-data-types
 	# image: UploadFile = File(...)
+	# image_files: UploadFile = File(..., media_type='image/jpeg')
+	# or   https://github.com/tiangolo/fastapi/issues/2257#issuecomment-717924054
+	# --->   image_files: Optional[List[UploadFile]] = File(None, media_type='image/jpeg'),
+	# https://github.com/tiangolo/fastapi/issues/2257
+
+	# ----> Gros boloss, on va mettre un nom d'image, et encore, mais en fait, jsute appeler dans la route InferenceIn. & un file !!  File(None, media_type='image/jpeg'),
 	image: bytes = Field(...)
 
 

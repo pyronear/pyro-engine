@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks
+from fastapi import File, UploadFile
 
 from app.api.schemas import InferenceIn, InferenceOut
 
@@ -13,7 +14,8 @@ def predict_and_alert(InferenceIn):
 
 
 @router.post("/", response_model=InferenceOut, status_code=201, summary="Send img from a device to predict smoke")
-async def inference(payload: InferenceIn, background_tasks: BackgroundTasks):
+async def inference(payload: InferenceIn,
+					background_tasks: BackgroundTasks, file:UploadFile = File(...)):
     """Send img from a device based on the given information in order to predict smoke
 
     Below, click on "Schema" for more detailed information about arguments
