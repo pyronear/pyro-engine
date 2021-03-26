@@ -1,29 +1,32 @@
 import json
 
 PAYLOAD = {
-  "id": 1,
-  "created_at": "2021-03-26T16:35:09.656Z",
-  "cpu_temperature_C": 17.3,
-  "mem_available_GB": 1.23,
-  "cpu_usage_percent": 51.8
+    "id": 1,
+    "created_at": "2021-03-26T16:35:09.656Z",
+    "cpu_temperature_C": 17.3,
+    "mem_available_GB": 1.23,
+    "cpu_usage_percent": 51.8
 }
+
 
 def test_send_metrics(test_app):
 
-	response = test_app.post("/metrics/", data=json.dumps(PAYLOAD))
+    response = test_app.post("/metrics/", data=json.dumps(PAYLOAD))
 
-	assert response.status_code == 201
+    assert response.status_code == 201
+
 
 BAD_PAYLOAD = {
-  "id": 1,
-  "created_at": "2021-03-26T16:35:09.656Z",
-  "cpu_temperature_C": "cold",
-  "mem_available_GB": 1.23,
-  "cpu_usage_percent": 51.8
+    "id": 1,
+    "created_at": "2021-03-26T16:35:09.656Z",
+    "cpu_temperature_C": "cold",
+    "mem_available_GB": 1.23,
+    "cpu_usage_percent": 51.8
 }
+
 
 def test_send_metrics_bad_type(test_app):
 
-	response = test_app.post("/metrics/", data=json.dumps(BAD_PAYLOAD))
-	
-	assert response.status_code == 422
+    response = test_app.post("/metrics/", data=json.dumps(BAD_PAYLOAD))
+
+    assert response.status_code == 422
