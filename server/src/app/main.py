@@ -8,10 +8,10 @@ from app.api.routes import metrics, inference
 app = FastAPI(title=cfg.PROJECT_NAME, description=cfg.PROJECT_DESCRIPTION, debug=cfg.DEBUG, version=cfg.VERSION)
 
 
-
 # Routing
 app.include_router(metrics.router, prefix="/metrics", tags=['metrics'])
 app.include_router(inference.router, prefix="/inference", tags=['inference'])
+
 
 # Middleware
 @app.middleware("http")
