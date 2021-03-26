@@ -20,19 +20,19 @@ class _Id(BaseModel):
 # Metrics
 class MetricIn(_CreatedAt, _Id):
     cpu_temperature_C: float = Field(None, example=17.3)
-    mem_available_GB: float = Field(None, example=1.23) 
+    mem_available_GB: float = Field(None, example=1.23)
     cpu_usage_percent: float = Field(None, example=51.8)
 
 
 class MetricOut(MetricIn):
-	pass
+    pass
 
 
 # Inference
 class InferenceIn(_CreatedAt, _Id):
-	#not sure about the format yet
-	image: bytes = Field(...)
+    #not sure about the format yet
+    image: bytes = Field(...)
 
 
 class InferenceOut(_CreatedAt, _Id):
-	pass
+    pass

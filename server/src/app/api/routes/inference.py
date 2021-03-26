@@ -7,15 +7,14 @@ router = APIRouter()
 
 
 def predict_and_alert(InferenceIn):
-	""" predict smoke from an image and if yes raise an alert """
+    """ predict smoke from an image and if yes raise an alert """
 
-	# TODO : use inference class and pyro-api client to raise an alert if needed
-	return {"comment": "set fire to the rain please"}
+    # TODO : use inference class and pyro-api client to raise an alert if needed
+    return {"comment": "set fire to the rain please"}
 
 
 @router.post("/", response_model=InferenceOut, status_code=201, summary="Send img from a device to predict smoke")
-async def inference(payload: InferenceIn,
-					background_tasks: BackgroundTasks, file:UploadFile = File(...)):
+async def inference(payload: InferenceIn, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     """Send img from a device based on the given information in order to predict smoke
 
     Below, click on "Schema" for more detailed information about arguments
@@ -27,4 +26,4 @@ async def inference(payload: InferenceIn,
     # Do we need a backround task here for inference ?
     background_tasks.add_task(predict_and_alert, payload)
 
-    return {"info" : "take some more pic please"}
+    return {"info": "take some more pic please"}
