@@ -33,5 +33,6 @@ class PyronearPredictor:
 
         with torch.no_grad():
             pred = self.model(imT.unsqueeze(0))
+            pred = torch.sigmoid(pred).item()
 
-        return torch.sigmoid(pred).item()
+        return pred
