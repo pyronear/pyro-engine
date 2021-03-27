@@ -1,2 +1,3 @@
-pyrovision
+pyrovision >= 0.1.2
+python-dotenv >= 0.15.0
 pyroclient
