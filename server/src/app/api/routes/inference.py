@@ -14,7 +14,6 @@ router = APIRouter()
 
 def predict_and_alert(file):
     """ predict smoke from an image and if yes raise an alert """
-
     # TODO : use inference class and pyro-api client to raise an alert if needed
     return {"comment": "set fire to the rain please"}
 
@@ -23,7 +22,8 @@ def predict_and_alert(file):
 async def inference(background_tasks: BackgroundTasks,
                     file: UploadFile = File(...)
                     ):
-    """Send img from a device based on the given information in order to predict smoke
+    """
+    Send img from a device based on the given information in order to predict smoke
 
     Below, click on "Schema" for more detailed information about arguments
     or "Example Value" to get a concrete idea of arguments

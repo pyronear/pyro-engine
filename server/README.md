@@ -2,13 +2,13 @@
 
 ## Table of Contents
 - [Internal Pyronear API for devices on sites](#internal-pyronear-api-for-devices-on-sites)
-  - [Table of Contents](#table-of-contents)
-  - [Getting started](#getting-started)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-  - [Usage](#usage)
-    - [Build](#build)
-    - [Tests](#tests)
+	- [Table of Contents](#table-of-contents)
+	- [Getting started](#getting-started)
+		- [Prerequisites](#prerequisites)
+		- [Installation](#installation)
+	- [Usage](#usage)
+		- [Build](#build)
+		- [Tests](#tests)
 
 ## Getting started
 
