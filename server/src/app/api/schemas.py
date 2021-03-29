@@ -28,11 +28,5 @@ class MetricOut(MetricIn):
     pass
 
 
-# Inference
-class InferenceIn(_CreatedAt, _Id):
-    #not sure about the format yet
-    image: bytes = Field(...)
-
-
 class InferenceOut(_CreatedAt, _Id):
     pass
