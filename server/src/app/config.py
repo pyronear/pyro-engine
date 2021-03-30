@@ -4,8 +4,6 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 
-import os
-
 PROJECT_NAME: str = 'Pyronear local system API'
 PROJECT_DESCRIPTION: str = 'API for pyronear systems interactions on sites'
 API_BASE: str = 'api/'
