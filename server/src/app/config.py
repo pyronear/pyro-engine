@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 
-PROJECT_NAME: str = 'Pyronear local system API'
+PROJECT_NAME: str = 'Pyronear local webserver'
 PROJECT_DESCRIPTION: str = 'API for pyronear systems interactions on sites'
 API_BASE: str = 'api/'
 VERSION: str = "0.1.0a0"
