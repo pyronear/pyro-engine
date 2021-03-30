@@ -12,7 +12,7 @@ router = APIRouter()
 
 
 @router.post("/", response_model=MetricOut, status_code=201, summary="Send metrics from a device")
-async def send_metrics(payload: MetricIn):
+async def log_metrics(payload: MetricIn):
     """
     Send metrics from a device based on the given information
 

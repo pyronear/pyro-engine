@@ -15,7 +15,7 @@ PAYLOAD = {
 }
 
 
-def test_send_metrics(test_app):
+def test_log_metrics(test_app):
 
     response = test_app.post("/metrics/", data=json.dumps(PAYLOAD))
 
@@ -31,7 +31,7 @@ BAD_PAYLOAD = {
 }
 
 
-def test_send_metrics_bad_type(test_app):
+def test_log_metrics_bad_type(test_app):
 
     response = test_app.post("/metrics/", data=json.dumps(BAD_PAYLOAD))
 
