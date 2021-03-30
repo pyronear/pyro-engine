@@ -5,34 +5,28 @@
 
 
 import json
+import pytest
 
-PAYLOAD = {
+
+PARTIAL_PAYLOAD = {
     "id": 1,
     "created_at": "2021-03-26T16:35:09.656Z",
-    "cpu_temperature_C": 17.3,
     "mem_available_GB": 1.23,
     "cpu_usage_percent": 51.8
 }
 
 
-def test_log_metrics(test_app):
+@pytest.mark.parametrize(
+    "payload, cpu_temperature_C, status_code",
+    [
+        [PARTIAL_PAYLOAD, 17.3, 201],
+        [PARTIAL_PAYLOAD, "cold", 422],
+    ],
+)
+def test_log_metrics(test_app, payload, cpu_temperature_C, status_code):
 
-    response = test_app.post("/metrics/", data=json.dumps(PAYLOAD))
+    payload["cpu_temperature_C"] = cpu_temperature_C
 
-    assert response.status_code == 201
+    response = test_app.post("/metrics/", data=json.dumps(payload))
 
-
-BAD_PAYLOAD = {
-    "id": 1,
-    "created_at": "2021-03-26T16:35:09.656Z",
-    "cpu_temperature_C": "cold",
-    "mem_available_GB": 1.23,
-    "cpu_usage_percent": 51.8
-}
-
-
-def test_log_metrics_bad_type(test_app):
-
-    response = test_app.post("/metrics/", data=json.dumps(BAD_PAYLOAD))
-
-    assert response.status_code == 422
+    assert response.status_code == status_code
