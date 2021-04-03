@@ -7,8 +7,6 @@
 from fastapi import APIRouter, BackgroundTasks
 from fastapi import File, UploadFile
 
-from app.api.schemas import InferenceOut
-
 router = APIRouter()
 
 
@@ -18,7 +16,7 @@ def predict_and_alert(file):
     return {"comment": "set fire to the rain please"}
 
 
-@router.post("/", response_model=InferenceOut, status_code=201, summary="Send img from a device to predict smoke")
+@router.post("/", status_code=201, summary="Send img from a device to predict smoke")
 async def inference(background_tasks: BackgroundTasks,
                     file: UploadFile = File(...)
                     ):
@@ -30,7 +28,5 @@ async def inference(background_tasks: BackgroundTasks,
     """
     # some async operation could happen here
 
-    # We might need a backround task here for inference ?
+    # We might need a backround task here for inference
     background_tasks.add_task(predict_and_alert, file)
-
-    return {"id": 12}

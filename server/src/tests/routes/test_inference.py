@@ -4,9 +4,7 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 
-import json
 import requests
-import os
 
 
 def test_inference(test_app):
