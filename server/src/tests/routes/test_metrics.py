@@ -10,7 +10,6 @@ import pytest
 
 PARTIAL_PAYLOAD = {
     "id": 1,
-    "created_at": "2021-03-26T16:35:09.656Z",
     "mem_available_GB": 1.23,
     "cpu_usage_percent": 51.8
 }
