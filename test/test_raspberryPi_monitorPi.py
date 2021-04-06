@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 from pathlib import Path
 import os
 import pandas as pd
-from pyronearEngine.raspberryPi.monitorPi import MonitorPi
+from pyroengine.raspberryPi.monitorPi import MonitorPi
 
 
 class MonitorPiTester(unittest.TestCase):
