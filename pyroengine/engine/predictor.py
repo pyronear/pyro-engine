@@ -16,6 +16,7 @@ class PyronearPredictor:
         >>> res = pyronearPredictor.predict(im)
     """
     def __init__(self):
+        """Init predictor"""
         # Model definition
         self.model = rexnet1_0x(pretrained=True).eval()
 
@@ -29,6 +30,7 @@ class PyronearPredictor:
                                       ])
 
     def predict(self, im):
+        """Run prediction"""
         imT = self.tf(im)
 
         with torch.no_grad():

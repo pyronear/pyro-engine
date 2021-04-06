@@ -14,24 +14,21 @@ class PyronearEngine:
     process by capturing and saving the image and by predicting if there is a fire or
     not based on this image.
     Examples:
-        >>> pyroEngine = PyronearEngine(api_login, api_password)
+        >>> pyroEngine = PyronearEngine(api_url, api_login, api_password)
         >>> pyroEngine.run()
     """
     def __init__(self, api_url, api_login, api_password):
+        """Init engine"""
         # Pyronear Predictor
         self.pyronearPredictor = PyronearPredictor()
 
         # API Setup
         self.api_url = api_url
-        self.create_device(api_login, api_password)
+        self.init_api(api_login, api_password)
         self.image = io.BytesIO()
 
-    def run(self):
-        """Should be implemented for each patform, with an adapted image capture method"""
-        pass
-
     def predict(self, frame):
-
+        """ run prediction oncomming frame"""
         res = self.pyronearPredictor.predict(frame)
         if res > 0.5:
             print(f"Wildfire detection ({res:.2%})")
@@ -39,12 +36,13 @@ class PyronearEngine:
             # Send alert to api
             self.send_alert()
 
-    def create_device(self, api_login, api_password):
-
+    def init_api(self, api_login, api_password):
+        """Setup api"""
         self.api_client = client.Client(self.api_url, api_login, api_password)
         self.event_id = self.api_client.create_event(lat=9, lon=9).json()["id"]
 
     def send_alert(self):
+        """Send Alert"""
         # Create a media
         media_id = self.api_client.create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
