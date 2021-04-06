@@ -4,6 +4,7 @@
 # This file is dual licensed under the terms of the CeCILL-2.1 and AGPLv3 licenses.
 # See the LICENSE file in the root of this repository for complete details.
 
+import pi_patch
 import unittest
 from unittest.mock import Mock, patch
 from pathlib import Path
