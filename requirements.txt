@@ -1,1 +1,5 @@
-pyrovision
+pyrovision >= 0.1.2
+python-dotenv >= 0.15.0
+pyroclient
+pandas>=0.25.2
+psutil
