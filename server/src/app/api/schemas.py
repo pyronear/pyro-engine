@@ -23,11 +23,11 @@ class _Id(BaseModel):
 
 
 # Metrics
-class MetricIn(_Id):
+class MetricIn(_CreatedAt, _Id):
     cpu_temperature_C: float = Field(None, example=17.3)
     mem_available_GB: float = Field(None, example=1.23)
     cpu_usage_percent: float = Field(None, example=51.8)
 
 
-class MetricOut(MetricIn):
+class MetricOut(MetricIn, _CreatedAt):
     pass
