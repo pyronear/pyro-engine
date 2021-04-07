@@ -17,14 +17,17 @@ class PyronearEngine:
         >>> pyroEngine = PyronearEngine(api_url, api_login, api_password)
         >>> pyroEngine.run()
     """
-    def __init__(self, api_url, api_login, api_password):
+    def __init__(self, api_url=None, api_login=None, api_password=None):
         """Init engine"""
         # Pyronear Predictor
         self.pyronearPredictor = PyronearPredictor()
 
         # API Setup
+        self.use_api = False
         self.api_url = api_url
-        self.init_api(api_login, api_password)
+        if self.api_url is not None:
+            self.use_api = True
+            self.init_api(api_login, api_password)
         self.image = io.BytesIO()
 
     def predict(self, frame):
@@ -32,9 +35,12 @@ class PyronearEngine:
         res = self.pyronearPredictor.predict(frame)
         if res > 0.5:
             print(f"Wildfire detection ({res:.2%})")
-            frame.save(self.image, format='JPEG')
-            # Send alert to api
-            self.send_alert()
+            if self.use_api:
+                frame.save(self.image, format='JPEG')
+                # Send alert to api
+                self.send_alert()
+
+        return res
 
     def init_api(self, api_login, api_password):
         """Setup api"""
