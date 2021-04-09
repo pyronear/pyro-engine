@@ -4,27 +4,28 @@
 # This file is dual licensed under the terms of the CeCILL-2.1 and AGPLv3 licenses.
 # See the LICENSE file in the root of this repository for complete details.
 
+import pi_patch
 import unittest
 from unittest.mock import Mock, patch
 from pathlib import Path
 import os
 import pandas as pd
-from pyronearEngine.raspberryPi.monitorPi import MonitorPi
+from pyroengine.raspberryPi.monitorPi import MonitorPi
 
 
 class MonitorPiTester(unittest.TestCase):
 
-    @patch('pyronearEngine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.raspberryPi.monitorPi.psutil')
     def setUp(self, mock_psutil):
 
-        self.monitoringFolder = Path(__file__).parent / 'fixtures'
+        self.monitoringFolder = Path(__file__).parent
         self.logFile = "pi_perf_example.csv"
         self.path_file = os.path.join(self.monitoringFolder, self.logFile)
 
         def prepare_get_record(self):
 
             with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
-                with patch('pyronearEngine.raspberryPi.monitorPi.strftime') as mock_strftime:
+                with patch('pyroengine.raspberryPi.monitorPi.strftime') as mock_strftime:
                     mock_strftime.return_value = '2020-04-01 12:34:56'
 
                     # add "attributes" to psutil mock
@@ -48,7 +49,7 @@ class MonitorPiTester(unittest.TestCase):
 
         prepare_get_record(self)
 
-    @patch('pyronearEngine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.raspberryPi.monitorPi.psutil')
     def test_MonitorPi_create_logfile(self, mock_psutil):
         self.assertTrue(os.path.exists(self.path_file), "file does not exist")
 
@@ -56,7 +57,7 @@ class MonitorPiTester(unittest.TestCase):
         the_record = pd.read_csv(self.path_file)
         pd.testing.assert_frame_equal(pd.DataFrame(data=self.the_test_line), the_record)
 
-    @patch('pyronearEngine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.raspberryPi.monitorPi.psutil')
     def test_MonitorPi_update_logFile(self, mock_psutil):
         with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
             mock_psutil.cpu_percent.return_value = 11
