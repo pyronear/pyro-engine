@@ -7,6 +7,8 @@ The :mod:`pyroengine` package provides everything usefull to deploy pyronear
    :maxdepth: 2
    :caption: Package Reference
 
+   engine
+
 
 .. automodule:: pyroengine
    :members:

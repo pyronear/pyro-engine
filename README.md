@@ -7,13 +7,8 @@
         <img src="ttps://api.codacy.com/project/badge/Grade/d7f62736901d4e5c97c744411d8e02e3"/></a>
     <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Apython-package">
         <img src="https://github.com/pyronear/pyro-engine/workflows/python-package/badge.svg" /></a>
-    <a href="https://codecov.io/gh/pyronear/pyro-engine">
-  		<img src="https://codecov.io/gh/pyronear/pyro-engine/branch/master/graph/badge.svg" />
-	</a>
     <a href="https://pyronear.github.io/pyro-engine">
   		<img src="https://img.shields.io/badge/docs-available-blue.svg" /></a>
-    <a href="https://pypi.org/project/pyroengine/" alt="Pypi">
-        <img src="https://img.shields.io/badge/pypi-v0.1.0-blue.svg" /></a>
 </p>
 
 

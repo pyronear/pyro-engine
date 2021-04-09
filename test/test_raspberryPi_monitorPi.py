@@ -10,12 +10,12 @@ from unittest.mock import Mock, patch
 from pathlib import Path
 import os
 import pandas as pd
-from pyroengine.raspberryPi.monitorPi import MonitorPi
+from pyroengine.pi_utils.monitor_pi import MonitorPi
 
 
 class MonitorPiTester(unittest.TestCase):
 
-    @patch('pyroengine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.pi_utils.monitor_pi.psutil')
     def setUp(self, mock_psutil):
 
         self.monitoringFolder = Path(__file__).parent
@@ -25,7 +25,7 @@ class MonitorPiTester(unittest.TestCase):
         def prepare_get_record(self):
 
             with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
-                with patch('pyroengine.raspberryPi.monitorPi.strftime') as mock_strftime:
+                with patch('pyroengine.pi_utils.monitor_pi.strftime') as mock_strftime:
                     mock_strftime.return_value = '2020-04-01 12:34:56'
 
                     # add "attributes" to psutil mock
@@ -49,7 +49,7 @@ class MonitorPiTester(unittest.TestCase):
 
         prepare_get_record(self)
 
-    @patch('pyroengine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.pi_utils.monitor_pi.psutil')
     def test_MonitorPi_create_logfile(self, mock_psutil):
         self.assertTrue(os.path.exists(self.path_file), "file does not exist")
 
@@ -57,7 +57,7 @@ class MonitorPiTester(unittest.TestCase):
         the_record = pd.read_csv(self.path_file)
         pd.testing.assert_frame_equal(pd.DataFrame(data=self.the_test_line), the_record)
 
-    @patch('pyroengine.raspberryPi.monitorPi.psutil')
+    @patch('pyroengine.pi_utils.monitor_pi.psutil')
     def test_MonitorPi_update_logFile(self, mock_psutil):
         with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
             mock_psutil.cpu_percent.return_value = 11
