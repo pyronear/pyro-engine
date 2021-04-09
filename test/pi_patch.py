@@ -7,4 +7,4 @@ import sys
 import fake_gpiozero
 
 
-sys.modules['gpiozero'] = fake_gpiozero 
+sys.modules['gpiozero'] = fake_gpiozero
