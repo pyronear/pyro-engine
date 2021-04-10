@@ -12,47 +12,41 @@ import os
 
 class MonitorPi:
     """This class aims to monitor some metrics from Raspberry Pi system.
-
     Example
     --------
-    recordlogs = MonitorPi("/home/pi/Desktop/")
-    recordlogs.record(5) # record metrics every 5 seconds
+    monitor = MonitorPi("/home/pi/")
+    monitor.record(5) # record metrics every 5 seconds
     """
 
-    def __init__(self, monitoringFolder, logFile="pi_perf.csv"):
-
-        # cpu temperature
+    def __init__(self, monitoring_folder, logs_csv="pi_perf.csv"):
         self.cpu_temp = CPUTemperature()
-
-        # path
-        self.monitoringFolder = monitoringFolder
-        self.logFile = logFile
+        self.monitoring_folder = monitoring_folder
+        self.logs_csv = logs_csv
 
     def get_record(self):
+        line = {
+            "datetime": [strftime("%Y-%m-%d %H:%M:%S")],
+            "cpu_temperature_C": [self.cpu_temp.temperature],
+            "mem_available_GB": [psutil.virtual_memory().available / 1024 ** 3],
+            "cpu_usage_percent": [psutil.cpu_percent()],
+        }
 
-        line = {"datetime": [strftime("%Y-%m-%d %H:%M:%S")],
-                "cpu_temperature_C": [self.cpu_temp.temperature],
-                "mem_available_GB": [psutil.virtual_memory().available / 1024 ** 3],
-                "cpu_usage_percent": [psutil.cpu_percent()]
-                }
-
-        path_file = os.path.join(self.monitoringFolder, self.logFile)
-
+        path_file = os.path.join(self.monitoring_folder, self.logs_csv)
         if os.path.isfile(path_file):
-            pd.DataFrame(data=line).to_csv(path_file, mode='a', header=False, index=0)
+            pd.DataFrame(data=line).to_csv(path_file, header=False)
         else:
-            pd.DataFrame(data=line).to_csv(path_file, mode='a', index=0)
+            pd.DataFrame(data=line).to_csv(path_file)
 
-    def record(self, timeStep):
-
+    def record(self, time_step):
         while True:
-
             self.get_record()
-
-            sleep(timeStep)
+            sleep(time_step)
 
 
 if __name__ == "__main__":
-
-    recordlogs = MonitorPi("/home/pi/Desktop/")
-    recordlogs.record(30)
+    # TODO: send file to the local API (use requests POST?)
+    log_folder = "/home/pi/pi_logs/"
+    if not os.path.exists(log_folder):
+        os.makedirs(log_folder)
+    monitor = MonitorPi(log_folder)
+    monitor.record(30)
