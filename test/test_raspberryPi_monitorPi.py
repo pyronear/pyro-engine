@@ -4,77 +4,106 @@
 # This file is dual licensed under the terms of the CeCILL-2.1 and AGPLv3 licenses.
 # See the LICENSE file in the root of this repository for complete details.
 
-import pi_patch
 import unittest
+from threading import Thread
 from unittest.mock import Mock, patch
-from pathlib import Path
-import os
-import pandas as pd
+
+# noinspection PyUnresolvedReferences
+import pi_patch
+import requests
+from requests import HTTPError
+
 from pyroengine.pi_utils.monitor_pi import MonitorPi
 
 
 class MonitorPiTester(unittest.TestCase):
+    def setUp(self):
+        self.module_path = "pyroengine.pi_utils.monitor_pi"
 
-    @patch('pyroengine.pi_utils.monitor_pi.psutil')
-    def setUp(self, mock_psutil):
+    def test_get_record(self):
+        with patch(f"{self.module_path}.psutil") as mock_psutil, patch(
+            f"{self.module_path}.requests"
+        ) as mock_requests:
+            mock_response = requests.Response()
+            mock_response.status_code = 200
+            mock_requests.post.return_value = mock_response
 
-        self.monitoringFolder = Path(__file__).parent
-        self.logFile = "pi_perf_example.csv"
-        self.path_file = os.path.join(self.monitoringFolder, self.logFile)
-
-        def prepare_get_record(self):
-
-            with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
-                with patch('pyroengine.pi_utils.monitor_pi.strftime') as mock_strftime:
-                    mock_strftime.return_value = '2020-04-01 12:34:56'
-
-                    # add "attributes" to psutil mock
-                    mock_psutil.cpu_percent.return_value = 11
-                    mock_psutil.virtual_memory().available = 99 * 1024 ** 3
-                    # add cst attribute to strftime mock
-                    recordlogs = MonitorPi(None, None)
-                    # fake init of MonitorPi
-                    recordlogs.cpu_temp = Mock(temperature=5)
-                    recordlogs.logFile = self.logFile
-                    recordlogs.monitoringFolder = self.monitoringFolder
-
-                    recordlogs.get_record()
-
-                    self.the_test_line = {"datetime": [mock_strftime()],
-                                          "cpu_temperature_C": [recordlogs.cpu_temp.temperature],
-                                          "mem_available_GB": [mock_psutil.virtual_memory().available / 1024 ** 3],
-                                          "cpu_usage_percent": [mock_psutil.cpu_percent()]}
-
-        self.get_test_record = prepare_get_record
-
-        prepare_get_record(self)
-
-    @patch('pyroengine.pi_utils.monitor_pi.psutil')
-    def test_MonitorPi_create_logfile(self, mock_psutil):
-        self.assertTrue(os.path.exists(self.path_file), "file does not exist")
-
-    def test_MonitorPi_file_content(self):
-        the_record = pd.read_csv(self.path_file)
-        pd.testing.assert_frame_equal(pd.DataFrame(data=self.the_test_line), the_record)
-
-    @patch('pyroengine.pi_utils.monitor_pi.psutil')
-    def test_MonitorPi_update_logFile(self, mock_psutil):
-        with patch.object(MonitorPi, "__init__", lambda x, y, z: None):
+            # add "attributes" to psutil mock
             mock_psutil.cpu_percent.return_value = 11
             mock_psutil.virtual_memory().available = 99 * 1024 ** 3
-            self.get_test_record(self)
 
-        the_record = pd.read_csv(self.path_file)
+            record_logs = MonitorPi("my_url")
+            record_logs.cpu_temp = Mock(temperature=5)
 
-        df_test = pd.concat([pd.DataFrame(self.the_test_line),
-                             pd.DataFrame(self.the_test_line)], ignore_index=True)
+            record_logs.get_record()
 
-        pd.testing.assert_frame_equal(df_test, the_record)
+        test_metrics = {
+            "id": 0,
+            "cpu_temperature_C": record_logs.cpu_temp.temperature,
+            "mem_available_GB": mock_psutil.virtual_memory().available / 1024 ** 3,
+            "cpu_usage_percent": mock_psutil.cpu_percent(),
+        }
+        mock_requests.post.assert_called_once_with("my_url", json=test_metrics)
 
-    def tearDown(self):
-        if os.path.exists(self.path_file):
-            os.remove(self.path_file)
+    def test_get_record_raises_http_exception_on_400(self):
+        with patch(f"{self.module_path}.requests") as mock_requests:
+            mock_response = requests.Response()
+            mock_response.status_code = 400
+            mock_requests.post.return_value = mock_response
+
+            record_logs = MonitorPi("my_url")
+
+            with self.assertRaises(HTTPError):
+                record_logs.get_record()
+
+    def test_record(self):
+        record_logs = MonitorPi("my_url")
+        calls = []
+
+        def new_get_record():
+            calls.append(True)
+            if len(calls) == 3:
+                record_logs.stop_monitoring()
+
+        mock_get_record = Mock(side_effect=new_get_record)
+        with patch.object(record_logs, "get_record", new=mock_get_record):
+            record_logs.record(time_step=0)
+
+        self.assertEqual(3, mock_get_record.call_count)
+
+    def test_record_catches_exception(self):
+        record_logs = MonitorPi("my_url")
+        calls = []
+
+        def new_get_record():
+            calls.append(True)
+            if len(calls) == 3:
+                record_logs.stop_monitoring()
+            elif len(calls) == 2:
+                raise HTTPError()
+
+        mock_get_record = Mock(side_effect=new_get_record)
+        with patch.object(record_logs, "get_record", new=mock_get_record):
+            record_logs.record(time_step=0)
+
+        self.assertEqual(3, mock_get_record.call_count)
+
+    def test_stop_monitoring(self):
+        record_logs = MonitorPi("my_url")
+        monitoring_thread = Thread(
+            target=lambda: record_logs.record(time_step=0.1), daemon=True
+        )
+        with patch(f"{self.module_path}.requests") as mock_requests:
+            mock_response = requests.Response()
+            mock_response.status_code = 400
+            mock_requests.post.return_value = mock_response
+
+            monitoring_thread.start()
+
+            record_logs.stop_monitoring()
+            monitoring_thread.join(timeout=1)
+            self.assertFalse(monitoring_thread.is_alive())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
