@@ -1,0 +1,256 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>pyroengine.engine.engine &mdash; pyroengine 0.1.0a0-git documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/underscore.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/css/custom_theme.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html">
+          
+
+          
+            
+            <img src="../../../_static/pyronear-logo-dark.png" class="logo" alt="Logo"/>
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1.0a0
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p><span class="caption-text">Package Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../engine.html">pyroengine.engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../engine.html#pyronear-predictor">Pyronear Predictor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../engine.html#pyronear-engine">Pyronear Engine</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">pyroengine</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>pyroengine.engine.engine</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for pyroengine.engine.engine</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (C) 2021, Pyronear contributors.</span>
+
+<span class="c1"># This program is licensed under the GNU Affero General Public License version 3.</span>
+<span class="c1"># See LICENSE or go to &lt;https://www.gnu.org/licenses/agpl-3.0.txt&gt; for full license details.</span>
+
+<span class="kn">from</span> <span class="nn">.predictor</span> <span class="kn">import</span> <span class="n">PyronearPredictor</span>
+<span class="kn">from</span> <span class="nn">pyroclient</span> <span class="kn">import</span> <span class="n">client</span>
+<span class="kn">import</span> <span class="nn">io</span>
+
+
+<div class="viewcode-block" id="PyronearEngine"><a class="viewcode-back" href="../../../engine.html#pyroengine.engine.PyronearEngine">[docs]</a><span class="k">class</span> <span class="nc">PyronearEngine</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This class is the Pyronear Engine. This engine manage the whole Fire Detection</span>
+<span class="sd">    process by capturing and saving the image and by predicting if there is a fire or</span>
+<span class="sd">    not based on this image.</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; pyroEngine = PyronearEngine(api_url, api_login, api_password)</span>
+<span class="sd">        &gt;&gt;&gt; pyroEngine.run()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">api_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">api_login</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">api_password</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Init engine&quot;&quot;&quot;</span>
+        <span class="c1"># Pyronear Predictor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span> <span class="o">=</span> <span class="n">PyronearPredictor</span><span class="p">()</span>
+
+        <span class="c1"># API Setup</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_url</span> <span class="o">=</span> <span class="n">api_url</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_api</span><span class="p">(</span><span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">image</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; run prediction oncomming frame&quot;&quot;&quot;</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">res</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span><span class="p">:</span>
+                <span class="n">frame</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;JPEG&#39;</span><span class="p">)</span>
+                <span class="c1"># Send alert to api</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">send_alert</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">res</span>
+
+    <span class="k">def</span> <span class="nf">init_api</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Setup api&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_url</span><span class="p">,</span> <span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">event_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">create_event</span><span class="p">(</span><span class="n">lat</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">lon</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">send_alert</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Send Alert&quot;&quot;&quot;</span>
+        <span class="c1"># Create a media</span>
+        <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="c1"># Create an alert linked to the media and the event</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">send_alert_from_device</span><span class="p">(</span><span class="n">lat</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">lon</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">event_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">event_id</span><span class="p">,</span> <span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">upload_media</span><span class="p">(</span><span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">,</span> <span class="n">image_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Pyronear Contributors
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
