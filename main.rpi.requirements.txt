@@ -1,0 +1,4 @@
+psutil==5.8.0
+pyroclient==0.1.1
+python-dotenv==0.17.0
+requests==2.25.1
