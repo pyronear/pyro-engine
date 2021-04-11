@@ -2,57 +2,63 @@
 
 # This program is licensed under the GNU Affero General Public License version 3.
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
-
-from gpiozero import CPUTemperature
-from time import sleep, strftime
-import psutil
-import pandas as pd
+import logging
 import os
+from time import sleep
+
+import psutil
+
+import requests
+from dotenv import load_dotenv
+from gpiozero import CPUTemperature
+from requests import RequestException
+
+load_dotenv()
+
+MAIN_RPI_IP = os.environ.get("MAIN_RPI_IP")
+MAIN_RPI_WEBSERVER_PORT = os.environ.get("MAIN_RPI_WEBSERVER_PORT")
 
 
 class MonitorPi:
     """This class aims to monitor some metrics from Raspberry Pi system.
-
     Example
     --------
-    recordlogs = MonitorPi("/home/pi/Desktop/")
-    recordlogs.record(5) # record metrics every 5 seconds
+    monitor = MonitorPi(url_of_webserver)
+    monitor.record(5) # record metrics every 5 seconds
     """
 
-    def __init__(self, monitoringFolder, logFile="pi_perf.csv"):
+    logger = logging.getLogger(__name__)
 
-        # cpu temperature
+    def __init__(self, webserver_url):
+        """Initialize parameters for MonitorPi."""
         self.cpu_temp = CPUTemperature()
-
-        # path
-        self.monitoringFolder = monitoringFolder
-        self.logFile = logFile
+        self.webserver_url = webserver_url
+        self.is_running = True
 
     def get_record(self):
+        metrics = {
+            "id": 0,
+            "cpu_temperature_C": self.cpu_temp.temperature,
+            "mem_available_GB": psutil.virtual_memory().available / 1024 ** 3,
+            "cpu_usage_percent": psutil.cpu_percent(),
+        }
 
-        line = {"datetime": [strftime("%Y-%m-%d %H:%M:%S")],
-                "cpu_temperature_C": [self.cpu_temp.temperature],
-                "mem_available_GB": [psutil.virtual_memory().available / 1024 ** 3],
-                "cpu_usage_percent": [psutil.cpu_percent()]
-                }
+        response = requests.post(self.webserver_url, json=metrics)
+        response.raise_for_status()
 
-        path_file = os.path.join(self.monitoringFolder, self.logFile)
+    def record(self, time_step):
+        while self.is_running:
+            try:
+                self.get_record()
+                sleep(time_step)
+            except RequestException as e:
+                self.logger.error(f"Unexpected error in get_record(): {e!r}")
 
-        if os.path.isfile(path_file):
-            pd.DataFrame(data=line).to_csv(path_file, mode='a', header=False, index=0)
-        else:
-            pd.DataFrame(data=line).to_csv(path_file, mode='a', index=0)
-
-    def record(self, timeStep):
-
-        while True:
-
-            self.get_record()
-
-            sleep(timeStep)
+    def stop_monitoring(self):
+        self.is_running = False
 
 
 if __name__ == "__main__":
-
-    recordlogs = MonitorPi("/home/pi/Desktop/")
-    recordlogs.record(30)
+    webserver_local_url = f"http://{MAIN_RPI_IP}:{MAIN_RPI_WEBSERVER_PORT}/metrics"
+    monitor = MonitorPi(webserver_local_url)
+    monitor.record(30)
