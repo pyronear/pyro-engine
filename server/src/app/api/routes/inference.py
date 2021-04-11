@@ -6,13 +6,21 @@
 
 from fastapi import APIRouter, BackgroundTasks
 from fastapi import File, UploadFile
+from pyroengine.engine import PyronearEngine
+from PIL import Image
+import io
+
 
 router = APIRouter()
+engine = PyronearEngine() #need to add api setup parameters here
 
 
 def predict_and_alert(file):
     """ predict smoke from an image and if yes raise an alert """
-    # TODO : use inference class and pyro-api client to raise an alert if needed
+    # Load Image
+    image = Image.open(io.BytesIO(file))
+    # Predict
+    prediction = engine.predict(image) 
     return {"comment": "set fire to the rain please"}
 
 
@@ -26,7 +34,6 @@ async def inference(background_tasks: BackgroundTasks,
     Below, click on "Schema" for more detailed information about arguments
     or "Example Value" to get a concrete idea of arguments
     """
-    # some async operation could happen here
 
-    # We might need a backround task here for inference
+    # Call engine as background task
     background_tasks.add_task(predict_and_alert, file)
