@@ -50,6 +50,23 @@ You can install the package using [pypi](https://pypi.org/project/pyronear/) as 
 pip install pyroengine
 ```
 
+### Test Engine
+
+You can test to run a prediction using our Pyronear Engine using the following:
+
+```shell
+from pyroengine.engine import PyronearEngine
+from PIL import Image
+
+engine = PyronearEngine()
+
+im = Image.open("path/to/your/image.jpg").convert('RGB')
+
+prediction = engine.predict(image) 
+```
+
+This is a quick demo without api setup, so without sending the alert
+
 ## Documentation
 
 The full package documentation is available [here](https://pyronear.github.io/pyro-engine/) for detailed specifications. The documentation was built with [Sphinx](https://www.sphinx-doc.org) using a [theme](https://github.com/readthedocs/sphinx_rtd_theme) provided by [Read the Docs](https://readthedocs.org).
