@@ -1,4 +1,4 @@
-FROM python:3.8.1-alpine
+FROM python:3.8.1-slim
 
 # set work directory
 WORKDIR /usr/src/app
@@ -11,11 +11,33 @@ ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app/server/src"
 # copy requirements file
 COPY ./server/src/requirements.txt /usr/src/app/requirements.txt
 
-# install dependencies
+# ensure local python is preferred over distribution python
+ENV PATH /usr/local/bin:$PATH
+
+# http://bugs.python.org/issue19846
+# > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
+ENV LANG C.UTF-8
+
+# runtime dependencies
 RUN set -eux \
-    && apk add --no-cache --virtual .build-deps build-base \
-        libressl-dev libffi-dev gcc musl-dev python3-dev \
-    && pip install --upgrade pip setuptools wheel \
+	&& apt-get update \
+	&& apt-get install -y --no-install-recommends \
+		ca-certificates \
+		netbase \
+	&& rm -rf /var/lib/apt/lists/*
+
+ENV GPG_KEY 3.8.1
+ENV PYTHON_VERSION 3.8.1
+
+RUN set -ex \
+	 \
+	&& savedAptMark="$(apt-mark showmanual)" \
+	&& apt-get update && apt-get install -y --no-install-recommends \
+		gcc \
+		python3-dev \
+		libffi-dev \
+		libssl-dev \
+	&& pip install --upgrade pip setuptools wheel \
     && pip install -r /usr/src/app/requirements.txt \
     && rm -rf /root/.cache/pip
 
