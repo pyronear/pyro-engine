@@ -1,6 +1,6 @@
 fastapi==0.61.1
 uvicorn==0.11.1
 python-multipart==0.0.5
-pyrovision >= 0.1.2
-python-dotenv >= 0.15.0
-pyroclient
+pyrovision == 0.1.2
+python-dotenv == 0.17.0
+pyroclient == 0.1.1
