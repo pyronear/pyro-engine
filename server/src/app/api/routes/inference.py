@@ -19,21 +19,18 @@ def predict_and_alert(file):
     """ predict smoke from an image and if yes raise an alert """
     # Load Image
     image = Image.open(io.BytesIO(file))
+
     # Predict
-    prediction = engine.predict(image) 
-    return {"comment": "set fire to the rain please"}
+    prediction = engine.predict(image)
 
 
-@router.post("/", status_code=201, summary="Send img from a device to predict smoke")
+@router.post("/file/", status_code=201, summary="Send img from a device to predict smoke")
 async def inference(background_tasks: BackgroundTasks,
                     file: UploadFile = File(...)
                     ):
     """
-    Send img from a device based on the given information in order to predict smoke
-
-    Below, click on "Schema" for more detailed information about arguments
-    or "Example Value" to get a concrete idea of arguments
+    Get image from pizero and call engine for wildfire detection
     """
 
     # Call engine as background task
-    background_tasks.add_task(predict_and_alert, file)
+    background_tasks.add_task(predict_and_alert, await file.read())
