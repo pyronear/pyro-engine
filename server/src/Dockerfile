@@ -1,4 +1,4 @@
-FROM python:3.8.1-slim
+FROM nelnatsol/pyroengine:latest
 
 # set work directory
 WORKDIR /usr/src/app
