@@ -32,7 +32,7 @@ class PyronearEngine:
 
     def predict(self, frame):
         """ run prediction oncomming frame"""
-        res = self.pyronearPredictor.predict(frame)
+        res = self.pyronearPredictor.predict(frame.convert('RGB'))
         if res > 0.5:
             print(f"Wildfire detection ({res:.2%})")
             if self.use_api:
