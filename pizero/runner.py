@@ -1,3 +1,9 @@
+# Copyright (C) 2021, Pyronear contributors.
+
+# This program is licensed under the GNU Affero General Public License version 3.
+# See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
+
+
 import io
 import time
 import picamera
@@ -5,7 +11,7 @@ from PIL import Image
 import requests
 
 
-url = "http://192.168.1.62:8000/file" # api url
+url = "http://192.168.1.62:80/inference/file" # api url
 stream = io.BytesIO()
 with picamera.PiCamera() as camera:
     camera.resolution = (3280, 2464) #use maximal resolution
@@ -20,4 +26,4 @@ with picamera.PiCamera() as camera:
         files = {'file': stream}
         requests.post(url, files=files) #send image to pi_cental
 
-        time.sleep(30) #Wait between two capture
+        time.sleep(3) #Wait between two capture
