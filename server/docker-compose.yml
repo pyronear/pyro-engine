@@ -5,8 +5,8 @@ services:
     build:
       context: ..
       dockerfile: ./server/src/Dockerfile
-    command: uvicorn server.src.app.main:app --reload --workers 1 --host 0.0.0.0 --port 80
+    command: uvicorn server.src.app.main:app --reload --workers 1 --host 0.0.0.0 --port 8000
 
     restart: always
     ports:
-      - ${PORT}:80
+      - ${PORT}:8002

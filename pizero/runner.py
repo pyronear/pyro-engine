@@ -11,7 +11,7 @@ from PIL import Image
 import requests
 
 
-url = "http://192.168.1.62:80/inference/file"  # api url
+url = "http://192.168.1.62:8002/inference/file"  # api url
 stream = io.BytesIO()
 with picamera.PiCamera() as camera:
     camera.resolution = (3280, 2464)  # use maximal resolution
