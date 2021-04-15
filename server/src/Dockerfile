@@ -29,6 +29,8 @@ RUN set -eux \
 ENV GPG_KEY 3.8.1
 ENV PYTHON_VERSION 3.8.1
 
+EXPOSE 80
+
 RUN set -ex \
 	 \
 	&& savedAptMark="$(apt-mark showmanual)" \
