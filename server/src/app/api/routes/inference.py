@@ -12,7 +12,7 @@ import io
 
 
 router = APIRouter()
-engine = PyronearEngine() #need to add api setup parameters here
+engine = PyronearEngine()  # need to add api setup parameters here
 
 
 def predict_and_alert(file):
@@ -21,7 +21,7 @@ def predict_and_alert(file):
     image = Image.open(io.BytesIO(file))
 
     # Predict
-    prediction = engine.predict(image)
+    engine.predict(image)
 
 
 @router.post("/file/", status_code=201, summary="Send img from a device to predict smoke")
