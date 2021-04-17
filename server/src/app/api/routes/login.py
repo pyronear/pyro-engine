@@ -1,3 +1,9 @@
+# Copyright (C) 2021, Pyronear contributors.
+
+# This program is licensed under the GNU Affero General Public License version 3.
+# See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
+
+
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import timedelta
@@ -36,7 +42,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     """
 
     # Verify user password
-    user = authenticate_user(cfg.fake_users_db, form_data.username, form_data.password)
+    user = authenticate_user(cfg.fleet_accesses, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
