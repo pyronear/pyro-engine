@@ -4,15 +4,17 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.api.schemas import MetricIn, MetricOut
+from app.api.schemas import MetricIn, MetricOut, User
+from app.api.deps import get_current_active_user
+
 
 router = APIRouter()
 
 
 @router.post("/", response_model=MetricOut, status_code=201, summary="Send metrics from a device")
-async def log_metrics(payload: MetricIn):
+async def log_metrics(payload: MetricIn, current_user: User = Depends(get_current_active_user)):
     """
     Send metrics from a device based on the given information
 
