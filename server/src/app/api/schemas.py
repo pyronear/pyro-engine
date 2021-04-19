@@ -44,10 +44,10 @@ class TokenData(BaseModel):
     username: Optional[str] = None
 
 
-class User(BaseModel):
+class Device(BaseModel):
     username: str
     disabled: Optional[bool] = None
 
 
-class UserInDB(User):
+class DeviceInDB(Device):
     hashed_password: str

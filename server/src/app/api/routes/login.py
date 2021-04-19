@@ -8,28 +8,28 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import timedelta
 
-from app.api.schemas import User, UserInDB, Token, TokenData
+from app.api.schemas import Device, DeviceInDB, Token, TokenData
 from app.api import security
-from app.api.deps import get_user
+from app.api.deps import get_device
 
 from app import config as cfg
 
 router = APIRouter()
 
 
-def authenticate_user(fake_db, username: str, password: str):
+def authenticate_device(fake_db, username: str, password: str):
 
-    user = get_user(fake_db, username)
+    device = get_device(fake_db, username)
 
-    if not user:
-
-        return False
-
-    if not security.verify_password(password, user.hashed_password):
+    if not device:
 
         return False
 
-    return user
+    if not security.verify_password(password, device.hashed_password):
+
+        return False
+
+    return device
 
 
 @router.post("/access-token", response_model=Token)
@@ -41,9 +41,9 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
     """
 
-    # Verify user password
-    user = authenticate_user(cfg.fleet_accesses, form_data.username, form_data.password)
-    if not user:
+    # Verify device password
+    device = authenticate_device(cfg.fleet_accesses, form_data.username, form_data.password)
+    if not device:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -53,7 +53,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     # create access token
     access_token_expires = timedelta(minutes=cfg.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = security.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": device.username}, expires_delta=access_token_expires
     )
 
     return {"access_token": access_token, "token_type": "bearer"}

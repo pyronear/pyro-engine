@@ -6,15 +6,15 @@
 
 from fastapi import APIRouter, Depends
 
-from app.api.schemas import MetricIn, MetricOut, User
-from app.api.deps import get_current_active_user
+from app.api.schemas import MetricIn, MetricOut, Device
+from app.api.deps import get_current_active_device
 
 
 router = APIRouter()
 
 
 @router.post("/", response_model=MetricOut, status_code=201, summary="Send metrics from a device")
-async def log_metrics(payload: MetricIn, current_user: User = Depends(get_current_active_user)):
+async def log_metrics(payload: MetricIn, current_device: Device = Depends(get_current_active_device)):
     """
     Send metrics from a device based on the given information
 
