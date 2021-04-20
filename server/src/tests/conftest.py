@@ -8,7 +8,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from app.main import app
-from app.api.deps import get_current_active_user
+from app.api.deps import get_current_active_device
 
 
 @pytest.fixture(scope="module")
@@ -17,7 +17,7 @@ def test_app():
     async def override_dependency():
         return {"username": "michel", "disabled": False}
 
-    app.dependency_overrides[get_current_active_user] = override_dependency
+    app.dependency_overrides[get_current_active_device] = override_dependency
 
     client = TestClient(app)
     yield client  # testing happens here
