@@ -54,8 +54,8 @@ pip install pyroengine
 ```
 ### Environment files 
 
-The `pyroengine/pi_utils/python.env` and `pizero/python.env` files must contain:
-- `WEBSERVER_PI`: the IP address of the main rpi once it is installed on site
+The `pyroengine/pi_utils/python.env` file must contain:
+- `WEBSERVER_IP`: the IP address of the main rpi once it is installed on site
 - `WEBSERVER_PORT`: the port exposed on the main rpi for the local webserver
 
 ### Test Engine
