@@ -15,8 +15,8 @@ from requests import RequestException
 
 load_dotenv()
 
-MAIN_RPI_IP = os.environ.get("MAIN_RPI_IP")
-MAIN_RPI_WEBSERVER_PORT = os.environ.get("MAIN_RPI_WEBSERVER_PORT")
+MAIN_RPI_IP = os.environ.get("WEBSERVER_IP")
+MAIN_RPI_WEBSERVER_PORT = os.environ.get("WEBSERVER_PORT")
 
 
 class MonitorPi:
