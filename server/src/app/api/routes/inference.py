@@ -24,13 +24,26 @@ def predict_and_alert(file):
     engine.predict(image)
 
 
+def write_picture(file):
+    """
+    Write picture to local storage. File name could include device name (see #37) and date.
+    Path could be retrieved from environment variable
+    """
+    pass  # FIXME
+
+
 @router.post("/file/", status_code=201, summary="Send img from a device to predict smoke")
 async def inference(background_tasks: BackgroundTasks,
-                    file: UploadFile = File(...)
+                    file: UploadFile = File(...),
+                    action: Optional[str] = 'infer',
                     ):
     """
     Get image from pizero and call engine for wildfire detection
     """
 
     # Call engine as background task
-    background_tasks.add_task(predict_and_alert, await file.read())
+    try:
+        fcn = {'infer': predict_and_alert, 'write': write_picture}[action]
+    except KeyError:
+        raise KeyError(f'Invalid action for route: {action}')
+    background_tasks.add_task(fcn, await file.read())
