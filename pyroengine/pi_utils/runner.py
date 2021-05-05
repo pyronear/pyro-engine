@@ -2,6 +2,7 @@
 
 # This program is licensed under the GNU Affero General Public License version 3.
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
+
 import argparse
 import logging
 import io
@@ -41,10 +42,10 @@ class Runner:
         stream.seek(0)
         return {"file": stream}
 
-    def send_stream(self, files, **kwargs):
+    def send_stream(self, files):
         try:
             response = requests.post(
-                self.webserver_url, files=files, **kwargs
+                self.webserver_url, files=files
             )  # send image to local webserver
             response.raise_for_status()
         except RequestException as e:
@@ -63,12 +64,14 @@ class Runner:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Take picture(s) and send to local web server')
     parser.add_argument('--single', action='store_true', help='Single picture instead of eternal loop')
+    parser.add_argument('--write', action='store_true', help='Use /write_image route instead of /inference')
     args = parser.parse_args()
 
-    webserver_local_url = f"http://{WEBSERVER_IP}:{WEBSERVER_PORT}/inference/file"
+    webserver_local_url = f"http://{WEBSERVER_IP}:{WEBSERVER_PORT}" + \
+                          ("/inference/file" if not args.write else "/write_image/file")
     runner = Runner(webserver_local_url)
     if args.single:
         files = runner.capture_stream()
-        runner.send_stream(files, action='write')
+        runner.send_stream(files)
     else:
         runner.run()
