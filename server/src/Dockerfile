@@ -1,4 +1,4 @@
-FROM pyronear/armv7_pyro-engine:latest
+FROM pyronear/pyro-engine:latest
 
 # set work directory
 WORKDIR /usr/src/app
