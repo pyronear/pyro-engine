@@ -34,6 +34,6 @@ def write_image(file):
 async def inference(background_tasks: BackgroundTasks,
                     file: UploadFile = File(...)
                     ):
-    """Get image from pizero and write it to $IMAGE_FOLDER"""
+    """Get image from pizero and write it to $IMAGE_FOLDER."""
     # Call write_image as background task
     background_tasks.add_task(write_image, await file.read())
