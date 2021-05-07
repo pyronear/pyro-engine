@@ -20,20 +20,20 @@ engine = PyronearEngine()  # need to add api setup parameters here
 
 
 def write_image(file):
-    """Write image to $IMAGE_FOLDER (or /tmp) as image_YYYY-MM-DD_hh_mm_ss.jpg"""
+    """Write image to $IMAGE_FOLDER (or /tmp) as image_YYYY-MM-DD_hh_mm_ss.jpg."""
     image = Image.open(io.BytesIO(file))  # Load Image
+    output_dir = Path(os.getenv('IMAGE_FOLDER', Path.home() / 'images'))
+    output_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
     # FIXME: add device to filename when it becomes available
-    fname = Path(os.getenv('IMAGE_FOLDER', '/tmp/')) / f'{now}.jpg'
-    image.save(fname)
+    fname = f'{now}.jpg'
+    image.save(output_dir / fname)
 
 
 @router.post("/file/", status_code=201, summary="Write image from a device")
 async def inference(background_tasks: BackgroundTasks,
                     file: UploadFile = File(...)
                     ):
-    """
-    Get image from pizero and write it to $IMAGE_FOLDER
-    """
+    """Get image from pizero and write it to $IMAGE_FOLDER"""
     # Call write_image as background task
     background_tasks.add_task(write_image, await file.read())
