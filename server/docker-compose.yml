@@ -9,7 +9,7 @@ services:
 
     restart: always
     ports:
-      - ${PORT}:8002
+      - ${PORT}:8000
 
 networks:
   default:
