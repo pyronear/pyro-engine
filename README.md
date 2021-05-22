@@ -52,6 +52,11 @@ You can install the package using [pypi](https://pypi.org/project/pyronear/) as 
 ```shell
 pip install pyroengine
 ```
+### Environment files 
+
+The `pyroengine/pi_utils/python.env` file must contain:
+- `WEBSERVER_IP`: the IP address of the main rpi once it is installed on site
+- `WEBSERVER_PORT`: the port exposed on the main rpi for the local webserver
 
 ### Test Engine
 

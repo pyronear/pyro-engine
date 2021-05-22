@@ -1,4 +1,4 @@
-FROM nelnatsol/pyroengine:latest
+FROM pyronear/pyro-engine:latest
 
 # set work directory
 WORKDIR /usr/src/app
