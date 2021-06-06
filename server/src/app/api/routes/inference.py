@@ -12,10 +12,6 @@ import io
 import json
 
 
-router = APIRouter()
-engine, pi_zeros_data = setup_engine()
-
-
 def setup_engine():
     with open('config_data.json') as json_file:
         config_data = json.load(json_file)
@@ -39,6 +35,10 @@ def setup_engine():
     engine = PyronearEngine(detection_threshold, api_url, pi_zero_credentials, save_evry_n_frame, latitude, longitude)
 
     return engine, pi_zeros_data
+
+
+router = APIRouter()
+engine, pi_zeros_data = setup_engine()
 
 
 def predict_and_alert(file, ip):
