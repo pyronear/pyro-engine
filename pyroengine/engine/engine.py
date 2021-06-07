@@ -120,8 +120,8 @@ class PyronearEngine:
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
-        self.api_client.send_alert_from_device(lat=9, lon=9, media_id=media_id)
-        self.api_client.upload_media(media_id=media_id, image_data=self.stream.getvalue())
+        self.api_client[pi_zero_id].send_alert_from_device(lat=9, lon=9, media_id=media_id)
+        self.api_client[pi_zero_id].upload_media(media_id=media_id, image_data=self.stream.getvalue())
 
     def save_frame(self, pi_zero_id):
         """Save frame"""
@@ -129,4 +129,4 @@ class PyronearEngine:
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Send media
-        self.api_client.upload_media(media_id=media_id, image_data=self.stream.getvalue())
+        self.api_client[pi_zero_id].upload_media(media_id=media_id, image_data=self.stream.getvalue())
