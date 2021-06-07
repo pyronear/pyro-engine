@@ -101,7 +101,7 @@ class PyronearEngine:
                 # Reset frame counter
                 self.frames_counter[pi_zero_id] = 0
                 # Send frame to the api
-                frame.save(self.image, format='JPEG')
+                frame.save(self.stream, format='JPEG')
                 self.save_frame(pi_zero_id)
                 self.stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
