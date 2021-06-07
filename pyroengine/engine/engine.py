@@ -116,6 +116,7 @@ class PyronearEngine:
 
     def send_alert(self, pi_zero_id):
         """Send alert"""
+        print("Send alert !")
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
@@ -124,6 +125,7 @@ class PyronearEngine:
 
     def save_frame(self, pi_zero_id):
         """Save frame"""
+        print("Upload media for dataset")
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Send media
