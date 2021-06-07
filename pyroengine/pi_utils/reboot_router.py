@@ -5,7 +5,7 @@ import os
 
 
 def reboot_router():
-    "Reboot 4G rooter  "
+    "Reboot 4G rooter"
     load_dotenv()
 
     ROOTER_LOGIN = os.environ.get("ROOTER_LOGIN")
