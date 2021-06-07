@@ -109,7 +109,7 @@ class PyronearEngine:
 
     def init_api(self, pi_zero_credentials):
         """Setup api"""
-        self.clients = {}
+        self.api_client = {}
         for pi_zero_id in pi_zero_credentials.keys():
             self.api_client[pi_zero_id] = client.Client(self.api_url, pi_zero_credentials[pi_zero_id]['login'],
                                                         pi_zero_credentials[pi_zero_id]['password'])
