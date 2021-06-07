@@ -79,6 +79,13 @@ class PyronearEngine:
 
             if not self.event_appening[pi_zero_id]:
                 self.detection_counter[pi_zero_id] += 1
+                # Ensure counter max value is 3
+                if self.detection_counter[pi_zero_id] > 3:
+                    self.detection_counter[pi_zero_id] = 3
+
+            # If counter reach 3, start sending alerts
+            if self.detection_counter[pi_zero_id] == 3:
+                self.event_appening[pi_zero_id] = True
 
             if self.use_api and self.event_appening[pi_zero_id]:
                 frame.save(self.stream, format='JPEG')
