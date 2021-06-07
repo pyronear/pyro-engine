@@ -47,7 +47,7 @@ def predict_and_alert(file, ip):
     image = Image.open(io.BytesIO(file))
 
     # Get pi zero id
-    pi_zero_id = pi_zeros_data[ip]
+    pi_zero_id = pi_zeros_data[ip]['id']
 
     # Predict
     engine.predict(image, pi_zero_id)
