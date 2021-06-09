@@ -9,12 +9,14 @@ from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 
 from app import config as cfg
-from app.api.routes import metrics, inference, write_image
+from app.api.routes import metrics, inference, login, write_image
+
 
 app = FastAPI(title=cfg.PROJECT_NAME, description=cfg.PROJECT_DESCRIPTION, version=cfg.VERSION)
 
 
 # Routing
+app.include_router(login.router, prefix="/login", tags=["login"])
 app.include_router(metrics.router, prefix="/metrics", tags=['metrics'])
 app.include_router(inference.router, prefix="/inference", tags=['inference'])
 app.include_router(write_image.router, prefix="/write_image", tags=['write'])
