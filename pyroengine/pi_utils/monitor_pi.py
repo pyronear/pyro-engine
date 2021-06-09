@@ -15,8 +15,8 @@ from requests import RequestException
 
 load_dotenv()
 
-MAIN_RPI_IP = os.environ.get("MAIN_RPI_IP")
-MAIN_RPI_WEBSERVER_PORT = os.environ.get("MAIN_RPI_WEBSERVER_PORT")
+WEBSERVER_IP = os.environ.get("WEBSERVER_IP")
+WEBSERVER_PORT = os.environ.get("WEBSERVER_PORT")
 
 
 class MonitorPi:
@@ -59,6 +59,6 @@ class MonitorPi:
 
 
 if __name__ == "__main__":
-    webserver_local_url = f"http://{MAIN_RPI_IP}:{MAIN_RPI_WEBSERVER_PORT}/metrics"
+    webserver_local_url = f"http://{WEBSERVER_IP}:{WEBSERVER_PORT}/metrics"
     monitor = MonitorPi(webserver_local_url)
     monitor.record(30)
