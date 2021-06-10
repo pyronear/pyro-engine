@@ -171,47 +171,130 @@
 <span class="sd">    This class is the Pyronear Engine. This engine manage the whole Fire Detection</span>
 <span class="sd">    process by capturing and saving the image and by predicting if there is a fire or</span>
 <span class="sd">    not based on this image.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        detection_threshold (float): wildfire detection threshold in [0, 1]</span>
+<span class="sd">        api_url (str): url of the pyronear API</span>
+<span class="sd">        pi_zero_credentials (Dict): api credectials for each pizero, the dictionary should as the one in the example</span>
+<span class="sd">        save_every_n_frame (int): Send one frame over N to the api for our dataset</span>
+<span class="sd">        latitude (float): device latitude</span>
+<span class="sd">        longitude (float): device longitude</span>
+
 <span class="sd">    Examples:</span>
-<span class="sd">        &gt;&gt;&gt; pyroEngine = PyronearEngine(api_url, api_login, api_password)</span>
+<span class="sd">        &gt;&gt;&gt; pi_zero_credentials ={}</span>
+<span class="sd">        &gt;&gt;&gt; pi_zero_credentials[&#39;pi_zero_id_1&#39;]={&#39;login&#39;:&#39;log1&#39;, &#39;password&#39;:&#39;pwd1&#39;}</span>
+<span class="sd">        &gt;&gt;&gt; pi_zero_credentials[&#39;pi_zero_id_2&#39;]={&#39;login&#39;:&#39;log2&#39;, &#39;password&#39;:&#39;pwd2&#39;}</span>
+<span class="sd">        &gt;&gt;&gt; pyroEngine = PyronearEngine(0.6, &#39;https://api.pyronear.org&#39;, pi_zero_credentials, 50)</span>
 <span class="sd">        &gt;&gt;&gt; pyroEngine.run()</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">api_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">api_login</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">api_password</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">detection_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">api_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">pi_zero_credentials</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">save_evry_n_frame</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">latitude</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">longitude</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Init engine&quot;&quot;&quot;</span>
-        <span class="c1"># Pyronear Predictor</span>
+        <span class="c1"># Engine Setup</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span> <span class="o">=</span> <span class="n">PyronearPredictor</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span> <span class="o">=</span> <span class="n">detection_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">frames_counter</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_evry_n_frame</span> <span class="o">=</span> <span class="n">save_evry_n_frame</span>
+        <span class="k">if</span> <span class="n">pi_zero_credentials</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">pi_zero_id</span> <span class="ow">in</span> <span class="n">pi_zero_credentials</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">frames_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="s1">&#39;-1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="s1">&#39;-1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="c1"># API Setup</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">api_url</span> <span class="o">=</span> <span class="n">api_url</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">latitude</span> <span class="o">=</span> <span class="n">latitude</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">longitude</span> <span class="o">=</span> <span class="n">longitude</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">init_api</span><span class="p">(</span><span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">image</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_api</span><span class="p">(</span><span class="n">pi_zero_credentials</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stream</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot; run prediction oncomming frame&quot;&quot;&quot;</span>
-        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s1">&#39;RGB&#39;</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">res</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span><span class="p">:</span>
-                <span class="n">frame</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;JPEG&#39;</span><span class="p">)</span>
-                <span class="c1"># Send alert to api</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">send_alert</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">pi_zero_id</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; run prediction on comming frame&quot;&quot;&quot;</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s1">&#39;RGB&#39;</span><span class="p">))</span>  <span class="c1"># run prediction</span>
+        <span class="k">if</span> <span class="n">pi_zero_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">), on device </span><span class="si">{</span><span class="n">pi_zero_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">res</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">pi_zero_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">pi_zero_id</span> <span class="o">=</span> <span class="s1">&#39;-1&#39;</span>  <span class="c1"># add default key value</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="c1"># Ensure counter max value is 3</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+
+            <span class="c1"># If counter reach 3, start sending alerts</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]:</span>
+                <span class="n">frame</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;JPEG&#39;</span><span class="p">)</span>
+                <span class="c1"># Send alert to the api</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">send_alert</span><span class="p">(</span><span class="n">pi_zero_id</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># &quot;Rewind&quot; the stream to the beginning so we can read its content</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">-=</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]:</span>
+                <span class="c1"># Stop event</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">event_appening</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># save frame</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_api</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_evry_n_frame</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">frames_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">frames_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_evry_n_frame</span><span class="p">:</span>
+                <span class="c1"># Reset frame counter</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">frames_counter</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="c1"># Send frame to the api</span>
+                <span class="n">frame</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;JPEG&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">save_frame</span><span class="p">(</span><span class="n">pi_zero_id</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># &quot;Rewind&quot; the stream to the beginning so we can read its content</span>
 
         <span class="k">return</span> <span class="n">res</span>
 
-    <span class="k">def</span> <span class="nf">init_api</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">init_api</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pi_zero_credentials</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Setup api&quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_url</span><span class="p">,</span> <span class="n">api_login</span><span class="p">,</span> <span class="n">api_password</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">event_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">create_event</span><span class="p">(</span><span class="n">lat</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">lon</span><span class="o">=</span><span class="mi">9</span><span class="p">)</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">pi_zero_id</span> <span class="ow">in</span> <span class="n">pi_zero_credentials</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">Client</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_url</span><span class="p">,</span> <span class="n">pi_zero_credentials</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">][</span><span class="s1">&#39;login&#39;</span><span class="p">],</span>
+                                                        <span class="n">pi_zero_credentials</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">][</span><span class="s1">&#39;password&#39;</span><span class="p">])</span>
 
-    <span class="k">def</span> <span class="nf">send_alert</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Send Alert&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">send_alert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pi_zero_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Send alert&quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Send alert !&quot;</span><span class="p">)</span>
         <span class="c1"># Create a media</span>
-        <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
         <span class="c1"># Create an alert linked to the media and the event</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">send_alert_from_device</span><span class="p">(</span><span class="n">lat</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">lon</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">event_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">event_id</span><span class="p">,</span> <span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="o">.</span><span class="n">upload_media</span><span class="p">(</span><span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">,</span> <span class="n">image_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">send_alert_from_device</span><span class="p">(</span><span class="n">lat</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">latitude</span><span class="p">,</span> <span class="n">lon</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">longitude</span><span class="p">,</span> <span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">upload_media</span><span class="p">(</span><span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">,</span> <span class="n">media_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">save_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pi_zero_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Save frame&quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Upload media for dataset&quot;</span><span class="p">)</span>
+        <span class="c1"># Create a media</span>
+        <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="c1"># Send media</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">upload_media</span><span class="p">(</span><span class="n">media_id</span><span class="o">=</span><span class="n">media_id</span><span class="p">,</span> <span class="n">media_data</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">getvalue</span><span class="p">())</span></div>
 </pre></div>
 
            </div>
