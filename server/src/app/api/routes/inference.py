@@ -4,11 +4,8 @@
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks
 from fastapi import File, UploadFile
-
-from app.api.deps import get_current_active_device
-from app.api.schemas import Device
 from pyroengine.engine import PyronearEngine
 from PIL import Image
 import io
@@ -29,8 +26,8 @@ def predict_and_alert(file):
 
 @router.post("/file/", status_code=201, summary="Send img from a device to predict smoke")
 async def inference(background_tasks: BackgroundTasks,
-                    file: UploadFile = File(...),
-                    current_device: Device = Depends(get_current_active_device)):
+                    file: UploadFile = File(...)
+                    ):
     """
     Get image from pizero and call engine for wildfire detection
     """

@@ -7,12 +7,10 @@
 import requests
 
 
-def test_inference(test_app, mocker):
-
-    mocker.patch('app.api.deps.get_current_active_user', return_value="kikou")
+def test_inference(test_app):
 
     img_content = requests.get("https://pyronear.org/img/logo_letters.png").content
 
-    response = test_app.post("/inference/file/", files=dict(file=img_content))
+    response = test_app.post("/inference/", files=dict(file=img_content))
 
     assert response.status_code == 201
