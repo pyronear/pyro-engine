@@ -1,5 +1,5 @@
 pyrovision >= 0.1.2
 python-dotenv >= 0.15.0
-pyroclient
+pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirectory=client
 pandas>=0.25.2
 psutil
