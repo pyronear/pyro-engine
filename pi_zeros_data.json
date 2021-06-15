@@ -1,10 +1,10 @@
 {
-    "192.168.1.1": {
+    "tour-1-hostname": {
         "id": "id1",
         "login": "log1",
         "password": "pwd1"
     },
-    "192.168.1.2": {
+    "tour-2-hostname": {
         "id": "id2",
         "login": "log2",
         "password": "pwd2"
