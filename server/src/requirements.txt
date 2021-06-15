@@ -6,3 +6,4 @@ python-dotenv == 0.17.0
 pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirectory=client
 python-jose==3.2.0
 passlib[bcrypt]==1.7.4
+huawei-lte-api == 1.4.18

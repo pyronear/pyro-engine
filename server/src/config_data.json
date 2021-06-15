@@ -1,0 +1,7 @@
+{
+    "detection_threshold": 0.55,
+    "api_url": "https://api.pyronear.org",
+    "save_evry_n_frame": 30,
+    "latitude": 9,
+    "longitude": 9
+}
