@@ -10,6 +10,29 @@ from pyroengine.engine import PyronearEngine
 from PIL import Image
 import io
 import json
+import socket
+
+
+def map_ip_hostname(hostnames):
+    """This function map all hostnames with their coresponding ip adress"""
+    ip_hostname_mapping = {}
+    for hostname in hostnames:
+        ip = socket.gethostbyname(hostname + '.local')
+        ip_hostname_mapping[ip] = hostname
+
+    return ip_hostname_mapping
+
+
+def get_hostname_from_ip(ip, ip_hostname_mapping):
+    """This function return the hostname for a given ip adress"""
+    if ip in ip_hostname_mapping.keys():
+        hostname = ip_hostname_mapping[ip]
+
+    else:
+        ip_hostname_mapping = map_ip_hostname(ip_hostname_mapping.values())
+        hostname = ip_hostname_mapping[ip]
+
+    return hostname, ip_hostname_mapping
 
 
 def setup_engine():
@@ -28,8 +51,8 @@ def setup_engine():
         pi_zeros_data = json.load(json_file)
 
     pi_zero_credentials = {}
-    for ip in pi_zeros_data .keys():
-        d = pi_zeros_data[ip]
+    for hostname in pi_zeros_data.keys():
+        d = pi_zeros_data[hostname]
         pi_zero_credentials[d['id']] = {'login': d['login'], 'password': d['password']}
 
     engine = PyronearEngine(detection_threshold, api_url, pi_zero_credentials, save_evry_n_frame, latitude, longitude)
@@ -39,6 +62,7 @@ def setup_engine():
 
 router = APIRouter()
 engine, pi_zeros_data = setup_engine()
+ip_hostname_mapping = map_ip_hostname(pi_zeros_data.keys())
 
 
 def predict_and_alert(file, ip):
@@ -46,8 +70,11 @@ def predict_and_alert(file, ip):
     # Load Image
     image = Image.open(io.BytesIO(file))
 
+    # Get hosname
+    hostname, ip_hostname_mapping = get_hostname_from_ip(ip, ip_hostname_mapping)
+
     # Get pi zero id
-    pi_zero_id = pi_zeros_data[ip]['id']
+    pi_zero_id = pi_zeros_data[hostname]['id']
 
     # Predict
     engine.predict(image, pi_zero_id)
