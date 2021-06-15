@@ -45,6 +45,3 @@ RUN set -ex \
 
 # copy project
 COPY . /usr/src/app/
-
-RUN git clone https://github.com/pyronear/pyro-api.git
-RUN pip install -e pyro-api/client/.
