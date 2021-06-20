@@ -13,30 +13,8 @@ import json
 import socket
 
 
-def map_ip_hostname(hostnames):
-    """This function map all hostnames with their coresponding ip adress"""
-    ip_hostname_mapping = {}
-    for hostname in hostnames:
-        ip = socket.gethostbyname(hostname + '.local')
-        ip_hostname_mapping[ip] = hostname
-
-    return ip_hostname_mapping
-
-
-def get_hostname_from_ip(ip, ip_hostname_mapping):
-    """This function return the hostname for a given ip adress"""
-    if ip in ip_hostname_mapping.keys():
-        hostname = ip_hostname_mapping[ip]
-
-    else:
-        ip_hostname_mapping = map_ip_hostname(ip_hostname_mapping.values())
-        hostname = ip_hostname_mapping[ip]
-
-    return hostname, ip_hostname_mapping
-
-
 def setup_engine():
-    with open('config_data.json') as json_file:
+    with open('data/config_data.json') as json_file:
         config_data = json.load(json_file)
 
     # Loading config datas
@@ -47,7 +25,7 @@ def setup_engine():
     longitude = config_data['longitude']
 
     # Loading pi zeros datas
-    with open('pi_zeros_data.json') as json_file:
+    with open('data/pi_zeros_data.json') as json_file:
         pi_zeros_data = json.load(json_file)
 
     pi_zero_credentials = {}
@@ -62,7 +40,6 @@ def setup_engine():
 
 router = APIRouter()
 engine, pi_zeros_data = setup_engine()
-ip_hostname_mapping = map_ip_hostname(pi_zeros_data.keys())
 
 
 def predict_and_alert(file, ip):
@@ -71,7 +48,9 @@ def predict_and_alert(file, ip):
     image = Image.open(io.BytesIO(file))
 
     # Get hosname
-    hostname, ip_hostname_mapping = get_hostname_from_ip(ip, ip_hostname_mapping)
+    with open('data/ip_hostname_mapping.json') as f:
+        ip_hostname_mapping = json.load(f)
+    hostname = ip_hostname_mapping[ip]
 
     # Get pi zero id
     pi_zero_id = pi_zeros_data[hostname]['id']
