@@ -12,10 +12,10 @@ for hostname in hostnames:
     try:
         ip = socket.gethostbyname(hostname + '.local')
         ip_hostname_mapping[ip] = hostname
-    except:
+    except Exception:
         ip = inv_map[hostname]
         ip_hostname_mapping[ip] = hostname
 
 
 with open('data/ip_hostname_mapping.json', 'w') as fp:
-    json.dump(ip_hostname_mapping, fp,  indent=4)
+    json.dump(ip_hostname_mapping, fp, indent=4)
