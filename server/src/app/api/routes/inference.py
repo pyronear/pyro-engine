@@ -47,7 +47,7 @@ def predict_and_alert(file, ip):
     # Load Image
     image = Image.open(io.BytesIO(file))
 
-    # Get hosname
+    # Get hostname
     with open('data/ip_hostname_mapping.json') as f:
         ip_hostname_mapping = json.load(f)
     hostname = ip_hostname_mapping[ip]
