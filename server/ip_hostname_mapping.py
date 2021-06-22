@@ -6,8 +6,10 @@ with open('data/ip_hostname_mapping.json') as f:
     ip_hostname_mapping = json.load(f)
 
 inv_map = {v: k for k, v in ip_hostname_mapping.items()}
-ip_hostname_mapping = {}
 hostnames = inv_map.keys()
+
+ip_hostname_mapping = {}
+
 for hostname in hostnames:
     try:
         ip = socket.gethostbyname(hostname + '.local')
