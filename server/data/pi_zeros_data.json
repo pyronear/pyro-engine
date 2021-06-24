@@ -1,0 +1,22 @@
+{
+    "device-hostname-1": {
+        "id": "1",
+        "login": "login1",
+        "password": "pwd1"
+    },
+    "device-hostname-2": {
+        "id": "2",
+        "login": "login2",
+        "password": "pwd2"
+    },
+    "device-hostname-3": {
+        "id": "3",
+        "login": "login3",
+        "password": "pwd3"
+    },
+    "device-hostname-4": {
+        "id": "4",
+        "login": "login4",
+        "password": "pwd4"
+    }
+}
