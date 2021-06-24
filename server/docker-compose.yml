@@ -10,6 +10,8 @@ services:
     restart: always
     ports:
       - ${PORT}:8000
+    volumes:
+      - ./data:/usr/src/app/data
 
 networks:
   default:

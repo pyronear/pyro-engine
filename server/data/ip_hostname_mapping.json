@@ -1,0 +1,6 @@
+{
+    "192.168.1.1": "device-hostname-1",
+    "192.168.1.2": "device-hostname-2",
+    "192.168.1.3": "device-hostname-3",
+    "192.168.1.4": "device-hostname-4"
+}
