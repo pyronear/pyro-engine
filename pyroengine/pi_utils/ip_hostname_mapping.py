@@ -2,7 +2,7 @@ import json
 import socket
 
 
-with open('data/ip_hostname_mapping.json') as f:
+with open('../../server/data/ip_hostname_mapping.json') as f:
     ip_hostname_mapping = json.load(f)
 
 inv_map = {v: k for k, v in ip_hostname_mapping.items()}
@@ -19,5 +19,5 @@ for hostname in hostnames:
         ip_hostname_mapping[ip] = hostname
 
 
-with open('data/ip_hostname_mapping.json', 'w') as fp:
+with open('../../server/data/ip_hostname_mapping.json', 'w') as fp:
     json.dump(ip_hostname_mapping, fp, indent=4)
