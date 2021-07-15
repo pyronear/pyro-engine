@@ -6,6 +6,7 @@
 from .predictor import PyronearPredictor
 from pyroclient import client
 import io
+from datetime import datetime
 
 
 class PyronearEngine:
@@ -90,7 +91,10 @@ class PyronearEngine:
             if self.use_api and self.event_appening[pi_zero_id]:
                 frame.save(self.stream, format='JPEG')
                 # Send alert to the api
-                self.send_alert(pi_zero_id)
+                now = datetime.now()
+                current_hour = int(now.strftime("%H"))
+                if current_hour > 8  and current_hour < 21: #Only during the day
+                    self.send_alert(pi_zero_id)
                 self.stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
         else:
