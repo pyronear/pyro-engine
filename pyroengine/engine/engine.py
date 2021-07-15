@@ -93,7 +93,7 @@ class PyronearEngine:
                 # Send alert to the api
                 now = datetime.now()
                 current_hour = int(now.strftime("%H"))
-                if current_hour > 8  and current_hour < 21: #Only during the day
+                if current_hour > 8 and current_hour < 21:  # Only during the day
                     self.send_alert(pi_zero_id)
                 self.stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
