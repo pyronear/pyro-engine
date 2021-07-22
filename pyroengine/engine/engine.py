@@ -71,6 +71,7 @@ class PyronearEngine:
         if pi_zero_id is None:
             print(f"Wildfire detection score ({res:.2%})")
         else:
+            self.heartbeat(pi_zero_id)
             print(f"Wildfire detection score ({res:.2%}), on device {pi_zero_id}")
 
         if res > self.detection_threshold:
@@ -137,3 +138,7 @@ class PyronearEngine:
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Send media
         self.api_client[pi_zero_id].upload_media(media_id=media_id, media_data=self.stream.getvalue())
+
+    def heartbeat(self, pi_zero_id):
+        """Updates last ping of device"""
+        self.api_client[pi_zero_id].heartbeat()
