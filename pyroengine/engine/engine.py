@@ -3,9 +3,10 @@
 # This program is licensed under the GNU Affero General Public License version 3.
 # See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
 
-from .predictor import PyronearPredictor
-from pyroclient import client
 import io
+import logging
+from pyroclient import client
+from .predictor import PyronearPredictor
 
 
 class PyronearEngine:
@@ -69,9 +70,9 @@ class PyronearEngine:
         """ run prediction on comming frame"""
         res = self.pyronearPredictor.predict(frame.convert('RGB'))  # run prediction
         if pi_zero_id is None:
-            print(f"Wildfire detection score ({res:.2%})")
+            logging.info(f"Wildfire detection score ({res:.2%})")
         else:
-            print(f"Wildfire detection score ({res:.2%}), on device {pi_zero_id}")
+            logging.info(f"Wildfire detection score ({res:.2%}), on device {pi_zero_id}")
 
         if res > self.detection_threshold:
             if pi_zero_id is None:
@@ -123,7 +124,7 @@ class PyronearEngine:
 
     def send_alert(self, pi_zero_id):
         """Send alert"""
-        print("Send alert !")
+        logging.info("Send alert !")
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
@@ -132,7 +133,7 @@ class PyronearEngine:
 
     def save_frame(self, pi_zero_id):
         """Save frame"""
-        print("Upload media for dataset")
+        logging.info("Upload media for dataset")
         # Create a media
         media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
         # Send media
