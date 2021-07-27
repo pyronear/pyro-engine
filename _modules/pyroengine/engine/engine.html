@@ -161,9 +161,10 @@
 <span class="c1"># This program is licensed under the GNU Affero General Public License version 3.</span>
 <span class="c1"># See LICENSE or go to &lt;https://www.gnu.org/licenses/agpl-3.0.txt&gt; for full license details.</span>
 
-<span class="kn">from</span> <span class="nn">.predictor</span> <span class="kn">import</span> <span class="n">PyronearPredictor</span>
-<span class="kn">from</span> <span class="nn">pyroclient</span> <span class="kn">import</span> <span class="n">client</span>
 <span class="kn">import</span> <span class="nn">io</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">pyroclient</span> <span class="kn">import</span> <span class="n">client</span>
+<span class="kn">from</span> <span class="nn">.predictor</span> <span class="kn">import</span> <span class="n">PyronearPredictor</span>
 
 
 <div class="viewcode-block" id="PyronearEngine"><a class="viewcode-back" href="../../../engine.html#pyroengine.engine.PyronearEngine">[docs]</a><span class="k">class</span> <span class="nc">PyronearEngine</span><span class="p">:</span>
@@ -227,9 +228,9 @@
         <span class="sd">&quot;&quot;&quot; run prediction on comming frame&quot;&quot;&quot;</span>
         <span class="n">res</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pyronearPredictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s1">&#39;RGB&#39;</span><span class="p">))</span>  <span class="c1"># run prediction</span>
         <span class="k">if</span> <span class="n">pi_zero_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">), on device </span><span class="si">{</span><span class="n">pi_zero_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wildfire detection score (</span><span class="si">{</span><span class="n">res</span><span class="si">:</span><span class="s2">.2%</span><span class="si">}</span><span class="s2">), on device </span><span class="si">{</span><span class="n">pi_zero_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">res</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">pi_zero_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -281,7 +282,7 @@
 
     <span class="k">def</span> <span class="nf">send_alert</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pi_zero_id</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Send alert&quot;&quot;&quot;</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Send alert !&quot;</span><span class="p">)</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Send alert !&quot;</span><span class="p">)</span>
         <span class="c1"># Create a media</span>
         <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
         <span class="c1"># Create an alert linked to the media and the event</span>
@@ -290,7 +291,7 @@
 
     <span class="k">def</span> <span class="nf">save_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pi_zero_id</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Save frame&quot;&quot;&quot;</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Upload media for dataset&quot;</span><span class="p">)</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Upload media for dataset&quot;</span><span class="p">)</span>
         <span class="c1"># Create a media</span>
         <span class="n">media_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">pi_zero_id</span><span class="p">]</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
         <span class="c1"># Send media</span>
