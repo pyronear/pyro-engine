@@ -105,7 +105,7 @@ class PyronearEngine:
                 pi_zero_id = '-1'  # add default key value
 
             # Don't increment beyond relaxation
-            if not ongoing_alert[pi_zero_id] and self.consec_dets[pi_zero_id] < self.alert_relaxation:
+            if not self.ongoing_alert[pi_zero_id] and self.consec_dets[pi_zero_id] < self.alert_relaxation:
                 self.consec_dets[pi_zero_id] += 1
 
             if self.consec_dets[pi_zero_id] == self.alert_relaxation:
@@ -202,7 +202,7 @@ class PyronearEngine:
                 os.remove(entry['frame_path'])
             os.remove('pending_alerts.json')
 
-        data_ = []
+        data = []
         for idx, info in enumerate(self.pending_alerts):
             # Save frame to disk
             info['frame'].save(f"pending_frame{idx}.jpg")
