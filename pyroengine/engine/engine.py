@@ -8,6 +8,7 @@ import os
 import json
 import logging
 from PIL import Image
+from pathlib import Path
 from requests.exceptions import ConnectionError
 from datetime import datetime, timedelta
 from collections import deque
@@ -89,6 +90,7 @@ class PyronearEngine:
         self.load_cache_from_disk()
         self.cache_backup_period = cache_backup_period
         self.last_cache_dump = datetime.utcnow()
+        self._backup_folder = Path("data/")  # with Docker, the path has to be a bind volume
 
     def predict(self, frame: Image.Image, pi_zero_id: Optional[int] = None) -> float:
         """ run prediction on comming frame"""
@@ -194,31 +196,37 @@ class PyronearEngine:
     def save_cache_to_disk(self) -> None:
 
         # Remove previous dump
-        if os.path.exists('pending_alerts.json'):
-            with open('pending_alerts.json', 'rb') as f:
+        json_path = _backup_folder.joinpath('pending_alerts.json')
+        if json_path.is_file():
+            with open(json_path, 'rb') as f:
                 data = json.load(f)
 
             for entry in data:
                 os.remove(entry['frame_path'])
-            os.remove('pending_alerts.json')
+            os.remove(json_path)
 
         data = []
         for idx, info in enumerate(self.pending_alerts):
             # Save frame to disk
-            info['frame'].save(f"pending_frame{idx}.jpg")
+            info['frame'].save(_backup_folder.joinpath(f"pending_frame{idx}.jpg"))
 
             # Save path in JSON
-            data.append({"frame_path": f"pending_frame{idx}.jpg", "pi_zero_id": info["pi_zero_id"], "ts": info['ts']})
+            data.append({
+                "frame_path": str(_backup_folder.joinpath(f"pending_frame{idx}.jpg")),
+                "pi_zero_id": info["pi_zero_id"],
+                "ts": info['ts']
+            })
 
         # JSON dump
         if len(data) > 0:
-            with open('pending_alerts.json', 'w') as f:
+            with open(json_path, 'w') as f:
                 json.dump(data, f)
 
     def load_cache_from_disk(self) -> None:
         # Read json
-        if os.path.exists('pending_alerts.json'):
-            with open('pending_alerts.json', 'rb') as f:
+        json_path = _backup_folder.joinpath('pending_alerts.json')
+        if json_path.is_file():
+            with open(json_path, 'rb') as f:
                 data = json.load(f)
 
             for entry in data:
