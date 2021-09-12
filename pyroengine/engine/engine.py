@@ -87,10 +87,10 @@ class PyronearEngine:
 
         # Restore pending alerts cache
         self.pending_alerts = deque([], cache_size)
+        self._backup_folder = Path("data/")  # with Docker, the path has to be a bind volume
         self.load_cache_from_disk()
         self.cache_backup_period = cache_backup_period
         self.last_cache_dump = datetime.utcnow()
-        self._backup_folder = Path("data/")  # with Docker, the path has to be a bind volume
 
     def predict(self, frame: Image.Image, pi_zero_id: Optional[int] = None) -> float:
         """ run prediction on comming frame"""
