@@ -196,7 +196,7 @@ class PyronearEngine:
     def save_cache_to_disk(self) -> None:
 
         # Remove previous dump
-        json_path = _backup_folder.joinpath('pending_alerts.json')
+        json_path = self._backup_folder.joinpath('pending_alerts.json')
         if json_path.is_file():
             with open(json_path, 'rb') as f:
                 data = json.load(f)
@@ -208,11 +208,11 @@ class PyronearEngine:
         data = []
         for idx, info in enumerate(self.pending_alerts):
             # Save frame to disk
-            info['frame'].save(_backup_folder.joinpath(f"pending_frame{idx}.jpg"))
+            info['frame'].save(self._backup_folder.joinpath(f"pending_frame{idx}.jpg"))
 
             # Save path in JSON
             data.append({
-                "frame_path": str(_backup_folder.joinpath(f"pending_frame{idx}.jpg")),
+                "frame_path": str(self._backup_folder.joinpath(f"pending_frame{idx}.jpg")),
                 "pi_zero_id": info["pi_zero_id"],
                 "ts": info['ts']
             })
@@ -224,7 +224,7 @@ class PyronearEngine:
 
     def load_cache_from_disk(self) -> None:
         # Read json
-        json_path = _backup_folder.joinpath('pending_alerts.json')
+        json_path = self._backup_folder.joinpath('pending_alerts.json')
         if json_path.is_file():
             with open(json_path, 'rb') as f:
                 data = json.load(f)
