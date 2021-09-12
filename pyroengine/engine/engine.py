@@ -78,6 +78,7 @@ class PyronearEngine:
                 self.ongoing_alert[pi_zero_id] = False
         else:
             self.consec_dets['-1'] = 0
+            self.ongoing_alert['-1'] = 0
 
         if self.api_url is not None:
             # Instantiate clients for each camera
