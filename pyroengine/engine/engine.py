@@ -90,6 +90,8 @@ class PyronearEngine:
                 self.event_appening[pi_zero_id] = True
 
             if self.use_api and self.event_appening[pi_zero_id]:
+                # Reduce image size to save bandwidth
+                frame = frame.resize(((960, 720)))
                 frame.save(self.stream, format='JPEG')
                 # Send alert to the api
                 self.send_alert(pi_zero_id)
@@ -109,6 +111,8 @@ class PyronearEngine:
             if self.frames_counter[pi_zero_id] == self.save_evry_n_frame:
                 # Reset frame counter
                 self.frames_counter[pi_zero_id] = 0
+                # Reduce image size to save bandwidth
+                frame = frame.resize(((960, 720)))
                 # Send frame to the api
                 frame.save(self.stream, format='JPEG')
                 self.save_frame(pi_zero_id)
