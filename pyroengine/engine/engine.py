@@ -27,7 +27,7 @@ class PyronearEngine:
     Args:
         detection_thresh: wildfire detection threshold in [0, 1]
         api_url: url of the pyronear API
-        client_creds: api credectials for each pizero, the dictionary should as the one in the example
+        client_creds: api credectials for each pizero, the dictionary should be as the one in the example
         frame_saving_period: Send one frame over N to the api for our dataset
         latitude: device latitude
         longitude: device longitude
