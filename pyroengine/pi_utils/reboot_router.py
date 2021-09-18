@@ -4,17 +4,16 @@ from dotenv import load_dotenv
 import os
 
 
-def reboot_router():
-    # Reboot 4G rooter
-    load_dotenv()
+"Reboot 4G rooter"
+load_dotenv()
 
-    ROOTER_LOGIN = os.environ.get("ROOTER_LOGIN")
-    ROOTER_PASSWORD = os.environ.get("ROOTER_PASSWORD")
-    ROOTER_IP = os.environ.get("ROOTER_IP")
+ROOTER_LOGIN = os.environ.get("ROOTER_LOGIN")
+ROOTER_PASSWORD = os.environ.get("ROOTER_PASSWORD")
+ROOTER_IP = os.environ.get("ROOTER_IP")
 
-    url = f"http://{ROOTER_LOGIN}:{ROOTER_PASSWORD}@{ROOTER_IP}/"
-    connection = AuthorizedConnection(url)
+url = f"http://{ROOTER_LOGIN}:{ROOTER_PASSWORD}@{ROOTER_IP}/"
+connection = AuthorizedConnection(url)
 
-    client = Client(connection)  # Creat client
+client = Client(connection)  # Creat client
 
-    client.device.reboot()  # Reboot
+client.device.reboot()  # Reboot
