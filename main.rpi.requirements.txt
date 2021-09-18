@@ -1,4 +1,4 @@
 psutil==5.8.0
-pyroclient==0.1.1
+pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirectory=client
 python-dotenv==0.17.0
 requests==2.25.1
