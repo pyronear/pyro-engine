@@ -27,6 +27,9 @@ class EngineTester(unittest.TestCase):
 
         self.assertGreater(res, 0.5)
 
+        # Check backup
+        engine.save_cache_to_disk()
+
 
 if __name__ == '__main__':
     unittest.main()
