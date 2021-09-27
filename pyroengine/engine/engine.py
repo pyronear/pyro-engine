@@ -106,7 +106,7 @@ class PyronearEngine:
             logging.info(f"Wildfire detection score ({prob:.2%}), on device {pi_zero_id}")
 
         # Reduce image size to save bandwidth
-        if self.frame_size:
+        if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size)
 
         # Alert
@@ -149,9 +149,6 @@ class PyronearEngine:
             if self.frames_counter[pi_zero_id] == self.frame_saving_period:
                 # Reset frame counter
                 self.frames_counter[pi_zero_id] = 0
-                # Reduce image size to save bandwidth
-                if self.frame_size:
-                    frame = frame.resize(((960, 720)))
                 # Send frame to the api
                 frame.save(self.stream, format='JPEG')
                 self.save_frame(pi_zero_id)
