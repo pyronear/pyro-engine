@@ -35,6 +35,7 @@ class PyronearEngine:
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
             the number of consecutive negative detections before stopping the alert
         cache_backup_period: number of minutes between each cache backup to disk
+        frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth
 
     Examples:
         >>> client_creds ={}
@@ -53,6 +54,7 @@ class PyronearEngine:
         cache_size: int = 100,
         alert_relaxation: int = 3,
         cache_backup_period: int = 60,
+        frame_size: tuple = None,
     ) -> None:
         """Init engine"""
         # Engine Setup
@@ -60,6 +62,7 @@ class PyronearEngine:
         self.detection_thresh = detection_thresh
         self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation
+        self.frame_size = frame_size
 
         # API Setup
         self.api_url = api_url
@@ -101,6 +104,10 @@ class PyronearEngine:
         else:
             self.heartbeat(pi_zero_id)
             logging.info(f"Wildfire detection score ({prob:.2%}), on device {pi_zero_id}")
+
+        # Reduce image size to save bandwidth
+        if isinstance(self.frame_size, tuple):
+            frame = frame.resize(self.frame_size)
 
         # Alert
         if prob > self.detection_thresh:
