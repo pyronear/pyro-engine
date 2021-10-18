@@ -13,12 +13,12 @@ import pi_patch
 import requests
 from requests import RequestException
 
-from pyroengine.pi_utils.runner import Runner
+from pyroengine.pi_utils.pi_zeros.runner import Runner
 
 
 class RunnerTester(unittest.TestCase):
     def setUp(self):
-        self.module_path = "pyroengine.pi_utils.runner"
+        self.module_path = "pyroengine.pi_utils.pi_zeros.runner"
         Runner.CAPTURE_DELAY = 0
         Runner.LOOP_INTERVAL = 0
 
