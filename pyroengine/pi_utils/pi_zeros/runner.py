@@ -55,10 +55,11 @@ class Runner:
     def run(self):
         it = 0
         while self.is_running:
+            it += 1
             files = self.capture_stream()
             self.send_stream(files)
             if self.max_iteration is not None:
-                if it > self.max_iteration:
+                if it >= self.max_iteration:
                     self.is_running = False
             time.sleep(self.loop_interval)  # Wait between two captures
             
