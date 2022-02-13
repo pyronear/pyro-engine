@@ -68,7 +68,7 @@ if __name__ == "__main__":
     parser.add_argument('--single', action='store_true', help='Single picture instead of eternal loop')
     parser.add_argument('--write', action='store_true', help='Use /write_image route instead of /inference')
     parser.add_argument('--loop_interval', default=30, action='store_true', help='Time between two photos')
-    parser.add_argument('--max_iteration', default=0, action='store_true', help='Number of loop')
+    parser.add_argument('--max_iteration', default=2, action='store_true', help='Number of loop')
     args = parser.parse_args()
 
     webserver_local_url = f"http://{WEBSERVER_IP}:{WEBSERVER_PORT}" + \
