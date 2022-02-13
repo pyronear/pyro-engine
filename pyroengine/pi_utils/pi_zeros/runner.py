@@ -30,7 +30,6 @@ class Runner:
         self.camera = picamera.PiCamera()
         self.camera.resolution = (3280, 2464)  # use maximal resolution
         self.webserver_url = webserver_url
-        self.is_running = True
         self.loop_interval = loop_interval
         self.max_iteration = max_iteration
 
@@ -60,12 +59,9 @@ class Runner:
             self.send_stream(files)
             if self.max_iteration is not None:
                 if it >= self.max_iteration:
-                    self.is_running = False
-            time.sleep(self.loop_interval)  # Wait between two captures
-            
+                    break
 
-    def stop_runner(self):
-        self.is_running = False
+            time.sleep(self.loop_interval)  # Wait between two captures
 
 
 if __name__ == "__main__":
@@ -78,7 +74,7 @@ if __name__ == "__main__":
 
     webserver_local_url = f"http://{WEBSERVER_IP}:{WEBSERVER_PORT}" + \
                           ("/inference/file" if not args.write else "/write_image/file")
-                     
+
     runner = Runner(webserver_local_url, loop_interval=args.loop_interval, max_iteration=args.max_iteration)
     if args.single:
         files = runner.capture_stream()
