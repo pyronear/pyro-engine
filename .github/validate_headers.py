@@ -29,7 +29,7 @@ HEADERS = [
 
 
 IGNORED_FILES = ["version.py", "__init__.py"]
-FOLDERS = ["pyrovision", "scripts", "references"]
+FOLDERS = ["pyroengine", "scripts", "server", "docs", "test"]
 
 
 def main():
