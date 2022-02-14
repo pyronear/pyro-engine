@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
+# Copyright (C) 2019-2022, Pyronear.
 
-# Copyright (c) Pyronear contributors.
-# This file is dual licensed under the terms of the CeCILL-2.1 and AGPLv3 licenses.
-# See the LICENSE file in the root of this repository for complete details.
+# This program is licensed under the Apache License version 2.
+# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0.txt> for full license details.
 
 import unittest
 from threading import Thread
