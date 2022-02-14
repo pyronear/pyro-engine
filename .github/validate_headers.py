@@ -5,7 +5,7 @@ shebang = ["#!usr/bin/python\n"]
 blank_line = "\n"
 
 # Possible years
-starting_year = 2019
+starting_year = 2020
 current_year = datetime.now().year
 
 year_options = [f"{current_year}"] + [f"{year}-{current_year}" for year in range(starting_year, current_year)]
