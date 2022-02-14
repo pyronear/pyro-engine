@@ -110,3 +110,21 @@ jobs:
       - name: Build documentation
         run: |
           sphinx-build docs/source docs/build -a
+
+  headers:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python: [3.7]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: x64
+      - name: Run unittests
+        run: python .github/validate_headers.py
