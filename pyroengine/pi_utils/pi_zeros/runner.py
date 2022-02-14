@@ -23,7 +23,7 @@ class Runner:
     """This class aims at taking picture using PiCamera and sending the stream to local webserver in main raspberry"""
 
     logger = logging.getLogger(__name__)
-    CAPTURE_DELAY_S = 3
+    CAPTURE_DELAY_S = 3  # time in second
 
     def __init__(self, webserver_url, loop_interval_s=30, max_iteration=None):
         """Initialize parameters for Runner."""
