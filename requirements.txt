@@ -1,4 +1,4 @@
-pyrovision >= 0.1.2
+pyrovision@git+https://github.com/pyronear/pyro-vision.git#egg=pyrovision
 python-dotenv >= 0.15.0
 requests>=2.25.1
 pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirectory=client
