@@ -12,26 +12,28 @@ Package installation setup
 import os
 import subprocess
 from setuptools import setup, find_packages
+from pathlib import Path
 
-
-package_name = 'pyroengine'
-with open(os.path.join('pyroengine', 'version.py')) as version_file:
-    version = version_file.read().strip()
+version = '0.0.1'
 sha = 'Unknown'
+src_folder = 'pyroengine'
+package_index = 'pyroengine'
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-
-try:
-    sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
-except Exception:
-    pass
+cwd = Path(__file__).parent.absolute()
 
 if os.getenv('BUILD_VERSION'):
     version = os.getenv('BUILD_VERSION')
-elif sha != 'Unknown':
-    version += '+' + sha[:7]
-print("Building wheel {}-{}".format(package_name, version))
+else:
+    try:
+        sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
+    except Exception:
+        pass
+    if sha != 'Unknown':
+        version += '+' + sha[:7]
+print(f"Building wheel {package_index}-{version}")
 
+with open(cwd.joinpath(src_folder, 'version.py'), 'w') as f:
+    f.write(f"__version__ = '{version}'\n")
 
 with open('README.md') as f:
     readme = f.read()
@@ -41,7 +43,7 @@ with open('requirements.txt') as f:
 
 setup(
     # Metadata
-    name=package_name,
+    name=package_index,
     version=version,
     author='PyroNear Contributors',
     author_email='pyronear.d4g@gmail.com',
