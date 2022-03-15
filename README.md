@@ -2,7 +2,7 @@
 
 <p align="center">
     <a href="LICENSE" alt="License">
-        <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" /></a>
+        <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" /></a>
     <a href="https://app.codacy.com/gh/pyronear/pyro-engine?utm_source=github.com&utm_medium=referral&utm_content=pyronear/pyro-engine&utm_campaign=Badge_Grade_Settings">
         <img src="https://api.codacy.com/project/badge/Grade/d7f62736901d4e5c97c744411d8e02e3"/></a>
     <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Apython-package">
@@ -95,4 +95,4 @@ This project is developed and maintained by the repo owner and volunteers from [
 
 ## License
 
-Distributed under the AGPLv3 License. See `LICENSE` for more information.
+Distributed under the Apache 2 License. See `LICENSE` for more information.

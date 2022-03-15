@@ -1,9 +1,9 @@
 #!usr/bin/python
 
-# Copyright (C) 2021, Pyronear contributors.
+# Copyright (C) 2020-2022, Pyronear.
 
-# This program is licensed under the GNU Affero General Public License version 3.
-# See LICENSE or go to <https://www.gnu.org/licenses/agpl-3.0.txt> for full license details.
+# This program is licensed under the Apache License version 2.
+# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0.txt> for full license details.
 
 """
 Package installation setup
@@ -12,26 +12,28 @@ Package installation setup
 import os
 import subprocess
 from setuptools import setup, find_packages
+from pathlib import Path
 
-
-package_name = 'pyroengine'
-with open(os.path.join('pyroengine', 'version.py')) as version_file:
-    version = version_file.read().strip()
+version = '0.0.1'
 sha = 'Unknown'
+src_folder = 'pyroengine'
+package_index = 'pyroengine'
 
-cwd = os.path.dirname(os.path.abspath(__file__))
-
-try:
-    sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
-except Exception:
-    pass
+cwd = Path(__file__).parent.absolute()
 
 if os.getenv('BUILD_VERSION'):
     version = os.getenv('BUILD_VERSION')
-elif sha != 'Unknown':
-    version += '+' + sha[:7]
-print("Building wheel {}-{}".format(package_name, version))
+else:
+    try:
+        sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=cwd).decode('ascii').strip()
+    except Exception:
+        pass
+    if sha != 'Unknown':
+        version += '+' + sha[:7]
+print(f"Building wheel {package_index}-{version}")
 
+with open(cwd.joinpath(src_folder, 'version.py'), 'w') as f:
+    f.write(f"__version__ = '{version}'\n")
 
 with open('README.md') as f:
     readme = f.read()
@@ -41,7 +43,7 @@ with open('requirements.txt') as f:
 
 setup(
     # Metadata
-    name=package_name,
+    name=package_index,
     version=version,
     author='PyroNear Contributors',
     author_email='pyronear.d4g@gmail.com',
@@ -51,13 +53,12 @@ setup(
     long_description_content_type="text/markdown",
     url='https://github.com/pyronear/pyro-engine',
     download_url='https://github.com/pyronear/pyro-engine/tags',
-    license='CeCILL-2.1 or AGPLv3',
+    license='Apache 2.0',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: CEA CNRS Inria Logiciel Libre License, version 2.1 (CeCILL-2.1)',
-        "License :: OSI Approved :: GNU Affero General Public License v3 (AGPLv3)",
+        "License :: OSI Approved :: Apache Software License",
         'Natural Language :: English',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
