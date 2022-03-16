@@ -1,5 +1,5 @@
 pyrovision@git+https://github.com/pyronear/pyro-vision.git#egg=pyrovision
 pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirectory=client
-python-dotenv == 0.15.0
+python-dotenv==0.15.0
 requests==2.25.1
-psutil == 5.9.0
+psutil==5.9.0
