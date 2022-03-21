@@ -24,7 +24,7 @@ class Runner:
 
     logger = logging.getLogger(__name__)
     CAPTURE_DELAY = 3
-    LOOP_INTERVAL = 3
+    LOOP_INTERVAL = 30
 
     def __init__(self, webserver_url):
         """Initialize parameters for Runner."""
