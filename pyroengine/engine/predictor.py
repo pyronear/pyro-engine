@@ -7,14 +7,14 @@ import torch
 
 
 class PyronearPredictor:
-    """This class use the last pyronear model to predict if a sigle frame contain a fire or not
+    """This class use the last pyronear model and run our smoke detection model on it
     Examples:
-        >>> pyronearPredictor = PyronearPredictor("path/to/model.pt")
+        >>> pyronearPredictor = PyronearPredictor()
         >>> im = Image.open("image.jpg")
         >>> res = pyronearPredictor.predict(im)
     """
 
-    def __init__(self, model_weights, conf=0.25):
+    def __init__(self, model_weights: str = None, conf: float = 0.25):
         """Init predictor"""
         # Model definition
         if model_weights is None:
