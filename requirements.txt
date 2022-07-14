@@ -2,6 +2,16 @@ pyroclient@git+https://github.com/pyronear/pyro-api.git#egg=pyroclient&subdirect
 python-dotenv==0.15.0
 requests==2.25.1
 psutil==5.9.0
-torch
-torchvision
-opencv-python
+# From https://github.com/ultralytics/yolov5/blob/master/requirements.txt
+torch==1.11.0
+torchvision==0.12.0
+opencv-python==4.5.4.60
+pandas==1.1.4
+PyYAML==5.3.1
+Pillow==7.1.2
+tqdm==4.41.0
+matplotlib==3.2.2
+onnx==1.12.0
+onnxruntime==1.11.1
+ipython==8.4.0
+seaborn==0.11.0
