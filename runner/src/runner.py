@@ -14,27 +14,37 @@ import time
 import json
 import logging
 
-logging.basicConfig(format='%(asctime)s | %(levelname)s: %(message)s', level=logging.INFO, force=True)
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
 
 
 def setup_engine():
-    with open('data/config_data.json') as json_file:
+    with open("data/config_data.json") as json_file:
         config_data = json.load(json_file)
 
     # Loading config datas
-    detection_threshold = config_data['detection_threshold']
-    api_url = config_data['api_url']
-    save_evry_n_frame = config_data['save_evry_n_frame']
+    detection_threshold = config_data["detection_threshold"]
+    api_url = config_data["api_url"]
+    save_evry_n_frame = config_data["save_evry_n_frame"]
     loop_time = config_data["loop_time"]
-    latitude = config_data['latitude']
-    longitude = config_data['longitude']
-    model_path = config_data['model_path']
+    latitude = config_data["latitude"]
+    longitude = config_data["longitude"]
+    model_path = config_data["model_path"]
 
     # Loading pi zeros datas
-    with open('data/cameras_credentials.json') as json_file:
+    with open("data/cameras_credentials.json") as json_file:
         cameras_credentials = json.load(json_file)
 
-    engine = PyronearEngine(detection_threshold, api_url, cameras_credentials, save_evry_n_frame, latitude, longitude, model_path=model_path)
+    engine = PyronearEngine(
+        detection_threshold,
+        api_url,
+        cameras_credentials,
+        save_evry_n_frame,
+        latitude,
+        longitude,
+        model_path=model_path,
+    )
 
     return engine, cameras_credentials, loop_time
 
@@ -64,4 +74,3 @@ while True:
             time.sleep(max(loop_time - time.time() + start_time, 0))
         except:
             logging.warning(f"Unable to get image from camera {ip}")
-
