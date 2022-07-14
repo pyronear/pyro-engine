@@ -18,9 +18,9 @@ class PyronearPredictor:
         """Init predictor"""
         # Model definition
         if model_weights is None:
-            model_weights = "https://github.com/pyronear/pyro-vision/releases/download/v0.1.2/yolov5s_v001.pt"
+            model_weights = "https://github.com//pyronear//pyro-vision//releases//download//v0.1.2//yolov5s_v001.onnx"
         self.model = torch.hub.load(
-            "ultralytics/yolov5", "custom", path=model_weights
+            "ultralytics/yolov5", "custom", path=model_weights, force_reload=True
         )  # local model
         self.model.conf = conf
 
