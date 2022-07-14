@@ -1,0 +1,8 @@
+onnx>=1.9.0
+onnxruntime
+pandas>=1.1.4
+PyYAML>=5.3.1
+tqdm>=4.41.0
+matplotlib>=3.2.2
+seaborn>=0.11.0
+ipython>=8.2.0
