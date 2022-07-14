@@ -14,11 +14,13 @@ class PyronearPredictor:
         >>> res = pyronearPredictor.predict(im)
     """
 
-    def __init__(self, path_to_model, conf=0.25):
+    def __init__(self, model_weights, conf=0.25):
         """Init predictor"""
         # Model definition
+        if model_weights is None:
+            model_weights = "https://github.com/pyronear/pyro-vision/releases/download/v0.1.2/yolov5s_v001.pt"
         self.model = torch.hub.load(
-            "ultralytics/yolov5", "custom", path=path_to_model
+            "ultralytics/yolov5", "custom", path=model_weights
         )  # local model
         self.model.conf = conf
 
