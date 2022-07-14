@@ -106,7 +106,13 @@ class PyronearEngine:
 
     def predict(self, frame: Image.Image, pi_zero_id: Optional[int] = None) -> float:
         """run prediction on comming frame"""
-        prob = self.pyronearPredictor.predict(frame.convert("RGB"))  # run prediction
+        pred = self.pyronearPredictor.predict(frame.convert("RGB"))  # run prediction
+
+        if len(pred) > 0:
+            prob = np.max(pred[:, 4])
+        else:
+            prob = 0
+
         if pi_zero_id is None:
             logging.info(f"Wildfire detection score ({prob:.2%})")
         else:
