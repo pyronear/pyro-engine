@@ -13,6 +13,7 @@ from requests.exceptions import ConnectionError
 from datetime import datetime, timedelta
 from collections import deque
 from typing import Optional, Dict
+import numpy as np
 
 from pyroclient import client
 from .predictor import PyronearPredictor
