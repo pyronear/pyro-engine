@@ -1,0 +1,5 @@
+gpiozero==1.5.1
+psutil==5.8.0
+requests==2.25.1
+picamera==1.13
+python-dotenv==0.17.0
