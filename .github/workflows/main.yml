@@ -21,19 +21,6 @@ jobs:
     needs: pkg-install
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.8
-      - name: Cache python modules
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pkg-deps-${{ hashFiles('requirements.txt') }}-${{ hashFiles('**/*.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pkg-deps-${{ hashFiles('requirements.txt') }}-
-            ${{ runner.os }}-pkg-deps-
-            ${{ runner.os }}-
       - name: Install dependencies
         run: |
           pip install -e .
@@ -66,7 +53,7 @@ jobs:
           flake8 ./
 
   docs-build:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: pkg-install
     steps:
       - uses: actions/checkout@v2
@@ -97,7 +84,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python: [3.7]
+        python: 3.8
     steps:
       - uses: actions/checkout@v2
         with:
