@@ -1,4 +1,4 @@
-FROM pyro-engine
+FROM pyronear/pyro-engine:latest
 
 # set work directory
 WORKDIR /usr/src/app
