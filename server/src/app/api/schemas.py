@@ -13,7 +13,7 @@ class _CreatedAt(BaseModel):
     created_at: datetime = None
 
     @staticmethod
-    @validator('created_at', pre=True, always=True)
+    @validator("created_at", pre=True, always=True)
     def default_ts_created(v):
         return v or datetime.utcnow()
 
