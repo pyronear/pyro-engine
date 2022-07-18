@@ -11,7 +11,9 @@ from app.api.schemas import MetricIn, MetricOut
 router = APIRouter()
 
 
-@router.post("/", response_model=MetricOut, status_code=201, summary="Send metrics from a device")
+@router.post(
+    "/", response_model=MetricOut, status_code=201, summary="Send metrics from a device"
+)
 async def log_metrics(payload: MetricIn):
     """
     Send metrics from a device based on the given information

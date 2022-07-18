@@ -14,7 +14,6 @@ url = "https://beta.ctvnews.ca/content/dam/ctvnews/images/2020/9/15/1_5105012.jp
 
 
 class EngineTester(unittest.TestCase):
-
     def test_engine(self):
         # Init
         engine = PyronearEngine()
@@ -31,5 +30,5 @@ class EngineTester(unittest.TestCase):
         engine.save_cache_to_disk()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

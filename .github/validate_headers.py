@@ -8,14 +8,15 @@ blank_line = "\n"
 starting_year = 2020
 current_year = datetime.now().year
 
-year_options = [f"{current_year}"] + [f"{year}-{current_year}" for year in range(starting_year, current_year)]
+year_options = [f"{current_year}"] + [
+    f"{year}-{current_year}" for year in range(starting_year, current_year)
+]
 copyright_notices = [
-    [f"# Copyright (C) {year_str}, Pyronear.\n"]
-    for year_str in year_options
+    [f"# Copyright (C) {year_str}, Pyronear.\n"] for year_str in year_options
 ]
 license_notice = [
     "# This program is licensed under the Apache License version 2.\n",
-    "# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0.txt> for full license details.\n"
+    "# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0.txt> for full license details.\n",
 ]
 
 # Define all header options
@@ -38,7 +39,9 @@ def main():
 
     # For every python file in the repository
     for folder in FOLDERS:
-        for source_path in Path(__file__).parent.parent.joinpath(folder).rglob('**/*.py'):
+        for source_path in (
+            Path(__file__).parent.parent.joinpath(folder).rglob("**/*.py")
+        ):
             if source_path.name not in IGNORED_FILES:
                 # Parse header
                 header_length = max(len(option) for option in HEADERS)
@@ -50,7 +53,8 @@ def main():
                             break
                 # Validate it
                 if not any(
-                    "".join(current_header[:min(len(option), len(current_header))]) == "".join(option)
+                    "".join(current_header[: min(len(option), len(current_header))])
+                    == "".join(option)
                     for option in HEADERS
                 ):
                     invalid_files.append(source_path)

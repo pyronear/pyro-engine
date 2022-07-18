@@ -5,7 +5,6 @@
 
 
 class CPUTemperature:
-
     def __init__(self):
         print("using fake CPUTemperature")
         self.temperature = 40

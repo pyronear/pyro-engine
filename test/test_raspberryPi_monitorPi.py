@@ -29,7 +29,7 @@ class MonitorPiTester(unittest.TestCase):
 
             # add "attributes" to psutil mock
             mock_psutil.cpu_percent.return_value = 11
-            mock_psutil.virtual_memory().available = 99 * 1024 ** 3
+            mock_psutil.virtual_memory().available = 99 * 1024**3
 
             record_logs = MonitorPi("my_url")
             record_logs.cpu_temp = Mock(temperature=5)
@@ -39,7 +39,7 @@ class MonitorPiTester(unittest.TestCase):
         test_metrics = {
             "id": 0,
             "cpu_temperature_C": record_logs.cpu_temp.temperature,
-            "mem_available_GB": mock_psutil.virtual_memory().available / 1024 ** 3,
+            "mem_available_GB": mock_psutil.virtual_memory().available / 1024**3,
             "cpu_usage_percent": mock_psutil.cpu_percent(),
         }
         mock_requests.post.assert_called_once_with("my_url", json=test_metrics)
