@@ -8,5 +8,5 @@ import fake_gpiozero
 import fake_picamera
 
 
-sys.modules['gpiozero'] = fake_gpiozero
-sys.modules['picamera'] = fake_picamera
+sys.modules["gpiozero"] = fake_gpiozero
+sys.modules["picamera"] = fake_picamera

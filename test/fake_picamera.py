@@ -5,7 +5,6 @@
 
 
 class PiCamera:
-
     @property
     def resolution(self):
         pass

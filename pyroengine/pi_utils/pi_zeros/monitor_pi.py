@@ -40,7 +40,7 @@ class MonitorPi:
         metrics = {
             "id": 0,
             "cpu_temperature_C": self.cpu_temp.temperature,
-            "mem_available_GB": psutil.virtual_memory().available / 1024 ** 3,
+            "mem_available_GB": psutil.virtual_memory().available / 1024**3,
             "cpu_usage_percent": psutil.cpu_percent(),
         }
 

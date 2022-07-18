@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0.txt> for full license details.
 
 import unittest
+
 # from pyronearEngine.raspberryPi.pyronearEngine import PyronearEngine
 
 
@@ -14,5 +15,5 @@ class UtilsTester(unittest.TestCase):
         self.assertTrue(20 >= 19)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
