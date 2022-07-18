@@ -122,9 +122,7 @@ class PyronearEngine:
             logging.info(f"Wildfire detection score ({prob:.2%})")
         else:
             self.heartbeat(cam_id)
-            logging.info(
-                f"Wildfire detection score ({prob:.2%}), on device {cam_id}"
-            )
+            logging.info(f"Wildfire detection score ({prob:.2%}), on device {cam_id}")
 
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
