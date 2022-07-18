@@ -72,5 +72,5 @@ while True:
             pred = engine.predict(img, ip)
 
             time.sleep(max(loop_time - time.time() + start_time, 0))
-        except:
+        except Exception:
             logging.warning(f"Unable to get image from camera {ip}")
