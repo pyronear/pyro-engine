@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install package
         run: |
+          python --version
           pip install -e .
 
   pkg-test:
