@@ -1,0 +1,40 @@
+name: pi-runner-python-package
+
+on:
+  push:
+    branches: [ master, develop]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  pkg-install:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install package
+        run: |
+          python --version
+          pip install -e .
+
+  pkg-test:
+    runs-on: self-hosted
+    needs: pkg-install
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install -r .github/workflows/requirements.txt
+
+      - name: Run unittests
+        run: |
+          coverage run -m unittest discover test/
+          coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
+
