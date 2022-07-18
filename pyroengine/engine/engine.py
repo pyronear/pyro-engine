@@ -109,7 +109,7 @@ class PyronearEngine:
         self.cache_backup_period = cache_backup_period
         self.last_cache_dump = datetime.utcnow()
 
-    def predict(self, frame: Image.Image, pi_zero_id: Optional[int] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[int] = None) -> float:
         """run prediction on comming frame"""
         pred = self.pyronearPredictor.predict(frame.convert("RGB"))  # run prediction
 
@@ -118,12 +118,12 @@ class PyronearEngine:
         else:
             prob = 0
 
-        if pi_zero_id is None:
+        if cam_id is None:
             logging.info(f"Wildfire detection score ({prob:.2%})")
         else:
-            self.heartbeat(pi_zero_id)
+            self.heartbeat(cam_id)
             logging.info(
-                f"Wildfire detection score ({prob:.2%}), on device {pi_zero_id}"
+                f"Wildfire detection score ({prob:.2%}), on device {cam_id}"
             )
 
         # Reduce image size to save bandwidth
