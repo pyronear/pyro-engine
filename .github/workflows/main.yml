@@ -31,7 +31,7 @@ jobs:
           pip install -e .
 
   pkg-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: pkg-install
     steps:
       - uses: actions/checkout@v2
@@ -83,7 +83,7 @@ jobs:
           flake8 ./
 
   docs-build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: pkg-install
     steps:
       - uses: actions/checkout@v2
