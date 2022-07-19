@@ -16,5 +16,5 @@ RUN apt update \
     && pip install --upgrade pip setuptools wheel \
     && pip install -e /tmp/. \
     && pip cache purge \
-    && rm -rf /root/.cache/pip
+    && rm -rf /root/.cache/pip \
     && rm -rf /var/lib/apt/lists/*
