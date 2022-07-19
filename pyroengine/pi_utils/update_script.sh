@@ -14,10 +14,10 @@ CID=$(docker ps | grep server_web | awk '{print $1}')
 if [ `git -C /home/pi/pyro-engine pull origin master | grep -c "up to date."` -ne 1 ];
     then
         echo "pyro-engine updated from github";
-        cd /home/pi/pyro-engine/server/;
+        cd /home/pi/pyro-engine/runner/;
         docker kill CID;
         echo "rebuild docker";
-        PORT=8002 docker-compose up -d --build;
+        docker-compose up -d --build;
     else
         echo "pyro-engine up to date";
 fi;
