@@ -11,6 +11,9 @@
 # Ping google again (to make sure that we have internet):
 #	- if success: ok exit
 #	- if failure: reboot
+#
+# This script must be run with a crontab, run every 10 mn
+# */10 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
 
 set -u
 

@@ -5,8 +5,8 @@
 #    kill container
 #	 rebuild docker compose
 # 
-# This script must be run with a crontab
-# */10 * * * * bash /home/pi/pyro-engine/pyroengine/pi_utils/update_script.sh
+# This script must be run with a crontab, run every day at 3am
+# 0 3 * * * bash /home/pi/pyro-engine/scripts/update_script.sh
 
 
 CID=$(docker ps | grep server_web | awk '{print $1}')
