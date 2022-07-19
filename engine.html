@@ -9,7 +9,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>pyroengine.engine &mdash; pyroengine 0.0.1+1c65642-git documentation</title>
+  <title>pyroengine.engine &mdash; pyroengine 0.0.1+ee813bc-git documentation</title>
   
 
   
@@ -22,8 +22,10 @@
   
     
       <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
@@ -64,7 +66,7 @@
             
             
               <div class="version">
-                0.0.1+1c65642
+                0.0.1+ee813bc
               </div>
             
           
@@ -88,7 +90,7 @@
               
             
             
-              <p><span class="caption-text">Package Reference</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Package Reference</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">pyroengine.engine</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#pyronear-predictor">Pyronear Predictor</a></li>
@@ -160,14 +162,59 @@
            <div itemprop="articleBody">
             
   <section id="pyroengine-engine">
-<h1>pyroengine.engine<a class="headerlink" href="#pyroengine-engine" title="Permalink to this headline">¶</a></h1>
+<h1>pyroengine.engine<a class="headerlink" href="#pyroengine-engine" title="Permalink to this heading">¶</a></h1>
 <p>The models subpackage contains everything to manage the whole Fire Detection process by capturing and saving the image and
 by predicting whether there is a fire on this image</p>
 <section id="pyronear-predictor">
-<h2>Pyronear Predictor<a class="headerlink" href="#pyronear-predictor" title="Permalink to this headline">¶</a></h2>
+<h2>Pyronear Predictor<a class="headerlink" href="#pyronear-predictor" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyroengine.engine.PyronearPredictor">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.engine.</span></span><span class="sig-name descname"><span class="pre">PyronearPredictor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.25</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/engine/predictor.html#PyronearPredictor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.engine.PyronearPredictor" title="Permalink to this definition">¶</a></dt>
+<dd><p>This class use the last pyronear model and run our smoke detection model on it
+.. rubric:: Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pyronearPredictor</span> <span class="o">=</span> <span class="n">PyronearPredictor</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">im</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;image.jpg&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">res</span> <span class="o">=</span> <span class="n">pyronearPredictor</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">im</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </section>
 <section id="pyronear-engine">
-<h2>Pyronear Engine<a class="headerlink" href="#pyronear-engine" title="Permalink to this headline">¶</a></h2>
+<h2>Pyronear Engine<a class="headerlink" href="#pyronear-engine" title="Permalink to this heading">¶</a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyroengine.engine.PyronearEngine">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.engine.</span></span><span class="sig-name descname"><span class="pre">PyronearEngine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">detection_thresh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client_creds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_saving_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alert_relaxation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_backup_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_weights</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/engine/engine.html#PyronearEngine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.engine.PyronearEngine" title="Permalink to this definition">¶</a></dt>
+<dd><p>This class is the Pyronear Engine. This engine manage the whole Fire Detection
+process by capturing and saving the image and by predicting if there is a fire or
+not based on this image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>detection_thresh</strong> – wildfire detection threshold in [0, 1]</p></li>
+<li><p><strong>api_url</strong> – url of the pyronear API</p></li>
+<li><p><strong>client_creds</strong> – api credectials for each pizero, the dictionary should be as the one in the example</p></li>
+<li><p><strong>frame_saving_period</strong> – Send one frame over N to the api for our dataset</p></li>
+<li><p><strong>latitude</strong> – device latitude</p></li>
+<li><p><strong>longitude</strong> – device longitude</p></li>
+<li><p><strong>cache_size</strong> – maximum number of alerts to save in cache</p></li>
+<li><p><strong>alert_relaxation</strong> – number of consecutive positive detections required to send the first alert, and also
+the number of consecutive negative detections before stopping the alert</p></li>
+<li><p><strong>cache_backup_period</strong> – number of minutes between each cache backup to disk</p></li>
+<li><p><strong>frame_size</strong> – Resize frame to frame_size before sending it to the api in order to save bandwidth</p></li>
+<li><p><strong>model_weights</strong> – Path / url model yolov5 model weights</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">client_creds</span> <span class="o">=</span><span class="p">{}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client_creds</span><span class="p">[</span><span class="s1">&#39;cam_id_1&#39;</span><span class="p">]</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;login&#39;</span><span class="p">:</span><span class="s1">&#39;log1&#39;</span><span class="p">,</span> <span class="s1">&#39;password&#39;</span><span class="p">:</span><span class="s1">&#39;pwd1&#39;</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">client_creds</span><span class="p">[</span><span class="s1">&#39;cam_id_2&#39;</span><span class="p">]</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;login&#39;</span><span class="p">:</span><span class="s1">&#39;log2&#39;</span><span class="p">,</span> <span class="s1">&#39;password&#39;</span><span class="p">:</span><span class="s1">&#39;pwd2&#39;</span><span class="p">}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pyroEngine</span> <span class="o">=</span> <span class="n">PyronearEngine</span><span class="p">(</span><span class="mf">0.6</span><span class="p">,</span> <span class="s1">&#39;https://api.pyronear.org&#39;</span><span class="p">,</span> <span class="n">client_creds</span><span class="p">,</span> <span class="mi">50</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
 </section>
 </section>
 
