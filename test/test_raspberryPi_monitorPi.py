@@ -12,12 +12,12 @@ import pi_patch
 import requests
 from requests import HTTPError
 
-from pyroengine.pi_utils.pi_zeros.monitor_pi import MonitorPi
+from pyroengine.pi_utils.monitor_pi import MonitorPi
 
 
 class MonitorPiTester(unittest.TestCase):
     def setUp(self):
-        self.module_path = "pyroengine.pi_utils.pi_zeros.monitor_pi"
+        self.module_path = "pyroengine.pi_utils.monitor_pi"
 
     def test_get_record(self):
         with patch(f"{self.module_path}.psutil") as mock_psutil, patch(

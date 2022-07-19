@@ -36,7 +36,5 @@ then
     exit 0;
 fi;
 
-python3 /home/pi/pyro-engine/pyroengine/pi_utils/reboot_router;
-sleep 60;
 
 sudo reboot;
