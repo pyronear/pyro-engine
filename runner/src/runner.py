@@ -30,7 +30,7 @@ def setup_engine():
     loop_time = config_data["loop_time"]
     latitude = config_data["latitude"]
     longitude = config_data["longitude"]
-    model_path = config_data["model_path"]
+    model_weights = config_data["model_weights"]
 
     # Loading pi zeros datas
     with open("data/cameras_credentials.json") as json_file:
@@ -43,7 +43,7 @@ def setup_engine():
         save_evry_n_frame,
         latitude,
         longitude,
-        model_path=model_path,
+        model_weights=model_weights,
     )
 
     return engine, cameras_credentials, loop_time
