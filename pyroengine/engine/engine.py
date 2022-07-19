@@ -18,6 +18,10 @@ import numpy as np
 from pyroclient import client
 from .predictor import PyronearPredictor
 
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
+
 
 class PyronearEngine:
     """
@@ -41,8 +45,8 @@ class PyronearEngine:
 
     Examples:
         >>> client_creds ={}
-        >>> client_creds['pi_zero_id_1']={'login':'log1', 'password':'pwd1'}
-        >>> client_creds['pi_zero_id_2']={'login':'log2', 'password':'pwd2'}
+        >>> client_creds['cam_id_1']={'login':'log1', 'password':'pwd1'}
+        >>> client_creds['cam_id_2']={'login':'log2', 'password':'pwd2'}
         >>> pyroEngine = PyronearEngine(0.6, 'https://api.pyronear.org', client_creds, 50)
     """
 
@@ -80,10 +84,10 @@ class PyronearEngine:
         self.ongoing_alert = {}
         self.frames_counter = {}
         if isinstance(client_creds, dict):
-            for pi_zero_id in client_creds.keys():
-                self.consec_dets[pi_zero_id] = 0
-                self.frames_counter[pi_zero_id] = 0
-                self.ongoing_alert[pi_zero_id] = False
+            for cam_id in client_creds.keys():
+                self.consec_dets[cam_id] = 0
+                self.frames_counter[cam_id] = 0
+                self.ongoing_alert[cam_id] = False
         else:
             self.consec_dets["-1"] = 0
             self.ongoing_alert["-1"] = 0
@@ -105,7 +109,7 @@ class PyronearEngine:
         self.cache_backup_period = cache_backup_period
         self.last_cache_dump = datetime.utcnow()
 
-    def predict(self, frame: Image.Image, pi_zero_id: Optional[int] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[int] = None) -> float:
         """run prediction on comming frame"""
         pred = self.pyronearPredictor.predict(frame.convert("RGB"))  # run prediction
 
@@ -114,13 +118,11 @@ class PyronearEngine:
         else:
             prob = 0
 
-        if pi_zero_id is None:
+        if cam_id is None:
             logging.info(f"Wildfire detection score ({prob:.2%})")
         else:
-            self.heartbeat(pi_zero_id)
-            logging.info(
-                f"Wildfire detection score ({prob:.2%}), on device {pi_zero_id}"
-            )
+            self.heartbeat(cam_id)
+            logging.info(f"Wildfire detection score ({prob:.2%}), on device {cam_id}")
 
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
@@ -128,30 +130,33 @@ class PyronearEngine:
 
         # Alert
         if prob > self.detection_thresh:
-            if pi_zero_id is None:
-                pi_zero_id = "-1"  # add default key value
+            if cam_id is None:
+                cam_id = "-1"  # add default key value
 
             # Don't increment beyond relaxation
             if (
-                not self.ongoing_alert[pi_zero_id]
-                and self.consec_dets[pi_zero_id] < self.alert_relaxation
+                not self.ongoing_alert[cam_id]
+                and self.consec_dets[cam_id] < self.alert_relaxation
             ):
-                self.consec_dets[pi_zero_id] += 1
+                self.consec_dets[cam_id] += 1
 
-            if self.consec_dets[pi_zero_id] == self.alert_relaxation:
-                self.ongoing_alert[pi_zero_id] = True
+            if self.consec_dets[cam_id] == self.alert_relaxation:
+                self.ongoing_alert[cam_id] = True
 
-            if isinstance(self.api_url, str) and self.ongoing_alert[pi_zero_id]:
+            if isinstance(self.api_url, str) and self.ongoing_alert[cam_id]:
                 # Save the alert in cache to avoid connection issues
-                self.save_to_cache(frame, pi_zero_id)
+                self.save_to_cache(frame, cam_id)
 
         # No wildfire
         else:
-            if self.consec_dets[pi_zero_id] > 0:
-                self.consec_dets[pi_zero_id] -= 1
+            if cam_id is None:
+                cam_id = "-1"  # add default key value
+
+            if self.consec_dets[cam_id] > 0:
+                self.consec_dets[cam_id] -= 1
             # Consider event as finished
-            if self.consec_dets[pi_zero_id] == 0:
-                self.ongoing_alert[pi_zero_id] = False
+            if self.consec_dets[cam_id] == 0:
+                self.ongoing_alert[cam_id] = False
 
         # Uploading pending alerts
         if len(self.pending_alerts) > 0:
@@ -167,52 +172,52 @@ class PyronearEngine:
         if (
             isinstance(self.api_url, str)
             and isinstance(self.frame_saving_period, int)
-            and isinstance(pi_zero_id, int)
+            and isinstance(cam_id, int)
         ):
-            self.frames_counter[pi_zero_id] += 1
-            if self.frames_counter[pi_zero_id] == self.frame_saving_period:
+            self.frames_counter[cam_id] += 1
+            if self.frames_counter[cam_id] == self.frame_saving_period:
                 # Reset frame counter
-                self.frames_counter[pi_zero_id] = 0
+                self.frames_counter[cam_id] = 0
                 # Send frame to the api
                 frame.save(self.stream, format="JPEG")
-                self.save_frame(pi_zero_id)
+                self.save_frame(cam_id)
                 self.stream.seek(
                     0
                 )  # "Rewind" the stream to the beginning so we can read its content
 
         return prob
 
-    def send_alert(self, pi_zero_id: int) -> None:
+    def send_alert(self, cam_id: int) -> None:
         """Send alert"""
         logging.info("Sending alert...")
         # Create a media
-        media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
+        media_id = self.api_client[cam_id].create_media_from_device().json()["id"]
         # Create an alert linked to the media and the event
-        self.api_client[pi_zero_id].send_alert_from_device(
+        self.api_client[cam_id].send_alert_from_device(
             lat=self.latitude, lon=self.longitude, media_id=media_id
         )
-        self.api_client[pi_zero_id].upload_media(
+        self.api_client[cam_id].upload_media(
             media_id=media_id, media_data=self.stream.getvalue()
         )
 
-    def upload_frame(self, pi_zero_id: int) -> None:
+    def upload_frame(self, cam_id: int) -> None:
         """Save frame"""
         logging.info("Uploading media...")
         # Create a media
-        media_id = self.api_client[pi_zero_id].create_media_from_device().json()["id"]
+        media_id = self.api_client[cam_id].create_media_from_device().json()["id"]
         # Send media
-        self.api_client[pi_zero_id].upload_media(
+        self.api_client[cam_id].upload_media(
             media_id=media_id, media_data=self.stream.getvalue()
         )
 
-    def heartbeat(self, pi_zero_id: int) -> None:
+    def heartbeat(self, cam_id: int) -> None:
         """Updates last ping of device"""
-        self.api_client[pi_zero_id].heartbeat()
+        self.api_client[cam_id].heartbeat()
 
-    def save_to_cache(self, frame: Image.Image, pi_zero_id: int) -> None:
+    def save_to_cache(self, frame: Image.Image, cam_id: int) -> None:
         # Store information in the queue
         self.pending_alerts.append(
-            {"frame": frame, "pi_zero_id": pi_zero_id, "ts": datetime.utcnow()}
+            {"frame": frame, "cam_id": cam_id, "ts": datetime.utcnow()}
         )
 
     def upload_pending_alerts(self) -> None:
@@ -224,13 +229,13 @@ class PyronearEngine:
             try:
                 frame_info["frame"].save(self.stream, format="JPEG")
                 # Send alert to the api
-                self.send_alert(frame_info["pi_zero_id"])
+                self.send_alert(frame_info["cam_id"])
                 # No need to upload it anymore
                 self.pending_alerts.popleft()
-                logging.info(f"Alert sent by device {frame_info['pi_zero_id']}")
+                logging.info(f"Alert sent by device {frame_info['cam_id']}")
             except ConnectionError:
                 logging.warning(
-                    f"Unable to upload cache for device {frame_info['pi_zero_id']}"
+                    f"Unable to upload cache for device {frame_info['cam_id']}"
                 )
                 self.stream.seek(
                     0
@@ -260,7 +265,7 @@ class PyronearEngine:
                     "frame_path": str(
                         self._backup_folder.joinpath(f"pending_frame{idx}.jpg")
                     ),
-                    "pi_zero_id": info["pi_zero_id"],
+                    "cam_id": info["cam_id"],
                     "ts": info["ts"],
                 }
             )
@@ -281,9 +286,5 @@ class PyronearEngine:
                 # Open image
                 frame = Image.open(entry["frame_path"], mode="r")
                 self.pending_alerts.append(
-                    {
-                        "frame": frame,
-                        "pi_zero_id": entry["pi_zero_id"],
-                        "ts": entry["ts"],
-                    }
+                    {"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]}
                 )
