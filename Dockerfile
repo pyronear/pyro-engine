@@ -13,8 +13,8 @@ RUN apt update \
     && apt install -y git \
     && apt install ffmpeg libsm6 libxext6  -y \
     && apt install -y gcc python3-dev \
-    && apt install --upgrade pip setuptools wheel \
+    && pip install --upgrade pip setuptools wheel \
     && pip install -e /tmp/. \
     && pip cache purge \
     && rm -rf /root/.cache/pip
-
+    && rm -rf /var/lib/apt/lists/*
