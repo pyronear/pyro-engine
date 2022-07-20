@@ -74,9 +74,9 @@ while True:
 
             # Save img
             if save_img_debug:
-                file = 'data/' + ip + '/' + time.strftime("%Y%m%d-%H%M%S") + '.jpg'
+                file = os.path.join("data", ip, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
                 os.makedirs(os.path.split(file)[0], exist_ok=True)
-                img.save('data/' + ip + '/.jpg')
+                img.save(file)
 
             time.sleep(max(loop_time - time.time() + start_time, 0))
         except Exception:
