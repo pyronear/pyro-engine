@@ -52,6 +52,7 @@ def setup_engine():
 
     return engine, cameras_credentials, loop_time
 
+
 def capture(ip, CAM_USER, CAM_PWD):
     url = f"https://{ip}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C&user={CAM_USER}&password={CAM_PWD}"
 

@@ -40,7 +40,9 @@ with open("/home/pi/pyro-engine/runner/data/cameras_credentials.json") as json_f
 for ip in cameras_credentials.keys():
     try:
         img = capture(ip, CAM_USER, CAM_PWD)
-        file = os.path.join("/home/pi/captured_images", ip, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
+        file = os.path.join(
+            "/home/pi/captured_images", ip, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"
+        )
         os.makedirs(os.path.split(file)[0], exist_ok=True)
         img.save(file)
 
