@@ -115,14 +115,20 @@ class PyronearEngine:
 
         if len(pred) > 0:
             prob = np.max(pred[:, 4])
-        else:
-            prob = 0
+            if cam_id is None:
+                logging.info(f"Wildfire detected with score ({prob:.2%})")
+            else:
+                self.heartbeat(cam_id)
+                logging.info(
+                    f"Wildfire detected with score ({prob:.2%}), on device {cam_id}"
+                )
 
-        if cam_id is None:
-            logging.info(f"Wildfire detection score ({prob:.2%})")
         else:
-            self.heartbeat(cam_id)
-            logging.info(f"Wildfire detection score ({prob:.2%}), on device {cam_id}")
+            if cam_id is None:
+                logging.info("No wildfire detected")
+            else:
+                self.heartbeat(cam_id)
+                logging.info(f"No wildfire detected on device {cam_id}")
 
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
