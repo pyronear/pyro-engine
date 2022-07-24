@@ -13,6 +13,10 @@ import os
 import time
 import json
 import logging
+import urllib3
+
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
