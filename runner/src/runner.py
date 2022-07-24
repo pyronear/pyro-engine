@@ -35,7 +35,6 @@ def setup_engine():
     latitude = config_data["latitude"]
     longitude = config_data["longitude"]
     model_weights = config_data["model_weights"]
-    save_img_debug = config_data["save_img_debug"]
 
     # Loading pi zeros datas
     with open("data/cameras_credentials.json") as json_file:
@@ -51,8 +50,7 @@ def setup_engine():
         model_weights=model_weights,
     )
 
-    return engine, cameras_credentials, loop_time, save_img_debug
-
+    return engine, cameras_credentials, loop_time
 
 def capture(ip, CAM_USER, CAM_PWD):
     url = f"https://{ip}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C&user={CAM_USER}&password={CAM_PWD}"
@@ -66,7 +64,7 @@ load_dotenv("data/.env")
 CAM_USER = os.environ.get("CAM_USER")
 CAM_PWD = os.environ.get("CAM_PWD")
 
-engine, cameras_credentials, loop_time, save_img_debug = setup_engine()
+engine, cameras_credentials, loop_time = setup_engine()
 
 while True:
     for ip in cameras_credentials.keys():
@@ -74,12 +72,6 @@ while True:
             start_time = time.time()
             img = capture(ip, CAM_USER, CAM_PWD)
             pred = engine.predict(img, ip)
-
-            # Save img
-            if save_img_debug:
-                file = os.path.join("data", ip, f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
-                os.makedirs(os.path.split(file)[0], exist_ok=True)
-                img.save(file)
 
             time.sleep(max(loop_time - time.time() + start_time, 0))
         except Exception:
