@@ -51,8 +51,7 @@ def setup_engine():
 
 
 def capture(ip, CAM_USER, CAM_PWD):
-    url = f"http://{ip}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C\
-          &user={CAM_USER}&password={CAM_PWD}"
+    url = f"https://{ip}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C&user={CAM_USER}&password={CAM_PWD}"
 
     response = requests.get(url, verify=False, timeout=3)
     return Image.open(BytesIO(response.content))
