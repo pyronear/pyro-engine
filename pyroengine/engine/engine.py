@@ -125,7 +125,7 @@ class PyronearEngine:
 
         else:
             if cam_id is None:
-                logging.info(f"No wildfire detected")
+                logging.info("No wildfire detected")
             else:
                 self.heartbeat(cam_id)
                 logging.info(f"No wildfire detected on device {cam_id}")
