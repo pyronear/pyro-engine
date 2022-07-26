@@ -21,6 +21,6 @@ class PyronearPredictor:
 
     def predict(self, im):
         """Run prediction"""
-        pred = self.model(im)
+        pred = self.model.forward(im)
 
         return pred
