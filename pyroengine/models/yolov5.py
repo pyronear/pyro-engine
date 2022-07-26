@@ -11,6 +11,7 @@ from pyroengine.models.utils import non_max_suppression, xywh2xyxy
 
 __all__ = ["Yolo_v5"]
 
+
 class Yolo_v5:
     def __init__(self, model_weights, conf_thres=0.25):
         """Yolov5 onnx instance
