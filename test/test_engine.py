@@ -10,15 +10,19 @@ import requests
 from pyroengine.engine import PyronearEngine
 
 
-url = "https://beta.ctvnews.ca/content/dam/ctvnews/images/2020/9/15/1_5105012.jpg?cache_timestamp=1600164224519"
+image_url = "https://beta.ctvnews.ca/content/dam/ctvnews/images/2020/9/15/1_5105012.jpg?cache_timestamp=1600164224519"
 
+model_url = "https://github.com//pyronear//pyro-vision//releases//download//v0.1.2//yolov5s_v001.onnx"
 
 class EngineTester(unittest.TestCase):
     def test_engine(self):
+        # Download model
+        r = requests.get(model_url, allow_redirects=True)
+        open('model.onnx', 'wb').write(r.content)
         # Init
-        engine = PyronearEngine()
+        engine = PyronearEngine(model_weights='model.onnx')
         # Get Image
-        response = requests.get(url)
+        response = requests.get(image_url)
         image_bytes = io.BytesIO(response.content)
         im = Image.open(image_bytes)
         # Predict
