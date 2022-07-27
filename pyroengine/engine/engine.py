@@ -124,6 +124,7 @@ class PyronearEngine:
                 )
 
         else:
+            prob = 0
             if cam_id is None:
                 logging.info("No wildfire detected")
             else:
