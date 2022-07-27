@@ -11,7 +11,10 @@ import tempfile
 from pyroengine.engine import PyronearEngine
 
 
-image_url = "https://bloximages.newyork1.vip.townnews.com/union-bulletin.com/content/tncms/assets/v3/editorial/6/86/68647f68-f036-11eb-a656-93dbdb9cc4b8/61024b72a57c7.image.jpg?resize=666%2C500"
+image_url = (
+    "https://bloximages.newyork1.vip.townnews.com/union-bulletin.com/content/tncms/assets/v3/editorial/6/86/"
+    "68647f68-f036-11eb-a656-93dbdb9cc4b8/61024b72a57c7.image.jpg?resize=666%2C500"
+)
 
 model_url = "https://github.com//pyronear//pyro-vision//releases//download//v0.1.2//yolov5s_v001.onnx"
 
