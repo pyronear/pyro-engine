@@ -15,13 +15,14 @@ image_url = "https://bloximages.newyork1.vip.townnews.com/union-bulletin.com/con
 
 model_url = "https://github.com//pyronear//pyro-vision//releases//download//v0.1.2//yolov5s_v001.onnx"
 
+
 class EngineTester(unittest.TestCase):
     def test_engine(self):
         with tempfile.TemporaryDirectory() as root:
             # Download model
             r = requests.get(model_url, allow_redirects=True)
-            model_path = root + '/model.onnx'
-            open(model_path, 'wb').write(r.content)
+            model_path = root + "/model.onnx"
+            open(model_path, "wb").write(r.content)
             # Init
             engine = PyronearEngine(model_weights=model_path)
             # Get Image
