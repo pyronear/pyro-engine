@@ -16,7 +16,7 @@ from typing import Optional, Dict
 import numpy as np
 
 from pyroclient import client
-from .predictor import PyronearPredictor
+from pyroengine.models.yolov5 import Yolo_v5
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
@@ -67,7 +67,7 @@ class PyronearEngine:
         """Init engine"""
         # Engine Setup
 
-        self.pyronearPredictor = PyronearPredictor(model_weights, detection_thresh)
+        self.model = Yolo_v5(model_weights=model_weights, conf_thres=detection_thresh)
         self.detection_thresh = detection_thresh
         self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation

@@ -26,7 +26,7 @@ class Yolo_v5:
 
         self.conf_thres = conf_thres
 
-    def forward(self, im):
+    def __call__(self, im):
         """Run prediction
 
         Args:
