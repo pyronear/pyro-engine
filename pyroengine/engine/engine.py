@@ -111,7 +111,7 @@ class PyronearEngine:
 
     def predict(self, frame: Image.Image, cam_id: Optional[int] = None) -> float:
         """run prediction on comming frame"""
-        pred = self.pyronearPredictor.predict(frame.convert("RGB"))  # run prediction
+        pred = self.model(frame.convert("RGB"))  # run prediction
 
         if len(pred) > 0:
             prob = np.max(pred[:, 4])
