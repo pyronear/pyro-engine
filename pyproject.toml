@@ -34,7 +34,7 @@ dependencies = [
     "onnxruntime>=1.10.0,<2.0.0",
     "numpy>=1.19.5,<2.0.0",
     "huggingface-hub>=0.4.0,<1.0.0",
-    "pyroclient==0.1.2"
+    "pyroclient>=0.1.2"
 ]
 
 [project.optional-dependencies]
