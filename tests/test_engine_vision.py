@@ -1,4 +1,5 @@
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from pyroengine.engine.vision import Classifier
 
@@ -16,3 +17,8 @@ def test_classifier(mock_classification_image):
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
     assert out.shape == (1,)
     assert out >= 0 and out <= 1
+
+    # Load static file
+    cfg_path = hf_hub_download("pyronear/rexnet1_3x", filename="config.json")
+    model_path = hf_hub_download("pyronear/rexnet1_3x", filename="model.onnx")
+    Classifier("pyronear/rexnet1_3x", cfg_path=cfg_path, model_path=model_path)
