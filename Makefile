@@ -18,3 +18,7 @@ test:
 # Build documentation for current version
 single-docs:
 	sphinx-build docs/source docs/_build -a
+
+# Build the docker
+docker:
+	docker build . -t pyroengine:python3.8.1-slim
