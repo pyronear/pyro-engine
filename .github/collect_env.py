@@ -10,11 +10,12 @@ Run it with `python collect_env.py`.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 import locale
+import os
 import re
 import subprocess
 import sys
-import os
 from collections import namedtuple
 
 try:
@@ -61,9 +62,7 @@ SystemEnv = namedtuple(
 
 def run(command):
     """Returns (return-code, stdout, stderr)"""
-    p = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     output, err = p.communicate()
     rc = p.returncode
     if PY3:
@@ -95,9 +94,7 @@ def run_and_parse_first_match(run_lambda, command, regex):
 def get_nvidia_driver_version(run_lambda):
     if get_platform() == "darwin":
         cmd = "kextstat | grep -i cuda"
-        return run_and_parse_first_match(
-            run_lambda, cmd, r"com[.]nvidia[.]CUDA [(](.*?)[)]"
-        )
+        return run_and_parse_first_match(run_lambda, cmd, r"com[.]nvidia[.]CUDA [(](.*?)[)]")
     smi = get_nvidia_smi()
     return run_and_parse_first_match(run_lambda, smi, r"Driver Version: (.*?) ")
 
@@ -184,15 +181,11 @@ def get_windows_version(run_lambda):
 
 
 def get_lsb_version(run_lambda):
-    return run_and_parse_first_match(
-        run_lambda, "lsb_release -a", r"Description:\t(.*)"
-    )
+    return run_and_parse_first_match(run_lambda, "lsb_release -a", r"Description:\t(.*)")
 
 
 def check_release_file(run_lambda):
-    return run_and_parse_first_match(
-        run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"'
-    )
+    return run_and_parse_first_match(run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"')
 
 
 def get_os(run_lambda):
@@ -298,9 +291,7 @@ def pretty_str(envinfo):
     mutable_dict = envinfo._asdict()
 
     # If nvidia_gpu_models is multiline, start on the next line
-    mutable_dict["nvidia_gpu_models"] = maybe_start_on_next_line(
-        envinfo.nvidia_gpu_models
-    )
+    mutable_dict["nvidia_gpu_models"] = maybe_start_on_next_line(envinfo.nvidia_gpu_models)
 
     # If the machine doesn't have CUDA, report some fields as 'No CUDA'
     dynamic_cuda_fields = [
@@ -309,14 +300,8 @@ def pretty_str(envinfo):
         "nvidia_driver_version",
     ]
     all_cuda_fields = dynamic_cuda_fields + ["cudnn_version"]
-    all_dynamic_cuda_fields_missing = all(
-        mutable_dict[field] is None for field in dynamic_cuda_fields
-    )
-    if (
-        TORCH_AVAILABLE
-        and not torch.cuda.is_available()
-        and all_dynamic_cuda_fields_missing
-    ):
+    all_dynamic_cuda_fields_missing = all(mutable_dict[field] is None for field in dynamic_cuda_fields)
+    if TORCH_AVAILABLE and not torch.cuda.is_available() and all_dynamic_cuda_fields_missing:
         for field in all_cuda_fields:
             mutable_dict[field] = "No CUDA"
 
