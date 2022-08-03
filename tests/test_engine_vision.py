@@ -1,7 +1,7 @@
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from pyroengine.engine.vision import Classifier
+from pyroengine.vision import Classifier
 
 
 def test_classifier(mock_classification_image):

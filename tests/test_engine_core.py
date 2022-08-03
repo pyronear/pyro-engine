@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 
-from pyroengine.engine.core import Engine
+from pyroengine.core import Engine
 
 
 def test_engine(tmpdir_factory, mock_classification_image):
@@ -14,7 +14,7 @@ def test_engine(tmpdir_factory, mock_classification_image):
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
-    engine.stage_alert(mock_classification_image, 0)
+    engine._stage_alert(mock_classification_image, 0)
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.utcnow().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
@@ -42,9 +42,9 @@ def test_engine(tmpdir_factory, mock_classification_image):
     out = engine.predict(mock_classification_image, 0)
     assert isinstance(out, float) and 0 <= out <= 1
     # Alert relaxation
-    assert not engine.ongoing_alert[-1]
+    assert not engine.ongoing_alert["-1"]
     out = engine.predict(mock_classification_image, 0)
     out = engine.predict(mock_classification_image, 0)
-    assert engine.ongoing_alert[-1]
+    assert engine.ongoing_alert["-1"]
 
     # With API
