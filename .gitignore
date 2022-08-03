@@ -110,3 +110,6 @@ test/fixtures/videos/
 
 #Ignore version file
 pyroengine/version.py
+
+# Ignore config file
+runner/data
