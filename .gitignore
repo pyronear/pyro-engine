@@ -112,4 +112,4 @@ test/fixtures/videos/
 pyroengine/version.py
 
 # Ignore config file
-runner/data
+./data

@@ -21,26 +21,31 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
+CFG_PATH = "data/config_data.json"
+CREDS_PATH = "data/cameras_credentials.json"
+
 
 def setup_engine():
-    with open("data/config_data.json") as json_file:
-        config_data = json.load(json_file)
+    with open(CFG_PATH, "rb") as json_file:
+        cfg = json.load(json_file)
 
     # Loading pi zeros datas
-    with open("data/cameras_credentials.json") as json_file:
+    with open(CREDS_PATH, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
     engine = Engine(
-        config_data["hub_repo"],
-        config_data["conf_threshold"],
-        config_data["api_url"],
+        cfg["hub_repo"],
+        cfg["conf_threshold"],
+        cfg["api_url"],
         cameras_credentials,
-        config_data["latitude"],
-        config_data["longitude"],
-        frame_saving_period=config_data["save_evry_n_frame"],
+        cfg["latitude"],
+        cfg["longitude"],
+        frame_saving_period=cfg["save_evry_n_frame"],
+        cfg_path=cfg.get("cfg_path"),
+        model_path=cfg.get("model_path"),
     )
 
-    return engine, cameras_credentials, config_data["loop_time"]
+    return engine, cameras_credentials, cfg["loop_time"]
 
 
 def capture(ip, CAM_USER, CAM_PWD):
