@@ -14,12 +14,26 @@ __all__ = ["Classifier"]
 
 
 class Classifier:
-    def __init__(self, hub_repo: str) -> None:
+    """Implements an image classification model using ONNX backend.
+
+    Examples:
+        >>> from pyroengine.vision import Classifier
+        >>> model = Classifier("pyronear/rexnet1_3x")
+
+    Args:
+        hub_repo: repository from HuggingFace Hub to load the model from
+        cfg_path: overrides the configuration file from the model
+        model_path: overrides the model path
+
+    """
+    def __init__(self, hub_repo: str, cfg_path: Optional[str] = None, model_path: Optional[str] = None) -> None:
         # Download model config & checkpoint
-        with open(hf_hub_download(hub_repo, filename="config.json"), "rb") as f:
+        _path = cfg_path or hf_hub_download(hub_repo, filename="config.json")
+        with open(_path, "rb") as f:
             self.cfg = json.load(f)
 
-        self.ort_session = onnxruntime.InferenceSession(hf_hub_download(hub_repo, filename="model.onnx"))
+        _path = model_path or hf_hub_download(hub_repo, filename="model.onnx")
+        self.ort_session = onnxruntime.InferenceSession(_path)
 
     def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
         """Preprocess an image for inference

@@ -39,6 +39,7 @@ class Engine:
         cache_backup_period: number of minutes between each cache backup to disk
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
+        kwargs: keyword args of Classifier
 
     Examples:
         >>> from pyroengine import Engine
@@ -63,11 +64,12 @@ class Engine:
         frame_saving_period: Optional[int] = None,
         cache_size: int = 100,
         cache_folder: str = "data/",
+        **kwargs: Any,
     ) -> None:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(hub_repo)
+        self.model = Classifier(hub_repo, **kwargs)
         self.conf_thresh = conf_thresh
 
         # API Setup
