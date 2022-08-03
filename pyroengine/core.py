@@ -10,7 +10,7 @@ import os
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
 from pyroclient import client

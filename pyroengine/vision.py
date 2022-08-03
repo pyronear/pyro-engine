@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
 import json
+from typing import Optional
 
 import numpy as np
 import onnxruntime
@@ -26,6 +27,7 @@ class Classifier:
         model_path: overrides the model path
 
     """
+
     def __init__(self, hub_repo: str, cfg_path: Optional[str] = None, model_path: Optional[str] = None) -> None:
         # Download model config & checkpoint
         _path = cfg_path or hf_hub_download(hub_repo, filename="config.json")
