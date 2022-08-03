@@ -4,8 +4,8 @@ services:
   pyro-engine:
     build:
       context: ..
-      dockerfile: ./runner/src/Dockerfile
-    command: python runner.py
+      dockerfile: ./src/Dockerfile
+    command: python run.py
     volumes:
       - ./data:/usr/src/app/data
 

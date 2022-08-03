@@ -1,0 +1,4 @@
+pyroengine
+python-dotenv==0.15.0
+requests==2.25.1
+Pillow==9.2.0

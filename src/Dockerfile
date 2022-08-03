@@ -10,4 +10,11 @@ ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
 ENV PATH /usr/local/bin:$PATH
 ENV LANG C.UTF-8
 
-COPY runner/src/runner.py /usr/src/app/runner.py 
+COPY ./src/requirements.txt /tmp/requirements.txt
+
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install -r /tmp/requirements.txt \
+    && pip cache purge \
+    && rm -rf /root/.cache/pip
+
+COPY .src/run.py /usr/src/app/run.py 
