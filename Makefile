@@ -20,7 +20,7 @@ single-docs:
 	sphinx-build docs/source docs/_build -a
 
 # Build the docker
-docker-pkg:
+docker:
 	docker build . -t pyronear/pyro-engine:python3.8.1-slim
 
 # Run the engine wrapper
