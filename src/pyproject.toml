@@ -11,6 +11,6 @@ license = "Apache-2.0"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-pyroengine = ">=0.2.0"
+pyroengine = "^0.2.0"
 python-dotenv = ">=0.15.0"
 requests = "^2.20.0"
