@@ -113,3 +113,6 @@ pyroengine/version.py
 
 # Ignore config file
 ./data
+# Checkpoints
+*.pth
+*.onnx
