@@ -20,5 +20,13 @@ single-docs:
 	sphinx-build docs/source docs/_build -a
 
 # Build the docker
-docker:
+docker-pkg:
 	docker build . -t pyroengine:python3.8.1-slim
+
+# Run the engine wrapper
+run:
+	docker-compose -f src/docker-compose.yml up -d --build
+
+# Stop the engine wrapper
+stop:
+	docker-compose -f src/docker-compose.yml down
