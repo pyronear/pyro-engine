@@ -24,4 +24,3 @@ RUN pip install --upgrade pip setuptools wheel \
     && rm -rf /root/.cache/pip
 
 COPY ./src/run.py /usr/src/app/run.py
-CMD ["python", "run.py"]
