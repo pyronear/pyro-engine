@@ -42,9 +42,9 @@ def test_engine(tmpdir_factory, mock_classification_image):
     out = engine.predict(mock_classification_image, 0)
     assert isinstance(out, float) and 0 <= out <= 1
     # Alert relaxation
-    assert not engine.ongoing_alert["-1"]
+    assert not engine._states["-1"]["ongoing"]
     out = engine.predict(mock_classification_image, 0)
     out = engine.predict(mock_classification_image, 0)
-    assert engine.ongoing_alert["-1"]
+    assert engine._states["-1"]["ongoing"]
 
     # With API
