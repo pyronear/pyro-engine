@@ -90,17 +90,12 @@ class Engine:
         self.cache_backup_period = cache_backup_period
 
         # Var initialization
-        self.consec_dets = {}
-        self.ongoing_alert = {}
-        self.frames_counter = {}
+        self._states: Dict[str, Dict[str, Any]] = {}
         if isinstance(client_creds, dict):
-            for cam_id in client_creds.keys():
-                self.consec_dets[cam_id] = 0
-                self.frames_counter[cam_id] = 0
-                self.ongoing_alert[cam_id] = False
+            for cam_id in client_creds:
+                self._states[cam_id] = {"consec": 0, "frame_count": 0, "ongoing": False}
         else:
-            self.consec_dets["-1"] = 0
-            self.ongoing_alert["-1"] = False
+            self._states["-1"] = {"consec": 0, "frame_count": 0, "ongoing": False}
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -161,6 +156,28 @@ class Engine:
         """Updates last ping of device"""
         self.api_client[cam_id].heartbeat()
 
+    def _update_states(self, conf: float, cam_key: str) -> bool:
+        """Updates the detection states"""
+        # Detection
+        if conf >= self.conf_thresh:
+            # Don't increment beyond relaxation
+            if not self._states[cam_key]["ongoing"] and self._states[cam_key]["consec"] < self.alert_relaxation:
+                self._states[cam_key]["consec"] += 1
+
+            if self._states[cam_key]["consec"] == self.alert_relaxation:
+                self._states[cam_key]["ongoing"] = True
+
+            return self._states[cam_key]["ongoing"]
+        # No wildfire
+        else:
+            if self._states[cam_key]["consec"] > 0:
+                self._states[cam_key]["consec"] -= 1
+            # Consider event as finished
+            if self._states[cam_key]["consec"] == 0:
+                self._states[cam_key]["ongoing"] = False
+
+        return False
+
     def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
 
@@ -188,26 +205,10 @@ class Engine:
 
         # Alert
         cam_key = cam_id or "-1"
-        if pred >= self.conf_thresh:
-            # Don't increment beyond relaxation
-            if not self.ongoing_alert[cam_key] and self.consec_dets[cam_key] < self.alert_relaxation:
-                self.consec_dets[cam_key] += 1
-
-            if self.consec_dets[cam_key] == self.alert_relaxation:
-                self.ongoing_alert[cam_key] = True
-
-            if len(self.api_client) > 0 and isinstance(cam_id, str) and self.ongoing_alert[cam_key]:
-                # Save the alert in cache to avoid connection issues
-                self._stage_alert(frame, cam_id)
-
-        # No wildfire
-        else:
-
-            if self.consec_dets[cam_key] > 0:
-                self.consec_dets[cam_key] -= 1
-            # Consider event as finished
-            if self.consec_dets[cam_key] == 0:
-                self.ongoing_alert[cam_key] = False
+        to_be_staged = self._update_states(pred, cam_key)
+        if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
+            # Save the alert in cache to avoid connection issues
+            self._stage_alert(frame, cam_id)
 
         # Uploading pending alerts
         if len(self._alerts) > 0:
@@ -221,15 +222,15 @@ class Engine:
 
         # save frame
         if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self.frames_counter[cam_id] += 1
-            if self.frames_counter[cam_id] == self.frame_saving_period:
+            self._states[cam_key]["frame_count"] += 1
+            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
                 # Send frame to the api
                 stream = io.BytesIO()
                 frame.save(stream, format="JPEG")
                 try:
                     self._upload_frame(cam_id, stream.getvalue())
                     # Reset frame counter
-                    self.frames_counter[cam_id] = 0
+                    self._states[cam_key]["frame_count"] = 0
                 except ConnectionError:
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 

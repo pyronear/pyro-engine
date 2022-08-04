@@ -23,12 +23,11 @@ class Classifier:
 
     Args:
         hub_repo: repository from HuggingFace Hub to load the model from
-        cfg_path: overrides the configuration file from the model
         model_path: overrides the model path
-
+        cfg_path: overrides the configuration file from the model
     """
 
-    def __init__(self, hub_repo: str, cfg_path: Optional[str] = None, model_path: Optional[str] = None) -> None:
+    def __init__(self, hub_repo: str, model_path: Optional[str] = None, cfg_path: Optional[str] = None) -> None:
         # Download model config & checkpoint
         _path = cfg_path or hf_hub_download(hub_repo, filename="config.json")
         with open(_path, "rb") as f:
