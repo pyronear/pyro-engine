@@ -21,12 +21,12 @@ single-docs:
 
 # Build the docker
 docker-pkg:
-	docker build . -t pyroengine:python3.8.1-slim
+	docker build . -t pyronear/pyro-engine:python3.8.1-slim
 
 # Run the engine wrapper
 run:
-	docker-compose -f src/docker-compose.yml up -d --build
+	docker-compose up -d
 
 # Stop the engine wrapper
 stop:
-	docker-compose -f src/docker-compose.yml down
+	docker-compose down
