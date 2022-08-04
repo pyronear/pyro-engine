@@ -97,6 +97,6 @@ jobs:
         with:
           license: 'Apache-2.0'
           owner: 'Pyronear'
-          starting-year: 2019
+          starting-year: 2020
           folders: 'pyroengine,docs,scripts,.github'
           ignores: 'version.py,__init__.py'
