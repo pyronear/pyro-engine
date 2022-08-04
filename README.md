@@ -58,6 +58,22 @@ git clone https://github.com/pyronear/pyro-engine.git
 pip install -e pyro-engine/.
 ```
 
+### Full docker orchestration
+
+Finally, you will need a `.env` file to enable camera & Alert API interactions. Your file should include a few mandatory entries:
+```
+API_URL=http://my-api.myhost.com
+LAT=48.88
+LON=2.38
+CAM_USER=my_dummy_login
+CAM_PWD=my_dummy_pwd
+```
+
+Additionally, you'll need a `./data` folder which contains:
+- `credentials.json`: a dictionary with the IP address of your cameras as key, and dictionary with entries `login` & `password` for their Alert API credentials
+- `model.onnx`: optional, will overrides the model weights download from HuggingFace Hub
+- `config.json`: optional, will overrides the model config download from HuggingFace Hub
+
 ## Documentation
 
 The full package documentation is available [here](https://pyronear.github.io/pyro-engine/) for detailed specifications. The documentation was built with [Sphinx](https://www.sphinx-doc.org) using a [theme](https://github.com/readthedocs/sphinx_rtd_theme) provided by [Read the Docs](https://readthedocs.org).
