@@ -3,8 +3,13 @@ version: '3.8'
 services:
   pyro-engine:
     image: pyronear/pyro-engine:latest
+    environment:
+      - API_URL=${API_URL}
+      - LAT=${LAT}
+      - LON=${LON}
+      - CAM_USER=${CAM_USER}
+      - CAM_PWD=${CAM_PWD}
     command: python run.py
     volumes:
       - ./data:/usr/src/app/data
-
     restart: always

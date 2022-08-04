@@ -25,6 +25,7 @@ docker:
 
 # Run the engine wrapper
 run:
+	docker build . -t pyronear/pyro-engine:latest
 	docker-compose up -d
 
 # Stop the engine wrapper
