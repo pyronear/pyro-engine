@@ -12,7 +12,6 @@ Run it with `python collect_env.py`.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import locale
-import os
 import re
 import subprocess
 import sys
