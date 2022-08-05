@@ -76,9 +76,7 @@ Additionally, you'll need a `./data` folder which contains:
 
 ## Documentation
 
-The full package documentation is available [here](https://pyronear.github.io/pyro-engine/) for detailed specifications. The documentation was built with [Sphinx](https://www.sphinx-doc.org) using a [theme](https://github.com/readthedocs/sphinx_rtd_theme) provided by [Read the Docs](https://readthedocs.org).
-
-
+The full package documentation is available [here](https://pyronear.org/pyro-engine/) for detailed specifications.
 
 ## Contributing
 
