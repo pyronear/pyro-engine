@@ -1,0 +1,16 @@
+[build-system]
+requires = ["poetry>=1.0"]
+build-backend = "poetry.masonry.api"
+
+[tool.poetry]
+name = "pyro-engine"
+version = "0.2.0.dev0"
+description = "Wildfire detection on edge devices"
+authors = ["Pyronear <pyronear@contact.org>"]
+license = "Apache-2.0"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pyroengine = "^0.2.0"
+python-dotenv = ">=0.15.0"
+requests = "^2.20.0"

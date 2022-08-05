@@ -1,40 +1,36 @@
-name: pi-runner-python-package
+name: tests-RPI
 
 on:
   push:
-    branches: [ master, develop]
+    branches: main
   pull_request:
-    branches: [ master, develop ]
+    branches: main
 
 jobs:
-  pkg-install:
-    runs-on: self-hosted
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [self-hosted]
     steps:
       - uses: actions/checkout@v2
       - name: Install package
         run: |
-          python --version
-          pip install -e .
+          python -m pip install --upgrade pip
+          pip install -e . --upgrade
 
-  pkg-test:
-    runs-on: self-hosted
-    needs: pkg-install
+  pytest:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [self-hosted]
+    needs: build
     steps:
       - uses: actions/checkout@v2
       - name: Install dependencies
-        run: |
-          pip install -e .
-          pip install -r .github/workflows/requirements.txt
+        run: pip install -e ".[test]" --upgrade
 
       - name: Run unittests
-        run: |
-          coverage run -m unittest discover test/
-          coverage xml
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          fail_ci_if_error: true
-
+        run: coverage run -m pytest tests/

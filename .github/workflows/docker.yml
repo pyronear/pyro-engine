@@ -1,0 +1,17 @@
+name: docker
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build . -t pyronear/pyro-engine:python3.8.1-slim
+      - name: Run docker container
+        run: docker run pyronear/pyro-engine:python3.8.1-slim python -c 'import pyroengine'
