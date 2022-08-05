@@ -32,6 +32,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[test]" --upgrade
       - name: Run unittests
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          LAT: 48.88
+          LON: 2.38
         run: |
           coverage run -m pytest tests/
           coverage xml

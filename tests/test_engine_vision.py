@@ -4,16 +4,16 @@ from huggingface_hub import hf_hub_download
 from pyroengine.vision import Classifier
 
 
-def test_classifier(mock_classification_image):
+def test_classifier(mock_image_content):
 
     # Instantiae the ONNX model
     model = Classifier("pyronear/rexnet1_3x")
     # Check preprocessing
-    out = model.preprocess_image(mock_classification_image)
+    out = model.preprocess_image(mock_image_content)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
     assert out.shape == (1, 3, 224, 224)
     # Check inference
-    out = model(mock_classification_image)
+    out = model(mock_image_content)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
     assert out.shape == (1,)
     assert out >= 0 and out <= 1

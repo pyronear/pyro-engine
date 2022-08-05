@@ -1,20 +1,23 @@
 import json
+import os
 from datetime import datetime
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from pyroengine.core import Engine
 
 
-def test_engine(tmpdir_factory, mock_classification_image):
+def test_engine_offline(tmpdir_factory, mock_image_stream, mock_image_content):
 
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
-    # No API
     engine = Engine("pyronear/rexnet1_3x", cache_folder=folder)
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
-    engine._stage_alert(mock_classification_image, 0)
+    engine._stage_alert(mock_image_content, 0)
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.utcnow().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
@@ -38,13 +41,58 @@ def test_engine(tmpdir_factory, mock_classification_image):
     engine.clear_cache()
 
     # inference
-    engine = Engine("pyronear/rexnet1_3x", cache_folder=folder)
-    out = engine.predict(mock_classification_image, 0)
+    engine = Engine("pyronear/rexnet1_3x", alert_relaxation=3, cache_folder=folder)
+    out = engine.predict(mock_image_content)
     assert isinstance(out, float) and 0 <= out <= 1
     # Alert relaxation
     assert not engine._states["-1"]["ongoing"]
-    out = engine.predict(mock_classification_image, 0)
-    out = engine.predict(mock_classification_image, 0)
+    out = engine.predict(mock_image_content)
+    out = engine.predict(mock_image_content)
     assert engine._states["-1"]["ongoing"]
 
+
+def test_engine_online(tmpdir_factory, mock_image_stream, mock_image_content):
+    # Cache
+    folder = str(tmpdir_factory.mktemp("engine_cache"))
     # With API
+    load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
+    api_url = os.environ.get("API_URL")
+    lat = os.environ.get("LAT")
+    lon = os.environ.get("LON")
+    cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
+    # Skip the API-related tests if the URL is not specified
+    if isinstance(api_url, str):
+        engine = Engine(
+            "pyronear/rexnet1_3x",
+            api_url=api_url,
+            cam_creds=cam_creds,
+            latitude=float(lat),
+            longitude=float(lon),
+            alert_relaxation=2,
+            frame_saving_period=3,
+            cache_folder=folder,
+            frame_size=(224, 224),
+        )
+        # Heartbeat
+        start_ts = datetime.utcnow().isoformat()
+        response = engine.heartbeat("dummy_cam")
+        assert response.status_code // 100 == 2
+        ts = datetime.utcnow().isoformat()
+        json_respone = response.json()
+        assert start_ts < json_respone["last_ping"] < ts
+        # Send an alert
+        engine.predict(mock_image_content, "dummy_cam")
+        assert len(engine._alerts) == 0 and engine._states["dummy_cam"]["consec"] == 1
+        assert engine._states["dummy_cam"]["frame_count"] == 1
+        engine.predict(mock_image_content, "dummy_cam")
+        assert engine._states["dummy_cam"]["consec"] == 2 and engine._states["dummy_cam"]["ongoing"]
+        assert engine._states["dummy_cam"]["frame_count"] == 2
+        # Check that a media and an alert have been registered
+        assert len(engine._alerts) == 0
+        # Upload a frame
+        response = engine._upload_frame("dummy_cam", mock_image_stream)
+        assert response.status_code // 100 == 2
+        # Upload frame in process
+        engine.predict(mock_image_content, "dummy_cam")
+        # Check that a new media has been created & uploaded
+        assert engine._states["dummy_cam"]["frame_count"] == 0

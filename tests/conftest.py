@@ -6,6 +6,11 @@ from PIL import Image
 
 
 @pytest.fixture(scope="session")
-def mock_classification_image(tmpdir_factory):
+def mock_image_stream(tmpdir_factory):
     url = "https://github.com/pyronear/pyro-vision/releases/download/v0.1.2/fire_sample_image.jpg"
-    return Image.open(BytesIO(requests.get(url).content))
+    return requests.get(url).content
+
+
+@pytest.fixture(scope="session")
+def mock_image_content(tmpdir_factory, mock_image_stream):
+    return Image.open(BytesIO(mock_image_stream))
