@@ -55,6 +55,55 @@ jobs:
           pip install pyroengine
           python -c "import pyroengine; print(pyroengine.__version__)"
 
+  conda-publish:
+    if: "!github.event.release.prerelease"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Miniconda setup
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: 3.8
+      - name: Install dependencies
+        run: |
+          conda install -y conda-build conda-verify anaconda-client
+      - name: Get release tag
+        id: release_tag
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: Build and publish
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+          VERSION: ${{ steps.release_tag.outputs.VERSION }}
+        run: |
+          BUILD_VERSION=${VERSION:1} python setup.py sdist
+          mkdir conda-dist
+          conda-build .conda/ --output-folder conda-dist
+          ls -l conda-dist/noarch/*tar.bz2
+          anaconda upload conda-dist/noarch/*tar.bz2
+
+  conda-check:
+    if: "!github.event.release.prerelease"
+    needs: conda-publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: [3.8]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Miniconda setup
+        uses: conda-incubator/setup-miniconda@v1
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python }}
+      - name: Install package
+        run: |
+          conda install -c pyronear pyroengine
+          python -c "import pyroengine; print(pyroengine.__version__)"
+
+
   dockerhub-publish:
     if: "!github.event.release.prerelease"
     name: Push Docker image to Docker Hub
