@@ -1,19 +1,31 @@
 ![PyroNear Logo](docs/source/_static/img/pyronear-logo-dark.png)
 
 <p align="center">
-    <a href="LICENSE" alt="License">
-        <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" /></a>
-    <a href="https://app.codacy.com/gh/pyronear/pyro-engine?utm_source=github.com&utm_medium=referral&utm_content=pyronear/pyro-engine&utm_campaign=Badge_Grade_Settings">
-        <img src="https://api.codacy.com/project/badge/Grade/d7f62736901d4e5c97c744411d8e02e3"/></a>
-    <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Abuilds">
-        <img src="https://github.com/pyronear/pyro-engine/workflows/builds/badge.svg" /></a>
-    <a href="https://codecov.io/gh/pyronear/pyro-engine">
-      <img src="https://codecov.io/gh/pyronear/pyro-engine/branch/master/graph/badge.svg" />
-    </a>
-    <a href="https://pyronear.github.io/pyro-engine">
-  		<img src="https://img.shields.io/badge/docs-available-blue.svg" /></a>
+  <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Abuilds">
+    <img alt="CI Status" src="https://img.shields.io/github/workflow/status/pyronear/pyro-engine/builds?label=CI&logo=github&style=flat-square">
+  </a>
+  <a href="https://pyronear.org/pyro-engine">
+    <img src="https://img.shields.io/github/workflow/status/pyronear/pyro-engine/docs?label=docs&logo=read-the-docs&style=flat-square" alt="Documentation Status">
+  </a>
+  <a href="https://codecov.io/gh/pyronear/pyro-engine">
+    <img src="https://img.shields.io/codecov/c/github/pyronear/pyro-engine.svg?logo=codecov&style=flat-square" alt="Test coverage percentage">
+  </a>
+  <a href="https://github.com/ambv/black">
+    <img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square" alt="black">
+  </a>
+  <a href="https://www.codacy.com/gh/pyronear/pyro-engine/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pyronear/pyro-engine&amp;utm_campaign=Badge_Grade"><img src="https://app.codacy.com/project/badge/Grade/108f5fe8a7ac4f40a7bbd1985e26d5f9"/></a>
 </p>
-
+<p align="center">
+  <a href="https://pypi.org/project/pyroengine/">
+    <img src="https://img.shields.io/pypi/v/pyroengine.svg?logo=python&logoColor=fff&style=flat-square" alt="PyPi Status">
+  </a>
+  <a href="https://anaconda.org/pyronear/pyroengine"> <img src="https://anaconda.org/pyronear/pyroengine/badges/version.svg" /> </a>
+  <a href="https://hub.docker.com/repository/docker/pyronear/pyro-engine">
+    <img alt="DockerHub version" src="https://img.shields.io/docker/v/pyronear/pyro-engine?arch=arm64&label=Docker&logo=Docker&logoColor=white">
+  </a>
+  <img src="https://img.shields.io/pypi/pyversions/pyroengine.svg?style=flat-square" alt="pyversions">
+  <img src="https://img.shields.io/pypi/l/pyroengine.svg?style=flat-square" alt="license">
+</p>
 
 
 # PyroEngine: Wildfire detection on edge devices
