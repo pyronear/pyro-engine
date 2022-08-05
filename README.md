@@ -19,7 +19,6 @@
   <a href="https://pypi.org/project/pyroengine/">
     <img src="https://img.shields.io/pypi/v/pyroengine.svg?logo=python&logoColor=fff&style=flat-square" alt="PyPi Status">
   </a>
-  <a href="https://anaconda.org/pyronear/pyroengine"> <img src="https://anaconda.org/pyronear/pyroengine/badges/version.svg" /> </a>
   <a href="https://hub.docker.com/repository/docker/pyronear/pyro-engine">
     <img alt="DockerHub version" src="https://img.shields.io/docker/v/pyronear/pyro-engine?arch=arm64&label=Docker&logo=Docker&logoColor=white">
   </a>
