@@ -1,21 +1,27 @@
-Pyroengine documentation
-========================
+**********************************************
+PyroEngine: Wildfire detection on edge devices
+**********************************************
 
-The :mod:`pyroengine` package provides everything usefull to deploy pyronear
+PyroEngine provides a high-level interface to use Deep learning models in production while being connected to the alert API.
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+   :hidden:
+
+   installing
 
 .. toctree::
    :maxdepth: 2
    :caption: Package Reference
+   :hidden:
 
-   engine
-
-
-.. automodule:: pyroengine
-   :members:
+   core
 
 
-Indices and tables
-==================
+.. toctree::
+   :maxdepth: 1
+   :caption: Notes
+   :hidden:
 
-* :ref:`genindex`
-* :ref:`modindex`
+   changelog

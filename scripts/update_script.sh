@@ -1,6 +1,6 @@
 #!/bin/bash
 # This script performs:
-# pull origin master
+# pull origin main
 #- if any change:
 #    kill container
 #	 rebuild docker compose
@@ -11,7 +11,7 @@
 
 CID=$(docker ps | grep runner_pyro-engine_1 | awk '{print $1}')
 
-if [ `git -C /home/pi/pyro-engine pull origin master | grep -c "up to date."` -ne 1 ];
+if [ `git -C /home/pi/pyro-engine pull origin main | grep -c "up to date."` -ne 1 ];
     then
         echo "pyro-engine updated from github";
         cd /home/pi/pyro-engine/runner/;

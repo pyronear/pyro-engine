@@ -5,8 +5,8 @@
         <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" /></a>
     <a href="https://app.codacy.com/gh/pyronear/pyro-engine?utm_source=github.com&utm_medium=referral&utm_content=pyronear/pyro-engine&utm_campaign=Badge_Grade_Settings">
         <img src="https://api.codacy.com/project/badge/Grade/d7f62736901d4e5c97c744411d8e02e3"/></a>
-    <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Apython-package">
-        <img src="https://github.com/pyronear/pyro-engine/workflows/python-package/badge.svg" /></a>
+    <a href="https://github.com/pyronear/pyro-engine/actions?query=workflow%3Abuilds">
+        <img src="https://github.com/pyronear/pyro-engine/workflows/builds/badge.svg" /></a>
     <a href="https://codecov.io/gh/pyronear/pyro-engine">
       <img src="https://codecov.io/gh/pyronear/pyro-engine/branch/master/graph/badge.svg" />
     </a>
@@ -16,64 +16,63 @@
 
 
 
-# pyroengine: Deploy Pyronear wildfire detection
+# PyroEngine: Wildfire detection on edge devices
 
-The increasing adoption of mobile phones have significantly shortened the time required for firefighting agents to be alerted of a starting wildfire. In less dense areas, limiting and minimizing this duration remains critical to preserve forest areas.
+PyroEngine provides a high-level interface to use Deep learning models in production while being connected to the alert API.
 
-![pyrovision](https://github.com/pyronear/pyro-vision) aims at providing the means to create a wildfire early detection system with state-of-the-art performances at minimal deployment costs.
+## Quick Tour
 
-pyroengine aims to deploy pyrovision wildfire detection system
+### Running your engine locally
 
+You can use the library like any other python package to detect wildfires as follows:
 
-
-## Table of Contents
-
-* [Getting Started](#getting-started)
-  * [Prerequisites](#prerequisites)
-  * [Installation](#installation)
-* [Documentation](#documentation)
-* [Contributing](#contributing)
-* [Credits](#credits)
-* [License](#license)
-
-
-
-## Getting started
-
-### Prerequisites
-
-- Python 3.6 (or more recent)
-- [pip](https://pip.pypa.io/en/stable/)
-
-### Installation
-
-You can install the package using [pypi](https://pypi.org/project/pyronear/) as follows:
-
-```shell
-pip install pyroengine
-```
-### Environment files 
-
-The `pyroengine/pi_utils/python.env` file must contain:
-- `WEBSERVER_IP`: the IP address of the main rpi once it is installed on site
-- `WEBSERVER_PORT`: the port exposed on the main rpi for the local webserver
-
-### Test Engine
-
-You can test to run a prediction using our Pyronear Engine using the following:
-
-```shell
-from pyroengine.engine import PyronearEngine
+```python
+from pyroengine.core import Engine
 from PIL import Image
 
-engine = PyronearEngine()
+engine = Engine("pyronear/rexnet1_3x")
 
 im = Image.open("path/to/your/image.jpg").convert('RGB')
 
 prediction = engine.predict(image) 
 ```
 
-This is a quick demo without api setup, so without sending the alert
+## Setup
+
+Python 3.6 (or higher) and [pip](https://pip.pypa.io/en/stable/)/[conda](https://docs.conda.io/en/latest/miniconda.html) are required to install PyroVision.
+
+### Stable release
+
+You can install the last stable release of the package using [pypi](https://pypi.org/project/pyroengine/) as follows:
+
+```shell
+pip install pyroengine
+```
+
+### Developer installation
+
+Alternatively, if you wish to use the latest features of the project that haven't made their way to a release yet, you can install the package from source:
+
+```shell
+git clone https://github.com/pyronear/pyro-engine.git
+pip install -e pyro-engine/.
+```
+
+### Full docker orchestration
+
+Finally, you will need a `.env` file to enable camera & Alert API interactions. Your file should include a few mandatory entries:
+```
+API_URL=http://my-api.myhost.com
+LAT=48.88
+LON=2.38
+CAM_USER=my_dummy_login
+CAM_PWD=my_dummy_pwd
+```
+
+Additionally, you'll need a `./data` folder which contains:
+- `credentials.json`: a dictionary with the IP address of your cameras as key, and dictionary with entries `login` & `password` for their Alert API credentials
+- `model.onnx`: optional, will overrides the model weights download from HuggingFace Hub
+- `config.json`: optional, will overrides the model config download from HuggingFace Hub
 
 ## Documentation
 
@@ -83,7 +82,7 @@ The full package documentation is available [here](https://pyronear.github.io/py
 
 ## Contributing
 
-Please refer to `CONTRIBUTING` if you wish to contribute to this project.
+Please refer to [`CONTRIBUTING`](CONTRIBUTING.md) if you wish to contribute to this project.
 
 
 
@@ -95,4 +94,4 @@ This project is developed and maintained by the repo owner and volunteers from [
 
 ## License
 
-Distributed under the Apache 2 License. See `LICENSE` for more information.
+Distributed under the Apache 2 License. See [`LICENSE`](LICENSE) for more information.

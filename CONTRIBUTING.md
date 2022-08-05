@@ -7,19 +7,23 @@ Whatever the way you wish to contribute to the project, please respect the [code
 
 ## Codebase structure
 
-- [pyroengine](https://github.com/pyronear/pyro-engine/blob/master/pyroengine) - The actual pyroengine library
+- [pyroengine](https://github.com/pyronear/pyro-engine/blob/main/pyroengine) - The actual pyroengine library
+- [docs](https://github.com/pyronear/pyro-engine/blob/main/docs) - Sphinx documentation building
+- [tests](https://github.com/pyronear/pyro-engine/blob/main/tests) - Python unit tests
+- [scripts](https://github.com/pyronear/pyro-engine/blob/main/scripts) - Scripts for Raspberry Pi
+- [src](https://github.com/pyronear/pyro-engine/blob/main/src) - code running on Raspberry Pi
+
 
 
 ## Continuous Integration
 
 This project uses the following integrations to ensure proper codebase maintenance:
 
-- [CircleCI](https://circleci.com/) - run jobs for package build and coverage
+- [Github Worklow](https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow) - run jobs for package build and coverage
 - [Codacy](https://www.codacy.com/) - analyzes commits for code quality
 - [Codecov](https://codecov.io/) - reports back coverage results
 
 As a contributor, you will only have to ensure coverage of your code by adding appropriate unit testing of your code.
-
 
 
 ## Issues
