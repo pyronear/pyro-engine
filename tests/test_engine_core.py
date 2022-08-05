@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from pyroengine.core import Engine
 
 
-def test_engine_offline(tmpdir_factory, mock_image_stream, mock_image_content):
+def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
@@ -17,7 +17,7 @@ def test_engine_offline(tmpdir_factory, mock_image_stream, mock_image_content):
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
-    engine._stage_alert(mock_image_content, 0)
+    engine._stage_alert(mock_wildfire_image, 0)
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.utcnow().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
@@ -34,6 +34,8 @@ def test_engine_offline(tmpdir_factory, mock_image_stream, mock_image_content):
         "cam_id": 0,
         "ts": engine._alerts[0]["ts"],
     }
+    # Overrites cache files
+    engine._dump_cache()
 
     # Cache dump loading
     engine = Engine("pyronear/rexnet1_3x", cache_folder=folder)
@@ -42,16 +44,22 @@ def test_engine_offline(tmpdir_factory, mock_image_stream, mock_image_content):
 
     # inference
     engine = Engine("pyronear/rexnet1_3x", alert_relaxation=3, cache_folder=folder)
-    out = engine.predict(mock_image_content)
+    out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
+    assert engine._states["-1"]["consec"] == 0
+    out = engine.predict(mock_wildfire_image)
+    assert isinstance(out, float) and 0 <= out <= 1
+    assert engine._states["-1"]["consec"] == 1
     # Alert relaxation
     assert not engine._states["-1"]["ongoing"]
-    out = engine.predict(mock_image_content)
-    out = engine.predict(mock_image_content)
+    out = engine.predict(mock_wildfire_image)
+    assert engine._states["-1"]["consec"] == 2
+    out = engine.predict(mock_wildfire_image)
+    assert engine._states["-1"]["consec"] == 3
     assert engine._states["-1"]["ongoing"]
 
 
-def test_engine_online(tmpdir_factory, mock_image_stream, mock_image_content):
+def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
     # With API
@@ -81,18 +89,18 @@ def test_engine_online(tmpdir_factory, mock_image_stream, mock_image_content):
         json_respone = response.json()
         assert start_ts < json_respone["last_ping"] < ts
         # Send an alert
-        engine.predict(mock_image_content, "dummy_cam")
+        engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._alerts) == 0 and engine._states["dummy_cam"]["consec"] == 1
         assert engine._states["dummy_cam"]["frame_count"] == 1
-        engine.predict(mock_image_content, "dummy_cam")
+        engine.predict(mock_wildfire_image, "dummy_cam")
         assert engine._states["dummy_cam"]["consec"] == 2 and engine._states["dummy_cam"]["ongoing"]
         assert engine._states["dummy_cam"]["frame_count"] == 2
         # Check that a media and an alert have been registered
         assert len(engine._alerts) == 0
         # Upload a frame
-        response = engine._upload_frame("dummy_cam", mock_image_stream)
+        response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
         assert response.status_code // 100 == 2
         # Upload frame in process
-        engine.predict(mock_image_content, "dummy_cam")
+        engine.predict(mock_wildfire_image, "dummy_cam")
         # Check that a new media has been created & uploaded
         assert engine._states["dummy_cam"]["frame_count"] == 0
