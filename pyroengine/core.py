@@ -45,9 +45,9 @@ class Engine:
     Examples:
         >>> from pyroengine import Engine
         >>> cam_creds ={
-        "cam_id_1": {'login':'log1', 'password':'pwd1'},
-        "cam_id_2": {'login':'log2', 'password':'pwd2'},
-        }
+        >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
+        >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
+        >>> }
         >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
