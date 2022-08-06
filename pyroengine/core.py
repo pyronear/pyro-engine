@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional, Tuple
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
+from requests.models import Response
 
 from .vision import Classifier
 
@@ -30,7 +31,7 @@ class Engine:
         hub_repo: repository on HF Hub to load the ONNX model from
         conf_thresh: confidence threshold to send an alert
         api_url: url of the pyronear API
-        client_creds: api credectials for each pizero, the dictionary should be as the one in the example
+        cam_creds: api credectials for each camera, the dictionary should be as the one in the example
         latitude: device latitude
         longitude: device longitude
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
@@ -43,11 +44,11 @@ class Engine:
 
     Examples:
         >>> from pyroengine import Engine
-        >>> client_creds ={
+        >>> cam_creds ={
         "cam_id_1": {'login':'log1', 'password':'pwd1'},
         "cam_id_2": {'login':'log2', 'password':'pwd2'},
         }
-        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', client_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
@@ -55,7 +56,7 @@ class Engine:
         hub_repo: str,
         conf_thresh: float = 0.5,
         api_url: Optional[str] = None,
-        client_creds: Optional[Dict[str, Dict[str, str]]] = None,
+        cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         alert_relaxation: int = 3,
@@ -74,13 +75,13 @@ class Engine:
 
         # API Setup
         if isinstance(api_url, str):
-            assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(client_creds, dict)
+            assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
         self.latitude = latitude
         self.longitude = longitude
         self.api_client = {}
-        if isinstance(api_url, str) and isinstance(client_creds, dict):
+        if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, vals in client_creds.items():
+            for _id, vals in cam_creds.items():
                 self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
 
         # Cache & relaxation
@@ -90,12 +91,12 @@ class Engine:
         self.cache_backup_period = cache_backup_period
 
         # Var initialization
-        self._states: Dict[str, Dict[str, Any]] = {}
-        if isinstance(client_creds, dict):
-            for cam_id in client_creds:
+        self._states: Dict[str, Dict[str, Any]] = {
+            "-1": {"consec": 0, "frame_count": 0, "ongoing": False},
+        }
+        if isinstance(cam_creds, dict):
+            for cam_id in cam_creds:
                 self._states[cam_id] = {"consec": 0, "frame_count": 0, "ongoing": False}
-        else:
-            self._states["-1"] = {"consec": 0, "frame_count": 0, "ongoing": False}
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -152,9 +153,9 @@ class Engine:
                 frame = Image.open(entry["frame_path"], mode="r")
                 self._alerts.append({"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]})
 
-    def heartbeat(self, cam_id: str) -> None:
+    def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
-        self.api_client[cam_id].heartbeat()
+        return self.api_client[cam_id].heartbeat()
 
     def _update_states(self, conf: float, cam_key: str) -> bool:
         """Updates the detection states"""
@@ -195,7 +196,7 @@ class Engine:
         # Inference with ONNX
         pred = float(self.model(frame.convert("RGB")))
         # Log analysis result
-        device_str = f"Camera {cam_id} - " if isinstance(cam_id, str) else ""
+        device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
         pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
         logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
 
@@ -236,13 +237,17 @@ class Engine:
 
         return pred
 
-    def _upload_frame(self, cam_id: str, media_data: bytes) -> None:
+    def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
         """Save frame"""
-        logging.info("Uploading media...")
+        logging.info(f"Camera '{cam_id}' - Uploading media...")
         # Create a media
-        media_id = self.api_client[cam_id].create_media_from_device().json()["id"]
-        # Send media
-        self.api_client[cam_id].upload_media(media_id=media_id, media_data=media_data)
+        response = self.api_client[cam_id].create_media_from_device()
+        if response.status_code // 100 == 2:
+            media = response.json()
+            # Upload media
+            self.api_client[cam_id].upload_media(media_id=media["id"], media_data=media_data)
+
+        return response
 
     def _stage_alert(self, frame: Image.Image, cam_id: str) -> None:
         # Store information in the queue
@@ -262,7 +267,7 @@ class Engine:
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
-            logging.info("Sending alert...")
+            logging.info(f"Camera {cam_id} - Sending alert from {frame_info['ts']}...")
 
             try:
                 # Media creation
@@ -283,10 +288,13 @@ class Engine:
                 # Media upload
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG")
-                self.api_client[cam_id].upload_media(self._alerts[0]["media_id"], media_data=stream.getvalue())
+                self.api_client[cam_id].upload_media(
+                    self._alerts[0]["media_id"],
+                    media_data=stream.getvalue(),
+                ).json()["id"]
                 # Clear
                 self._alerts.popleft()
-                logging.info(f"Camera {frame_info['cam_id']} - alert sent")
+                logging.info(f"Camera {cam_id} - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError):
                 logging.warning(f"Camera {cam_id} - unable to upload cache")
