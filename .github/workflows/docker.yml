@@ -7,8 +7,12 @@ on:
     branches: main
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  docker:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, self-hosted]
     steps:
       - uses: actions/checkout@v2
       - name: Build docker image
