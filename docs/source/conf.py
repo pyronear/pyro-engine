@@ -93,6 +93,7 @@ html_theme_options = {
     "source_repository": "https://github.com/pyronear/pyro-engine/",
     "source_branch": "develop",
     "source_directory": "docs/source/",
+    "sidebar_hide_name": True,
 }
 
 
