@@ -79,7 +79,7 @@ jobs:
         run: |
           BUILD_VERSION=${VERSION:1} python setup.py sdist
           mkdir conda-dist
-          conda-build .conda/ --output-folder conda-dist
+          conda-build -c pyronear -c conda-forge .conda/ --output-folder conda-dist
           ls -l conda-dist/noarch/*tar.bz2
           anaconda upload conda-dist/noarch/*tar.bz2
 
