@@ -116,3 +116,5 @@ pyroengine/version.py
 # Checkpoints
 *.pth
 *.onnx
+# Release
+conda-dist/
