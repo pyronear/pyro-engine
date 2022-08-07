@@ -17,8 +17,9 @@
 </p>
 <p align="center">
   <a href="https://pypi.org/project/pyroengine/">
-    <img src="https://img.shields.io/pypi/v/pyroengine.svg?logo=python&logoColor=fff&style=flat-square" alt="PyPi Status">
+    <img src="https://img.shields.io/pypi/v/pyroengine.svg?logo=python&logoColor=fff&style=flat-square" alt="PyPi Version">
   </a>
+  <img alt="Conda (channel only)" src="https://img.shields.io/conda/vn/pyronear/pyroengine?label=Anaconda&logo=Anaconda&logoColor=white">
   <a href="https://hub.docker.com/repository/docker/pyronear/pyro-engine">
     <img alt="DockerHub version" src="https://img.shields.io/docker/v/pyronear/pyro-engine?arch=arm64&label=Docker&logo=Docker&logoColor=white">
   </a>
