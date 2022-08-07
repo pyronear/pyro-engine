@@ -1,0 +1,371 @@
+[[package]]
+name = "certifi"
+version = "2022.6.15"
+description = "Python package for providing Mozilla's CA Bundle."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[[package]]
+name = "charset-normalizer"
+version = "2.1.0"
+description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
+category = "main"
+optional = false
+python-versions = ">=3.6.0"
+
+[package.extras]
+unicode_backport = ["unicodedata2"]
+
+[[package]]
+name = "colorama"
+version = "0.4.5"
+description = "Cross-platform colored terminal text."
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[[package]]
+name = "coloredlogs"
+version = "15.0.1"
+description = "Colored terminal output for Python's logging module"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.dependencies]
+humanfriendly = ">=9.1"
+
+[package.extras]
+cron = ["capturer (>=2.4)"]
+
+[[package]]
+name = "filelock"
+version = "3.7.1"
+description = "A platform independent file lock."
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+docs = ["furo (>=2021.8.17b43)", "sphinx (>=4.1)", "sphinx-autodoc-typehints (>=1.12)"]
+testing = ["covdefaults (>=1.2.0)", "coverage (>=4)", "pytest (>=4)", "pytest-cov", "pytest-timeout (>=1.4.2)"]
+
+[[package]]
+name = "flatbuffers"
+version = "2.0"
+description = "The FlatBuffers serialization format for Python"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "huggingface-hub"
+version = "0.8.1"
+description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
+category = "main"
+optional = false
+python-versions = ">=3.7.0"
+
+[package.dependencies]
+filelock = "*"
+packaging = ">=20.9"
+pyyaml = ">=5.1"
+requests = "*"
+tqdm = "*"
+typing-extensions = ">=3.7.4.3"
+
+[package.extras]
+all = ["pytest", "pytest-cov", "datasets", "soundfile", "black (>=22.0,<23.0)", "isort (>=5.5.4)", "flake8 (>=3.8.3)"]
+dev = ["pytest", "pytest-cov", "datasets", "soundfile", "black (>=22.0,<23.0)", "isort (>=5.5.4)", "flake8 (>=3.8.3)"]
+fastai = ["toml", "fastai (>=2.4)", "fastcore (>=1.3.27)"]
+quality = ["black (>=22.0,<23.0)", "isort (>=5.5.4)", "flake8 (>=3.8.3)"]
+tensorflow = ["tensorflow", "pydot", "graphviz"]
+testing = ["pytest", "pytest-cov", "datasets", "soundfile"]
+torch = ["torch"]
+
+[[package]]
+name = "humanfriendly"
+version = "10.0"
+description = "Human friendly output for text interfaces using Python"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.dependencies]
+pyreadline3 = {version = "*", markers = "sys_platform == \"win32\" and python_version >= \"3.8\""}
+
+[[package]]
+name = "idna"
+version = "3.3"
+description = "Internationalized Domain Names in Applications (IDNA)"
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[[package]]
+name = "mpmath"
+version = "1.2.1"
+description = "Python library for arbitrary-precision floating-point arithmetic"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+tests = ["pytest (>=4.6)"]
+develop = ["wheel", "codecov", "pytest-cov", "pycodestyle", "pytest (>=4.6)"]
+
+[[package]]
+name = "numpy"
+version = "1.23.1"
+description = "NumPy is the fundamental package for array computing with Python."
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[[package]]
+name = "onnxruntime"
+version = "1.12.1"
+description = "ONNX Runtime is a runtime accelerator for Machine Learning models"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+coloredlogs = "*"
+flatbuffers = "*"
+numpy = ">=1.21.0"
+packaging = "*"
+protobuf = "*"
+sympy = "*"
+
+[[package]]
+name = "packaging"
+version = "21.3"
+description = "Core utilities for Python packages"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+pyparsing = ">=2.0.2,<3.0.5 || >3.0.5"
+
+[[package]]
+name = "pillow"
+version = "9.2.0"
+description = "Python Imaging Library (Fork)"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.extras]
+docs = ["furo", "olefile", "sphinx (>=2.4)", "sphinx-copybutton", "sphinx-issues (>=3.0.1)", "sphinx-removed-in", "sphinxext-opengraph"]
+tests = ["check-manifest", "coverage", "defusedxml", "markdown2", "olefile", "packaging", "pyroma", "pytest", "pytest-cov", "pytest-timeout"]
+
+[[package]]
+name = "protobuf"
+version = "4.21.4"
+description = ""
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
+name = "pyparsing"
+version = "3.0.9"
+description = "pyparsing module - Classes and methods to define and execute parsing grammars"
+category = "main"
+optional = false
+python-versions = ">=3.6.8"
+
+[package.extras]
+diagrams = ["railroad-diagrams", "jinja2"]
+
+[[package]]
+name = "pyreadline3"
+version = "3.4.1"
+description = "A python implementation of GNU readline."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "pyroclient"
+version = "0.1.2"
+description = "Python Client for Pyronear wildfire alert API"
+category = "main"
+optional = false
+python-versions = "<4,>=3.6"
+
+[package.dependencies]
+requests = ">=2.24.0"
+
+[package.extras]
+dev = ["pytest (>=5.3.2)", "coverage[toml] (>=4.5.4)", "flake8 (>=3.9.0)", "isort (>=5.7.0)", "mypy (>=0.812)", "pydocstyle[toml] (>=6.0.0)", "black (>=22.1,<23.0)", "sphinx (>=3.0.0,!=3.5.0)", "sphinxemoji (>=0.1.8)", "sphinx-copybutton (>=0.3.1)", "docutils (<0.18)", "Jinja2 (<3.1)", "furo (>=2022.3.4)"]
+docs = ["sphinx (>=3.0.0,!=3.5.0)", "sphinxemoji (>=0.1.8)", "sphinx-copybutton (>=0.3.1)", "docutils (<0.18)", "Jinja2 (<3.1)", "furo (>=2022.3.4)"]
+quality = ["flake8 (>=3.9.0)", "isort (>=5.7.0)", "mypy (>=0.812)", "pydocstyle[toml] (>=6.0.0)", "black (>=22.1,<23.0)"]
+test = ["pytest (>=5.3.2)", "coverage[toml] (>=4.5.4)"]
+
+[[package]]
+name = "pyroengine"
+version = "0.2.0"
+description = "Wildfire detection on edge devices"
+category = "main"
+optional = false
+python-versions = "<4,>=3.6"
+
+[package.dependencies]
+huggingface-hub = ">=0.4.0,<1.0.0"
+numpy = ">=1.19.5,<2.0.0"
+onnxruntime = ">=1.10.0,<2.0.0"
+Pillow = ">=8.4.0"
+pyroclient = ">=0.1.2"
+
+[package.extras]
+test = ["python-dotenv (>=0.15.0)", "requests (>=2.20.0,<3.0.0)", "coverage[toml] (>=4.5.4)", "pytest (>=5.3.2)"]
+quality = ["black (>=22.1,<23.0)", "pydocstyle[toml] (>=6.0.0)", "mypy (>=0.812)", "isort (>=5.7.0)", "flake8 (>=3.9.0)"]
+docs = ["Jinja2 (<3.1)", "sphinx-copybutton (>=0.3.1)", "sphinxemoji (>=0.1.8)", "furo (>=2022.3.4)", "sphinx (>=3.0.0,!=3.5.0)"]
+dev = ["Jinja2 (<3.1)", "sphinx-copybutton (>=0.3.1)", "sphinxemoji (>=0.1.8)", "furo (>=2022.3.4)", "sphinx (>=3.0.0,!=3.5.0)", "black (>=22.1,<23.0)", "pydocstyle[toml] (>=6.0.0)", "mypy (>=0.812)", "isort (>=5.7.0)", "flake8 (>=3.9.0)", "requests (>=2.20.0,<3.0.0)", "coverage[toml] (>=4.5.4)", "pytest (>=5.3.2)"]
+
+[[package]]
+name = "python-dotenv"
+version = "0.20.0"
+description = "Read key-value pairs from a .env file and set them as environment variables"
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[package.extras]
+cli = ["click (>=5.0)"]
+
+[[package]]
+name = "pyyaml"
+version = "6.0"
+description = "YAML parser and emitter for Python"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[[package]]
+name = "requests"
+version = "2.28.1"
+description = "Python HTTP for Humans."
+category = "main"
+optional = false
+python-versions = ">=3.7, <4"
+
+[package.dependencies]
+certifi = ">=2017.4.17"
+charset-normalizer = ">=2,<3"
+idna = ">=2.5,<4"
+urllib3 = ">=1.21.1,<1.27"
+
+[package.extras]
+socks = ["PySocks (>=1.5.6,!=1.5.7)"]
+use_chardet_on_py3 = ["chardet (>=3.0.2,<6)"]
+
+[[package]]
+name = "sympy"
+version = "1.10.1"
+description = "Computer algebra system (CAS) in Python"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+mpmath = ">=0.19"
+
+[[package]]
+name = "tqdm"
+version = "4.64.0"
+description = "Fast, Extensible Progress Meter"
+category = "main"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
+
+[package.dependencies]
+colorama = {version = "*", markers = "platform_system == \"Windows\""}
+
+[package.extras]
+dev = ["py-make (>=0.1.0)", "twine", "wheel"]
+notebook = ["ipywidgets (>=6)"]
+slack = ["slack-sdk"]
+telegram = ["requests"]
+
+[[package]]
+name = "typing-extensions"
+version = "4.3.0"
+description = "Backported and Experimental Type Hints for Python 3.7+"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
+name = "urllib3"
+version = "1.26.11"
+description = "HTTP library with thread-safe connection pooling, file post, and more."
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, <4"
+
+[package.extras]
+brotli = ["brotlicffi (>=0.8.0)", "brotli (>=1.0.9)", "brotlipy (>=0.6.0)"]
+secure = ["pyOpenSSL (>=0.14)", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "certifi", "ipaddress"]
+socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
+
+[metadata]
+lock-version = "1.1"
+python-versions = "^3.8"
+content-hash = "bf8c121d940fbfa573584c37c81bbd7dbef6c847a176717af878269c5a17efeb"
+
+[metadata.files]
+certifi = [
+    {file = "certifi-2022.6.15-py3-none-any.whl", hash = "sha256:fe86415d55e84719d75f8b69414f6438ac3547d2078ab91b67e779ef69378412"},
+    {file = "certifi-2022.6.15.tar.gz", hash = "sha256:84c85a9078b11105f04f3036a9482ae10e4621616db313fe045dd24743a0820d"},
+]
+charset-normalizer = [
+    {file = "charset-normalizer-2.1.0.tar.gz", hash = "sha256:575e708016ff3a5e3681541cb9d79312c416835686d054a23accb873b254f413"},
+    {file = "charset_normalizer-2.1.0-py3-none-any.whl", hash = "sha256:5189b6f22b01957427f35b6a08d9a0bc45b46d3788ef5a92e978433c7a35f8a5"},
+]
+colorama = [
+    {file = "colorama-0.4.5-py2.py3-none-any.whl", hash = "sha256:854bf444933e37f5824ae7bfc1e98d5bce2ebe4160d46b5edf346a89358e99da"},
+    {file = "colorama-0.4.5.tar.gz", hash = "sha256:e6c6b4334fc50988a639d9b98aa429a0b57da6e17b9a44f0451f930b6967b7a4"},
+]
+coloredlogs = []
+filelock = []
+flatbuffers = []
+huggingface-hub = []
+humanfriendly = []
+idna = [
+    {file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff"},
+    {file = "idna-3.3.tar.gz", hash = "sha256:9d643ff0a55b762d5cdb124b8eaa99c66322e2157b69160bc32796e824360e6d"},
+]
+mpmath = []
+numpy = []
+onnxruntime = []
+packaging = []
+pillow = []
+protobuf = []
+pyparsing = []
+pyreadline3 = []
+pyroclient = [
+    {file = "pyroclient-0.1.2-py3-none-any.whl", hash = "sha256:d616f2e2ace2334afa1af2a77325595667172dc48e26cd41eb16c00b7651c60f"},
+    {file = "pyroclient-0.1.2.tar.gz", hash = "sha256:018843c50463c0fddce711c688729810e86ba7f74c04051bd3e43b641a75e450"},
+]
+pyroengine = []
+python-dotenv = [
+    {file = "python-dotenv-0.20.0.tar.gz", hash = "sha256:b7e3b04a59693c42c36f9ab1cc2acc46fa5df8c78e178fc33a8d4cd05c8d498f"},
+    {file = "python_dotenv-0.20.0-py3-none-any.whl", hash = "sha256:d92a187be61fe482e4fd675b6d52200e7be63a12b724abbf931a40ce4fa92938"},
+]
+pyyaml = []
+requests = [
+    {file = "requests-2.28.1-py3-none-any.whl", hash = "sha256:8fefa2a1a1365bf5520aac41836fbee479da67864514bdb821f31ce07ce65349"},
+    {file = "requests-2.28.1.tar.gz", hash = "sha256:7c5599b102feddaa661c826c56ab4fee28bfd17f5abca1ebbe3e7f19d7c97983"},
+]
+sympy = []
+tqdm = []
+typing-extensions = [
+    {file = "typing_extensions-4.3.0-py3-none-any.whl", hash = "sha256:25642c956049920a5aa49edcdd6ab1e06d7e5d467fc00e0506c44ac86fbfca02"},
+    {file = "typing_extensions-4.3.0.tar.gz", hash = "sha256:e6d2677a32f47fc7eb2795db1dd15c1f34eff616bcaf2cfb5e997f854fa1c4a6"},
+]
+urllib3 = []
