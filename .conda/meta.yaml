@@ -23,7 +23,11 @@ requirements:
 
   run:
     - python>=3.6, <4.0
-    - requests >=2.24.0, <3.0.0
+    - pillow>=8.4.0
+    - pyroclient>=0.1.2
+    - numpy>=1.19.5, <2.0.0
+    - onnxruntime>=1.10.0, <2.0.0
+    - huggingface_hub>=0.4.0, <1.0.0
 
 test:
   # Python imports
