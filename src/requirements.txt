@@ -1,7 +1,26 @@
-pyroengine
-python-dotenv==0.15.0
-requests==2.25.1
-Pillow==9.2.0
-onnxruntime==1.11.1
-numpy==1.22.4
-huggingface-hub==0.7.0
+certifi==2022.6.15; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
+charset-normalizer==2.1.0; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
+colorama==0.4.5; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0" and platform_system == "Windows"
+coloredlogs==15.0.1; python_version >= "3.6" and python_full_version < "3.0.0" and python_version < "4" or python_version >= "3.6" and python_version < "4" and python_full_version >= "3.5.0"
+filelock==3.7.1; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
+flatbuffers==2.0; python_version >= "3.6" and python_version < "4"
+huggingface-hub==0.8.1; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
+humanfriendly==10.0; python_version >= "3.6" and python_full_version < "3.0.0" and python_version < "4" or python_version >= "3.6" and python_version < "4" and python_full_version >= "3.5.0"
+idna==3.3; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
+mpmath==1.2.1; python_version >= "3.7" and python_version < "4"
+numpy==1.23.1; python_version >= "3.8" and python_version < "4"
+onnxruntime==1.12.1; python_version >= "3.6" and python_version < "4"
+packaging==21.3; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
+pillow==9.2.0; python_version >= "3.7"
+protobuf==4.21.4; python_version >= "3.7" and python_version < "4"
+pyparsing==3.0.9; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
+pyreadline3==3.4.1; sys_platform == "win32" and python_version >= "3.8" and (python_version >= "3.6" and python_full_version < "3.0.0" and python_version < "4" or python_version >= "3.6" and python_version < "4" and python_full_version >= "3.5.0")
+pyroclient==0.1.2; python_version >= "3.6" and python_version < "4"
+pyroengine==0.2.0; python_version >= "3.6" and python_version < "4"
+python-dotenv==0.20.0; python_version >= "3.5"
+pyyaml==6.0; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
+requests==2.28.1; python_version >= "3.7" and python_version < "4"
+sympy==1.10.1; python_version >= "3.7" and python_version < "4"
+tqdm==4.64.0; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
+typing-extensions==4.3.0; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
+urllib3==1.26.11; python_full_version >= "3.7.0" and python_version < "4" and python_version >= "3.7"
