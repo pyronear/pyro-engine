@@ -182,12 +182,6 @@ def pretty_str(envinfo):
                 dct[key] = false
         return dct
 
-    def maybe_start_on_next_line(string):
-        # If `string` is multiline, prepend a \n to it.
-        if string is not None and len(string.split("\n")) > 1:
-            return "\n{}\n".format(string)
-        return string
-
     mutable_dict = envinfo._asdict()
 
     # Replace True with Yes, False with No
