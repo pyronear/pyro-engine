@@ -28,12 +28,12 @@ def capture(ip, CAM_USER, CAM_PWD):
 
 
 def main():
-    load_dotenv("/home/pi/pyro-engine/runner/data/.env")
+    load_dotenv("/home/pi/pyro-engine/.env")
 
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
 
-    with open("/home/pi/pyro-engine/runner/data/cameras_credentials.json") as json_file:
+    with open("/home/pi/pyro-engine/data/credentials.json") as json_file:
         cameras_credentials = json.load(json_file)
 
     for ip in cameras_credentials.keys():
