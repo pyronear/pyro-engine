@@ -33,7 +33,7 @@ def main():
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
 
-    with open("/home/pi/pyro-engine/runner/data/cameras_credentials.json") as json_file:
+    with open("/home/pi/pyro-engine/data/credentials.json") as json_file:
         cameras_credentials = json.load(json_file)
 
     for ip in cameras_credentials.keys():
