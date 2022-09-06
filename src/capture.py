@@ -28,7 +28,7 @@ def capture(ip, CAM_USER, CAM_PWD):
 
 
 def main():
-    load_dotenv("/home/pi/pyro-engine/runner/data/.env")
+    load_dotenv("/home/pi/pyro-engine/.env")
 
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
