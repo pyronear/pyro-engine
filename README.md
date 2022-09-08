@@ -106,4 +106,4 @@ This project is developed and maintained by the repo owner and volunteers from [
 
 ## License
 
-Distributed under the Apache 2 License. See [`LICENSE`](LICENSE) for more information.
+Distributed under the Apache 2 License. See [`LICENSE`](LICENSE) for more information
