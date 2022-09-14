@@ -34,7 +34,8 @@ dependencies = [
     "onnxruntime>=1.10.0,<2.0.0",
     "numpy>=1.19.5,<2.0.0",
     "huggingface-hub>=0.4.0,<1.0.0",
-    "pyroclient>=0.1.2"
+    "pyroclient>=0.1.2",
+    "requests>=2.20.0,<3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -108,7 +109,7 @@ module = [
     "PIL.*",
     "huggingface_hub.*",
     "pyroclient.*",
-    "psutil.*",
+    "urllib3.*",
 ]
 ignore_missing_imports = true
 
