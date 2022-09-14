@@ -14,9 +14,9 @@ from pathlib import Path
 import urllib3
 from dotenv import load_dotenv
 
-from pyroengine import Engine
-
-from .controller import ReolinkCamera, SystemController
+from pyroengine import SystemController
+from pyroengine.engine import Engine
+from pyroengine.sensors import ReolinkCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

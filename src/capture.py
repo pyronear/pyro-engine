@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .controller import ReolinkCamera
+from pyroengine.sensors import ReolinkCamera
 
 
 def main(args):
