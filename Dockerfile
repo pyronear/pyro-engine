@@ -24,3 +24,4 @@ RUN pip install --upgrade pip setuptools wheel \
     && rm -rf /root/.cache/pip
 
 COPY ./src/run.py /usr/src/app/run.py
+COPY ./src/capture.py /usr/src/app/capture.py
