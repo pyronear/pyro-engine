@@ -79,7 +79,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             alert_relaxation=2,
             frame_saving_period=3,
             cache_folder=folder,
-            frame_size=(224, 224),
+            frame_size=(256, 384),
         )
         # Heartbeat
         start_ts = datetime.utcnow().isoformat()

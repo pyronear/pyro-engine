@@ -11,7 +11,7 @@ def test_classifier(mock_wildfire_image):
     # Check preprocessing
     out = model.preprocess_image(mock_wildfire_image)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
-    assert out.shape == (1, 3, 224, 224)
+    assert out.shape == (1, 3, 256, 384)
     # Check inference
     out = model(mock_wildfire_image)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
