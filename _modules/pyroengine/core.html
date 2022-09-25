@@ -4,10 +4,10 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
 
-    <meta name="generator" content="sphinx-5.1.1, furo 2022.06.21"/>
+    <meta name="generator" content="sphinx-5.2.0.post0, furo 2022.09.15"/>
         <title>pyroengine.core - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
-    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?digest=40978830699223671f4072448e654b5958f38b89" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?digest=9ec31e2665bf879c1d47d93a8ec4893870ee1e45" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/custom_theme.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?digest=30d1aed668e5c3a91c3e3bf6a60b675221979f0e" />
@@ -240,7 +240,7 @@
 <span class="sd">        longitude: device longitude</span>
 <span class="sd">        alert_relaxation: number of consecutive positive detections required to send the first alert, and also</span>
 <span class="sd">            the number of consecutive negative detections before stopping the alert</span>
-<span class="sd">        frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth</span>
+<span class="sd">        frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)</span>
 <span class="sd">        cache_backup_period: number of minutes between each cache backup to disk</span>
 <span class="sd">        frame_saving_period: Send one frame over N to the api for our dataset</span>
 <span class="sd">        cache_size: maximum number of alerts to save in cache</span>
@@ -406,7 +406,7 @@
 
         <span class="c1"># Reduce image size to save bandwidth</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">,</span> <span class="n">Image</span><span class="o">.</span><span class="n">BILINEAR</span><span class="p">)</span>
+            <span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">Image</span><span class="o">.</span><span class="n">BILINEAR</span><span class="p">)</span>
 
         <span class="c1"># Alert</span>
         <span class="n">cam_key</span> <span class="o">=</span> <span class="n">cam_id</span> <span class="ow">or</span> <span class="s2">&quot;-1&quot;</span>
@@ -547,6 +547,7 @@
     <script src="../../_static/underscore.js"></script>
     <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/sphinx_highlight.js"></script>
     <script src="../../_static/scripts/furo.js"></script>
     <script src="../../_static/clipboard.min.js"></script>
     <script src="../../_static/copybutton.js"></script>

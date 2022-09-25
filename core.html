@@ -5,10 +5,10 @@
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 <link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Changelog" href="changelog.html" /><link rel="prev" title="Installation" href="installing.html" />
 
-    <meta name="generator" content="sphinx-5.1.1, furo 2022.06.21"/>
+    <meta name="generator" content="sphinx-5.2.0.post0, furo 2022.09.15"/>
         <title>pyroengine.core - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=40978830699223671f4072448e654b5958f38b89" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=9ec31e2665bf879c1d47d93a8ec4893870ee1e45" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css" />
     <link rel="stylesheet" type="text/css" href="_static/css/custom_theme.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?digest=30d1aed668e5c3a91c3e3bf6a60b675221979f0e" />
@@ -136,7 +136,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -205,7 +205,7 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
@@ -230,7 +230,7 @@ by predicting whether there is a fire on this image</p>
 <li><p><strong>longitude</strong> – device longitude</p></li>
 <li><p><strong>alert_relaxation</strong> – number of consecutive positive detections required to send the first alert, and also
 the number of consecutive negative detections before stopping the alert</p></li>
-<li><p><strong>frame_size</strong> – Resize frame to frame_size before sending it to the api in order to save bandwidth</p></li>
+<li><p><strong>frame_size</strong> – Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)</p></li>
 <li><p><strong>cache_backup_period</strong> – number of minutes between each cache backup to disk</p></li>
 <li><p><strong>frame_saving_period</strong> – Send one frame over N to the api for our dataset</p></li>
 <li><p><strong>cache_size</strong> – maximum number of alerts to save in cache</p></li>
@@ -292,10 +292,10 @@ the number of consecutive negative detections before stopping the alert</p></li>
                 </div>
                 <div class="title">Changelog</div>
               </div>
-              <svg><use href="#svg-arrow-right"></use></svg>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
           <a class="prev-page" href="installing.html">
-              <svg><use href="#svg-arrow-right"></use></svg>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
@@ -330,8 +330,32 @@ the number of consecutive negative detections before stopping the alert</p></li>
         
       </footer>
     </div>
-    <aside class="toc-drawer no-toc">
+    <aside class="toc-drawer">
       
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">pyroengine.core</a><ul>
+<li><a class="reference internal" href="#pyroengine.Engine"><code class="docutils literal notranslate"><span class="pre">Engine</span></code></a><ul>
+<li><a class="reference internal" href="#pyroengine.Engine.clear_cache"><code class="docutils literal notranslate"><span class="pre">Engine.clear_cache()</span></code></a></li>
+<li><a class="reference internal" href="#pyroengine.Engine.predict"><code class="docutils literal notranslate"><span class="pre">Engine.predict()</span></code></a></li>
+<li><a class="reference internal" href="#pyroengine.Engine.heartbeat"><code class="docutils literal notranslate"><span class="pre">Engine.heartbeat()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
       
       
     </aside>
@@ -341,6 +365,7 @@ the number of consecutive negative detections before stopping the alert</p></li>
     <script src="_static/underscore.js"></script>
     <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="_static/doctools.js"></script>
+    <script src="_static/sphinx_highlight.js"></script>
     <script src="_static/scripts/furo.js"></script>
     <script src="_static/clipboard.min.js"></script>
     <script src="_static/copybutton.js"></script>
