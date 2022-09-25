@@ -88,6 +88,7 @@ class Engine:
         self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation
         self.frame_size = frame_size
+        self.jpeg_quality = 50
         self.cache_backup_period = cache_backup_period
 
         # Var initialization
@@ -227,7 +228,7 @@ class Engine:
             if self._states[cam_key]["frame_count"] == self.frame_saving_period:
                 # Send frame to the api
                 stream = io.BytesIO()
-                frame.save(stream, format="JPEG")
+                frame.save(stream, format="JPEG", quality=self.jpeg_quality)
                 try:
                     self._upload_frame(cam_id, stream.getvalue())
                     # Reset frame counter
@@ -267,12 +268,13 @@ class Engine:
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
-            logging.info(f"Camera {cam_id} - Sending alert from {frame_info['ts']}...")
+            logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
             try:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
                     self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
+
                 # Alert creation
                 if not isinstance(self._alerts[0]["alert_id"], int):
                     self._alerts[0]["alert_id"] = (
@@ -287,15 +289,17 @@ class Engine:
 
                 # Media upload
                 stream = io.BytesIO()
-                frame_info["frame"].save(stream, format="JPEG")
-                self.api_client[cam_id].upload_media(
+                frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                response = self.api_client[cam_id].upload_media(
                     self._alerts[0]["media_id"],
                     media_data=stream.getvalue(),
-                ).json()["id"]
+                )
+                # Force a KeyError if the request failed
+                response.json()["id"]
                 # Clear
                 self._alerts.popleft()
-                logging.info(f"Camera {cam_id} - alert sent")
+                logging.info(f"Camera '{cam_id}' - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError):
-                logging.warning(f"Camera {cam_id} - unable to upload cache")
+                logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                 break
