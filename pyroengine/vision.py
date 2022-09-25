@@ -47,7 +47,7 @@ class Classifier:
         """
 
         # Resizing
-        img = pil_img.resize(self.cfg["input_shape"][-2:], Image.BILINEAR)
+        img = pil_img.resize(self.cfg["input_shape"][-2:][::-1], Image.BILINEAR)
         # (H, W, C) --> (C, H, W)
         img = np.asarray(img).transpose((2, 0, 1)).astype(np.float32) / 255
         # Normalization

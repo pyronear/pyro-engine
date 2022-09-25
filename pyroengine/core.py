@@ -36,7 +36,7 @@ class Engine:
         longitude: device longitude
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
             the number of consecutive negative detections before stopping the alert
-        frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth
+        frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
         cache_backup_period: number of minutes between each cache backup to disk
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
@@ -202,7 +202,7 @@ class Engine:
 
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size, Image.BILINEAR)
+            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
         # Alert
         cam_key = cam_id or "-1"
