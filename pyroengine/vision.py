@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 import onnxruntime
@@ -25,15 +25,22 @@ class Classifier:
         hub_repo: repository from HuggingFace Hub to load the model from
         model_path: overrides the model path
         cfg_path: overrides the configuration file from the model
+        kwargs: keyword args of `huggingface_hub.hf_hub_download`
     """
 
-    def __init__(self, hub_repo: str, model_path: Optional[str] = None, cfg_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        hub_repo: str,
+        model_path: Optional[str] = None,
+        cfg_path: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
         # Download model config & checkpoint
-        _path = cfg_path or hf_hub_download(hub_repo, filename="config.json")
+        _path = cfg_path or hf_hub_download(hub_repo, filename="config.json", **kwargs)
         with open(_path, "rb") as f:
             self.cfg = json.load(f)
 
-        _path = model_path or hf_hub_download(hub_repo, filename="model.onnx")
+        _path = model_path or hf_hub_download(hub_repo, filename="model.onnx", **kwargs)
         self.ort_session = onnxruntime.InferenceSession(_path)
 
     def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
