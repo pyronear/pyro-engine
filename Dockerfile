@@ -18,9 +18,10 @@ COPY ./setup.py /tmp/setup.py
 COPY ./pyroengine /tmp/pyroengine
 
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install -e /tmp/. \
     && pip install -r /tmp/requirements.txt \
+    && pip install -e /tmp/. \
     && pip cache purge \
     && rm -rf /root/.cache/pip
 
 COPY ./src/run.py /usr/src/app/run.py
+COPY ./src/capture.py /usr/src/app/capture.py

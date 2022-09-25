@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from pyroengine.core import Engine
+from pyroengine.engine import Engine
 
 
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
