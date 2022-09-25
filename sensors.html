@@ -3,10 +3,10 @@
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="pyroengine.core" href="core.html" /><link rel="prev" title="PyroEngine: Wildfire detection on edge devices" href="index.html" />
+<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" />
 
     <meta name="generator" content="sphinx-5.2.1, furo 2022.09.15"/>
-        <title>Installation - PyroEngine</title>
+        <title>pyroengine.sensors - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=9ec31e2665bf879c1d47d93a8ec4893870ee1e45" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css" />
@@ -159,8 +159,8 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
-<ul class="current">
-<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Installation</a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installing.html">Installation</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Package Reference</span></p>
 <ul>
@@ -189,7 +189,7 @@
         </a>
         <div class="content-icon-container">
           <div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/pyronear/pyro-engine/edit/main/docs/source/installing.rst" title="Edit this page">
+  <a class="muted-link" href="https://github.com/pyronear/pyro-engine/edit/main/docs/source/sensors.rst" title="Edit this page">
     <svg aria-hidden="true" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
       <path d="M4 20h4l10.5 -10.5a1.5 1.5 0 0 0 -4 -4l-10.5 10.5v4" />
@@ -211,31 +211,24 @@
           </label>
         </div>
         <article role="main">
-          <section id="installation">
-<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this heading">#</a></h1>
-<p>This library requires <a class="reference external" href="https://www.python.org/downloads/">Python</a> 3.6 or higher.</p>
-<section id="via-python-package">
-<h2>Via Python Package<a class="headerlink" href="#via-python-package" title="Permalink to this heading">#</a></h2>
-<p>Install the last stable release of the package using <a class="reference external" href="https://pip.pypa.io/en/stable/installation/">pip</a>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install pyroengine
-</pre></div>
-</div>
-</section>
-<section id="via-conda">
-<h2>Via Conda<a class="headerlink" href="#via-conda" title="Permalink to this heading">#</a></h2>
-<p>Install the last stable release of the package using <a class="reference external" href="https://docs.conda.io/en/latest/">conda</a>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda install -c pyronear pyroengine
-</pre></div>
-</div>
-</section>
-<section id="via-git">
-<h2>Via Git<a class="headerlink" href="#via-git" title="Permalink to this heading">#</a></h2>
-<p>Install the library in developer mode:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/pyronear/pyro-engine.git
-pip install -e pyro-engine/.
-</pre></div>
-</div>
-</section>
+          <section id="pyroengine-sensors">
+<h1>pyroengine.sensors<a class="headerlink" href="#pyroengine-sensors" title="Permalink to this heading">#</a></h1>
+<p>The sensors module provides control over perception sensors connected to the system.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.sensors.</span></span><span class="sig-name descname"><span class="pre">ReolinkCamera</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ip_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">login</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera" title="Permalink to this definition">#</a></dt>
+<dd><p>Implements a camera controller</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ip_address</strong> – the local IP address to reach the Reolink camera</p></li>
+<li><p><strong>login</strong> – login to access camera stream</p></li>
+<li><p><strong>password</strong> – password to access camera stream</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
         </article>
@@ -243,26 +236,8 @@ pip install -e pyro-engine/.
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="core.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">pyroengine.core</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
-          <a class="prev-page" href="index.html">
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-              <div class="page-info">
-                <div class="context">
-                  <span>Previous</span>
-                </div>
-                
-                <div class="title">Home</div>
-                
-              </div>
-            </a>
+          
+          
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -300,10 +275,8 @@ pip install -e pyro-engine/.
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">Installation</a><ul>
-<li><a class="reference internal" href="#via-python-package">Via Python Package</a></li>
-<li><a class="reference internal" href="#via-conda">Via Conda</a></li>
-<li><a class="reference internal" href="#via-git">Via Git</a></li>
+<li><a class="reference internal" href="#">pyroengine.sensors</a><ul>
+<li><a class="reference internal" href="#pyroengine.sensors.ReolinkCamera"><code class="docutils literal notranslate"><span class="pre">ReolinkCamera</span></code></a></li>
 </ul>
 </li>
 </ul>

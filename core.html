@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 <link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Changelog" href="changelog.html" /><link rel="prev" title="Installation" href="installing.html" />
 
-    <meta name="generator" content="sphinx-5.2.0.post0, furo 2022.09.15"/>
+    <meta name="generator" content="sphinx-5.2.1, furo 2022.09.15"/>
         <title>pyroengine.core - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?digest=9ec31e2665bf879c1d47d93a8ec4893870ee1e45" />
@@ -213,69 +213,19 @@
         <article role="main">
           <section id="pyroengine-core">
 <h1>pyroengine.core<a class="headerlink" href="#pyroengine-core" title="Permalink to this heading">#</a></h1>
-<p>The models subpackage contains everything to manage the whole Fire Detection process by capturing and saving the image and
-by predicting whether there is a fire on this image</p>
+<p>This module abtracts the sensor management and the detection workflow into controllable units.</p>
 <dl class="py class">
-<dt class="sig sig-object py" id="pyroengine.Engine">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.</span></span><span class="sig-name descname"><span class="pre">Engine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hub_repo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conf_thresh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">api_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_creds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">latitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">longitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alert_relaxation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_backup_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_saving_period</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_folder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'data/'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/core.html#Engine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.Engine" title="Permalink to this definition">#</a></dt>
-<dd><p>This implements an object to manage predictions and API interactions for wildfire alerts.</p>
+<dt class="sig sig-object py" id="pyroengine.core.SystemController">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.core.</span></span><span class="sig-name descname"><span class="pre">SystemController</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="engine.html#pyroengine.engine.Engine" title="pyroengine.engine.Engine"><span class="pre">Engine</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cameras</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sensors.html#pyroengine.sensors.ReolinkCamera" title="pyroengine.sensors.ReolinkCamera"><span class="pre">ReolinkCamera</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/core.html#SystemController"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.core.SystemController" title="Permalink to this definition">#</a></dt>
+<dd><p>Implements the full system controller</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>hub_repo</strong> – repository on HF Hub to load the ONNX model from</p></li>
-<li><p><strong>conf_thresh</strong> – confidence threshold to send an alert</p></li>
-<li><p><strong>api_url</strong> – url of the pyronear API</p></li>
-<li><p><strong>cam_creds</strong> – api credectials for each camera, the dictionary should be as the one in the example</p></li>
-<li><p><strong>latitude</strong> – device latitude</p></li>
-<li><p><strong>longitude</strong> – device longitude</p></li>
-<li><p><strong>alert_relaxation</strong> – number of consecutive positive detections required to send the first alert, and also
-the number of consecutive negative detections before stopping the alert</p></li>
-<li><p><strong>frame_size</strong> – Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)</p></li>
-<li><p><strong>cache_backup_period</strong> – number of minutes between each cache backup to disk</p></li>
-<li><p><strong>frame_saving_period</strong> – Send one frame over N to the api for our dataset</p></li>
-<li><p><strong>cache_size</strong> – maximum number of alerts to save in cache</p></li>
-<li><p><strong>kwargs</strong> – keyword args of Classifier</p></li>
+<li><p><strong>engine</strong> – the image analyzer</p></li>
+<li><p><strong>cameras</strong> – the cameras to get the visual streams from</p></li>
 </ul>
 </dd>
 </dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">pyroengine</span> <span class="kn">import</span> <span class="n">Engine</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">cam_creds</span> <span class="o">=</span><span class="p">{</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s2">&quot;cam_id_1&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;login&#39;</span><span class="p">:</span><span class="s1">&#39;log1&#39;</span><span class="p">,</span> <span class="s1">&#39;password&#39;</span><span class="p">:</span><span class="s1">&#39;pwd1&#39;</span><span class="p">},</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="s2">&quot;cam_id_2&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;login&#39;</span><span class="p">:</span><span class="s1">&#39;log2&#39;</span><span class="p">,</span> <span class="s1">&#39;password&#39;</span><span class="p">:</span><span class="s1">&#39;pwd2&#39;</span><span class="p">},</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="p">}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">pyroEngine</span> <span class="o">=</span> <span class="n">Engine</span><span class="p">(</span><span class="s2">&quot;pyronear/rexnet1_3x&quot;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="s1">&#39;https://api.pyronear.org&#39;</span><span class="p">,</span> <span class="n">cam_creds</span><span class="p">,</span> <span class="mf">48.88</span><span class="p">,</span> <span class="mf">2.38</span><span class="p">)</span>
-</pre></div>
-</div>
-<dl class="py method">
-<dt class="sig sig-object py" id="pyroengine.Engine.clear_cache">
-<span class="sig-name descname"><span class="pre">clear_cache</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/pyroengine/core.html#Engine.clear_cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.Engine.clear_cache" title="Permalink to this definition">#</a></dt>
-<dd><p>Clear local cache</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="pyroengine.Engine.predict">
-<span class="sig-name descname"><span class="pre">predict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">frame</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="reference internal" href="_modules/pyroengine/core.html#Engine.predict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.Engine.predict" title="Permalink to this definition">#</a></dt>
-<dd><p>Computes the confidence that the image contains wildfire cues</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>frame</strong> – a PIL image</p></li>
-<li><p><strong>cam_id</strong> – the name of the camera that sent this image</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>the predicted confidence</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="pyroengine.Engine.heartbeat">
-<span class="sig-name descname"><span class="pre">heartbeat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Response</span></span></span><a class="reference internal" href="_modules/pyroengine/core.html#Engine.heartbeat"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.Engine.heartbeat" title="Permalink to this definition">#</a></dt>
-<dd><p>Updates last ping of device</p>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -343,12 +293,7 @@ the number of consecutive negative detections before stopping the alert</p></li>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">pyroengine.core</a><ul>
-<li><a class="reference internal" href="#pyroengine.Engine"><code class="docutils literal notranslate"><span class="pre">Engine</span></code></a><ul>
-<li><a class="reference internal" href="#pyroengine.Engine.clear_cache"><code class="docutils literal notranslate"><span class="pre">Engine.clear_cache()</span></code></a></li>
-<li><a class="reference internal" href="#pyroengine.Engine.predict"><code class="docutils literal notranslate"><span class="pre">Engine.predict()</span></code></a></li>
-<li><a class="reference internal" href="#pyroengine.Engine.heartbeat"><code class="docutils literal notranslate"><span class="pre">Engine.heartbeat()</span></code></a></li>
-</ul>
-</li>
+<li><a class="reference internal" href="#pyroengine.core.SystemController"><code class="docutils literal notranslate"><span class="pre">SystemController</span></code></a></li>
 </ul>
 </li>
 </ul>
