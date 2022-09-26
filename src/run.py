@@ -63,6 +63,7 @@ def main(args):
         model_path=_model,
         cfg_path=_config,
         cache_folder=args.cache,
+        revision=args.revision,
     )
 
     sys_controller = SystemController(
@@ -86,6 +87,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=None, help="Overrides the ONNX model")
     parser.add_argument("--config", type=str, default=None, help="Overrides the model config")
     parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
+    parser.add_argument("--revision", type=str, default=None, help="HF Hub revision to use for model download")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")

@@ -7,7 +7,7 @@ from pyroengine.vision import Classifier
 def test_classifier(mock_wildfire_image):
 
     # Instantiate the ONNX model
-    model = Classifier("pyronear/rexnet1_0x")
+    model = Classifier("pyronear/rexnet1_0x", revision="983c33f0b1aacde134e934e91550e6bd8651b31c")
     # Check preprocessing
     out = model.preprocess_image(mock_wildfire_image)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
