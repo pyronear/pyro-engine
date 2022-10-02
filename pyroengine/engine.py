@@ -313,8 +313,7 @@ class Engine:
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                 break
 
-
-    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool=False) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
         """Save image on device
 
         Args:
@@ -322,13 +321,12 @@ class Engine:
             cam_id (str): camera id (ip address)
             is_alert (bool, optional): is alert or backup frame. Defaults to False.
         """
-        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/") 
+        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/")
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%S')}.jpg")
         img.save(file)
-
 
     def _clean_local_backup(self, backup_cache) -> None:
         """Clean local backup after _backup_size days
@@ -339,6 +337,5 @@ class Engine:
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
         nb_folder_to_remove = len(backup_by_days) - self._backup_size
-        for _, folder in zip(range(nb_folder_to_remove),backup_by_days):
+        for _, folder in zip(range(nb_folder_to_remove), backup_by_days):
             shutil.rmtree(folder)
-

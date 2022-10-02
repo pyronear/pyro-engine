@@ -64,7 +64,7 @@ def main(args):
         cfg_path=_config,
         cache_folder=args.cache,
         revision=args.revision,
-        backup_size=args.backup_size
+        backup_size=args.backup_size,
     )
 
     sys_controller = SystemController(
