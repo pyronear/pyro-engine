@@ -28,7 +28,7 @@ def main(args):
     with open(args.creds, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
-    # Check if model is available in cache
+    # Create cache dir
     cache = Path(args.cache, "snapshots")
     cache.mkdir(parents=True, exist_ok=True)
 
