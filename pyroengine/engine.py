@@ -7,7 +7,7 @@ import io
 import json
 import logging
 import os
-import time 
+import time
 import shutil
 from collections import deque
 from datetime import datetime, timedelta
