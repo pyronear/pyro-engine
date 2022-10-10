@@ -64,6 +64,7 @@ def main(args):
         cfg_path=_config,
         cache_folder=args.cache,
         revision=args.revision,
+        backup_size=args.backup_size,
     )
 
     sys_controller = SystemController(
@@ -91,6 +92,8 @@ if __name__ == "__main__":
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
+    # Backup
+    parser.add_argument("--cache", type=int, default=30, help="Number of days before local backup is delete")
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
