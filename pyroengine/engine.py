@@ -192,7 +192,10 @@ class Engine:
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            self.heartbeat(cam_id)
+            try:
+                self.heartbeat(cam_id)
+            except ConnectionError:
+                logging.warning(f"Unable to reach the pyro-api with {cam_id}")
 
         # Inference with ONNX
         pred = float(self.model(frame.convert("RGB")))
