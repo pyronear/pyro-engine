@@ -12,14 +12,18 @@ WORKDIR /usr/src/app
 
 
 COPY ./pyproject.toml /tmp/pyproject.toml
-COPY ./src/requirements.txt /tmp/requirements.txt
 COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
-COPY ./pyroengine /tmp/pyroengine
 
+COPY ./src/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -r /tmp/requirements.txt \
-    && pip install -e /tmp/. \
+    && pip cache purge \
+    && rm -rf /root/.cache/pip
+
+COPY ./pyroengine /tmp/pyroengine
+
+RUN pip install -e /tmp/. \
     && pip cache purge \
     && rm -rf /root/.cache/pip
 
