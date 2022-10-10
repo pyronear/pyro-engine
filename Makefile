@@ -28,6 +28,10 @@ run:
 	docker build . -t pyronear/pyro-engine:latest
 	docker-compose up -d
 
+# Get log from engine wrapper
+log: 
+	docker logs -f --tail 50 pyro-engine_pyro-engine_1
+
 # Stop the engine wrapper
 stop:
 	docker-compose down
