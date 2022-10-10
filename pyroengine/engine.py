@@ -7,6 +7,8 @@ import io
 import json
 import logging
 import os
+import shutil
+import time
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -65,6 +67,7 @@ class Engine:
         frame_saving_period: Optional[int] = None,
         cache_size: int = 100,
         cache_folder: str = "data/",
+        backup_size: int = 30,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -90,6 +93,9 @@ class Engine:
         self.frame_size = frame_size
         self.jpeg_quality = 50
         self.cache_backup_period = cache_backup_period
+
+        # Local backup
+        self._backup_size = backup_size
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
@@ -229,6 +235,8 @@ class Engine:
         if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
             self._states[cam_key]["frame_count"] += 1
             if self._states[cam_key]["frame_count"] == self.frame_saving_period:
+                # Save frame on device
+                self._local_backup(frame, cam_id, is_alert=False)
                 # Send frame to the api
                 stream = io.BytesIO()
                 frame.save(stream, format="JPEG", quality=self.jpeg_quality)
@@ -273,6 +281,9 @@ class Engine:
             cam_id = frame_info["cam_id"]
             logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
+            # Save alert on device
+            self._local_backup(frame_info["frame"], cam_id, is_alert=True)
+
             try:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
@@ -306,3 +317,30 @@ class Engine:
             except (KeyError, ConnectionError):
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                 break
+
+    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
+        """Save image on device
+
+        Args:
+            img (Image.Image): Image to save
+            cam_id (str): camera id (ip address)
+            is_alert (bool, optional): is alert or backup frame. Defaults to False.
+        """
+        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/")
+        self._clean_local_backup(backup_cache)  # Dump old cache
+        backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
+        backup_cache.mkdir(parents=True, exist_ok=True)
+        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%S')}.jpg")
+        img.save(file)
+
+    def _clean_local_backup(self, backup_cache) -> None:
+        """Clean local backup after _backup_size days
+
+        Args:
+            backup_cache (Path): backup to clean
+        """
+        backup_by_days = list(backup_cache.glob("*"))
+        backup_by_days.sort()
+        nb_folder_to_remove = len(backup_by_days) - self._backup_size
+        for _, folder in zip(range(nb_folder_to_remove), backup_by_days):
+            shutil.rmtree(folder)
