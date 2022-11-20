@@ -30,7 +30,7 @@ class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
 
     Args:
-        models: list of models to use
+        model_list: list of models to use
         conf_thresh: confidence threshold to send an alert
         api_url: url of the pyronear API
         cam_creds: api credectials for each camera, the dictionary should be as the one in the example
@@ -55,7 +55,7 @@ class Engine:
 
     def __init__(
         self,
-        models: str,
+        model_list: str,
         conf_thresh: float = 0.5,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
@@ -73,7 +73,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(models, **kwargs)
+        self.model = Classifier(model_list, **kwargs)
         self.conf_thresh = conf_thresh
 
         # API Setup

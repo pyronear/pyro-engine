@@ -18,6 +18,8 @@ from pyroengine import SystemController
 from pyroengine.engine import Engine
 from pyroengine.sensors import ReolinkCamera
 
+import requests
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
@@ -47,11 +49,14 @@ def main(args):
     # Check if model is available in cache
     cache = Path(args.cache)
 
+    model_list = []
     for model in args.models:
         folder = cache.joinpath(f"models/{model}")
         folder.mkdir(parents=True, exist_ok=True)
         model_file = folder.joinpath("model.onnx")
         cfg_file = folder.joinpath("config.json")
+
+        model_list.append((str(model_file), str(cfg_file)))
         
         if not model_file.is_file():
             url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
@@ -62,17 +67,14 @@ def main(args):
             dl_file(url_cfg, cfg_file)
 
     engine = Engine(
-        args.models,
+        model_list,
         args.thresh,
         API_URL,
         cameras_credentials,
         LAT,
         LON,
         frame_saving_period=args.save_period // args.period,
-        model_path=_model,
-        cfg_path=_config,
         cache_folder=args.cache,
-        revision=args.revision,
         backup_size=args.backup_size,
     )
 
@@ -93,14 +95,13 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--models", type=list, default=["pyronear/rexnet1_3x", "pyronear/rexnet1_5x"], help="list of models to use")
+    parser.add_argument("--models", type=list, default=["rexnet1_3x", "rexnet1_5x"], help="list of models to use")
     parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
-    parser.add_argument("--revision", type=str, default=None, help="HF Hub revision to use for model download")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
     # Backup
-    parser.add_argument("--cache", type=int, default=30, help="Number of days before local backup is delete")
+    parser.add_argument("--backup-size", type=int, default=30, help="Number of days before local backup is delete")
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")

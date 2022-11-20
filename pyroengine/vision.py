@@ -31,10 +31,8 @@ class Classifier:
     ) -> None:
 
         self.cfg = []
-        self.ort_sessions = []
-        for model in model_list:
-            model_file = folder.joinpath(f"models/{model}/model.onnx")
-            cfg_file = folder.joinpath(f"models/{model}/config.json")
+        self.ort_session = []
+        for model_file, cfg_file in model_list:
 
             with open(cfg_file, "rb") as f:
                 self.cfg.append(json.load(f))
