@@ -22,6 +22,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
+def dl_file(url, dst):
+    response = requests.get(url)
+    open(dst, "wb").write(response.content)
+
 
 def main(args):
     print(args)
@@ -42,18 +46,23 @@ def main(args):
 
     # Check if model is available in cache
     cache = Path(args.cache)
-    _model, _config = args.model, args.config
-    if cache.is_dir():
-        if cache.joinpath("model.onnx").is_file():
-            _model = str(cache.joinpath("model.onnx"))
-        if cache.joinpath("config.json").is_file():
-            _config = str(cache.joinpath("config.json"))
 
-    if isinstance(_model, str):
-        logging.info(f"Loading model from: {_model}")
+    for model in args.models:
+        folder = cache.joinpath(f"models/{model}")
+        folder.mkdir(parents=True, exist_ok=True)
+        model_file = folder.joinpath("model.onnx")
+        cfg_file = folder.joinpath("config.json")
+        
+        if not model_file.is_file():
+            url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
+            dl_file(url_model, model_file)
+            
+        if not cfg_file.is_file():
+            url_cfg = f"https://huggingface.co/pyronear/{model}/resolve/main/config.json"
+            dl_file(url_cfg, cfg_file)
 
     engine = Engine(
-        args.hub,
+        args.models,
         args.thresh,
         API_URL,
         cameras_credentials,
@@ -84,9 +93,7 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--hub", type=str, default="pyronear/rexnet1_3x", help="HF Hub repo to use")
-    parser.add_argument("--model", type=str, default=None, help="Overrides the ONNX model")
-    parser.add_argument("--config", type=str, default=None, help="Overrides the model config")
+    parser.add_argument("--models", type=list, default=["pyronear/rexnet1_3x", "pyronear/rexnet1_5x"], help="list of models to use")
     parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
     parser.add_argument("--revision", type=str, default=None, help="HF Hub revision to use for model download")
     # Camera & cache

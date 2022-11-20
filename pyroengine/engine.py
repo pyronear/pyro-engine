@@ -30,7 +30,7 @@ class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
 
     Args:
-        hub_repo: repository on HF Hub to load the ONNX model from
+        models: list of models to use
         conf_thresh: confidence threshold to send an alert
         api_url: url of the pyronear API
         cam_creds: api credectials for each camera, the dictionary should be as the one in the example
@@ -50,12 +50,12 @@ class Engine:
         >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
         >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
         >>> }
-        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine(["pyronear/rexnet1_3x"], 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
         self,
-        hub_repo: str,
+        models: str,
         conf_thresh: float = 0.5,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
@@ -73,7 +73,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(hub_repo, **kwargs)
+        self.model = Classifier(models, **kwargs)
         self.conf_thresh = conf_thresh
 
         # API Setup

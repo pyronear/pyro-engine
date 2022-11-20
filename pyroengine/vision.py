@@ -22,31 +22,31 @@ class Classifier:
         >>> model = Classifier("pyronear/rexnet1_3x")
 
     Args:
-        hub_repo: repository from HuggingFace Hub to load the model from
-        model_path: overrides the model path
-        cfg_path: overrides the configuration file from the model
-        kwargs: keyword args of `huggingface_hub.hf_hub_download`
+        model_list: list of model to use
     """
 
     def __init__(
         self,
-        hub_repo: str,
-        model_path: Optional[str] = None,
-        cfg_path: Optional[str] = None,
-        **kwargs: Any,
+        model_list: str,
     ) -> None:
-        # Download model config & checkpoint
-        _path = cfg_path or hf_hub_download(hub_repo, filename="config.json", **kwargs)
-        with open(_path, "rb") as f:
-            self.cfg = json.load(f)
 
-        _path = model_path or hf_hub_download(hub_repo, filename="model.onnx", **kwargs)
-        self.ort_session = onnxruntime.InferenceSession(_path)
+        self.cfg = []
+        self.ort_sessions = []
+        for model in model_list:
+            model_file = folder.joinpath(f"models/{model}/model.onnx")
+            cfg_file = folder.joinpath(f"models/{model}/config.json")
 
-    def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
+            with open(cfg_file, "rb") as f:
+                self.cfg.append(json.load(f))
+
+            self.ort_session.append(onnxruntime.InferenceSession(model_file))
+
+
+    def preprocess_image(self, idx: int, pil_img: Image.Image) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
+            model_idx: model index
             pil_img: a valid pillow image
 
         Returns:
@@ -54,20 +54,25 @@ class Classifier:
         """
 
         # Resizing
-        img = pil_img.resize(self.cfg["input_shape"][-2:][::-1], Image.BILINEAR)
+        img = pil_img.resize(self.cfg[idx]["input_shape"][-2:][::-1], Image.BILINEAR)
         # (H, W, C) --> (C, H, W)
         img = np.asarray(img).transpose((2, 0, 1)).astype(np.float32) / 255
         # Normalization
-        img -= np.array(self.cfg["mean"])[:, None, None]
-        img /= np.array(self.cfg["std"])[:, None, None]
+        img -= np.array(self.cfg[idx]["mean"])[:, None, None]
+        img /= np.array(self.cfg[idx]["std"])[:, None, None]
 
         return img[None, ...]
 
     def __call__(self, pil_img: Image.Image) -> np.ndarray:
-        np_img = self.preprocess_image(pil_img)
 
-        # ONNX inference
-        ort_input = {self.ort_session.get_inputs()[0].name: np_img}
-        ort_out = self.ort_session.run(None, ort_input)
-        # Sigmoid
-        return 1 / (1 + np.exp(-ort_out[0][0]))
+        scores = []
+        for idx in range(len(self.ort_session)):
+            np_img = self.preprocess_image(idx, pil_img)
+
+            # ONNX inference
+            ort_input = {self.ort_session[idx].get_inputs()[0].name: np_img}
+            ort_out = self.ort_session[idx].run(None, ort_input)
+            # Sigmoid
+            scores.append(1 / (1 + np.exp(-ort_out[0][0])))
+
+        return np.mean(scores)
