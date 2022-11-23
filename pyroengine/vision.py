@@ -4,22 +4,16 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 import onnxruntime
-import requests
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
 __all__ = ["Classifier"]
-
-
-def dl_file(url, dst):
-    print(f"Downloading {url} ...")
-    response = requests.get(url)
-    open(dst, "wb").write(response.content)
 
 
 class Classifier:
@@ -51,16 +45,17 @@ class Classifier:
             model_files.append((str(model_file), str(cfg_file)))
 
             if not model_file.is_file():
-                url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
-                dl_file(url_model, model_file)
+                temp_model_file = hf_hub_download(model, filename="model.onnx")
+                shutil.copy(temp_model_file, model_file)
 
             if not cfg_file.is_file():
-                url_cfg = f"https://huggingface.co/pyronear/{model}/resolve/main/config.json"
-                dl_file(url_cfg, cfg_file)
+                temp_cfg_file = hf_hub_download(model, filename="config.json")
+                shutil.copy(temp_cfg_file, cfg_file)
 
         for model_file, cfg_file in model_files:
 
             with open(cfg_file, "rb") as f:
+
                 self.cfg.append(json.load(f))
 
             self.ort_session.append(onnxruntime.InferenceSession(model_file))

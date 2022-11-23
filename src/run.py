@@ -69,7 +69,9 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--models", type=list, default=["rexnet1_3x", "rexnet1_5x"], help="list of models to use")
+    parser.add_argument(
+        "--models", type=list, default=["pyronear/rexnet1_3x", "pyronear/rexnet1_5x"], help="list of models to use"
+    )
     parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
