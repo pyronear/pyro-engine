@@ -22,8 +22,6 @@ def dl_file(url, dst):
     open(dst, "wb").write(response.content)
 
 
-
-
 class Classifier:
     """Implements an image classification model using ONNX backend.
 
@@ -35,11 +33,7 @@ class Classifier:
         model_list: list of model to use
     """
 
-    def __init__(
-        self,
-        model_list: str,
-        cache_folder: str 
-    ) -> None:
+    def __init__(self, model_list: str, cache_folder: str) -> None:
 
         self.cfg = []
         self.ort_session = []
@@ -55,22 +49,21 @@ class Classifier:
             cfg_file = folder.joinpath("config.json")
 
             model_files.append((str(model_file), str(cfg_file)))
-            
+
             if not model_file.is_file():
                 url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
                 dl_file(url_model, model_file)
-                
+
             if not cfg_file.is_file():
                 url_cfg = f"https://huggingface.co/pyronear/{model}/resolve/main/config.json"
                 dl_file(url_cfg, cfg_file)
-                
+
         for model_file, cfg_file in model_files:
 
             with open(cfg_file, "rb") as f:
                 self.cfg.append(json.load(f))
 
             self.ort_session.append(onnxruntime.InferenceSession(model_file))
-
 
     def preprocess_image(self, idx: int, pil_img: Image.Image) -> np.ndarray:
         """Preprocess an image for inference

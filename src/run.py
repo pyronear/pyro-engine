@@ -42,8 +42,6 @@ def main(args):
     with open(args.creds, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
-
-
     engine = Engine(
         args.models,
         args.thresh,
