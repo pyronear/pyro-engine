@@ -18,8 +18,6 @@ from pyroengine import SystemController
 from pyroengine.engine import Engine
 from pyroengine.sensors import ReolinkCamera
 
-import requests
-
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)

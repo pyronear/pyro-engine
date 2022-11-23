@@ -4,14 +4,14 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
 import json
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 import onnxruntime
+import requests
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from pathlib import Path
-import requests
 
 __all__ = ["Classifier"]
 
