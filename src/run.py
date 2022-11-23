@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
 
 import urllib3
 from dotenv import load_dotenv
