@@ -11,6 +11,7 @@ import numpy as np
 import onnxruntime
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from typing import Any
 
 __all__ = ["Classifier"]
 
@@ -26,7 +27,7 @@ class Classifier:
         model_list: list of model to use
     """
 
-    def __init__(self, model_list: str, cache_folder: str) -> None:
+    def __init__(self, model_list: str, cache_folder: str, **kwargs: Any,) -> None:
 
         self.cfg = []
         self.ort_session = []
@@ -44,11 +45,11 @@ class Classifier:
             model_files.append((str(model_file), str(cfg_file)))
 
             if not model_file.is_file():
-                temp_model_file = hf_hub_download(model, filename="model.onnx")
+                temp_model_file = hf_hub_download(model, filename="model.onnx", **kwargs)
                 shutil.copy(temp_model_file, model_file)
 
             if not cfg_file.is_file():
-                temp_cfg_file = hf_hub_download(model, filename="config.json")
+                temp_cfg_file = hf_hub_download(model, filename="config.json", **kwargs)
                 shutil.copy(temp_cfg_file, cfg_file)
 
         for model_file, cfg_file in model_files:

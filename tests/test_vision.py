@@ -1,5 +1,5 @@
 import numpy as np
-
+from typing import Any
 from pyroengine.vision import Classifier
 
 
@@ -14,6 +14,7 @@ def test_classifier(mock_wildfire_image, tmpdir_factory):
             "pyronear/rexnet1_0x",
         ],
         folder,
+        revision="983c33f0b1aacde134e934e91550e6bd8651b31c"
     )
     # Check preprocessing
     out = model.preprocess_image(0, mock_wildfire_image)
