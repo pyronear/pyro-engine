@@ -73,7 +73,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_list, **kwargs)
+        self.model = Classifier(model_list, cache_folder)
         self.conf_thresh = conf_thresh
 
         # API Setup

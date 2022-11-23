@@ -24,10 +24,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
-def dl_file(url, dst):
-    response = requests.get(url)
-    open(dst, "wb").write(response.content)
-
 
 def main(args):
     print(args)
@@ -46,28 +42,10 @@ def main(args):
     with open(args.creds, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
-    # Check if model is available in cache
-    cache = Path(args.cache)
 
-    model_list = []
-    for model in args.models:
-        folder = cache.joinpath(f"models/{model}")
-        folder.mkdir(parents=True, exist_ok=True)
-        model_file = folder.joinpath("model.onnx")
-        cfg_file = folder.joinpath("config.json")
-
-        model_list.append((str(model_file), str(cfg_file)))
-        
-        if not model_file.is_file():
-            url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
-            dl_file(url_model, model_file)
-            
-        if not cfg_file.is_file():
-            url_cfg = f"https://huggingface.co/pyronear/{model}/resolve/main/config.json"
-            dl_file(url_cfg, cfg_file)
 
     engine = Engine(
-        model_list,
+        args.models,
         args.thresh,
         API_URL,
         cameras_credentials,

@@ -10,8 +10,18 @@ import numpy as np
 import onnxruntime
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from pathlib import Path
+import requests
 
 __all__ = ["Classifier"]
+
+
+def dl_file(url, dst):
+    print(f"Downloading {url} ...")
+    response = requests.get(url)
+    open(dst, "wb").write(response.content)
+
+
 
 
 class Classifier:
@@ -28,11 +38,33 @@ class Classifier:
     def __init__(
         self,
         model_list: str,
+        cache_folder: str 
     ) -> None:
 
         self.cfg = []
         self.ort_session = []
-        for model_file, cfg_file in model_list:
+
+        # Check if model is available in cache
+        cache = Path(cache_folder)
+
+        model_files = []
+        for model in model_list:
+            folder = cache.joinpath(f"models/{model}")
+            folder.mkdir(parents=True, exist_ok=True)
+            model_file = folder.joinpath("model.onnx")
+            cfg_file = folder.joinpath("config.json")
+
+            model_files.append((str(model_file), str(cfg_file)))
+            
+            if not model_file.is_file():
+                url_model = f"https://huggingface.co/pyronear/{model}/resolve/main/model.onnx"
+                dl_file(url_model, model_file)
+                
+            if not cfg_file.is_file():
+                url_cfg = f"https://huggingface.co/pyronear/{model}/resolve/main/config.json"
+                dl_file(url_cfg, cfg_file)
+                
+        for model_file, cfg_file in model_files:
 
             with open(cfg_file, "rb") as f:
                 self.cfg.append(json.load(f))
