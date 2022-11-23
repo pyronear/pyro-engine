@@ -6,12 +6,12 @@
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import onnxruntime
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from typing import Any
 
 __all__ = ["Classifier"]
 
@@ -25,9 +25,16 @@ class Classifier:
 
     Args:
         model_list: list of model to use
+        cache_folder: cache directory
+        kwargs: keyword args of `huggingface_hub.hf_hub_download`
     """
 
-    def __init__(self, model_list: str, cache_folder: str, **kwargs: Any,) -> None:
+    def __init__(
+        self,
+        model_list: str,
+        cache_folder: str,
+        **kwargs: Any,
+    ) -> None:
 
         self.cfg = []
         self.ort_session = []
