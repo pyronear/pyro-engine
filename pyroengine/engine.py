@@ -3,6 +3,7 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
+import glob
 import io
 import json
 import logging
@@ -334,13 +335,23 @@ class Engine:
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:
-        """Clean local backup after _backup_size days
+        """Clean local backup when it's bigger than _backup_size MB
 
         Args:
             backup_cache (Path): backup to clean
         """
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
-        nb_folder_to_remove = len(backup_by_days) - self._backup_size
-        for _, folder in zip(range(nb_folder_to_remove), backup_by_days):
-            shutil.rmtree(folder)
+        for folder in backup_by_days:
+            s = (
+                sum(
+                    os.path.getsize(f)
+                    for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
+                    if os.path.isfile(f)
+                )
+                // 1024**2
+            )
+            if s > self._backup_size:
+                shutil.rmtree(folder)
+            else:
+                break
