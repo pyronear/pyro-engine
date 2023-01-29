@@ -27,13 +27,6 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def get_folder_size(folder):
-    return (
-        sum(os.path.getsize(f) for f in glob.glob(str(folder) + "/**/*", recursive=True) if os.path.isfile(f))
-        // 1024**2
-    )
-
-
 class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
 
