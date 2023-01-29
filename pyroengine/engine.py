@@ -27,31 +27,23 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache):
+def is_day_time(cache, delta=3600):
     """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
     trigger night alerts for now. We take 1 hour margin
 
     Args:
         cache (Path): cache folder where sunset_sunrise.txt is located
+        delta (int): delta before and after sunset / sunrise in sec
 
     Returns:
         bool: is day time
     """
     with open(cache.joinpath("sunset_sunrise.txt")) as f:
         lines = f.readlines()
-    sunrise = lines[0][:-1].split(":")
-    sunset = lines[1][:-1].split(":")
-    th = datetime.now().hour
-    tm = datetime.now().minute
-    if (
-        th < int(sunrise[0]) - 1
-        or (th == int(sunrise[0]) - 1 and tm < sunrise[1])
-        or th > int(sunset[0]) + 1
-        or (th == int(sunset[0]) + 1 and tm > int(sunset[1]))
-    ):
-        return False
-    else:
-        return True
+    sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
+    sunset = datetime.strptime(lines[1][:-1], "%H:%M")
+    now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
+    return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
 
 
 class Engine:
