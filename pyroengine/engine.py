@@ -28,7 +28,7 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 
 
 def is_day_time(cache):
-    """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to 
+    """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
     trigger night alerts for now. We take 1 hour margin
 
     Args:
@@ -39,14 +39,20 @@ def is_day_time(cache):
     """
     with open(cache.joinpath("sunset_sunrise.txt")) as f:
         lines = f.readlines()
-    sunrise = lines[0][:-1].split(':')
-    sunset = lines[1][:-1].split(':')
-    th = datetime.now().hour 
-    tm = datetime.now().minute 
-    if th < int(sunrise[0]) - 1 or (th == int(sunrise[0]) - 1 and tm < sunrise[1]) or  th > int(sunset[0]) + 1 or (th == int(sunset[0])+1 and tm > int(sunset[1])):
+    sunrise = lines[0][:-1].split(":")
+    sunset = lines[1][:-1].split(":")
+    th = datetime.now().hour
+    tm = datetime.now().minute
+    if (
+        th < int(sunrise[0]) - 1
+        or (th == int(sunrise[0]) - 1 and tm < sunrise[1])
+        or th > int(sunset[0]) + 1
+        or (th == int(sunset[0]) + 1 and tm > int(sunset[1]))
+    ):
         return False
     else:
         return True
+
 
 class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
@@ -237,16 +243,16 @@ class Engine:
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
             pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")     
+            logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
 
             # Alert
-            
+
             to_be_staged = self._update_states(pred, cam_key)
             if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
                 # Save the alert in cache to avoid connection issues
                 self._stage_alert(frame, cam_id)
         else:
-            pred = 0 # return default value
+            pred = 0  # return default value
 
         # Uploading pending alerts
         if len(self._alerts) > 0:
