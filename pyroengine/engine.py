@@ -26,6 +26,13 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
+def get_folder_size(folder):
+    return (
+        sum(os.path.getsize(f) for f in glob.glob(str(folder) + "/**/*", recursive=True) if os.path.isfile(f))
+        // 1000000
+    )
+    
+
 class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
 
@@ -334,13 +341,16 @@ class Engine:
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:
-        """Clean local backup after _backup_size days
+        """Clean local backup when it's bigger than _backup_size MB
 
         Args:
             backup_cache (Path): backup to clean
         """
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
-        nb_folder_to_remove = len(backup_by_days) - self._backup_size
-        for _, folder in zip(range(nb_folder_to_remove), backup_by_days):
-            shutil.rmtree(folder)
+        for folder in backup_by_days:
+            s = get_folder_size(backup_cache)
+            if s > self._backup_size:
+                shutil.rmtree(folder)
+            else:
+                break
