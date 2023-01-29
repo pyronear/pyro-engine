@@ -4,11 +4,12 @@
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
 import json
+import os
+import urllib
 from typing import Any, Optional
 
 import numpy as np
 import onnxruntime
-import os
 from PIL import Image
 
 __all__ = ["Classifier"]
