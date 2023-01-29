@@ -30,7 +30,7 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 def get_folder_size(folder):
     return (
         sum(os.path.getsize(f) for f in glob.glob(str(folder) + "/**/*", recursive=True) if os.path.isfile(f))
-        // 1000000
+        // 1024**2
     )
 
 
@@ -350,7 +350,14 @@ class Engine:
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
         for folder in backup_by_days:
-            s = get_folder_size(backup_cache)
+            s = (
+                sum(
+                    os.path.getsize(f)
+                    for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
+                    if os.path.isfile(f)
+                )
+                // 1024**2
+            )
             if s > self._backup_size:
                 shutil.rmtree(folder)
             else:
