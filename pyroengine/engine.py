@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
-from mockpyroclient import client
+from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
 
