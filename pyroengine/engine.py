@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from PIL import Image
 from mockpyroclient import client
+from PIL import Image
 from requests.exceptions import ConnectionError
 from requests.models import Response
 

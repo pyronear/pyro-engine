@@ -36,14 +36,13 @@ def main(args):
     CAM_PWD = os.environ.get("CAM_PWD")
     assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
 
-
     # Loading camera creds
     with open(args.creds, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
-     # Check if model is available in cache
+    # Check if model is available in cache
     cache = Path(args.cache)
-    
+
     model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
 
     engine = Engine(
