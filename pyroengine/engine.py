@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
-from pyroclient import client
+from mockpyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
 
@@ -70,13 +70,13 @@ class Engine:
         >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
         >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
         >>> }
-        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine("data/model.onnx", 0.25, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
         self,
-        hub_repo: str,
-        conf_thresh: float = 0.5,
+        model_path: Optional[str] = "data/model.onnx",
+        conf_thresh: Optional[float] = 0.25,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -93,7 +93,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(hub_repo, **kwargs)
+        self.model = Classifier(model_path)
         self.conf_thresh = conf_thresh
 
         # API Setup
