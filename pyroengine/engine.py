@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from mockpyroclient import client
 from PIL import Image
-from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
 
@@ -88,6 +88,7 @@ class Engine:
         cache_size: int = 100,
         cache_folder: str = "data/",
         backup_size: int = 30,
+        jpeg_quality: int = 80,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -111,7 +112,7 @@ class Engine:
         self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation
         self.frame_size = frame_size
-        self.jpeg_quality = 50
+        self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
 
         # Local backup
