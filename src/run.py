@@ -108,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--alert_relaxation",
         type=int,
-        default=1,
+        default=2,
         help="Number of consecutive positive detections required to send the first alert",
     )
     parser.add_argument(
