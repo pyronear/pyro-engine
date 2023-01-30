@@ -65,6 +65,10 @@ def main(args):
         cache_folder=args.cache,
         revision=args.revision,
         backup_size=args.backup_size,
+        alert_relaxation = args.alert_relaxation,
+        frame_size = args.frame_size,
+        cache_backup_period = args.cache_backup_period,
+        cache_size = args.cache_size,
     )
 
     sys_controller = SystemController(
@@ -92,6 +96,10 @@ if __name__ == "__main__":
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
+    parser.add_argument("--frame-size", type=tuple, default=(1280, 720), help="Frame size to save")
+    parser.add_argument("--cache-size", type=int, default=20, help="Frame size to save")
+    parser.add_argument("--alert_relaxation", type=int, default=2, help="Frame size to save")
+    parser.add_argument("--cache_backup_period", type=int, default=60, help="Frame size to save")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
     # Time config
