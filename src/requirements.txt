@@ -4,7 +4,6 @@ colorama==0.4.5; python_version >= "3.6" and python_version < "4" and python_ful
 coloredlogs==15.0.1; python_version >= "3.6" and python_full_version < "3.0.0" and python_version < "4" or python_version >= "3.6" and python_version < "4" and python_full_version >= "3.5.0"
 filelock==3.7.1; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
 flatbuffers==2.0; python_version >= "3.6" and python_version < "4"
-huggingface-hub==0.8.1; python_version >= "3.6" and python_version < "4" and python_full_version >= "3.7.0"
 humanfriendly==10.0; python_version >= "3.6" and python_full_version < "3.0.0" and python_version < "4" or python_version >= "3.6" and python_version < "4" and python_full_version >= "3.5.0"
 idna==3.3; python_version >= "3.7" and python_version < "4" and python_full_version >= "3.7.0"
 mpmath==1.2.1; python_version >= "3.7" and python_version < "4"
