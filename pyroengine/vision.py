@@ -3,15 +3,19 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
-import json
-from typing import Any, Optional
+import os
+import urllib
+from typing import Optional
 
 import numpy as np
 import onnxruntime
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
+from .utils import letterbox
+
 __all__ = ["Classifier"]
+
+MODEL_URL = "https://github.com/pyronear/pyro-vision/releases/download/v0.2.0/yolov5s_v002.onnx"
 
 
 class Classifier:
@@ -19,55 +23,45 @@ class Classifier:
 
     Examples:
         >>> from pyroengine.vision import Classifier
-        >>> model = Classifier("pyronear/rexnet1_3x")
+        >>> model = Classifier()
 
     Args:
-        hub_repo: repository from HuggingFace Hub to load the model from
-        model_path: overrides the model path
-        cfg_path: overrides the configuration file from the model
-        kwargs: keyword args of `huggingface_hub.hf_hub_download`
+        model_path: model path
     """
 
-    def __init__(
-        self,
-        hub_repo: str,
-        model_path: Optional[str] = None,
-        cfg_path: Optional[str] = None,
-        **kwargs: Any,
-    ) -> None:
-        # Download model config & checkpoint
-        _path = cfg_path or hf_hub_download(hub_repo, filename="config.json", **kwargs)
-        with open(_path, "rb") as f:
-            self.cfg = json.load(f)
+    def __init__(self, model_path: Optional[str] = "data/model.onnx") -> None:
+        # Download model if not available
+        if not os.path.isfile(model_path):
+            os.makedirs(os.path.split(model_path)[0], exist_ok=True)
+            print(f"Downloading model from {MODEL_URL} ...")
+            urllib.request.urlretrieve(MODEL_URL, model_path)
 
-        _path = model_path or hf_hub_download(hub_repo, filename="model.onnx", **kwargs)
-        self.ort_session = onnxruntime.InferenceSession(_path)
+        self.ort_session = onnxruntime.InferenceSession(model_path)
 
-    def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image, img_size=(640, 384)) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
             pil_img: a valid pillow image
+            img_size: image size
 
         Returns:
             the resized and normalized image of shape (1, C, H, W)
         """
 
-        # Resizing
-        img = pil_img.resize(self.cfg["input_shape"][-2:][::-1], Image.BILINEAR)
-        # (H, W, C) --> (C, H, W)
-        img = np.asarray(img).transpose((2, 0, 1)).astype(np.float32) / 255
-        # Normalization
-        img -= np.array(self.cfg["mean"])[:, None, None]
-        img /= np.array(self.cfg["std"])[:, None, None]
+        np_img = letterbox(np.array(pil_img))  # letterbox
+        np_img = np.expand_dims(np_img.astype("float"), axis=0)
+        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
+        np_img = np_img.astype("float32") / 255
 
-        return img[None, ...]
+        return np_img
 
     def __call__(self, pil_img: Image.Image) -> np.ndarray:
         np_img = self.preprocess_image(pil_img)
 
         # ONNX inference
-        ort_input = {self.ort_session.get_inputs()[0].name: np_img}
-        ort_out = self.ort_session.run(None, ort_input)
-        # Sigmoid
-        return 1 / (1 + np.exp(-ort_out[0][0]))
+        y = self.ort_session.run(["output0"], {"images": np_img})[0]
+        # Non maximum suppression need to be added here when we will use the location information
+        # let's avoid useless compute for now
+
+        return np.max(y[0, :, 4])

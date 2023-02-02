@@ -16,7 +16,8 @@ COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
 COPY ./src/requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip setuptools wheel \
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
+    && pip install --upgrade pip setuptools wheel \
     && pip install -r /tmp/requirements.txt \
     && pip cache purge \
     && rm -rf /root/.cache/pip

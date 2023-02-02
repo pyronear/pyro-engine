@@ -59,14 +59,6 @@ category = "main"
 optional = false
 python-versions = "*"
 
-[[package]]
-name = "huggingface-hub"
-version = "0.8.1"
-description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
-category = "main"
-optional = false
-python-versions = ">=3.7.0"
-
 [package.dependencies]
 filelock = "*"
 packaging = ">=20.9"
@@ -215,7 +207,6 @@ optional = false
 python-versions = "<4,>=3.6"
 
 [package.dependencies]
-huggingface-hub = ">=0.4.0,<1.0.0"
 numpy = ">=1.19.5,<2.0.0"
 onnxruntime = ">=1.10.0,<2.0.0"
 Pillow = ">=8.4.0"
@@ -334,7 +325,6 @@ colorama = [
 coloredlogs = []
 filelock = []
 flatbuffers = []
-huggingface-hub = []
 humanfriendly = []
 idna = [
     {file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff"},

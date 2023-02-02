@@ -44,7 +44,7 @@ You can use the library like any other python package to detect wildfires as fol
 from pyroengine.core import Engine
 from PIL import Image
 
-engine = Engine("pyronear/rexnet1_3x")
+engine = Engine()
 
 im = Image.open("path/to/your/image.jpg").convert('RGB')
 

@@ -9,7 +9,7 @@ def test_systemcontroller(tmpdir_factory, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
-    engine = Engine("pyronear/rexnet1_3x", cache_folder=folder)
+    engine = Engine(cache_folder=folder)
     cams = []
     controller = SystemController(engine, cams)
 

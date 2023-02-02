@@ -42,28 +42,18 @@ def main(args):
 
     # Check if model is available in cache
     cache = Path(args.cache)
-    _model, _config = args.model, args.config
-    if cache.is_dir():
-        if cache.joinpath("model.onnx").is_file():
-            _model = str(cache.joinpath("model.onnx"))
-        if cache.joinpath("config.json").is_file():
-            _config = str(cache.joinpath("config.json"))
 
-    if isinstance(_model, str):
-        logging.info(f"Loading model from: {_model}")
+    model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
 
     engine = Engine(
-        args.hub,
+        model_path,
         args.thresh,
         API_URL,
         cameras_credentials,
         LAT,
         LON,
         frame_saving_period=args.save_period // args.period,
-        model_path=_model,
-        cfg_path=_config,
         cache_folder=args.cache,
-        revision=args.revision,
         backup_size=args.backup_size,
         alert_relaxation=args.alert_relaxation,
         frame_size=args.frame_size,
@@ -89,11 +79,8 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--hub", type=str, default="pyronear/rexnet1_3x", help="HF Hub repo to use")
-    parser.add_argument("--model", type=str, default=None, help="Overrides the ONNX model")
-    parser.add_argument("--config", type=str, default=None, help="Overrides the model config")
-    parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
-    parser.add_argument("--revision", type=str, default=None, help="HF Hub revision to use for model download")
+    parser.add_argument("--model_path", type=str, default="data/model.onnx", help="model path")
+    parser.add_argument("--thresh", type=float, default=0.25, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
