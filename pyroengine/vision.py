@@ -49,7 +49,7 @@ class Classifier:
         """
 
         np_img = letterbox(np.array(pil_img))  # letterbox
-        np_img = np.expand_dims(img.astype("float"), axis=0)
+        np_img = np.expand_dims(np_img.astype("float"), axis=0)
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
         np_img = np_img.astype("float32") / 255
 
