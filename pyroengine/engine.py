@@ -70,13 +70,13 @@ class Engine:
         >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
         >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
         >>> }
-        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine("data/model.onnx", 0.25, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
         self,
-        hub_repo: str,
-        conf_thresh: float = 0.5,
+        model_path: Optional[str] = "data/model.onnx",
+        conf_thresh: Optional[float] = 0.25,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -94,7 +94,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(hub_repo, **kwargs)
+        self.model = Classifier(model_path)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -227,7 +227,7 @@ class Engine:
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+            frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
         if is_day_time(self._cache):
 
@@ -243,7 +243,7 @@ class Engine:
             to_be_staged = self._update_states(pred, cam_key)
             if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
                 # Save the alert in cache to avoid connection issues
-                self._stage_alert(frame, cam_id)
+                self._stage_alert(frame_resize, cam_id)
         else:
             pred = 0  # return default value
 
@@ -262,10 +262,10 @@ class Engine:
             self._states[cam_key]["frame_count"] += 1
             if self._states[cam_key]["frame_count"] == self.frame_saving_period:
                 # Save frame on device
-                self._local_backup(frame, cam_id, is_alert=False)
+                self._local_backup(frame_resize, cam_id, is_alert=False)
                 # Send frame to the api
                 stream = io.BytesIO()
-                frame.save(stream, format="JPEG", quality=self.jpeg_quality)
+                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
                 try:
                     self._upload_frame(cam_id, stream.getvalue())
                     # Reset frame counter
