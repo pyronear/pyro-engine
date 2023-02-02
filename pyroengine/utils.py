@@ -33,14 +33,14 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, stride
 
     dw /= 2  # divide padding into 2 sides
     dh /= 2
-    
+
     if shape[::-1] != new_unpad:  # resize
         im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     # add border
     h, w = im.shape[:2]
-    im_b = np.zeros((h+top+bottom, w+left+right, 3)) + color
-    im_b[top:top+h, left:left+w,:] = im
+    im_b = np.zeros((h + top + bottom, w + left + right, 3)) + color
+    im_b[top : top + h, left : left + w, :] = im
 
-    return im_b.astype('uint8')
+    return im_b.astype("uint8")
