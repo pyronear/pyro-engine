@@ -32,6 +32,7 @@ class Classifier:
     def __init__(self, model_path: Optional[str] = "data/model.onnx") -> None:
         # Download model if not available
         if not os.path.isfile(model_path):
+            os.makedirs(os.path.split(model_path)[0], exist_ok=True)
             print(f"Downloading model from {MODEL_URL} ...")
             urllib.request.urlretrieve(MODEL_URL, model_path)
 
