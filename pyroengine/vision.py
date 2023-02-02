@@ -29,7 +29,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.model.onnx") -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx") -> None:
         # Download model if not available
         if not os.path.isfile(model_path):
             print(f"Downloading model from {MODEL_URL} ...")
