@@ -36,6 +36,7 @@ dependencies = [
     "huggingface-hub>=0.4.0,<1.0.0",
     "pyroclient>=0.1.2",
     "requests>=2.20.0,<3.0.0",
+    "opencv-python==4.5.5.64",
 ]
 
 [project.optional-dependencies]
