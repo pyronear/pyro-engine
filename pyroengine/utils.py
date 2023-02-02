@@ -9,7 +9,8 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, stride
     Args:
         im (np.array): Input image
         new_shape (tuple, optional): Image size. Defaults to (640, 640).
-        color (tuple, optional): Pixel fill value for the area outside the transformed image. Defaults to (114, 114, 114).
+        color (tuple, optional): Pixel fill value for the area outside the transformed image.
+        Defaults to (114, 114, 114).
         auto (bool, optional): auto padding. Defaults to True.
         stride (int, optional): padding stride. Defaults to 32.
     Returns:
