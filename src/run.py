@@ -103,6 +103,7 @@ if __name__ == "__main__":
     )
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
