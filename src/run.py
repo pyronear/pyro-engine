@@ -42,29 +42,24 @@ def main(args):
 
     # Check if model is available in cache
     cache = Path(args.cache)
-    _model, _config = args.model, args.config
-    if cache.is_dir():
-        if cache.joinpath("model.onnx").is_file():
-            _model = str(cache.joinpath("model.onnx"))
-        if cache.joinpath("config.json").is_file():
-            _config = str(cache.joinpath("config.json"))
 
-    if isinstance(_model, str):
-        logging.info(f"Loading model from: {_model}")
+    model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
 
     engine = Engine(
-        args.hub,
+        model_path,
         args.thresh,
         API_URL,
         cameras_credentials,
         LAT,
         LON,
         frame_saving_period=args.save_period // args.period,
-        model_path=_model,
-        cfg_path=_config,
         cache_folder=args.cache,
-        revision=args.revision,
         backup_size=args.backup_size,
+        alert_relaxation=args.alert_relaxation,
+        frame_size=args.frame_size,
+        cache_backup_period=args.cache_backup_period,
+        cache_size=args.cache_size,
+        jpeg_quality=args.jpeg_quality,
     )
 
     sys_controller = SystemController(
@@ -84,16 +79,31 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--hub", type=str, default="pyronear/rexnet1_3x", help="HF Hub repo to use")
-    parser.add_argument("--model", type=str, default=None, help="Overrides the ONNX model")
-    parser.add_argument("--config", type=str, default=None, help="Overrides the model config")
-    parser.add_argument("--thresh", type=float, default=0.5, help="Confidence threshold")
-    parser.add_argument("--revision", type=str, default=None, help="HF Hub revision to use for model download")
+    parser.add_argument("--model_path", type=str, default="data/model.onnx", help="model path")
+    parser.add_argument("--thresh", type=float, default=0.25, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
+    parser.add_argument(
+        "--frame-size",
+        type=tuple,
+        default=(720, 1280),
+        help="Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)",
+    )
+    parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
+    parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
+    parser.add_argument(
+        "--alert_relaxation",
+        type=int,
+        default=2,
+        help="Number of consecutive positive detections required to send the first alert",
+    )
+    parser.add_argument(
+        "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
+    )
     # Backup
-    parser.add_argument("--backup-size", type=int, default=30, help="Number of days before local backup is delete")
+    parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")

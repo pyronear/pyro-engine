@@ -13,7 +13,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
-    engine = Engine("pyronear/rexnet1_0x", cache_folder=folder)
+    engine = Engine(cache_folder=folder)
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
@@ -38,12 +38,12 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine._dump_cache()
 
     # Cache dump loading
-    engine = Engine("pyronear/rexnet1_0x", cache_folder=folder)
+    engine = Engine(cache_folder=folder + "model.onnx")
     assert len(engine._alerts) == 1
     engine.clear_cache()
 
     # inference
-    engine = Engine("pyronear/rexnet1_0x", alert_relaxation=3, cache_folder=folder)
+    engine = Engine(alert_relaxation=3, cache_folder=folder + "model.onnx")
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert engine._states["-1"]["consec"] == 0
@@ -71,7 +71,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # Skip the API-related tests if the URL is not specified
     if isinstance(api_url, str):
         engine = Engine(
-            "pyronear/rexnet1_0x",
+            folder + "model.onnx",
             api_url=api_url,
             cam_creds=cam_creds,
             latitude=float(lat),

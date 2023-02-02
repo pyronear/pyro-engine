@@ -3,6 +3,7 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
 
+import glob
 import io
 import json
 import logging
@@ -24,6 +25,25 @@ from .vision import Classifier
 __all__ = ["Engine"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+
+
+def is_day_time(cache, delta=3600):
+    """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
+    trigger night alerts for now. We take 1 hour margin
+
+    Args:
+        cache (Path): cache folder where sunset_sunrise.txt is located
+        delta (int): delta before and after sunset / sunrise in sec
+
+    Returns:
+        bool: is day time
+    """
+    with open(cache.joinpath("sunset_sunrise.txt")) as f:
+        lines = f.readlines()
+    sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
+    sunset = datetime.strptime(lines[1][:-1], "%H:%M")
+    now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
+    return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
 
 
 class Engine:
@@ -50,13 +70,13 @@ class Engine:
         >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
         >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
         >>> }
-        >>> pyroEngine = Engine("pyronear/rexnet1_3x", 0.5, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine("data/model.onnx", 0.25, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
         self,
-        hub_repo: str,
-        conf_thresh: float = 0.5,
+        model_path: Optional[str] = "data/model.onnx",
+        conf_thresh: Optional[float] = 0.25,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -68,12 +88,13 @@ class Engine:
         cache_size: int = 100,
         cache_folder: str = "data/",
         backup_size: int = 30,
+        jpeg_quality: int = 80,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(hub_repo, **kwargs)
+        self.model = Classifier(model_path)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -91,7 +112,7 @@ class Engine:
         self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation
         self.frame_size = frame_size
-        self.jpeg_quality = 50
+        self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
 
         # Local backup
@@ -203,23 +224,28 @@ class Engine:
             except ConnectionError:
                 logging.warning(f"Unable to reach the pyro-api with {cam_id}")
 
-        # Inference with ONNX
-        pred = float(self.model(frame.convert("RGB")))
-        # Log analysis result
-        device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-        pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
-        logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
-
+        cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+            frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
-        # Alert
-        cam_key = cam_id or "-1"
-        to_be_staged = self._update_states(pred, cam_key)
-        if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
-            # Save the alert in cache to avoid connection issues
-            self._stage_alert(frame, cam_id)
+        if is_day_time(self._cache):
+
+            # Inference with ONNX
+            pred = float(self.model(frame.convert("RGB")))
+            # Log analysis result
+            device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
+            pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
+            logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
+
+            # Alert
+
+            to_be_staged = self._update_states(pred, cam_key)
+            if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
+                # Save the alert in cache to avoid connection issues
+                self._stage_alert(frame_resize, cam_id)
+        else:
+            pred = 0  # return default value
 
         # Uploading pending alerts
         if len(self._alerts) > 0:
@@ -236,10 +262,10 @@ class Engine:
             self._states[cam_key]["frame_count"] += 1
             if self._states[cam_key]["frame_count"] == self.frame_saving_period:
                 # Save frame on device
-                self._local_backup(frame, cam_id, is_alert=False)
+                self._local_backup(frame_resize, cam_id, is_alert=False)
                 # Send frame to the api
                 stream = io.BytesIO()
-                frame.save(stream, format="JPEG", quality=self.jpeg_quality)
+                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
                 try:
                     self._upload_frame(cam_id, stream.getvalue())
                     # Reset frame counter
@@ -334,13 +360,23 @@ class Engine:
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:
-        """Clean local backup after _backup_size days
+        """Clean local backup when it's bigger than _backup_size MB
 
         Args:
             backup_cache (Path): backup to clean
         """
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
-        nb_folder_to_remove = len(backup_by_days) - self._backup_size
-        for _, folder in zip(range(nb_folder_to_remove), backup_by_days):
-            shutil.rmtree(folder)
+        for folder in backup_by_days:
+            s = (
+                sum(
+                    os.path.getsize(f)
+                    for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
+                    if os.path.isfile(f)
+                )
+                // 1024**2
+            )
+            if s > self._backup_size:
+                shutil.rmtree(folder)
+            else:
+                break
