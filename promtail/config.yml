@@ -1,0 +1,19 @@
+server:
+  http_listen_port: 8300
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: ${LOKI_URL}
+
+scrape_configs:
+- job_name: system
+  static_configs:
+  - targets:
+      - localhost
+    labels:
+      job: varlogs
+      scope: ${TOWER_SCOPE}
+      tower: ${TOWER_NAME_IN_API} 
+      __path__: /var/lib/docker/containers/*/*log
