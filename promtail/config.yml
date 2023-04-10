@@ -14,6 +14,6 @@ scrape_configs:
       - localhost
     labels:
       job: varlogs
-      scope: ${PROMTAIL_TOWER_SCOPE}
-      tower: ${PROMTAIL_TOWER_NAME} 
+      scope: ${PROMTAIL_DEVICE_SCOPE}
+      tower: ${PROMTAIL_DEVICE_NAME} 
       __path__: /var/lib/docker/containers/*/*log
