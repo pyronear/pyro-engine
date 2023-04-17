@@ -32,3 +32,4 @@ services:
     command: 
       -config.file=/etc/promtail/config.yml
       -config.expand-env=true
+    restart: always
