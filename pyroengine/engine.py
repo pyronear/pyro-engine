@@ -1,7 +1,7 @@
-# Copyright (C) 2020-2022, Pyronear.
+# Copyright (C) 2022-2023, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import glob
 import io
@@ -139,7 +139,6 @@ class Engine:
             file.unlink()
 
     def _dump_cache(self) -> None:
-
         # Remove previous dump
         json_path = self._cache.joinpath("pending_alerts.json")
         if json_path.is_file():
@@ -230,7 +229,6 @@ class Engine:
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
         if is_day_time(self._cache):
-
             # Inference with ONNX
             pred = float(self.model(frame.convert("RGB")))
             # Log analysis result
@@ -300,7 +298,6 @@ class Engine:
         )
 
     def _process_alerts(self) -> None:
-
         for _ in range(len(self._alerts)):
             # try to upload the oldest element
             frame_info = self._alerts[0]
