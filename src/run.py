@@ -69,7 +69,7 @@ def main(args):
 
     while True:
         start_ts = time.time()
-        sys_controller.run()
+        sys_controller.run(args.period)
         # Sleep only once all images are processed
         time.sleep(max(args.period - time.time() + start_ts, 0))
 
