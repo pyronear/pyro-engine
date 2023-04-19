@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import signal
 from typing import List
 
 import urllib3
@@ -16,6 +17,10 @@ __all__ = ["SystemController"]
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+
+
+def handler():
+    raise Exception("Analyze stream timeout")
 
 
 class SystemController:
@@ -41,10 +46,16 @@ class SystemController:
         except Exception:
             logging.warning(f"Unable to fetch stream from camera {self.cameras[idx]}")
 
-    def run(self):
+    def run(self, period=30):
         """Analyzes all camera streams"""
         for idx in range(len(self.cameras)):
-            self.analyze_stream(idx)
+            try:
+                signal.signal(signal.SIGALRM, handler)
+                signal.alarm(int(period / len(self.cameras)))
+                self.analyze_stream(idx)
+                signal.alarm(0)
+            except Exception:
+                logging.warning(f"Analyze stream timeout on {self.cameras[idx]}")
 
     def __repr__(self) -> str:
         repr_str = f"{self.__class__.__name__}("
