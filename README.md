@@ -100,7 +100,7 @@ Please refer to [`CONTRIBUTING`](CONTRIBUTING.md) if you wish to contribute to t
 
 ## Credits
 
-This project is developed and maintained by the repo owner and volunteers from [Data for Good](https://dataforgood.fr/).
+This project is developed and maintained by the repo owner and volunteers from [Pyronear](https://pyronear.org/).
 
 
 
