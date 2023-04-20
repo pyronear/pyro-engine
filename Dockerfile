@@ -1,4 +1,4 @@
-FROM python:3.8.1-slim
+FROM python:3.8.16-slim
 
 # set environment variables
 ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
