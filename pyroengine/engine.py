@@ -44,7 +44,7 @@ def is_day_time(cache, delta=3600, utc=2):
     sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
     sunset = datetime.strptime(lines[1][:-1], "%H:%M")
     now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-    now = now - timedelta(hours=utc) # convert to utc 0
+    now = now - timedelta(hours=utc)  # convert to utc 0
     return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
 
 
