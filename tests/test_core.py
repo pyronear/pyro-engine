@@ -5,7 +5,6 @@ from pyroengine.engine import Engine
 
 
 def test_systemcontroller(tmpdir_factory, mock_wildfire_image):
-
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 

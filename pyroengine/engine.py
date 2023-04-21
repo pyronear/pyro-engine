@@ -1,7 +1,7 @@
-# Copyright (C) 2020-2022, Pyronear.
+# Copyright (C) 2022-2023, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import glob
 import io
@@ -27,13 +27,14 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache, delta=3600):
+def is_day_time(cache, delta=3600, utc=2):
     """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
     trigger night alerts for now. We take 1 hour margin
 
     Args:
         cache (Path): cache folder where sunset_sunrise.txt is located
         delta (int): delta before and after sunset / sunrise in sec
+        utc (int): coordinated Universal Time of the current station
 
     Returns:
         bool: is day time
@@ -43,6 +44,7 @@ def is_day_time(cache, delta=3600):
     sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
     sunset = datetime.strptime(lines[1][:-1], "%H:%M")
     now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
+    now = now - timedelta(hours=utc)  # convert to utc 0
     return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
 
 
@@ -139,7 +141,6 @@ class Engine:
             file.unlink()
 
     def _dump_cache(self) -> None:
-
         # Remove previous dump
         json_path = self._cache.joinpath("pending_alerts.json")
         if json_path.is_file():
@@ -230,7 +231,6 @@ class Engine:
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
         if is_day_time(self._cache):
-
             # Inference with ONNX
             pred = float(self.model(frame.convert("RGB")))
             # Log analysis result
@@ -300,7 +300,6 @@ class Engine:
         )
 
     def _process_alerts(self) -> None:
-
         for _ in range(len(self._alerts)):
             # try to upload the oldest element
             frame_info = self._alerts[0]
