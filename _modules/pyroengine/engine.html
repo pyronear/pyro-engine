@@ -202,10 +202,10 @@
         </div>
         <article role="main">
           <h1>Source code for pyroengine.engine</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (C) 2020-2022, Pyronear.</span>
+<span></span><span class="c1"># Copyright (C) 2022-2023, Pyronear.</span>
 
 <span class="c1"># This program is licensed under the Apache License 2.0.</span>
-<span class="c1"># See LICENSE or go to &lt;https://www.apache.org/licenses/LICENSE-2.0&gt; for full license details.</span>
+<span class="c1"># See LICENSE or go to &lt;https://opensource.org/licenses/Apache-2.0&gt; for full license details.</span>
 
 <span class="kn">import</span> <span class="nn">glob</span>
 <span class="kn">import</span> <span class="nn">io</span>
@@ -231,13 +231,14 @@
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> | </span><span class="si">%(levelname)s</span><span class="s2">: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">is_day_time</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mi">3600</span><span class="p">):</span>
+<span class="k">def</span> <span class="nf">is_day_time</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mi">3600</span><span class="p">,</span> <span class="n">utc</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don&#39;t want to</span>
 <span class="sd">    trigger night alerts for now. We take 1 hour margin</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        cache (Path): cache folder where sunset_sunrise.txt is located</span>
 <span class="sd">        delta (int): delta before and after sunset / sunrise in sec</span>
+<span class="sd">        utc (int): coordinated Universal Time of the current station</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        bool: is day time</span>
@@ -247,6 +248,7 @@
     <span class="n">sunrise</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="mi">0</span><span class="p">][:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;%H:%M&quot;</span><span class="p">)</span>
     <span class="n">sunset</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="mi">1</span><span class="p">][:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;%H:%M&quot;</span><span class="p">)</span>
     <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;T&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">][:</span><span class="mi">5</span><span class="p">],</span> <span class="s2">&quot;%H:%M&quot;</span><span class="p">)</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">now</span> <span class="o">-</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="n">utc</span><span class="p">)</span>  <span class="c1"># convert to utc 0</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">now</span> <span class="o">-</span> <span class="n">sunrise</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">&gt;</span> <span class="o">-</span><span class="n">delta</span> <span class="ow">and</span> <span class="p">(</span><span class="n">sunset</span> <span class="o">-</span> <span class="n">now</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">&gt;</span> <span class="o">-</span><span class="n">delta</span>
 
 
@@ -343,7 +345,6 @@
             <span class="n">file</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="nf">_dump_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-
         <span class="c1"># Remove previous dump</span>
         <span class="n">json_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;pending_alerts.json&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">json_path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
@@ -434,7 +435,6 @@
             <span class="n">frame_resize</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">Image</span><span class="o">.</span><span class="n">BILINEAR</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">is_day_time</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">):</span>
-
             <span class="c1"># Inference with ONNX</span>
             <span class="n">pred</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">frame</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;RGB&quot;</span><span class="p">)))</span>
             <span class="c1"># Log analysis result</span>
@@ -504,7 +504,6 @@
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_process_alerts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">)):</span>
             <span class="c1"># try to upload the oldest element</span>
             <span class="n">frame_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
