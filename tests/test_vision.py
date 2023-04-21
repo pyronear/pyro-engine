@@ -4,7 +4,6 @@ from pyroengine.vision import Classifier
 
 
 def test_classifier(mock_wildfire_image):
-
     # Instantiate the ONNX model
     model = Classifier()
     # Check preprocessing

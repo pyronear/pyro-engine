@@ -74,13 +74,29 @@ pip install -e pyro-engine/.
 
 ### Full docker orchestration
 
-Finally, you will need a `.env` file to enable camera & Alert API interactions. Your file should include a few mandatory entries:
+In order to run the projet, you will need to specific some information, which can be done using a .env file.
+This file will have to hold the following information:
+- `API_URL`: the URL of the api where to send alerts
+- `LAT`: the latitude of the device
+- `LON`:  the longitude of the device
+- `CAM_USER`: the user name to access camera
+- `CAM_PWD`: the password name to access camera
+- `LOKI_URL`: the loki URL where to export logs
+- `PROMTAIL_DEVICE_SCOPE`: the scope of the device (in order to filter devices logs with ease)
+- `PROMTAIL_DEVICE_NAME`: the name of the device (in order to filter devices logs with ease)
+
+So your `.env` file should look like something similar to:
+
 ```
 API_URL=http://my-api.myhost.com
 LAT=48.88
 LON=2.38
 CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
+
+LOKI_URL=http://my-loki-service.com
+PROMTAIL_DEVICE_SCOPE=tower_scope
+PROMTAIL_DEVICE_NAME=tower_name
 ```
 
 Additionally, you'll need a `./data` folder which contains:
@@ -100,7 +116,7 @@ Please refer to [`CONTRIBUTING`](CONTRIBUTING.md) if you wish to contribute to t
 
 ## Credits
 
-This project is developed and maintained by the repo owner and volunteers from [Data for Good](https://dataforgood.fr/).
+This project is developed and maintained by the repo owner and volunteers from [Pyronear](https://pyronear.org/).
 
 
 

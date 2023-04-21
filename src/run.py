@@ -1,7 +1,7 @@
-# Copyright (C) 2022, Pyronear.
+# Copyright (C) 2022-2023, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
 import argparse
@@ -69,7 +69,7 @@ def main(args):
 
     while True:
         start_ts = time.time()
-        sys_controller.run()
+        sys_controller.run(args.period)
         # Sleep only once all images are processed
         time.sleep(max(args.period - time.time() + start_ts, 0))
 
