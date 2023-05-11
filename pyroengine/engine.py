@@ -31,7 +31,7 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 def is_day_time(cache, frame, strategy, delta=0):
     """This function allows to know if it is daytime or not. We have two strategies. 
     The first one is to take the current time and compare it to the sunset time. 
-    The second is to see if we have a color image. The ir cameras switch to ir at night and 
+    The second is to see if we have a color image. The ir cameras switch to ir mode at night and 
     therefore produce black and white images. This function can use one or more strategies depending on the use case.
 
     Args:
