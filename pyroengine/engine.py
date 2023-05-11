@@ -27,14 +27,13 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache, delta=0, utc=2):
+def is_day_time(cache, delta=0):
     """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
     trigger night alerts for now. We take delta s margin
 
     Args:
         cache (Path): cache folder where sunset_sunrise.txt is located
         delta (int): delta before and after sunset / sunrise in sec
-        utc (int): coordinated Universal Time of the current station
 
     Returns:
         bool: is day time
@@ -44,7 +43,6 @@ def is_day_time(cache, delta=0, utc=2):
     sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
     sunset = datetime.strptime(lines[1][:-1], "%H:%M")
     now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-    now = now - timedelta(hours=utc)  # convert to utc 0
     return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
 
 
