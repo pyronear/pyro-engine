@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from PIL import Image
 import numpy as np
+from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
@@ -29,9 +29,9 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 
 
 def is_day_time(cache, frame, strategy, delta=0):
-    """This function allows to know if it is daytime or not. We have two strategies. 
-    The first one is to take the current time and compare it to the sunset time. 
-    The second is to see if we have a color image. The ir cameras switch to ir mode at night and 
+    """This function allows to know if it is daytime or not. We have two strategies.
+    The first one is to take the current time and compare it to the sunset time.
+    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
     therefore produce black and white images. This function can use one or more strategies depending on the use case.
 
     Args:
@@ -55,7 +55,7 @@ def is_day_time(cache, frame, strategy, delta=0):
 
     if strategy in ["both", "ir"]:
         frame = np.array(frame)
-        if np.max(frame[:,:,0] - frame[:,:,1]) == 0:
+        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
             is_day = False
 
     return is_day
@@ -77,6 +77,7 @@ class Engine:
         cache_backup_period: number of minutes between each cache backup to disk
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
+        day_time_strategy: strategy to define if it's daytime
         kwargs: keyword args of Classifier
 
     Examples:
