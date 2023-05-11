@@ -27,9 +27,9 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache, delta=3600, utc=2):
+def is_day_time(cache, delta=0, utc=2):
     """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
-    trigger night alerts for now. We take 1 hour margin
+    trigger night alerts for now. We take delta s margin
 
     Args:
         cache (Path): cache folder where sunset_sunrise.txt is located
