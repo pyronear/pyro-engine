@@ -131,6 +131,7 @@ class Engine:
         self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
+        self.day_time_strategy = day_time_strategy
 
         # Local backup
         self._backup_size = backup_size
@@ -245,7 +246,7 @@ class Engine:
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
-        if is_day_time(self._cache, frame, day_time_strategy):
+        if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
             pred = float(self.model(frame.convert("RGB")))
             # Log analysis result
