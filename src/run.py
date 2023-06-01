@@ -60,6 +60,7 @@ def main(args):
         cache_backup_period=args.cache_backup_period,
         cache_size=args.cache_size,
         jpeg_quality=args.jpeg_quality,
+        day_time_strategy=args.day_time_strategy,
     )
 
     sys_controller = SystemController(
@@ -101,6 +102,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
     )
+    parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
