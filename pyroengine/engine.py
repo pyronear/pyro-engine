@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
@@ -27,25 +28,37 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache, delta=3600, utc=2):
-    """Read sunset and sunrise hour in sunset_sunrise.txt and check if we are currently on daytime. We don't want to
-    trigger night alerts for now. We take 1 hour margin
+def is_day_time(cache, frame, strategy, delta=0):
+    """This function allows to know if it is daytime or not. We have two strategies.
+    The first one is to take the current time and compare it to the sunset time.
+    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
+    therefore produce black and white images. This function can use one or more strategies depending on the use case.
 
     Args:
         cache (Path): cache folder where sunset_sunrise.txt is located
+        frame (PIL image): frame to analyze with ir strategy
+        strategy (str): Strategy to define day time [None, time, ir or both]
         delta (int): delta before and after sunset / sunrise in sec
-        utc (int): coordinated Universal Time of the current station
 
     Returns:
         bool: is day time
     """
-    with open(cache.joinpath("sunset_sunrise.txt")) as f:
-        lines = f.readlines()
-    sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
-    sunset = datetime.strptime(lines[1][:-1], "%H:%M")
-    now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-    now = now - timedelta(hours=utc)  # convert to utc 0
-    return (now - sunrise).total_seconds() > -delta and (sunset - now).total_seconds() > -delta
+    is_day = True
+    if strategy in ["both", "time"]:
+        with open(cache.joinpath("sunset_sunrise.txt")) as f:
+            lines = f.readlines()
+        sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
+        sunset = datetime.strptime(lines[1][:-1], "%H:%M")
+        now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
+        if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
+            is_day = False
+
+    if strategy in ["both", "ir"]:
+        frame = np.array(frame)
+        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
+            is_day = False
+
+    return is_day
 
 
 class Engine:
@@ -64,6 +77,7 @@ class Engine:
         cache_backup_period: number of minutes between each cache backup to disk
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
+        day_time_strategy: strategy to define if it's daytime
         kwargs: keyword args of Classifier
 
     Examples:
@@ -91,6 +105,7 @@ class Engine:
         cache_folder: str = "data/",
         backup_size: int = 30,
         jpeg_quality: int = 80,
+        day_time_strategy: str = None,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -230,7 +245,7 @@ class Engine:
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
 
-        if is_day_time(self._cache):
+        if is_day_time(self._cache, frame, day_time_strategy):
             # Inference with ONNX
             pred = float(self.model(frame.convert("RGB")))
             # Log analysis result
