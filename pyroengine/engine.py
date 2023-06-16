@@ -117,13 +117,15 @@ class Engine:
         # API Setup
         if isinstance(api_url, str):
             assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
-        self.latitude = latitude
-        self.longitude = longitude
+        self.latitude = {}
+        self.longitude = {}
         self.api_client = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, vals in cam_creds.items():
                 self.api_client[_id.split("/")[2]] = client.Client(api_url, vals["login"], vals["password"])
+                self.latitude[_id.split("/")[2]] = vals["lat"]
+                self.longitude[_id.split("/")[2]] = vals["lon"]
     
 
         # Cache & relaxation
@@ -336,8 +338,8 @@ class Engine:
                     self._alerts[0]["alert_id"] = (
                         self.api_client[cam_id]
                         .send_alert_from_device(
-                            self.latitude,
-                            self.longitude,
+                            self.latitude[cam_id],
+                            self.longitude[cam_id],
                             self._alerts[0]["media_id"],
                         )
                         .json()["id"]
