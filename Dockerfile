@@ -30,3 +30,4 @@ RUN pip install -e /tmp/. \
 
 COPY ./src/run.py /usr/src/app/run.py
 COPY ./src/capture.py /usr/src/app/capture.py
+COPY ./src/dl_image.py /usr/src/app/dl_image.py

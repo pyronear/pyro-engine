@@ -6,8 +6,10 @@
 from io import BytesIO
 
 import requests
+import os
 import urllib3
 from PIL import Image
+
 
 __all__ = ["ReolinkCamera"]
 
@@ -39,3 +41,30 @@ class ReolinkCamera:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(ip_address={self.ip_address}, login={self.login})"
+
+
+class IPCamera:
+    """Implements a ipcamera controller
+
+    Args:
+        ip_address: the local IP address to reach the Reolink camera
+        login: login to access camera stream
+        password: password to access camera stream
+    """
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.ip_address = url.split("/")[2]
+        # Check the connection
+ #       print(self.url)
+#        assert isinstance(self.capture(), Image.Image)
+
+    def capture(self) -> Image.Image:
+        """Retrieves the camera stream"""
+        cam_id = self.url.split('/cgi')[0].split(':')[-1]
+        name = os.path.join("data/last_img",cam_id+".jpg")
+
+        return Image.open(name)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(url={self.ip_address })"

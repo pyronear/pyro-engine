@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 from pyroengine import SystemController
 from pyroengine.engine import Engine
-from pyroengine.sensors import ReolinkCamera
+from pyroengine.sensors import IPCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -65,7 +65,7 @@ def main(args):
 
     sys_controller = SystemController(
         engine,
-        [ReolinkCamera(_ip, CAM_USER, CAM_PWD) for _ip in cameras_credentials],
+        [IPCamera(_ip) for _ip in cameras_credentials],
     )
 
     while True:
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=45, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
     args = parser.parse_args()
 

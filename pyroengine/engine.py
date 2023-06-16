@@ -123,7 +123,8 @@ class Engine:
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, vals in cam_creds.items():
-                self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
+                self.api_client[_id.split("/")[2]] = client.Client(api_url, vals["login"], vals["password"])
+    
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
@@ -142,7 +143,7 @@ class Engine:
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
-                self._states[cam_id] = {"consec": 0, "frame_count": 0, "ongoing": False}
+                self._states[cam_id.split("/")[2]] = {"consec": 0, "frame_count": 0, "ongoing": False}
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)

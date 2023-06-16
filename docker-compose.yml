@@ -19,6 +19,14 @@ services:
         max-size: "100m"
         max-file: "5"
 
+  img-downloader:
+    image: pyronear/pyro-engine:latest
+
+    command: python dl_image.py
+    volumes:
+      - ./data:/usr/src/app/data
+    restart: always
+
   promtail:
     image: grafana/promtail:2.7.3
     ports:
