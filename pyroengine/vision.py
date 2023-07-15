@@ -11,7 +11,7 @@ import numpy as np
 import onnxruntime
 from PIL import Image
 
-from .utils import letterbox
+from .utils import letterbox, xywh2xyxy, NMS
 
 __all__ = ["Classifier"]
 
@@ -38,7 +38,7 @@ class Classifier:
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
 
-    def preprocess_image(self, pil_img: Image.Image, img_size=(640, 384)) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image, img_size=(384, 640)) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
@@ -49,7 +49,7 @@ class Classifier:
             the resized and normalized image of shape (1, C, H, W)
         """
 
-        np_img = letterbox(np.array(pil_img))  # letterbox
+        np_img = letterbox(np.array(pil_img), img_size)  # letterbox
         np_img = np.expand_dims(np_img.astype("float"), axis=0)
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
         np_img = np_img.astype("float32") / 255
@@ -60,8 +60,10 @@ class Classifier:
         np_img = self.preprocess_image(pil_img)
 
         # ONNX inference
-        y = self.ort_session.run(["output0"], {"images": np_img})[0]
-        # Non maximum suppression need to be added here when we will use the location information
-        # let's avoid useless compute for now
+        y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
+        y = y[:,y[-1,:]>0.1]
+        y = np.transpose(y)
+        y = xywh2xyxy(y)
+        y = y[y[:, 4].argsort()]
 
-        return np.max(y[0, :, 4])
+        return NMS(y)
