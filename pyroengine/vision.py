@@ -62,11 +62,13 @@ class Classifier:
 
         # ONNX inference
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
-        y = y[:, y[-1, :] > 0.1]
+        # Post processing
         y = np.transpose(y)
         y = xywh2xyxy(y)
+        # Sort by confidence
         y = y[y[:, 4].argsort()]
         y = NMS(y)
+        # Normalize preds
         if len(y) > 0:
             y[:, :4:2] /= self.img_size[1]
             y[:, 1:4:2] /= self.img_size[0]
