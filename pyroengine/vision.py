@@ -67,7 +67,7 @@ class Classifier:
         y = xywh2xyxy(y)
         y = y[y[:, 4].argsort()]
         y = NMS(y)
-        if len(y)>0:
+        if len(y) > 0:
             y[:, :4:2] /= self.img_size[1]
             y[:, 1:4:2] /= self.img_size[0]
 
