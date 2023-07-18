@@ -6,12 +6,11 @@
 
 import cv2
 import numpy as np
-import torch
 
 __all__ = ["letterbox", "NMS", "xywh2xyxy"]
 
 def xywh2xyxy(x):
-    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y = np.copy(x)
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
     y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
     y[..., 2] = x[..., 0] + x[..., 2] / 2  # bottom right x
@@ -61,37 +60,48 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, strid
 
     return im_b.astype("uint8")
 
+def box_iou(box1, box2, eps=1e-7):
+    """
+    Calculate intersection-over-union (IoU) of boxes.
+    Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
+    Based on https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
 
-def NMS(boxes, overlapThresh = 0):
+    Args:
+        box1 (np.array): A numpy array of shape (N, 4) representing N bounding boxes.
+        box2 (np.array): A numpy array of shape (M, 4) representing M bounding boxes.
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
+
+    Returns:
+        (np.array): An NxM numpy array containing the pairwise IoU values for every element in box1 and box2.
+    """
+
+    (a1, a2), (b1, b2) = np.split(box1, 2, 1), np.split(box2, 2, 1)
+    inter = (np.minimum(a2,b2[:,None,:])- np.maximum(a1,b1[:,None,:])).clip(0).prod(2)
+
+    # IoU = inter / (area1 + area2 - inter)
+    return  inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:,None] - inter + eps)
+
+
+def NMS(boxes, overlapThresh=0):
+    """Non maximum suppression
+
+    Args:
+        boxes (np.array): A numpy array of shape (N, 4) representing N bounding boxes in (x1, y1, x2, y2, conf) format
+        overlapThresh (int, optional): iou threshold. Defaults to 0.
+
+    Returns:
+        boxes: Boxes after NMS
+    """
     # Return an empty list, if no boxes given
+    boxes = boxes[boxes[:, -1].argsort()]
     if len(boxes) == 0:
         return []
-    x1 = boxes[:, 0]  # x coordinate of the top-left corner
-    y1 = boxes[:, 1]  # y coordinate of the top-left corner
-    x2 = boxes[:, 2]  # x coordinate of the bottom-right corner
-    y2 = boxes[:, 3]  # y coordinate of the bottom-right corner
-    # Compute the area of the bounding boxes and sort the bounding
-    # Boxes by the bottom-right y-coordinate of the bounding box
-    areas = (x2 - x1 + 1) * (y2 - y1 + 1) # We add 1, because the pixel at the start as well as at the end counts
-    # The indices of all boxes at start. We will redundant indices one by one.
-    indices = np.arange(len(x1))
-    for i,box in enumerate(boxes):
-        # Create temporary indices  
-        temp_indices = indices[indices!=i]
-        # Find out the coordinates of the intersection box
-        xx1 = np.maximum(box[0], boxes[temp_indices,0])
-        yy1 = np.maximum(box[1], boxes[temp_indices,1])
-        xx2 = np.minimum(box[2], boxes[temp_indices,2])
-        yy2 = np.minimum(box[3], boxes[temp_indices,3])
-        # Find out the width and the height of the intersection box
-        w = np.maximum(0, xx2 - xx1 + 1)
-        h = np.maximum(0, yy2 - yy1 + 1)
-        # compute the ratio of overlap
-        overlap = (w * h) / areas[temp_indices]
-        # if the actual boungding box has an overlap bigger than treshold with any other box, remove it's index  
-        if np.any(overlap) > overlapThresh:
+
+    indices = np.arange(len(boxes))
+    rr = box_iou(boxes[:,:4], boxes[:,:4])
+    for i, box in enumerate(boxes):
+        temp_indices = indices[indices != i]
+        if np.any(rr[i,temp_indices]>overlapThresh):
             indices = indices[indices != i]
-    #return only the boxes at the remaining indices
-    boxes = boxes[indices]
-    boxes[:,:4] = boxes[:,:4].astype(int)
-    return boxes
+   
+    return boxes[indices]

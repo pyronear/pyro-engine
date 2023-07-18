@@ -29,7 +29,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx") -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size=(384, 640)) -> None:
         # Download model if not available
         if not os.path.isfile(model_path):
             os.makedirs(os.path.split(model_path)[0], exist_ok=True)
@@ -37,8 +37,9 @@ class Classifier:
             urllib.request.urlretrieve(MODEL_URL, model_path)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
+        self.img_size=img_size
 
-    def preprocess_image(self, pil_img: Image.Image, img_size=(384, 640)) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
@@ -49,7 +50,7 @@ class Classifier:
             the resized and normalized image of shape (1, C, H, W)
         """
 
-        np_img = letterbox(np.array(pil_img), img_size)  # letterbox
+        np_img = letterbox(np.array(pil_img), self.img_size)  # letterbox
         np_img = np.expand_dims(np_img.astype("float"), axis=0)
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
         np_img = np_img.astype("float32") / 255
@@ -65,5 +66,8 @@ class Classifier:
         y = np.transpose(y)
         y = xywh2xyxy(y)
         y = y[y[:, 4].argsort()]
+        y = NMS(y)
+        y[:,::2]/=self.img_size[1]
+        y[:,1::2]/=self.img_size[0]
 
-        return NMS(y)
+        return y
