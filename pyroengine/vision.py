@@ -15,7 +15,7 @@ from .utils import NMS, letterbox, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://github.com/pyronear/pyro-vision/releases/download/v0.2.0/yolov5s_v002.onnx"
+MODEL_URL = "https://github.com/pyronear/pyro-vision/releases/download/v0.2.0/yolov8s_v001.onnx"
 
 
 class Classifier:
