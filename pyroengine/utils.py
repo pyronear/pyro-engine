@@ -9,6 +9,7 @@ import numpy as np
 
 __all__ = ["letterbox", "NMS", "xywh2xyxy"]
 
+
 def xywh2xyxy(x):
     y = np.copy(x)
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
@@ -60,6 +61,7 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, strid
 
     return im_b.astype("uint8")
 
+
 def box_iou(box1, box2, eps=1e-7):
     """
     Calculate intersection-over-union (IoU) of boxes.
@@ -76,10 +78,10 @@ def box_iou(box1, box2, eps=1e-7):
     """
 
     (a1, a2), (b1, b2) = np.split(box1, 2, 1), np.split(box2, 2, 1)
-    inter = (np.minimum(a2,b2[:,None,:])- np.maximum(a1,b1[:,None,:])).clip(0).prod(2)
+    inter = (np.minimum(a2, b2[:, None, :]) - np.maximum(a1, b1[:, None, :])).clip(0).prod(2)
 
     # IoU = inter / (area1 + area2 - inter)
-    return  inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:,None] - inter + eps)
+    return inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:, None] - inter + eps)
 
 
 def NMS(boxes, overlapThresh=0):
@@ -98,10 +100,10 @@ def NMS(boxes, overlapThresh=0):
         return []
 
     indices = np.arange(len(boxes))
-    rr = box_iou(boxes[:,:4], boxes[:,:4])
+    rr = box_iou(boxes[:, :4], boxes[:, :4])
     for i, box in enumerate(boxes):
         temp_indices = indices[indices != i]
-        if np.any(rr[i,temp_indices]>overlapThresh):
+        if np.any(rr[i, temp_indices] > overlapThresh):
             indices = indices[indices != i]
-   
+
     return boxes[indices]

@@ -11,7 +11,7 @@ import numpy as np
 import onnxruntime
 from PIL import Image
 
-from .utils import letterbox, xywh2xyxy, NMS
+from .utils import NMS, letterbox, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -37,7 +37,7 @@ class Classifier:
             urllib.request.urlretrieve(MODEL_URL, model_path)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
-        self.img_size=img_size
+        self.img_size = img_size
 
     def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
         """Preprocess an image for inference
@@ -62,12 +62,12 @@ class Classifier:
 
         # ONNX inference
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
-        y = y[:,y[-1,:]>0.1]
+        y = y[:, y[-1, :] > 0.1]
         y = np.transpose(y)
         y = xywh2xyxy(y)
         y = y[y[:, 4].argsort()]
         y = NMS(y)
-        y[:,::2]/=self.img_size[1]
-        y[:,1::2]/=self.img_size[0]
+        y[:, ::2] /= self.img_size[1]
+        y[:, 1::2] /= self.img_size[0]
 
         return y
