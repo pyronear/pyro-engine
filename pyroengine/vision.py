@@ -62,6 +62,8 @@ class Classifier:
 
         # ONNX inference
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
+        # Drop low conf for speed-up
+        y = y[:, y[-1, :] > 0.05]
         # Post processing
         y = np.transpose(y)
         y = xywh2xyxy(y)
