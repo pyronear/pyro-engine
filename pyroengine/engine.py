@@ -249,18 +249,17 @@ class Engine:
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
             preds = self.model(frame.convert("RGB"))
-            if len(preds)==0:
-                conf=0
+            if len(preds) == 0:
+                conf = 0
                 localization = ""
             else:
-                conf = float(np.max(preds[:,-1]))
+                conf = float(np.max(preds[:, -1]))
                 localization = str(json.dumps(preds.tolist()))
 
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
             pred_str = "Wildfire detected" if conf >= self.conf_thresh else "No wildfire"
             logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
-
 
             # Alert
 
@@ -331,8 +330,6 @@ class Engine:
             cam_id = frame_info["cam_id"]
             logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
-            print(self._alerts[0])
-
             # Save alert on device
             self._local_backup(frame_info["frame"], cam_id, is_alert=True)
 
@@ -346,10 +343,10 @@ class Engine:
                     self._alerts[0]["alert_id"] = (
                         self.api_client[cam_id]
                         .send_alert_from_device(
-                            self.latitude,
-                            self.longitude,
-                            self._alerts[0]["media_id"],
-                            self._alerts[0]["localization"],
+                            lat=self.latitude,
+                            lon=self.longitude,
+                            media_id=self._alerts[0]["media_id"],
+                            localization=self._alerts[0]["localization"],
                         )
                         .json()["id"]
                     )
