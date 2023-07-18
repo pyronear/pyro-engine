@@ -16,7 +16,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
-    engine._stage_alert(mock_wildfire_image, 0)
+    engine._stage_alert(mock_wildfire_image, 0, localization="dummy")
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.utcnow().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
