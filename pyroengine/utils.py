@@ -7,10 +7,10 @@
 import cv2
 import numpy as np
 
-__all__ = ["letterbox", "NMS", "xywh2xyxy"]
+__all__ = ["letterbox", "nms", "xywh2xyxy"]
 
 
-def xywh2xyxy(x):
+def xywh2xyxy(x: np.array):
     y = np.copy(x)
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
     y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
@@ -19,7 +19,9 @@ def xywh2xyxy(x):
     return y
 
 
-def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, stride=32):
+def letterbox(
+    im: np.array, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
+):
     """Letterbox image transform for yolo models
     Args:
         im (np.array): Input image
@@ -62,7 +64,7 @@ def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=False, strid
     return im_b.astype("uint8")
 
 
-def box_iou(box1, box2, eps=1e-7):
+def box_iou(box1: np.array, box2: np.array, eps: float = 1e-7):
     """
     Calculate intersection-over-union (IoU) of boxes.
     Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
@@ -84,7 +86,7 @@ def box_iou(box1, box2, eps=1e-7):
     return inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:, None] - inter + eps)
 
 
-def NMS(boxes, overlapThresh=0):
+def nms(boxes: np.array, overlapThresh: int = 0):
     """Non maximum suppression
 
     Args:

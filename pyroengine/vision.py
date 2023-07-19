@@ -11,7 +11,7 @@ import numpy as np
 import onnxruntime
 from PIL import Image
 
-from .utils import NMS, letterbox, xywh2xyxy
+from .utils import letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -29,7 +29,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size=(384, 640)) -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (384, 640)) -> None:
         # Download model if not available
         if not os.path.isfile(model_path):
             os.makedirs(os.path.split(model_path)[0], exist_ok=True)
@@ -69,7 +69,7 @@ class Classifier:
         y = xywh2xyxy(y)
         # Sort by confidence
         y = y[y[:, 4].argsort()]
-        y = NMS(y)
+        y = nms(y)
         # Normalize preds
         if len(y) > 0:
             y[:, :4:2] /= self.img_size[1]
