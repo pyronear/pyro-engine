@@ -251,20 +251,27 @@ class Engine:
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
-            pred = float(self.model(frame.convert("RGB")))
+            preds = self.model(frame.convert("RGB"))
+            if len(preds) == 0:
+                conf = 0
+                localization = ""
+            else:
+                conf = float(np.max(preds[:, -1]))
+                localization = str(json.dumps(preds.tolist()))
+
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
+            pred_str = "Wildfire detected" if conf >= self.conf_thresh else "No wildfire"
+            logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
             # Alert
 
-            to_be_staged = self._update_states(pred, cam_key)
+            to_be_staged = self._update_states(conf, cam_key)
             if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
                 # Save the alert in cache to avoid connection issues
-                self._stage_alert(frame_resize, cam_id)
+                self._stage_alert(frame_resize, cam_id, localization)
         else:
-            pred = 0  # return default value
+            conf = 0  # return default value
 
         # Uploading pending alerts
         if len(self._alerts) > 0:
@@ -292,7 +299,7 @@ class Engine:
                 except ConnectionError:
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
-        return pred
+        return float(conf)
 
     def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
         """Save frame"""
@@ -306,7 +313,7 @@ class Engine:
 
         return response
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, localization: str) -> None:
         # Store information in the queue
         self._alerts.append(
             {
@@ -315,6 +322,7 @@ class Engine:
                 "ts": datetime.utcnow().isoformat(),
                 "media_id": None,
                 "alert_id": None,
+                "localization": localization,
             }
         )
 
@@ -338,9 +346,10 @@ class Engine:
                     self._alerts[0]["alert_id"] = (
                         self.api_client[cam_id]
                         .send_alert_from_device(
-                            self.latitude[cam_id],
-                            self.longitude[cam_id],
-                            self._alerts[0]["media_id"],
+                            lat=self.latitude[cam_id],
+                            lon=self.longitude[cam_id],
+                            media_id=self._alerts[0]["media_id"],
+                            localization=self._alerts[0]["localization"],
                         )
                         .json()["id"]
                     )
