@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 from dotenv import load_dotenv
 
 from pyroengine.engine import Engine
@@ -37,16 +38,17 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine._dump_cache()
 
     # Cache dump loading
-    engine = Engine(cache_folder=folder + "model.onnx")
+    engine = Engine(cache_folder=folder)
     assert len(engine._alerts) == 1
     engine.clear_cache()
 
     # inference
-    engine = Engine(alert_relaxation=3, cache_folder=folder + "model.onnx")
+    engine = Engine(alert_relaxation=3, cache_folder=folder)
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert engine._states["-1"]["consec"] == 0
     out = engine.predict(mock_wildfire_image)
+
     assert isinstance(out, float) and 0 <= out <= 1
     assert engine._states["-1"]["consec"] == 1
     # Alert relaxation

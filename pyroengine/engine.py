@@ -296,7 +296,7 @@ class Engine:
                 except ConnectionError:
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
-        return conf
+        return float(conf)
 
     def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
         """Save frame"""
