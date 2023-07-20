@@ -32,6 +32,9 @@ run:
 log: 
 	docker logs -f --tail 50 pyro-engine_pyro-engine_1
 
+logdl:
+	docker logs -f --tail 50 pyro-engine_img-downloader_1
+
 # Stop the engine wrapper
 stop:
 	docker-compose down
