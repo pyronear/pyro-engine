@@ -12,4 +12,6 @@ def test_classifier(mock_wildfire_image):
     assert out.shape == (1, 3, 384, 640)
     # Check inference
     out = model(mock_wildfire_image)
-    assert out >= 0 and out <= 1
+    assert out.shape == (1, 5)
+    conf = np.max(out[:, 4])
+    assert conf >= 0 and conf <= 1
