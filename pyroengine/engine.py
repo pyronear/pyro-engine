@@ -75,7 +75,6 @@ class Engine:
             the number of consecutive negative detections before stopping the alert
         frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
         cache_backup_period: number of minutes between each cache backup to disk
-        frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
         day_time_strategy: strategy to define if it's daytime
         kwargs: keyword args of Classifier
@@ -100,7 +99,6 @@ class Engine:
         alert_relaxation: int = 3,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
-        frame_saving_period: Optional[int] = None,
         cache_size: int = 100,
         cache_folder: str = "data/",
         backup_size: int = 30,
@@ -126,7 +124,6 @@ class Engine:
                 self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
 
         # Cache & relaxation
-        self.frame_saving_period = frame_saving_period
         self.alert_relaxation = alert_relaxation
         self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
@@ -279,22 +276,6 @@ class Engine:
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
-
-        # save frame
-        if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self._states[cam_key]["frame_count"] += 1
-            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
-                # Save frame on device
-                self._local_backup(frame_resize, cam_id, is_alert=False)
-                # Send frame to the api
-                stream = io.BytesIO()
-                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
-                try:
-                    self._upload_frame(cam_id, stream.getvalue())
-                    # Reset frame counter
-                    self._states[cam_key]["frame_count"] = 0
-                except ConnectionError:
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
         return float(conf)
 
