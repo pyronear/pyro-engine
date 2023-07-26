@@ -21,6 +21,8 @@ from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
 
+from pyroengine.utils import box_iou, nms
+
 from .vision import Classifier
 
 __all__ = ["Engine"]
@@ -97,7 +99,7 @@ class Engine:
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
-        alert_relaxation: int = 3,
+        nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
         frame_saving_period: Optional[int] = None,
@@ -127,7 +129,7 @@ class Engine:
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
-        self.alert_relaxation = alert_relaxation
+        self.nb_consecutive_frames = nb_consecutive_frames
         self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
@@ -138,11 +140,15 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"consec": 0, "frame_count": 0, "ongoing": False},
+            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
-                self._states[cam_id] = {"consec": 0, "frame_count": 0, "ongoing": False}
+                self._states[cam_id] = {
+                    "last_predictions": deque([], self.nb_consecutive_frames),
+                    "frame_count": 0,
+                    "ongoing": False,
+                }
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -202,27 +208,49 @@ class Engine:
         """Updates last ping of device"""
         return self.api_client[cam_id].heartbeat()
 
-    def _update_states(self, conf: float, cam_key: str) -> bool:
+    def _update_states(self, frame: Image.Image, preds: np.array, cam_key: str) -> bool:
         """Updates the detection states"""
-        # Detection
-        if conf >= self.conf_thresh:
-            # Don't increment beyond relaxation
-            if not self._states[cam_key]["ongoing"] and self._states[cam_key]["consec"] < self.alert_relaxation:
-                self._states[cam_key]["consec"] += 1
 
-            if self._states[cam_key]["consec"] == self.alert_relaxation:
-                self._states[cam_key]["ongoing"] = True
+        conf_th = self.conf_thresh * self.nb_consecutive_frames
+        # Reduce threshold once we are in alert mode to collect more data
+        if self._states[cam_key]["ongoing"]:
+            conf_th *= 0.8
 
-            return self._states[cam_key]["ongoing"]
-        # No wildfire
+        # Get last predictions
+        boxes = np.zeros((0, 5))
+        boxes = np.concatenate([boxes, preds])
+        for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
+            if box.shape[0] > 0:
+                boxes = np.concatenate([boxes, box])
+
+        conf = 0
+        output_predictions = np.zeros((0, 5))
+        # Get the best ones
+        if boxes.shape[0]:
+            best_boxes = nms(boxes)
+            ious = box_iou(best_boxes[:, :4], boxes[:, :4])
+            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+            combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
+            conf = np.max(best_boxes_scores) / self.nb_consecutive_frames
+
+            # if current predictions match with combine predictions send match else send combine predcition
+            ious = box_iou(combine_predictions[:, :4], preds[:, :4])[0]
+            if np.sum(ious) > 0:
+                output_predictions = preds
+            else:
+                output_predictions = combine_predictions
+
+        self._states[cam_key]["last_predictions"].append(
+            (frame, preds, str(json.dumps(output_predictions.tolist())), datetime.utcnow().isoformat(), False)
+        )
+
+        # update state
+        if conf > conf_th:
+            self._states[cam_key]["ongoing"] = True
         else:
-            if self._states[cam_key]["consec"] > 0:
-                self._states[cam_key]["consec"] -= 1
-            # Consider event as finished
-            if self._states[cam_key]["consec"] == 0:
-                self._states[cam_key]["ongoing"] = False
+            self._states[cam_key]["ongoing"] = False
 
-        return False
+        return conf
 
     def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
@@ -249,24 +277,23 @@ class Engine:
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
             preds = self.model(frame.convert("RGB"))
-            if len(preds) == 0:
-                conf = 0
-                localization = ""
-            else:
-                conf = float(np.max(preds[:, -1]))
-                localization = str(json.dumps(preds.tolist()))
+            conf = self._update_states(frame_resize, preds, cam_key)
 
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if conf >= self.conf_thresh else "No wildfire"
+            pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
             logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
             # Alert
-
-            to_be_staged = self._update_states(conf, cam_key)
-            if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
+            if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
                 # Save the alert in cache to avoid connection issues
-                self._stage_alert(frame_resize, cam_id, localization)
+                for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+                    self._states[cam_key]["last_predictions"]
+                ):
+                    if not is_staged:
+                        self._stage_alert(frame, cam_id, ts, localization)
+                        self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+
         else:
             conf = 0  # return default value
 
@@ -310,13 +337,13 @@ class Engine:
 
         return response
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, localization: str) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: str) -> None:
         # Store information in the queue
         self._alerts.append(
             {
                 "frame": frame,
                 "cam_id": cam_id,
-                "ts": datetime.utcnow().isoformat(),
+                "ts": ts,
                 "media_id": None,
                 "alert_id": None,
                 "localization": localization,
