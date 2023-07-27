@@ -159,7 +159,7 @@ class Engine:
 
     def clear_cache(self) -> None:
         """Clear local cache"""
-        for file in self._cache.rglob("*"):
+        for file in self._cache.rglob("pending*"):
             file.unlink()
 
     def _dump_cache(self) -> None:
@@ -184,6 +184,7 @@ class Engine:
                     "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
                     "cam_id": info["cam_id"],
                     "ts": info["ts"],
+                    "localization": info["localization"],
                 }
             )
 
@@ -245,7 +246,7 @@ class Engine:
         )
 
         # update state
-        if conf > conf_th:
+        if conf > self.conf_thresh:
             self._states[cam_key]["ongoing"] = True
         else:
             self._states[cam_key]["ongoing"] = False
@@ -273,6 +274,8 @@ class Engine:
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+        else:
+            frame_resize = frame
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
