@@ -258,7 +258,7 @@ class Engine:
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
-            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_id])
+            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
             if len(preds) == 0:
                 conf = 0
                 localization = ""
