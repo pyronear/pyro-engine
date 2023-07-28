@@ -39,12 +39,12 @@ class Classifier:
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
 
-    def preprocess_image(self, pil_img: Image.Image) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image, mask: np.array = None) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
             pil_img: a valid pillow image
-            img_size: image size
+            mask: occlusion mask to drop prediction in an area
 
         Returns:
             the resized and normalized image of shape (1, C, H, W)
@@ -74,5 +74,20 @@ class Classifier:
         if len(y) > 0:
             y[:, :4:2] /= self.img_size[1]
             y[:, 1:4:2] /= self.img_size[0]
+
+        # Remove prediction in occlusion mask
+        if mask:
+            hm, wm = mask.shape
+            keep = []
+            for p in y.copy():
+                p[:4:2] *= wm
+                p[1:4:2] *= hm
+                x0, y0, x1, y1 = p.astype("int")[:4]
+                if np.sum(mask[y0:y1, x0:x1]) > 0:
+                    keep.append(True)
+                else:
+                    keep.append(False)
+
+            y = y[keep]
 
         return y
