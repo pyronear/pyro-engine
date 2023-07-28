@@ -76,7 +76,7 @@ class Classifier:
             y[:, 1:4:2] /= self.img_size[0]
 
         # Remove prediction in occlusion mask
-        if occlusion_mask:
+        if occlusion_mask is not None:
             hm, wm = occlusion_mask.shape
             keep = []
             for p in y.copy():
