@@ -16,11 +16,7 @@ COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
 # install git
-<<<<<<< HEAD
-RUN apt update && apt install git -y
-=======
 RUN apt-get update && apt-get install git -y
->>>>>>> upstream/develop
 
 COPY ./src/requirements.txt /tmp/requirements.txt
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\

@@ -17,11 +17,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache saving
     _ts = datetime.utcnow().isoformat()
-<<<<<<< HEAD
-    engine._stage_alert(mock_wildfire_image, 0, localization="dummy")
-=======
     engine._stage_alert(mock_wildfire_image, 0, datetime.utcnow().isoformat(), localization="dummy")
->>>>>>> upstream/develop
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.utcnow().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
@@ -48,11 +44,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine.clear_cache()
 
     # inference
-<<<<<<< HEAD
-    engine = Engine(alert_relaxation=3, cache_folder=folder)
-=======
     engine = Engine(nb_consecutive_frames=4, cache_folder=folder)
->>>>>>> upstream/develop
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
