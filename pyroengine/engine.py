@@ -252,8 +252,8 @@ class Engine:
                 output_predictions = combine_predictions
 
             # Limit bbox size in api
-            output_predictions = np.round(output_predictions, 3) # max 3 digit
-            output_predictions = output_predictions[:5, :] # max 5 bbox
+            output_predictions = np.round(output_predictions, 3)  # max 3 digit
+            output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, str(json.dumps(output_predictions.tolist())), datetime.utcnow().isoformat(), False)
