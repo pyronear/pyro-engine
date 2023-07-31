@@ -37,27 +37,27 @@ class SystemController:
 
     def analyze_stream(self, idx: int) -> None:
         assert 0 <= idx < len(self.cameras)
-        # try:
-        img = self.cameras[idx].capture()
+        try:
+            img = self.cameras[idx].capture()
 
-        # try:
+            try:
 
-        self.engine.predict(img, self.cameras[idx].cam_id)
-        #     except Exception:
-        #         logging.warning(f"Unable to analyze stream from camera {self.cameras[idx]}")
-        # except Exception:
-        #     logging.warning(f"Unable to fetch stream from camera {self.cameras[idx]}")
+                self.engine.predict(img, self.cameras[idx].cam_id)
+            except Exception:
+                logging.warning(f"Unable to analyze stream from camera {self.cameras[idx]}")
+        except Exception:
+            logging.warning(f"Unable to fetch stream from camera {self.cameras[idx]}")
 
     def run(self, period=30):
         """Analyzes all camera streams"""
         for idx in range(len(self.cameras)):
-            # try:
-            #     signal.signal(signal.SIGALRM, handler)
-            #     signal.alarm(int(period / len(self.cameras)))
-            self.analyze_stream(idx)
-            #     signal.alarm(0)
-            # except Exception:
-            #     logging.warning(f"Analyze stream timeout on {self.cameras[idx]}")
+            try:
+                signal.signal(signal.SIGALRM, handler)
+                signal.alarm(int(period / len(self.cameras)))
+                self.analyze_stream(idx)
+                signal.alarm(0)
+            except Exception:
+                logging.warning(f"Analyze stream timeout on {self.cameras[idx]}")
 
     def __repr__(self) -> str:
         repr_str = f"{self.__class__.__name__}("
