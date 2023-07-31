@@ -19,4 +19,8 @@ def test_classifier(mock_wildfire_image):
     # Test mask
     mask = np.ones((384, 640))
     out = model(mock_wildfire_image, mask)
+    assert out.shape == (1, 5)
+
+    mask = np.zeros((384, 640))
+    out = model(mock_wildfire_image, mask)
     assert out.shape == (0, 5)
