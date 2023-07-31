@@ -74,6 +74,8 @@ class Classifier:
         if len(y) > 0:
             y[:, :4:2] /= self.img_size[1]
             y[:, 1:4:2] /= self.img_size[0]
+        else:
+            y = np.zeros((0, 5))  # normalize output
 
         # Remove prediction in occlusion mask
         if occlusion_mask is not None:
