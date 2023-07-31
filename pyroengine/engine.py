@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import cv2
 import numpy as np
 from PIL import Image
 from pyroclient import client
@@ -150,6 +151,15 @@ class Engine:
                     "ongoing": False,
                 }
 
+        self.occlusion_masks = {"-1": None}
+        if isinstance(cam_creds, dict):
+            for cam_id in cam_creds:
+                mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
+                if os.path.isfile(mask_file):
+                    self.occlusion_masks[cam_id] = cv2.imread(mask_file, 0)
+                else:
+                    self.occlusion_masks[cam_id] = None
+
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
@@ -279,7 +289,7 @@ class Engine:
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
-            preds = self.model(frame.convert("RGB"))
+            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
             conf = self._update_states(frame_resize, preds, cam_key)
 
             # Log analysis result
