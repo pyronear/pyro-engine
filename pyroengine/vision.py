@@ -84,6 +84,8 @@ class Classifier:
             for p in y.copy():
                 p[:4:2] *= wm
                 p[1:4:2] *= hm
+                p[:4:2] = np.clip(p[:4:2], 0, wm)
+                p[:4:2] = np.clip(p[:4:2], 0, hm)
                 x0, y0, x1, y1 = p.astype("int")[:4]
                 if np.sum(occlusion_mask[y0:y1, x0:x1]) > 0:
                     keep.append(True)
