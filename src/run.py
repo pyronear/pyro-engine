@@ -38,7 +38,12 @@ def main(args):
 
     # Loading camera creds
     with open(args.creds, "rb") as json_file:
-        cameras_credentials = json.load(json_file)
+        cameras_credentials_0 = json.load(json_file)
+
+    cameras_credentials = {}
+
+    for k, v in cameras_credentials_0.items():
+        cameras_credentials[k.split(":")[-1].split("/")[0]] = v
 
     # Check if model is available in cache
     cache = Path(args.cache)

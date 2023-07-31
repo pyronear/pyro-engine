@@ -3,13 +3,12 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
+import os
 from io import BytesIO
 
 import requests
-import os
 import urllib3
 from PIL import Image
-
 
 __all__ = ["ReolinkCamera"]
 
@@ -52,19 +51,19 @@ class IPCamera:
         password: password to access camera stream
     """
 
-    def __init__(self, url: str) -> None:
-        self.url = url
-        self.ip_address = url.split("/")[2]
+    def __init__(self, cam_id: str) -> None:
+        self.cam_id = cam_id
+
         # Check the connection
- #       print(self.url)
-#        assert isinstance(self.capture(), Image.Image)
+
+    #       print(self.url)
+    #        assert isinstance(self.capture(), Image.Image)
 
     def capture(self) -> Image.Image:
         """Retrieves the camera stream"""
-        cam_id = self.url.split('/cgi')[0].split(':')[-1]
-        name = os.path.join("data/last_img",cam_id+".jpg")
+        name = os.path.join("data/last_img", self.cam_id + ".jpg")
 
         return Image.open(name)
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(url={self.ip_address })"
+        return f"{self.__class__.__name__}(url={self.cam_id})"

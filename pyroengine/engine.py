@@ -126,10 +126,9 @@ class Engine:
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, vals in cam_creds.items():
-                self.api_client[_id.split("/")[2]] = client.Client(api_url, vals["login"], vals["password"])
-                self.latitude[_id.split("/")[2]] = vals["lat"]
-                self.longitude[_id.split("/")[2]] = vals["lon"]
-    
+                self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
+                self.latitude[_id] = vals["lat"]
+                self.longitude[_id] = vals["lon"]
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
@@ -162,6 +161,8 @@ class Engine:
                     self.occlusion_masks[cam_id] = cv2.imread(mask_file, 0)
                 else:
                     self.occlusion_masks[cam_id] = None
+
+        print(self.occlusion_masks)
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
