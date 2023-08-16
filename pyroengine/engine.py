@@ -245,7 +245,7 @@ class Engine:
             conf = np.max(best_boxes_scores) / self.nb_consecutive_frames
 
             # if current predictions match with combine predictions send match else send combine predcition
-            ious = box_iou(combine_predictions[:, :4], preds[:, :4])[0]
+            ious = box_iou(combine_predictions[:, :4], preds[:, :4])
             if np.sum(ious) > 0:
                 output_predictions = preds
             else:
