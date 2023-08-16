@@ -390,7 +390,7 @@ class Engine:
                             lat=self.latitude,
                             lon=self.longitude,
                             media_id=self._alerts[0]["media_id"],
-                            localization=self._alerts[0]["localization"],
+                            # localization=self._alerts[0]["localization"],
                         )
                         .json()["id"]
                     )
