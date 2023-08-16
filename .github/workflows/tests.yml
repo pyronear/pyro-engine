@@ -39,7 +39,6 @@ jobs:
           LAT: 48.88
           LON: 2.38
         run: |
-          echo $API_URL
           coverage run -m pytest tests/
           coverage xml
       - uses: actions/upload-artifact@v2

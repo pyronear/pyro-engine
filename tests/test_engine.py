@@ -89,6 +89,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     lat = os.environ.get("LAT")
     lon = os.environ.get("LON")
     cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
+    print(api_url)
     # Skip the API-related tests if the URL is not specified
     if isinstance(api_url, str):
         engine = Engine(
