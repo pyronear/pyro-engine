@@ -15,11 +15,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import cv2
 import numpy as np
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
+
+from pyroengine.utils import box_iou, nms
 
 from .vision import Classifier
 
@@ -97,7 +100,7 @@ class Engine:
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
-        alert_relaxation: int = 3,
+        nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
         frame_saving_period: Optional[int] = None,
@@ -127,7 +130,7 @@ class Engine:
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
-        self.alert_relaxation = alert_relaxation
+        self.nb_consecutive_frames = nb_consecutive_frames
         self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
@@ -138,11 +141,24 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"consec": 0, "frame_count": 0, "ongoing": False},
+            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
-                self._states[cam_id] = {"consec": 0, "frame_count": 0, "ongoing": False}
+                self._states[cam_id] = {
+                    "last_predictions": deque([], self.nb_consecutive_frames),
+                    "frame_count": 0,
+                    "ongoing": False,
+                }
+
+        self.occlusion_masks = {"-1": None}
+        if isinstance(cam_creds, dict):
+            for cam_id in cam_creds:
+                mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
+                if os.path.isfile(mask_file):
+                    self.occlusion_masks[cam_id] = cv2.imread(mask_file, 0)
+                else:
+                    self.occlusion_masks[cam_id] = None
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -153,7 +169,7 @@ class Engine:
 
     def clear_cache(self) -> None:
         """Clear local cache"""
-        for file in self._cache.rglob("*"):
+        for file in self._cache.rglob("pending*"):
             file.unlink()
 
     def _dump_cache(self) -> None:
@@ -178,6 +194,7 @@ class Engine:
                     "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
                     "cam_id": info["cam_id"],
                     "ts": info["ts"],
+                    "localization": info["localization"],
                 }
             )
 
@@ -202,27 +219,53 @@ class Engine:
         """Updates last ping of device"""
         return self.api_client[cam_id].heartbeat()
 
-    def _update_states(self, conf: float, cam_key: str) -> bool:
+    def _update_states(self, frame: Image.Image, preds: np.array, cam_key: str) -> bool:
         """Updates the detection states"""
-        # Detection
-        if conf >= self.conf_thresh:
-            # Don't increment beyond relaxation
-            if not self._states[cam_key]["ongoing"] and self._states[cam_key]["consec"] < self.alert_relaxation:
-                self._states[cam_key]["consec"] += 1
 
-            if self._states[cam_key]["consec"] == self.alert_relaxation:
-                self._states[cam_key]["ongoing"] = True
+        conf_th = self.conf_thresh * self.nb_consecutive_frames
+        # Reduce threshold once we are in alert mode to collect more data
+        if self._states[cam_key]["ongoing"]:
+            conf_th *= 0.8
 
-            return self._states[cam_key]["ongoing"]
-        # No wildfire
+        # Get last predictions
+        boxes = np.zeros((0, 5))
+        boxes = np.concatenate([boxes, preds])
+        for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
+            if box.shape[0] > 0:
+                boxes = np.concatenate([boxes, box])
+
+        conf = 0
+        output_predictions = np.zeros((0, 5))
+        # Get the best ones
+        if boxes.shape[0]:
+            best_boxes = nms(boxes)
+            ious = box_iou(best_boxes[:, :4], boxes[:, :4])
+            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+            combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
+            conf = np.max(best_boxes_scores) / self.nb_consecutive_frames
+
+            # if current predictions match with combine predictions send match else send combine predcition
+            ious = box_iou(combine_predictions[:, :4], preds[:, :4])
+            if np.sum(ious) > 0:
+                output_predictions = preds
+            else:
+                output_predictions = combine_predictions
+
+            # Limit bbox size in api
+            output_predictions = np.round(output_predictions, 3)  # max 3 digit
+            output_predictions = output_predictions[:5, :]  # max 5 bbox
+
+        self._states[cam_key]["last_predictions"].append(
+            (frame, preds, str(json.dumps(output_predictions.tolist())), datetime.utcnow().isoformat(), False)
+        )
+
+        # update state
+        if conf > self.conf_thresh:
+            self._states[cam_key]["ongoing"] = True
         else:
-            if self._states[cam_key]["consec"] > 0:
-                self._states[cam_key]["consec"] -= 1
-            # Consider event as finished
-            if self._states[cam_key]["consec"] == 0:
-                self._states[cam_key]["ongoing"] = False
+            self._states[cam_key]["ongoing"] = False
 
-        return False
+        return conf
 
     def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
@@ -245,23 +288,31 @@ class Engine:
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+        else:
+            frame_resize = frame
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
             # Inference with ONNX
-            pred = float(self.model(frame.convert("RGB")))
+            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+            conf = self._update_states(frame_resize, preds, cam_key)
+
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if pred >= self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {pred:.2%})")
+            pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
+            logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
             # Alert
-
-            to_be_staged = self._update_states(pred, cam_key)
-            if to_be_staged and len(self.api_client) > 0 and isinstance(cam_id, str):
+            if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
                 # Save the alert in cache to avoid connection issues
-                self._stage_alert(frame_resize, cam_id)
+                for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+                    self._states[cam_key]["last_predictions"]
+                ):
+                    if not is_staged:
+                        self._stage_alert(frame, cam_id, ts, localization)
+                        self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+
         else:
-            pred = 0  # return default value
+            conf = 0  # return default value
 
         # Uploading pending alerts
         if len(self._alerts) > 0:
@@ -289,7 +340,7 @@ class Engine:
                 except ConnectionError:
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
-        return pred
+        return float(conf)
 
     def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
         """Save frame"""
@@ -303,15 +354,16 @@ class Engine:
 
         return response
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: str) -> None:
         # Store information in the queue
         self._alerts.append(
             {
                 "frame": frame,
                 "cam_id": cam_id,
-                "ts": datetime.utcnow().isoformat(),
+                "ts": ts,
                 "media_id": None,
                 "alert_id": None,
+                "localization": localization,
             }
         )
 
@@ -335,9 +387,10 @@ class Engine:
                     self._alerts[0]["alert_id"] = (
                         self.api_client[cam_id]
                         .send_alert_from_device(
-                            self.latitude,
-                            self.longitude,
-                            self._alerts[0]["media_id"],
+                            lat=self.latitude,
+                            lon=self.longitude,
+                            media_id=self._alerts[0]["media_id"],
+                            # localization=self._alerts[0]["localization"],
                         )
                         .json()["id"]
                     )

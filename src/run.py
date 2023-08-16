@@ -55,7 +55,7 @@ def main(args):
         frame_saving_period=args.save_period // args.period,
         cache_folder=args.cache,
         backup_size=args.backup_size,
-        alert_relaxation=args.alert_relaxation,
+        nb_consecutive_frames=args.nb_consecutive_frames,
         frame_size=args.frame_size,
         cache_backup_period=args.cache_backup_period,
         cache_size=args.cache_size,
@@ -94,10 +94,10 @@ if __name__ == "__main__":
     parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
     parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
     parser.add_argument(
-        "--alert_relaxation",
+        "--nb-consecutive_frames",
         type=int,
-        default=2,
-        help="Number of consecutive positive detections required to send the first alert",
+        default=4,
+        help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
         "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
