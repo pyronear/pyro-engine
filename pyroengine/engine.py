@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import cv2  # type: ignore[import]
+import cv2  # type: ignore[import-untyped]
 import numpy as np
 from PIL import Image
 from pyroclient import client
