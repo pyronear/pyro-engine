@@ -57,7 +57,7 @@ def is_day_time(cache, frame, strategy, delta=0):
             is_day = False
 
     if strategy in ["both", "ir"]:
-        frame = np.array(frame)
+        frame = np.ndarray(frame)
         if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
             is_day = False
 
@@ -219,7 +219,7 @@ class Engine:
         """Updates last ping of device"""
         return self.api_client[cam_id].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.array, cam_key: str) -> bool:
+    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> bool:
         """Updates the detection states"""
 
         conf_th = self.conf_thresh * self.nb_consecutive_frames
@@ -240,7 +240,7 @@ class Engine:
         if boxes.shape[0]:
             best_boxes = nms(boxes)
             ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+            best_boxes_scores = np.ndarray([sum(boxes[iou > 0, 4]) for iou in ious.T])
             combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
             conf = np.max(best_boxes_scores) / self.nb_consecutive_frames
 

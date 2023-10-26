@@ -39,7 +39,7 @@ class Classifier:
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
 
-    def preprocess_image(self, pil_img: Image.Image, mask: np.array = None) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image, mask: np.ndarray = None) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
@@ -50,14 +50,14 @@ class Classifier:
             the resized and normalized image of shape (1, C, H, W)
         """
 
-        np_img = letterbox(np.array(pil_img), self.img_size)  # letterbox
+        np_img = letterbox(np.ndarray(pil_img), self.img_size)  # letterbox
         np_img = np.expand_dims(np_img.astype("float"), axis=0)
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
         np_img = np_img.astype("float32") / 255
 
         return np_img
 
-    def __call__(self, pil_img: Image.Image, occlusion_mask: np.array = None) -> np.ndarray:
+    def __call__(self, pil_img: Image.Image, occlusion_mask: np.ndarray = None) -> np.ndarray:
         np_img = self.preprocess_image(pil_img)
 
         # ONNX inference

@@ -10,7 +10,7 @@ import numpy as np
 __all__ = ["letterbox", "nms", "xywh2xyxy"]
 
 
-def xywh2xyxy(x: np.array):
+def xywh2xyxy(x: np.ndarray):
     y = np.copy(x)
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
     y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
@@ -20,21 +20,21 @@ def xywh2xyxy(x: np.array):
 
 
 def letterbox(
-    im: np.array, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
+    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
 ):
     """Letterbox image transform for yolo models
     Args:
-        im (np.array): Input image
+        im (np.ndarray): Input image
         new_shape (tuple, optional): Image size. Defaults to (640, 640).
         color (tuple, optional): Pixel fill value for the area outside the transformed image.
         Defaults to (114, 114, 114).
         auto (bool, optional): auto padding. Defaults to True.
         stride (int, optional): padding stride. Defaults to 32.
     Returns:
-        np.array: Output image
+        np.ndarray: Output image
     """
     # Resize and pad image while meeting stride-multiple constraints
-    im = np.array(im)
+    im = np.ndarray(im)
     shape = im.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
@@ -64,19 +64,19 @@ def letterbox(
     return im_b.astype("uint8")
 
 
-def box_iou(box1: np.array, box2: np.array, eps: float = 1e-7):
+def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):
     """
     Calculate intersection-over-union (IoU) of boxes.
     Both sets of boxes are expected to be in (x1, y1, x2, y2) format.
     Based on https://github.com/pytorch/vision/blob/master/torchvision/ops/boxes.py
 
     Args:
-        box1 (np.array): A numpy array of shape (N, 4) representing N bounding boxes.
-        box2 (np.array): A numpy array of shape (M, 4) representing M bounding boxes.
+        box1 (np.ndarray): A numpy array of shape (N, 4) representing N bounding boxes.
+        box2 (np.ndarray): A numpy array of shape (M, 4) representing M bounding boxes.
         eps (float, optional): A small value to avoid division by zero. Defaults to 1e-7.
 
     Returns:
-        (np.array): An NxM numpy array containing the pairwise IoU values for every element in box1 and box2.
+        (np.ndarray): An NxM numpy array containing the pairwise IoU values for every element in box1 and box2.
     """
 
     (a1, a2), (b1, b2) = np.split(box1, 2, 1), np.split(box2, 2, 1)
@@ -86,11 +86,11 @@ def box_iou(box1: np.array, box2: np.array, eps: float = 1e-7):
     return inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:, None] - inter + eps)
 
 
-def nms(boxes: np.array, overlapThresh: int = 0):
+def nms(boxes: np.ndarray, overlapThresh: int = 0):
     """Non maximum suppression
 
     Args:
-        boxes (np.array): A numpy array of shape (N, 4) representing N bounding boxes in (x1, y1, x2, y2, conf) format
+        boxes (np.ndarray): A numpy array of shape (N, 4) representing N bounding boxes in (x1, y1, x2, y2, conf) format
         overlapThresh (int, optional): iou threshold. Defaults to 0.
 
     Returns:
