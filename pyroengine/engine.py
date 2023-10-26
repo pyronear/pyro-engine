@@ -256,7 +256,7 @@ class Engine:
             output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, str(json.dumps(output_predictions.tolist())), datetime.utcnow().isoformat(), False)
+            (frame, preds, json.dumps(output_predictions.tolist()), datetime.utcnow().isoformat(), False)
         )
 
         # update state
@@ -390,7 +390,7 @@ class Engine:
                             lat=self.latitude,
                             lon=self.longitude,
                             media_id=self._alerts[0]["media_id"],
-                            # localization=self._alerts[0]["localization"],
+                            localization=self._alerts[0]["localization"],
                         )
                         .json()["id"]
                     )
