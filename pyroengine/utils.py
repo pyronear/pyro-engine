@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
-import cv2
+import cv2  # type: ignore[import]
 import numpy as np
 
 __all__ = ["letterbox", "nms", "xywh2xyxy"]
