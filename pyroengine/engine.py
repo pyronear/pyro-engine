@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import cv2
+import cv2  # type: ignore[import-untyped]
 import numpy as np
 from PIL import Image
 from pyroclient import client
@@ -95,7 +95,7 @@ class Engine:
     def __init__(
         self,
         model_path: Optional[str] = "data/model.onnx",
-        conf_thresh: Optional[float] = 0.25,
+        conf_thresh: float = 0.25,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -108,7 +108,7 @@ class Engine:
         cache_folder: str = "data/",
         backup_size: int = 30,
         jpeg_quality: int = 80,
-        day_time_strategy: str = None,
+        day_time_strategy: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -219,7 +219,7 @@ class Engine:
         """Updates last ping of device"""
         return self.api_client[cam_id].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.array, cam_key: str) -> bool:
+    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
         """Updates the detection states"""
 
         conf_th = self.conf_thresh * self.nb_consecutive_frames

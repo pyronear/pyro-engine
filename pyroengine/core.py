@@ -5,7 +5,8 @@
 
 import logging
 import signal
-from typing import List
+from types import FrameType
+from typing import List, Optional
 
 import urllib3
 
@@ -19,7 +20,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def handler():
+def handler(signum: int, frame: Optional[FrameType]) -> None:
     raise Exception("Analyze stream timeout")
 
 
