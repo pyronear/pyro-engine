@@ -4,8 +4,8 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import os
-from urllib.request import urlretrieve
 from typing import Optional
+from urllib.request import urlretrieve
 
 import numpy as np
 import onnxruntime
@@ -30,20 +30,18 @@ class Classifier:
     """
 
     def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (384, 640)) -> None:
-    
         if model_path is None:
             model_path = "data/model.onnx"
 
         if not os.path.isfile(model_path):
             os.makedirs(os.path.split(model_path)[0], exist_ok=True)
             print(f"Downloading model from {MODEL_URL} ...")
-            urlretrieve(MODEL_URL, model_path) 
+            urlretrieve(MODEL_URL, model_path)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
 
-
-    def preprocess_image(self, pil_img: Image.Image, mask: Optional[np.ndarray] = None) -> np.ndarray: 
+    def preprocess_image(self, pil_img: Image.Image, mask: Optional[np.ndarray] = None) -> np.ndarray:
         """Preprocess an image for inference
 
         Args:
@@ -61,7 +59,7 @@ class Classifier:
 
         return np_img
 
-    def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray: 
+    def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
         np_img = self.preprocess_image(pil_img)
 
         # ONNX inference

@@ -34,7 +34,7 @@ def letterbox(
         np.ndarray: Output image
     """
     # Resize and pad image while meeting stride-multiple constraints
-    im = np.ndarray(im)
+    im = np.array(im)
     shape = im.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
