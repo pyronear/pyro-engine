@@ -354,7 +354,7 @@ class Engine:
 
         return response
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: str) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
         # Store information in the queue
         self._alerts.append(
             {
@@ -381,7 +381,7 @@ class Engine:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
                     self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-
+                print(self._alerts[0])
                 # Alert creation
                 if not isinstance(self._alerts[0]["alert_id"], int):
                     self._alerts[0]["alert_id"] = (
