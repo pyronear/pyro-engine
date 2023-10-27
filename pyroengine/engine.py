@@ -256,7 +256,7 @@ class Engine:
             output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, json.dumps(output_predictions.tolist()), datetime.utcnow().isoformat(), False)
+            (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
         )
 
         # update state
