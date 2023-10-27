@@ -96,4 +96,4 @@ class Classifier:
 
             y = y[keep]
 
-        return y
+        return np.clip(y, 0, 1)
