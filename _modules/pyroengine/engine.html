@@ -219,7 +219,7 @@
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
-<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">cv2</span>  <span class="c1"># type: ignore[import-untyped]</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
 <span class="kn">from</span> <span class="nn">pyroclient</span> <span class="kn">import</span> <span class="n">client</span>
@@ -299,7 +299,7 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">model_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;data/model.onnx&quot;</span><span class="p">,</span>
-        <span class="n">conf_thresh</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span>
+        <span class="n">conf_thresh</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span>
         <span class="n">api_url</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">cam_creds</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">latitude</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -312,7 +312,7 @@
         <span class="n">cache_folder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;data/&quot;</span><span class="p">,</span>
         <span class="n">backup_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
         <span class="n">jpeg_quality</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">80</span><span class="p">,</span>
-        <span class="n">day_time_strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">day_time_strategy</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Init engine&quot;&quot;&quot;</span>
@@ -423,7 +423,7 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates last ping of device&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">cam_id</span><span class="p">]</span><span class="o">.</span><span class="n">heartbeat</span><span class="p">()</span></div>
 
-    <span class="k">def</span> <span class="nf">_update_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">,</span> <span class="n">cam_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">_update_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">,</span> <span class="n">preds</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cam_key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Updates the detection states&quot;&quot;&quot;</span>
 
         <span class="n">conf_th</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conf_thresh</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_consecutive_frames</span>
@@ -460,7 +460,7 @@
             <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">output_predictions</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># max 5 bbox</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_states</span><span class="p">[</span><span class="n">cam_key</span><span class="p">][</span><span class="s2">&quot;last_predictions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">output_predictions</span><span class="o">.</span><span class="n">tolist</span><span class="p">())),</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">output_predictions</span><span class="o">.</span><span class="n">tolist</span><span class="p">()),</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span> <span class="kc">False</span><span class="p">)</span>
         <span class="p">)</span>
 
         <span class="c1"># update state</span>
@@ -594,7 +594,7 @@
                             <span class="n">lat</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">latitude</span><span class="p">,</span>
                             <span class="n">lon</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">longitude</span><span class="p">,</span>
                             <span class="n">media_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;media_id&quot;</span><span class="p">],</span>
-                            <span class="c1"># localization=self._alerts[0][&quot;localization&quot;],</span>
+                            <span class="n">localization</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;localization&quot;</span><span class="p">],</span>
                         <span class="p">)</span>
                         <span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
                     <span class="p">)</span>
