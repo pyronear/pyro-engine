@@ -254,6 +254,9 @@ class Engine:
             # Limit bbox size in api
             output_predictions = np.round(output_predictions, 3)  # max 3 digit
             output_predictions = output_predictions[:5, :]  # max 5 bbox
+            output_predictions = output_predictions[
+                output_predictions[:, 4] > self.conf_thresh
+            ]  # send only boxes above conf
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
