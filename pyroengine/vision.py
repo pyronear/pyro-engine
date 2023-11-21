@@ -38,7 +38,9 @@ class Classifier:
             print(f"Downloading model from {MODEL_URL} ...")
             urlretrieve(MODEL_URL, model_path)
 
-        self.ort_session = onnxruntime.InferenceSession(model_path)
+        # Check if GPU (CUDA) is available, else use CPU
+        providers = ["CUDAExecutionProvider"] if onnxruntime.get_device() == "GPU" else ["CPUExecutionProvider"]
+        self.ort_session = onnxruntime.InferenceSession(model_path, providers=providers)
         self.img_size = img_size
 
     def preprocess_image(self, pil_img: Image.Image, mask: Optional[np.ndarray] = None) -> np.ndarray:
