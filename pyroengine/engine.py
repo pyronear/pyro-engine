@@ -109,6 +109,7 @@ class Engine:
         backup_size: int = 30,
         jpeg_quality: int = 80,
         day_time_strategy: Optional[str] = None,
+        verbose: Optional[bool] = True,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -116,6 +117,7 @@ class Engine:
 
         self.model = Classifier(model_path)
         self.conf_thresh = conf_thresh
+        self.verbose = verbose
 
         # API Setup
         if isinstance(api_url, str):
@@ -302,7 +304,8 @@ class Engine:
             # Log analysis result
             device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
             pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+            if self.verbose:
+                logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
             # Alert
             if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -347,7 +350,8 @@ class Engine:
 
     def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
         """Save frame"""
-        logging.info(f"Camera '{cam_id}' - Uploading media...")
+        if self.verbose:
+            logging.info(f"Camera '{cam_id}' - Uploading media...")
         # Create a media
         response = self.api_client[cam_id].create_media_from_device()
         if response.status_code // 100 == 2:
@@ -375,7 +379,8 @@ class Engine:
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
-            logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+            if self.verbose:
+                logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
             # Save alert on device
             self._local_backup(frame_info["frame"], cam_id, is_alert=True)
@@ -409,7 +414,8 @@ class Engine:
                 response.json()["id"]
                 # Clear
                 self._alerts.popleft()
-                logging.info(f"Camera '{cam_id}' - alert sent")
+                if self.verbose:
+                    logging.info(f"Camera '{cam_id}' - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError):
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
