@@ -6,7 +6,7 @@
 #    any others change needed
 # 
 # This script must be run with a crontab, run every hour
-# 0 * * * * bash /home/pi/pyro-engine/scripts/update_and_execute.sh >> /home/pi/pyro-engine/logfile.log 2>&1
+# 0 * * * * bash /home/pi/pyro-engine/scripts/update_script.sh >> /home/pi/pyro-engine/logfile.log 2>&1
 
 
 # Print current date and time
