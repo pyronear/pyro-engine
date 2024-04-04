@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2023, Pyronear.
+# Copyright (C) 2022-2024, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -290,7 +290,7 @@ class Engine:
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+            frame_resize = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
         else:
             frame_resize = frame
 
