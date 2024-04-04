@@ -10,6 +10,7 @@ def test_classifier(mock_wildfire_image):
     out, pad = model.preprocess_image(mock_wildfire_image)
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
     assert out.shape == (1, 3, 384, 640)
+    assert isinstance(pad, tuple) 
     # Check inference
     out = model(mock_wildfire_image)
     assert out.shape == (1, 5)
