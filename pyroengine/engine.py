@@ -290,7 +290,7 @@ class Engine:
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame_resize = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+            frame_resize = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
         else:
             frame_resize = frame
 
