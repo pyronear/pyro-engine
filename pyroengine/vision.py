@@ -72,15 +72,15 @@ class Classifier:
         # Sort by confidence
         y = y[y[:, 4].argsort()]
         y = nms(y)
-        
+
         # Normalize preds
         if len(y) > 0:
             # Remove padding
             left_pad, top_pad = pad
             y[:, :4:2] -= left_pad
             y[:, 1:4:2] -= top_pad
-            y[:, :4:2] /= (self.img_size[1] - 2*left_pad)
-            y[:, 1:4:2] /= (self.img_size[0] - 2*top_pad)
+            y[:, :4:2] /= self.img_size[1] - 2 * left_pad
+            y[:, 1:4:2] /= self.img_size[0] - 2 * top_pad
         else:
             y = np.zeros((0, 5))  # normalize output
 
