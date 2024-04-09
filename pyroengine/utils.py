@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2023, Pyronear.
+# Copyright (C) 2022-2024, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -61,7 +61,7 @@ def letterbox(
     im_b = np.zeros((h + top + bottom, w + left + right, 3)) + color
     im_b[top : top + h, left : left + w, :] = im
 
-    return im_b.astype("uint8")
+    return im_b.astype("uint8"), (left, top)
 
 
 def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):

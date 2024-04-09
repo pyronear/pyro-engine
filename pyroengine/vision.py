@@ -1,10 +1,10 @@
-# Copyright (C) 2022-2023, Pyronear.
+# Copyright (C) 2022-2024, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import numpy as np
@@ -41,26 +41,27 @@ class Classifier:
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
 
-    def preprocess_image(self, pil_img: Image.Image, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
 
         Args:
-            pil_img: a valid pillow image
-            mask: occlusion mask to drop prediction in an area
+            pil_img: A valid PIL image.
 
         Returns:
-            the resized and normalized image of shape (1, C, H, W)
+            A tuple containing:
+            - The resized and normalized image of shape (1, C, H, W).
+            - Padding information as a tuple of integers (pad_height, pad_width).
         """
 
-        np_img = letterbox(np.array(pil_img), self.img_size)  # letterbox
-        np_img = np.expand_dims(np_img.astype("float"), axis=0)
-        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
-        np_img = np_img.astype("float32") / 255
+        np_img, pad = letterbox(np.array(pil_img), self.img_size)  # Applies letterbox resize with padding
+        np_img = np.expand_dims(np_img.astype("float"), axis=0)  # Add batch dimension
+        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+        np_img = np_img.astype("float32") / 255  # Normalize to [0, 1]
 
-        return np_img
+        return np_img, pad
 
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
-        np_img = self.preprocess_image(pil_img)
+        np_img, pad = self.preprocess_image(pil_img)
 
         # ONNX inference
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
@@ -72,10 +73,15 @@ class Classifier:
         # Sort by confidence
         y = y[y[:, 4].argsort()]
         y = nms(y)
+
         # Normalize preds
         if len(y) > 0:
-            y[:, :4:2] /= self.img_size[1]
-            y[:, 1:4:2] /= self.img_size[0]
+            # Remove padding
+            left_pad, top_pad = pad
+            y[:, :4:2] -= left_pad
+            y[:, 1:4:2] -= top_pad
+            y[:, :4:2] /= self.img_size[1] - 2 * left_pad
+            y[:, 1:4:2] /= self.img_size[0] - 2 * top_pad
         else:
             y = np.zeros((0, 5))  # normalize output
 
