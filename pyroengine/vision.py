@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import numpy as np
@@ -41,21 +41,22 @@ class Classifier:
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
 
-    def preprocess_image(self, pil_img: Image.Image, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
 
         Args:
-            pil_img: a valid pillow image
-            mask: occlusion mask to drop prediction in an area
+            pil_img: A valid PIL image.
 
         Returns:
-            the resized and normalized image of shape (1, C, H, W)
+            A tuple containing:
+            - The resized and normalized image of shape (1, C, H, W).
+            - Padding information as a tuple of integers (pad_height, pad_width).
         """
 
-        np_img, pad = letterbox(np.array(pil_img), self.img_size)  # letterbox
-        np_img = np.expand_dims(np_img.astype("float"), axis=0)
-        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # BHWC to BCHW
-        np_img = np_img.astype("float32") / 255
+        np_img, pad = letterbox(np.array(pil_img), self.img_size)  # Applies letterbox resize with padding
+        np_img = np.expand_dims(np_img.astype("float"), axis=0)  # Add batch dimension
+        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+        np_img = np_img.astype("float32") / 255  # Normalize to [0, 1]
 
         return np_img, pad
 
