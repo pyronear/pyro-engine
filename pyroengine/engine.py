@@ -242,21 +242,18 @@ class Engine:
             ious = box_iou(best_boxes[:, :4], boxes[:, :4])
             best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
             combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-            conf = np.max(best_boxes_scores) / self.nb_consecutive_frames
+            conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
 
-            # if current predictions match with combine predictions send match else send combine predcition
-            ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-            if np.sum(ious) > 0:
-                output_predictions = preds
-            else:
-                output_predictions = combine_predictions
+            if len(combine_predictions):
 
-            # Limit bbox size in api
-            output_predictions = np.round(output_predictions, 3)  # max 3 digit
-            output_predictions = output_predictions[:5, :]  # max 5 bbox
-            output_predictions = output_predictions[
-                output_predictions[:, 4] > self.conf_thresh
-            ]  # send only boxes above conf
+                # send only preds boxes that match combine_predictions
+                ious = box_iou(combine_predictions[:, :4], preds[:, :4])
+                iou_match = [np.max(iou) > 0 for iou in ious]
+                output_predictions = preds[iou_match, :]
+
+                # Limit bbox size for api
+                output_predictions = np.round(output_predictions, 3)  # max 3 digit
+                output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
@@ -384,7 +381,7 @@ class Engine:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
                     self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-                print(self._alerts[0])
+
                 # Alert creation
                 if not isinstance(self._alerts[0]["alert_id"], int):
                     self._alerts[0]["alert_id"] = (
