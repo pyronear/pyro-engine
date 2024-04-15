@@ -7,7 +7,7 @@
 # Print current date and time
 echo "$(date): Checking for updates"
 
-# Navigate to the repository 
+# Navigate to the repository directory
 cd /home/pi/pyro-engine
 
 # Fetch main branch specifically and update local tracking
