@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
 
-    <!-- Generated with Sphinx 7.1.2 and Furo 2023.09.10 -->
+    <!-- Generated with Sphinx 7.1.2 and Furo 2024.01.29 -->
         <title>pyroengine.engine - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=649a27d8" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=135e06be" />
@@ -202,7 +202,7 @@
         </div>
         <article role="main">
           <h1>Source code for pyroengine.engine</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (C) 2022-2023, Pyronear.</span>
+<span></span><span class="c1"># Copyright (C) 2022-2024, Pyronear.</span>
 
 <span class="c1"># This program is licensed under the Apache License 2.0.</span>
 <span class="c1"># See LICENSE or go to &lt;https://opensource.org/licenses/Apache-2.0&gt; for full license details.</span>
@@ -446,21 +446,18 @@
             <span class="n">ious</span> <span class="o">=</span> <span class="n">box_iou</span><span class="p">(</span><span class="n">best_boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">],</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">])</span>
             <span class="n">best_boxes_scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">sum</span><span class="p">(</span><span class="n">boxes</span><span class="p">[</span><span class="n">iou</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span> <span class="k">for</span> <span class="n">iou</span> <span class="ow">in</span> <span class="n">ious</span><span class="o">.</span><span class="n">T</span><span class="p">])</span>
             <span class="n">combine_predictions</span> <span class="o">=</span> <span class="n">best_boxes</span><span class="p">[</span><span class="n">best_boxes_scores</span> <span class="o">&gt;</span> <span class="n">conf_th</span><span class="p">,</span> <span class="p">:]</span>
-            <span class="n">conf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">best_boxes_scores</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">nb_consecutive_frames</span>
+            <span class="n">conf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">best_boxes_scores</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nb_consecutive_frames</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># memory + preds</span>
 
-            <span class="c1"># if current predictions match with combine predictions send match else send combine predcition</span>
-            <span class="n">ious</span> <span class="o">=</span> <span class="n">box_iou</span><span class="p">(</span><span class="n">combine_predictions</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">],</span> <span class="n">preds</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">])</span>
-            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">ious</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">preds</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">combine_predictions</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">combine_predictions</span><span class="p">):</span>
 
-            <span class="c1"># Limit bbox size in api</span>
-            <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">output_predictions</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># max 3 digit</span>
-            <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">output_predictions</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># max 5 bbox</span>
-            <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">output_predictions</span><span class="p">[</span>
-                <span class="n">output_predictions</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">conf_thresh</span>
-            <span class="p">]</span>  <span class="c1"># send only boxes above conf</span>
+                <span class="c1"># send only preds boxes that match combine_predictions</span>
+                <span class="n">ious</span> <span class="o">=</span> <span class="n">box_iou</span><span class="p">(</span><span class="n">combine_predictions</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">],</span> <span class="n">preds</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">])</span>
+                <span class="n">iou_match</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">iou</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">iou</span> <span class="ow">in</span> <span class="n">ious</span><span class="p">]</span>
+                <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">preds</span><span class="p">[</span><span class="n">iou_match</span><span class="p">,</span> <span class="p">:]</span>
+
+                <span class="c1"># Limit bbox size for api</span>
+                <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">output_predictions</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>  <span class="c1"># max 3 digit</span>
+                <span class="n">output_predictions</span> <span class="o">=</span> <span class="n">output_predictions</span><span class="p">[:</span><span class="mi">5</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># max 5 bbox</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_states</span><span class="p">[</span><span class="n">cam_key</span><span class="p">][</span><span class="s2">&quot;last_predictions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">preds</span><span class="p">,</span> <span class="n">output_predictions</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span> <span class="kc">False</span><span class="p">)</span>
@@ -494,7 +491,7 @@
         <span class="n">cam_key</span> <span class="o">=</span> <span class="n">cam_id</span> <span class="ow">or</span> <span class="s2">&quot;-1&quot;</span>
         <span class="c1"># Reduce image size to save bandwidth</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
-            <span class="n">frame_resize</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">Image</span><span class="o">.</span><span class="n">BILINEAR</span><span class="p">)</span>
+            <span class="n">frame_resize</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">frame_size</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">Image</span><span class="p">,</span> <span class="s2">&quot;BILINEAR&quot;</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">frame_resize</span> <span class="o">=</span> <span class="n">frame</span>
 
@@ -588,7 +585,7 @@
                 <span class="c1"># Media creation</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;media_id&quot;</span><span class="p">],</span> <span class="nb">int</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;media_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">cam_id</span><span class="p">]</span><span class="o">.</span><span class="n">create_media_from_device</span><span class="p">()</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-                <span class="nb">print</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
                 <span class="c1"># Alert creation</span>
                 <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;alert_id&quot;</span><span class="p">],</span> <span class="nb">int</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;alert_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
@@ -667,7 +664,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2023, Pyronear
+                Copyright &#169; 2020-2024, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
