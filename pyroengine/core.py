@@ -1,18 +1,24 @@
+# Copyright (C) 2022-2024, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
 import logging
 import signal
-import threading
-import time
 from multiprocessing import Process, Queue
 from types import FrameType
-from typing import Optional
+from typing import Optional, Tuple
 
+import numpy as np
 import urllib3
+from PIL import Image
 
 __all__ = ["SystemController"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+PredictionResult = Tuple[np.ndarray, Image.Image, str]
 
 
 def handler(signum: int, frame: Optional[FrameType]) -> None:
@@ -23,7 +29,7 @@ class SystemController:
     def __init__(self, engine, cameras):
         self.engine = engine
         self.cameras = cameras
-        self.prediction_results = Queue()  # Queue for handling results
+        self.prediction_results: Queue[PredictionResult] = Queue()  # Queue for handling results
 
     def capture_and_predict(self, idx):
         """Capture an image from the camera and perform prediction in a single function."""
@@ -54,7 +60,7 @@ class SystemController:
             if len(self.engine._alerts) > 0:
                 self.engine._process_alerts()
         except Exception:
-            logging.warning(f"Unable to process alerts")
+            logging.warning("Unable to process alerts")
 
     def run(self, period=30):
         """Create a process for each camera to capture and predict simultaneously."""

@@ -267,7 +267,7 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> np.ndarray[Any, Any]:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
