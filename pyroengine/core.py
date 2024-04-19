@@ -1,62 +1,59 @@
-# Copyright (C) 2022-2024, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
 import logging
-import signal
-from types import FrameType
-from typing import List, Optional
+import time
+from multiprocessing import Process, Queue
+from typing import Optional
 
-import urllib3
-
-from .engine import Engine
-from .sensors import ReolinkCamera
-
-__all__ = ["SystemController"]
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
-
-
-def handler(signum: int, frame: Optional[FrameType]) -> None:
-    raise Exception("Analyze stream timeout")
+import numpy as np
+from PIL import Image
 
 
 class SystemController:
-    """Implements the full system controller
-
-    Args:
-        engine: the image analyzer
-        cameras: the cameras to get the visual streams from
-    """
-
-    def __init__(self, engine: Engine, cameras: List[ReolinkCamera]) -> None:
+    def __init__(self, engine, cameras):
         self.engine = engine
         self.cameras = cameras
+        self.prediction_results = Queue()  # Queue for handling results
 
-    def analyze_stream(self, idx: int) -> None:
-        assert 0 <= idx < len(self.cameras)
-        try:
-            img = self.cameras[idx].capture()
-            try:
-                self.engine.predict(img, self.cameras[idx].ip_address)
-            except Exception:
-                logging.warning(f"Unable to analyze stream from camera {self.cameras[idx]}")
-        except Exception:
-            logging.warning(f"Unable to fetch stream from camera {self.cameras[idx]}")
+    def capture_and_predict(self, idx):
+        """Capture an image from the camera and perform prediction in a single function."""
+        img = self.cameras[idx].capture()
+        if img is not None:
+            preds = self.engine.predict(img, self.cameras[idx].ip_address)
+            print("pred", preds, idx)
+            # Send the result along with the image and camera ID for further processing
+            self.prediction_results.put((preds, img, self.cameras[idx].ip_address))
+        else:
+            logging.error(f"Failed to capture image from camera {self.cameras[idx].ip_address}")
 
-    def run(self, period=30):
-        """Analyzes all camera streams"""
+    def process_results(self, start_time):
+        """Process results sequentially from the results queue."""
+        while not self.prediction_results.empty():
+            preds, frame, cam_id = self.prediction_results.get()
+            print(cam_id, preds)
+            self.engine.process_prediction(preds, frame, cam_id)
+
+        print(f"remain {30-(time.time()-start_time)} for sending")
+
+        # Uploading pending alerts
+        if len(self.engine._alerts) > 0:
+            self.engine._process_alerts()
+
+    def run(self):
+        """Create a process for each camera to capture and predict simultaneously."""
+        start_time = time.time()
+        processes = []
         for idx in range(len(self.cameras)):
-            try:
-                signal.signal(signal.SIGALRM, handler)
-                signal.alarm(int(period / len(self.cameras)))
-                self.analyze_stream(idx)
-                signal.alarm(0)
-            except Exception:
-                logging.warning(f"Analyze stream timeout on {self.cameras[idx]}")
+            process = Process(target=self.capture_and_predict, args=(idx,))
+            processes.append(process)
+            process.start()
+        print(f"done capture and process after {time.time()-start_time}")
+
+        # # Ensure all processes complete
+        # for process in processes:
+        #     process.join()
+
+        # Process all collected results
+        self.process_results(start_time)
+        print(f"done all {time.time()-start_time}")
 
     def __repr__(self) -> str:
         repr_str = f"{self.__class__.__name__}("

@@ -234,6 +234,8 @@ class Engine:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
 
+        print("boxes", cam_key, boxes, preds)
+
         conf = 0
         output_predictions = np.zeros((0, 5))
         # Get the best ones
@@ -243,6 +245,7 @@ class Engine:
             best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
             combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
             conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+            print("preds", conf)
 
             if len(combine_predictions):
 
@@ -285,6 +288,15 @@ class Engine:
                 logging.warning(f"Unable to reach the pyro-api with {cam_id}")
 
         cam_key = cam_id or "-1"
+        if is_day_time(self._cache, frame, self.day_time_strategy):
+            # Inference with ONNX
+            return self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+
+        else:
+            return np.zeros((0, 5))
+
+    def process_prediction(self, preds: np.ndarray, frame: Image.Image, cam_id: Optional[str] = None):
+        cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
@@ -292,8 +304,6 @@ class Engine:
             frame_resize = frame
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
-            # Inference with ONNX
-            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
             conf = self._update_states(frame_resize, preds, cam_key)
 
             # Log analysis result
@@ -314,31 +324,11 @@ class Engine:
         else:
             conf = 0  # return default value
 
-        # Uploading pending alerts
-        if len(self._alerts) > 0:
-            self._process_alerts()
-
         # Check if it's time to backup pending alerts
         ts = datetime.utcnow()
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
-
-        # save frame
-        if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self._states[cam_key]["frame_count"] += 1
-            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
-                # Save frame on device
-                self._local_backup(frame_resize, cam_id, is_alert=False)
-                # Send frame to the api
-                stream = io.BytesIO()
-                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
-                try:
-                    self._upload_frame(cam_id, stream.getvalue())
-                    # Reset frame counter
-                    self._states[cam_key]["frame_count"] = 0
-                except ConnectionError:
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
         return float(conf)
 
