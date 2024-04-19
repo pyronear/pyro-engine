@@ -70,7 +70,7 @@ def main(args):
 
     while True:
         start_ts = time.time()
-        sys_controller.run()
+        sys_controller.run(args.period)
         # Sleep only once all images are processed
         time.sleep(max(args.period - time.time() + start_ts, 0))
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
     # Time config
-    parser.add_argument("--period", type=int, default=5, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
     args = parser.parse_args()
 

@@ -234,8 +234,6 @@ class Engine:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
 
-        print("boxes", cam_key, boxes, preds)
-
         conf = 0
         output_predictions = np.zeros((0, 5))
         # Get the best ones
@@ -245,7 +243,6 @@ class Engine:
             best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
             combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
             conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
-            print("preds", conf)
 
             if len(combine_predictions):
 
