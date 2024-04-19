@@ -18,7 +18,6 @@ class SystemController:
         img = self.cameras[idx].capture()
         if img is not None:
             preds = self.engine.predict(img, self.cameras[idx].ip_address)
-            print("pred", preds, idx)
             # Send the result along with the image and camera ID for further processing
             self.prediction_results.put((preds, img, self.cameras[idx].ip_address))
         else:
@@ -28,10 +27,7 @@ class SystemController:
         """Process results sequentially from the results queue."""
         while not self.prediction_results.empty():
             preds, frame, cam_id = self.prediction_results.get()
-            print(cam_id, preds)
             self.engine.process_prediction(preds, frame, cam_id)
-
-        print(f"remain {30-(time.time()-start_time)} for sending")
 
         # Uploading pending alerts
         if len(self.engine._alerts) > 0:
@@ -45,15 +41,9 @@ class SystemController:
             process = Process(target=self.capture_and_predict, args=(idx,))
             processes.append(process)
             process.start()
-        print(f"done capture and process after {time.time()-start_time}")
-
-        # # Ensure all processes complete
-        # for process in processes:
-        #     process.join()
 
         # Process all collected results
         self.process_results(start_time)
-        print(f"done all {time.time()-start_time}")
 
     def __repr__(self) -> str:
         repr_str = f"{self.__class__.__name__}("
