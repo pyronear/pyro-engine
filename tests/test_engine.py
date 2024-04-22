@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -45,7 +46,10 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # inference
     engine = Engine(nb_consecutive_frames=4, cache_folder=folder)
-    out = engine.predict(mock_forest_image)
+    preds = engine.predict(mock_forest_image)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (0, 5)
+    out = engine.process_prediction(preds, mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
     assert engine._states["-1"]["frame_count"] == 0
@@ -57,7 +61,10 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][0][3] < datetime.utcnow().isoformat()
     assert engine._states["-1"]["last_predictions"][0][4] is False
 
-    out = engine.predict(mock_wildfire_image)
+    preds = engine.predict(mock_wildfire_image)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (1, 5)
+    out = engine.process_prediction(preds, mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 2
     assert engine._states["-1"]["ongoing"] is False
@@ -68,7 +75,8 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][1][3] < datetime.utcnow().isoformat()
     assert engine._states["-1"]["last_predictions"][1][4] is False
 
-    out = engine.predict(mock_wildfire_image)
+    preds = engine.predict(mock_wildfire_image)
+    out = engine.process_prediction(preds, mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
     assert engine._states["-1"]["ongoing"] is True
@@ -110,12 +118,15 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         json_respone = response.json()
         assert start_ts < json_respone["last_ping"] < ts
         # Send an alert
-        engine.predict(mock_wildfire_image, "dummy_cam")
+        preds = engine.predict(mock_wildfire_image, "dummy_cam")
+        engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
         assert len(engine._alerts) == 0
         assert engine._states["dummy_cam"]["ongoing"] is False
 
-        engine.predict(mock_wildfire_image, "dummy_cam")
+        preds = engine.predict(mock_wildfire_image, "dummy_cam")
+        engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
+        print(engine._states["dummy_cam"])
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
 
         assert engine._states["dummy_cam"]["ongoing"] is True
@@ -126,6 +137,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
         assert response.status_code // 100 == 2
         # Upload frame in process
-        engine.predict(mock_wildfire_image, "dummy_cam")
+        preds = engine.predict(mock_wildfire_image, "dummy_cam")
+        engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
         # Check that a new media has been created & uploaded
         assert engine._states["dummy_cam"]["frame_count"] == 0
