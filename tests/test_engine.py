@@ -126,7 +126,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
 
         preds = engine.predict(mock_wildfire_image, "dummy_cam")
         engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
-        print(engine._states["dummy_cam"])
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
 
         assert engine._states["dummy_cam"]["ongoing"] is True
