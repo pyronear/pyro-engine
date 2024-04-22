@@ -17,7 +17,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import cv2  # type: ignore[import-untyped]
 import numpy as np
-from numpy.typing import NDArray
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
