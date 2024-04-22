@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import cv2  # type: ignore[import-untyped]
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
@@ -267,7 +268,7 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> np.ndarray[Any, Any]:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> np.ndarray:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
