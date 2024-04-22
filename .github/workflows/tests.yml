@@ -51,12 +51,18 @@ jobs:
     needs: pytest
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v2
         with:
+          name: coverage-main
+          path: .  # Downloads the artifact to the current working directory
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v2  # Updated to use version 2
+        with:
+          file: ./coverage.xml  # Explicitly specifying the coverage report file
           flags: unittests
           fail_ci_if_error: true
+          
 
   docs:
     runs-on: ${{ matrix.os }}
