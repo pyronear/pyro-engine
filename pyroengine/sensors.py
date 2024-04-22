@@ -13,7 +13,7 @@ __all__ = ["ReolinkCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-CAM_URL = "http://{ip_address}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C&user={login}&password={password}"
+CAM_URL = "https://{ip_address}/cgi-bin/api.cgi?cmd=Snap&channel=0&rs=wuuPhkmUCeI9WG7C&user={login}&password={password}"
 
 
 class ReolinkCamera:
