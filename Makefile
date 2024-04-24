@@ -20,13 +20,14 @@ single-docs:
 	sphinx-build docs/source docs/_build -a
 
 # Build the docker
-docker:
+build:
 	docker build . -t pyronear/pyro-engine:python3.8.1-slim
+	docker build . -t pyronear/pyro-engine:latest
 
 # Run the engine wrapper
 run:
 	docker build . -t pyronear/pyro-engine:latest
-	docker-compose up -d
+	docker compose up -d
 
 # Get log from engine wrapper
 log: 
@@ -34,4 +35,4 @@ log:
 
 # Stop the engine wrapper
 stop:
-	docker-compose down
+	docker compose down
