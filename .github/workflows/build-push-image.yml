@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - develop
+      - origin/rs/create-gitaction-push
 
 jobs:
   build_and_push_image:
@@ -17,11 +18,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
-
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.9
 
     - name: Log in to Docker Hub
       run: echo "${{ secrets.DOCKERHUB_PW }}" | docker login -u "${{ secrets.DOCKERHUB_LOGIN }}" --password-stdin
