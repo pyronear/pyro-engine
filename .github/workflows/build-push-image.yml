@@ -8,7 +8,6 @@ on:
   push:
     branches:
       - develop
-      - rs/create-gitaction-push
 
 jobs:
   build_and_push_image:
