@@ -6,8 +6,9 @@
 
 import cv2  # type: ignore[import-untyped]
 import numpy as np
+from tqdm import tqdm
 
-__all__ = ["letterbox", "nms", "xywh2xyxy"]
+__all__ = ["letterbox", "nms", "xywh2xyxy", "DownloadProgressBar"]
 
 
 def xywh2xyxy(x: np.ndarray):
@@ -109,3 +110,10 @@ def nms(boxes: np.ndarray, overlapThresh: int = 0):
             indices = indices[indices != i]
 
     return boxes[indices]
+
+
+class DownloadProgressBar(tqdm):
+    def update_to(self, b=1, bsize=1, tsize=None):
+        if tsize is not None:
+            self.total = tsize
+        self.update(b * bsize - self.n)

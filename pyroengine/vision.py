@@ -11,7 +11,7 @@ import numpy as np
 import onnxruntime
 from PIL import Image
 
-from .utils import letterbox, nms, xywh2xyxy
+from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -36,7 +36,9 @@ class Classifier:
         if not os.path.isfile(model_path):
             os.makedirs(os.path.split(model_path)[0], exist_ok=True)
             print(f"Downloading model from {MODEL_URL} ...")
-            urlretrieve(MODEL_URL, model_path)
+            with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
+                urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
+            print(f"Model downloaded!")
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
