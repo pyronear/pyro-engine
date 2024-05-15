@@ -20,14 +20,14 @@ def xywh2xyxy(x: np.ndarray):
 
 
 def letterbox(
-    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
+    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (0, 0, 0), auto: bool = False, stride: int = 32
 ):
     """Letterbox image transform for yolo models
     Args:
         im (np.ndarray): Input image
         new_shape (tuple, optional): Image size. Defaults to (640, 640).
         color (tuple, optional): Pixel fill value for the area outside the transformed image.
-        Defaults to (114, 114, 114).
+        Defaults to (0, 0, 0).
         auto (bool, optional): auto padding. Defaults to True.
         stride (int, optional): padding stride. Defaults to 32.
     Returns:
