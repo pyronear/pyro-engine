@@ -15,7 +15,7 @@ from .utils import letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://github.com/pyronear/pyro-vision/releases/download/v0.2.0/yolov8s_v001.onnx"
+MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/yolov8s.onnx"
 
 
 class Classifier:
@@ -29,7 +29,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (384, 640)) -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (1024, 1024)) -> None:
         if model_path is None:
             model_path = "data/model.onnx"
 
