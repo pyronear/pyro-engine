@@ -100,9 +100,7 @@ class ReolinkCamera:
             try:
                 logging.debug(f"attempt {attempt}")
                 start_time = time.time()
-                response = requests.get(
-                    url, verify=False, timeout=timeout
-                )  # Consider configuring SSL verification appropriately
+                response = requests.get(url, verify=False, timeout=timeout)
                 elapsed_time = time.time() - start_time
                 logging.debug(f"Capture attempt {attempt + 1}: Response received in {elapsed_time:.2f} seconds")
 
