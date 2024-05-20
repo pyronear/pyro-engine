@@ -381,7 +381,6 @@ class Engine:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
                     self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-
                 # Alert creation
                 if not isinstance(self._alerts[0]["alert_id"], int):
                     self._alerts[0]["alert_id"] = (
@@ -394,7 +393,6 @@ class Engine:
                         )
                         .json()["id"]
                     )
-
                 # Media upload
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
@@ -408,8 +406,9 @@ class Engine:
                 self._alerts.popleft()
                 logging.info(f"Camera '{cam_id}' - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-            except (KeyError, ConnectionError):
+            except (KeyError, ConnectionError) as e:
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
+                logging.warning(e)
                 break
 
     def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
