@@ -71,12 +71,15 @@ class SystemController:
                                     frame = camera.capture(pose_id)
                                     if frame is not None:
                                         logging.debug(
-                                            f"[{process_name}] Captured frame from camera {camera.ip_address} at pose {pose_id}"
+                                            f"[{process_name}] Captured frame from camera {camera.ip_address}"
+                                            f"at pose {pose_id}"
                                         )
+
                                         self.process_frame(idx, frame, capture_queue, camera, pose_id)
                                     else:
                                         logging.error(
-                                            f"[{process_name}] Failed to capture image from camera {camera.ip_address} at pose {pose_id}"
+                                            f"[{process_name}] Failed to capture image from camera {camera.ip_address}"
+                                            f"at pose {pose_id}"
                                         )
                             else:
                                 frame = camera.capture()
@@ -95,9 +98,7 @@ class SystemController:
                     logging.exception(f"[{process_name}] Exception during image capture loop: {e}")
 
                 sleep_duration = max(capture_interval - (time.time() - start_ts), 0)
-                logging.debug(
-                    f"[{process_name}] Sleeping for {sleep_duration:.2f} seconds, {capture_interval} {(time.time() - start_ts)}"
-                )
+                logging.debug(f"[{process_name}] Sleeping for {sleep_duration:.2f} seconds")
                 # Ensure capturing an image every capture_interval seconds
                 time.sleep(sleep_duration)
             except Exception as e:
@@ -136,7 +137,7 @@ class SystemController:
                     )
                     prediction_queue.put((preds, frame, cam_id))
                 except Exception as e:
-                    logging.exception(f"[{process_name}] Exception during prediction")
+                    logging.exception(f"[{process_name}] Exception during prediction : {e}")
             else:
                 time.sleep(1)
 
@@ -164,7 +165,7 @@ class SystemController:
                         logging.debug(f"[{process_name}] Prediction queue is empty, sleeping for 1 second")
                         time.sleep(1)
                     except Exception as e:
-                        logging.exception(f"[{process_name}] Exception during alert processing")
+                        logging.exception(f"[{process_name}] Exception during alert processing: {e}")
                 else:
                     logging.debug(f"[{process_name}] Prediction queue is empty, sleeping for 1 second")
                     time.sleep(1)

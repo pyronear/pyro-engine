@@ -61,7 +61,10 @@ class ReolinkCamera:
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
-        return f"{self.protocol}://{self.ip_address}/cgi-bin/api.cgi?cmd={command}&user={self.username}&password={self.password}&channel=0"
+        return (
+            f"{self.protocol}://{self.ip_address}/cgi-bin/api.cgi?"
+            f"cmd={command}&user={self.username}&password={self.password}&channel=0"
+        )
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
