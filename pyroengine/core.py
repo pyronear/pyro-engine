@@ -186,8 +186,8 @@ class SystemController:
         watchdog_interval: int = 5,
     ):
         """Run the system with separate processes for capturing, predicting, and alerting."""
-        capture_queue = Queue(maxsize=capture_queue_size)  # Increased size for the queue for captured frames
-        prediction_queue = Queue(maxsize=prediction_queue_size)  # Queue for prediction results
+        capture_queue: Queue = Queue(maxsize=capture_queue_size)  # Increased size for the queue for captured frames
+        prediction_queue: Queue = Queue(maxsize=prediction_queue_size)  # Queue for prediction results
 
         capture_process = start_process("capture_process", self.capture_images, (capture_queue, capture_interval))
         prediction_process = start_process(

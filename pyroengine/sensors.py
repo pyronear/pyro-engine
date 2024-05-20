@@ -49,7 +49,7 @@ class ReolinkCamera:
         cam_type: str,
         cam_poses: Optional[List[int]] = None,
         protocol: str = "http",
-        verbose: str = False,
+        verbose: bool = False,
     ):
         self.ip_address = ip_address
         self.username = username
