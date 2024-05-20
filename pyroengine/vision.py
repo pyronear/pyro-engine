@@ -38,7 +38,7 @@ class Classifier:
             print(f"Downloading model from {MODEL_URL} ...")
             with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
                 urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
-            print(f"Model downloaded!")
+            print("Model downloaded!")
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
