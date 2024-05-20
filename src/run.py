@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
     parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
     parser.add_argument(
-        "--nb_consecutive_frames",
+        "--nb-consecutive_frames",
         type=int,
         default=4,
         help="Number of consecutive frames to combine for prediction",
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
-    parser.add_argument("--save_period", type=int, default=3600, help="Number of seconds between each media save")
+    parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
     args = parser.parse_args()
 
     main(args)
