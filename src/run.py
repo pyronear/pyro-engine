@@ -3,12 +3,12 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-
 import argparse
 import json
 import logging
 import os
 import time
+from multiprocessing import Process
 from pathlib import Path
 
 import urllib3
@@ -40,6 +40,19 @@ def main(args):
     with open(args.creds, "rb") as json_file:
         cameras_credentials = json.load(json_file)
 
+    splitted_cam_creds = {}
+    cameras = []
+    for _ip, cam_data in cameras_credentials.items():
+        cam_poses = []
+        for creds in cam_data["credentials"]:
+            if cam_data["type"] == "ptz":
+                splitted_cam_creds[_ip + "_" + str(creds["posid"])] = creds
+                cam_poses.append(creds["posid"])
+            else:
+                splitted_cam_creds[_ip] = creds
+
+        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+
     # Check if model is available in cache
     cache = Path(args.cache)
 
@@ -49,7 +62,7 @@ def main(args):
         model_path,
         args.thresh,
         API_URL,
-        cameras_credentials,
+        splitted_cam_creds,
         LAT,
         LON,
         frame_saving_period=args.save_period // args.period,
@@ -65,14 +78,10 @@ def main(args):
 
     sys_controller = SystemController(
         engine,
-        [ReolinkCamera(_ip, CAM_USER, CAM_PWD) for _ip in cameras_credentials],
+        cameras,
     )
 
-    while True:
-        start_ts = time.time()
-        sys_controller.run(args.period)
-        # Sleep only once all images are processed
-        time.sleep(max(args.period - time.time() + start_ts, 0))
+    sys_controller.run(args.period)
 
 
 if __name__ == "__main__":
@@ -94,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
     parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
     parser.add_argument(
-        "--nb-consecutive_frames",
+        "--nb_consecutive_frames",
         type=int,
         default=4,
         help="Number of consecutive frames to combine for prediction",
@@ -103,12 +112,13 @@ if __name__ == "__main__":
         "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
     )
     parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
+    parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
-    parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
+    parser.add_argument("--save_period", type=int, default=3600, help="Number of seconds between each media save")
     args = parser.parse_args()
 
     main(args)
