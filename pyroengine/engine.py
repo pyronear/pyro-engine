@@ -26,7 +26,7 @@ from pyroengine.utils import box_iou, nms
 
 from .vision import Classifier
 
-__all__ = ["Engine"]
+__all__ = ["Engine", "is_day_time"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
@@ -267,7 +267,7 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> np.ndarray:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
@@ -285,6 +285,15 @@ class Engine:
                 logging.warning(f"Unable to reach the pyro-api with {cam_id}")
 
         cam_key = cam_id or "-1"
+        if is_day_time(self._cache, frame, self.day_time_strategy):
+            # Inference with ONNX
+            return self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+
+        else:
+            return np.zeros((0, 5))
+
+    def process_prediction(self, preds: np.ndarray, frame: Image.Image, cam_id: Optional[str] = None):
+        cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame_resize = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
@@ -292,8 +301,6 @@ class Engine:
             frame_resize = frame
 
         if is_day_time(self._cache, frame, self.day_time_strategy):
-            # Inference with ONNX
-            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
             conf = self._update_states(frame_resize, preds, cam_key)
 
             # Log analysis result
@@ -314,31 +321,11 @@ class Engine:
         else:
             conf = 0  # return default value
 
-        # Uploading pending alerts
-        if len(self._alerts) > 0:
-            self._process_alerts()
-
         # Check if it's time to backup pending alerts
         ts = datetime.utcnow()
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
-
-        # save frame
-        if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self._states[cam_key]["frame_count"] += 1
-            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
-                # Save frame on device
-                self._local_backup(frame_resize, cam_id, is_alert=False)
-                # Send frame to the api
-                stream = io.BytesIO()
-                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
-                try:
-                    self._upload_frame(cam_id, stream.getvalue())
-                    # Reset frame counter
-                    self._states[cam_key]["frame_count"] = 0
-                except ConnectionError:
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
         return float(conf)
 
@@ -381,6 +368,7 @@ class Engine:
                 # Media creation
                 if not isinstance(self._alerts[0]["media_id"], int):
                     self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
+
                 # Alert creation
                 if not isinstance(self._alerts[0]["alert_id"], int):
                     self._alerts[0]["alert_id"] = (
@@ -393,6 +381,7 @@ class Engine:
                         )
                         .json()["id"]
                     )
+
                 # Media upload
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
@@ -406,9 +395,8 @@ class Engine:
                 self._alerts.popleft()
                 logging.info(f"Camera '{cam_id}' - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-            except (KeyError, ConnectionError) as e:
+            except (KeyError, ConnectionError):
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
-                logging.warning(e)
                 break
 
     def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
@@ -423,7 +411,7 @@ class Engine:
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
-        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%S')}.jpg")
+        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:
