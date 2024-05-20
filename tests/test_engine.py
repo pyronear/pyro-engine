@@ -53,7 +53,6 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     out = engine.process_prediction(preds, mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
-    assert engine._states["-1"]["frame_count"] == 0
     assert engine._states["-1"]["ongoing"] is False
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][0][1].shape[0] == 0
@@ -141,14 +140,8 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
 
     assert engine._states["dummy_cam"]["ongoing"] is True
-    assert engine._states["dummy_cam"]["frame_count"] == 2
     # Check that a media and an alert have been registered
     assert len(engine._alerts) == 0
     # Upload a frame
     response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
     assert response.status_code // 100 == 2
-    # Upload frame in process
-    preds = engine.predict(mock_wildfire_image, "dummy_cam")
-    engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
-    # Check that a new media has been created & uploaded
-    assert engine._states["dummy_cam"]["frame_count"] == 0

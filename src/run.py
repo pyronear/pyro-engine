@@ -63,7 +63,6 @@ def main(args):
         splitted_cam_creds,
         LAT,
         LON,
-        frame_saving_period=args.save_period // args.period,
         cache_folder=args.cache,
         backup_size=args.backup_size,
         nb_consecutive_frames=args.nb_consecutive_frames,
@@ -116,7 +115,6 @@ if __name__ == "__main__":
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
-    parser.add_argument("--save-period", type=int, default=3600, help="Number of seconds between each media save")
     args = parser.parse_args()
 
     main(args)

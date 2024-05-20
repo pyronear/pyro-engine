@@ -78,7 +78,7 @@ class Engine:
             the number of consecutive negative detections before stopping the alert
         frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
         cache_backup_period: number of minutes between each cache backup to disk
-        frame_saving_period: Send one frame over N to the api for our dataset
+
         cache_size: maximum number of alerts to save in cache
         day_time_strategy: strategy to define if it's daytime
         kwargs: keyword args of Classifier
@@ -103,7 +103,6 @@ class Engine:
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
-        frame_saving_period: Optional[int] = None,
         cache_size: int = 100,
         cache_folder: str = "data/",
         backup_size: int = 30,
@@ -129,7 +128,6 @@ class Engine:
                 self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
 
         # Cache & relaxation
-        self.frame_saving_period = frame_saving_period
         self.nb_consecutive_frames = nb_consecutive_frames
         self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
@@ -141,13 +139,12 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
+            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "ongoing": False},
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 self._states[cam_id] = {
                     "last_predictions": deque([], self.nb_consecutive_frames),
-                    "frame_count": 0,
                     "ongoing": False,
                 }
 
@@ -362,7 +359,7 @@ class Engine:
             logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id, is_alert=True)
+            self._local_backup(frame_info["frame"], cam_id)
 
             try:
                 # Media creation
@@ -399,7 +396,7 @@ class Engine:
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: str) -> None:
         """Save image on device
 
         Args:
@@ -407,7 +404,7 @@ class Engine:
             cam_id (str): camera id (ip address)
             is_alert (bool, optional): is alert or backup frame. Defaults to False.
         """
-        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/")
+        backup_cache = self._cache.joinpath("backup/alerts/")
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
