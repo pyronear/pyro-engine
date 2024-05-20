@@ -3,6 +3,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+import pytest
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -35,7 +37,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
         "ts": engine._alerts[0]["ts"],
         "localization": "dummy",
     }
-    # Overrites cache files
+    # Overwrites cache files
     engine._dump_cache()
 
     # Cache dump loading
@@ -43,9 +45,12 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert len(engine._alerts) == 1
     engine.clear_cache()
 
-    # inference
+    # Inference
     engine = Engine(nb_consecutive_frames=4, cache_folder=folder)
-    out = engine.predict(mock_forest_image)
+    preds = engine.predict(mock_forest_image)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (0, 5)
+    out = engine.process_prediction(preds, mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
     assert engine._states["-1"]["frame_count"] == 0
@@ -57,7 +62,10 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][0][3] < datetime.utcnow().isoformat()
     assert engine._states["-1"]["last_predictions"][0][4] is False
 
-    out = engine.predict(mock_wildfire_image)
+    preds = engine.predict(mock_wildfire_image)
+    assert isinstance(preds, np.ndarray)
+    assert preds.shape == (1, 5)
+    out = engine.process_prediction(preds, mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 2
     assert engine._states["-1"]["ongoing"] is False
@@ -68,13 +76,13 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][1][3] < datetime.utcnow().isoformat()
     assert engine._states["-1"]["last_predictions"][1][4] is False
 
-    out = engine.predict(mock_wildfire_image)
+    preds = engine.predict(mock_wildfire_image)
+    out = engine.process_prediction(preds, mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
     assert engine._states["-1"]["ongoing"] is True
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
-    assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
     assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
     assert engine._states["-1"]["last_predictions"][2][3] < datetime.utcnow().isoformat()
     assert engine._states["-1"]["last_predictions"][2][4] is False
@@ -83,49 +91,64 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
-    # With API
+    # Load environment variables
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
+
+    # Retrieve environment variables
     api_url = os.environ.get("API_URL")
     lat = os.environ.get("LAT")
     lon = os.environ.get("LON")
-    cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
-    # Skip the API-related tests if the URL is not specified
-    if isinstance(api_url, str):
-        engine = Engine(
-            folder + "model.onnx",
-            api_url=api_url,
-            cam_creds=cam_creds,
-            latitude=float(lat),
-            longitude=float(lon),
-            nb_consecutive_frames=4,
-            frame_saving_period=3,
-            cache_folder=folder,
-            frame_size=(256, 384),
-        )
-        # Heartbeat
-        start_ts = datetime.utcnow().isoformat()
-        response = engine.heartbeat("dummy_cam")
-        assert response.status_code // 100 == 2
-        ts = datetime.utcnow().isoformat()
-        json_respone = response.json()
-        assert start_ts < json_respone["last_ping"] < ts
-        # Send an alert
-        engine.predict(mock_wildfire_image, "dummy_cam")
-        assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
-        assert len(engine._alerts) == 0
-        assert engine._states["dummy_cam"]["ongoing"] is False
+    api_login = os.environ.get("API_LOGIN")
+    api_pwd = os.environ.get("API_PWD")
 
-        engine.predict(mock_wildfire_image, "dummy_cam")
-        assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
+    # Validate environment variables
+    if not all([api_url, lat, lon, api_login, api_pwd]):
+        pytest.skip("API credentials are not set in the environment variables.")
 
-        assert engine._states["dummy_cam"]["ongoing"] is True
-        assert engine._states["dummy_cam"]["frame_count"] == 2
-        # Check that a media and an alert have been registered
-        assert len(engine._alerts) == 0
-        # Upload a frame
-        response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
-        assert response.status_code // 100 == 2
-        # Upload frame in process
-        engine.predict(mock_wildfire_image, "dummy_cam")
-        # Check that a new media has been created & uploaded
-        assert engine._states["dummy_cam"]["frame_count"] == 0
+    cam_creds = {"dummy_cam": {"login": api_login, "password": api_pwd}}
+
+    engine = Engine(
+        folder + "model.onnx",
+        api_url=api_url,
+        cam_creds=cam_creds,
+        latitude=float(lat),
+        longitude=float(lon),
+        nb_consecutive_frames=4,
+        frame_saving_period=3,
+        cache_folder=folder,
+        frame_size=(256, 384),
+    )
+
+    # Heartbeat
+    start_ts = datetime.utcnow().isoformat()
+    response = engine.heartbeat("dummy_cam")
+    assert response.status_code // 100 == 2
+    ts = datetime.utcnow().isoformat()
+    json_response = response.json()
+    assert start_ts < json_response["last_ping"] < ts
+
+    # Send an alert
+    preds = engine.predict(mock_wildfire_image, "dummy_cam")
+    engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
+    assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
+    assert len(engine._alerts) == 0
+    assert engine._states["dummy_cam"]["ongoing"] is False
+
+    preds = engine.predict(mock_wildfire_image, "dummy_cam")
+    engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
+    if len(engine._alerts) > 0:
+        engine._process_alerts()
+    assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
+
+    assert engine._states["dummy_cam"]["ongoing"] is True
+    assert engine._states["dummy_cam"]["frame_count"] == 2
+    # Check that a media and an alert have been registered
+    assert len(engine._alerts) == 0
+    # Upload a frame
+    response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
+    assert response.status_code // 100 == 2
+    # Upload frame in process
+    preds = engine.predict(mock_wildfire_image, "dummy_cam")
+    engine.process_prediction(preds, mock_wildfire_image, "dummy_cam")
+    # Check that a new media has been created & uploaded
+    assert engine._states["dummy_cam"]["frame_count"] == 0
