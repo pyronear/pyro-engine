@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the percentage of host memory you want to allocate
-PERCENTAGE=50
+PERCENTAGE=70
 
 # Get the total memory of the host system in kilobytes
 TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
