@@ -43,8 +43,7 @@ def test_capture_images(system_controller):
 
         # Check if the image was captured and put in the queue
         assert not capture_queue.empty()
-        idx, frame, cam_id, pose_id = capture_queue.get_nowait()
-        assert idx == 0
+        frame, cam_id = capture_queue.get_nowait()
         assert cam_id == "192.168.1.1"
         assert isinstance(frame, Image.Image)
 
@@ -55,7 +54,7 @@ def test_run_predictions(system_controller):
 
     # Put a mock frame in the capture queue
     mock_frame = Image.new("RGB", (100, 100))
-    capture_queue.put((0, mock_frame, "192.168.1.1", None))
+    capture_queue.put((mock_frame, "192.168.1.1"))
 
     # Run the run_predictions method for a limited time
     system_controller.run_predictions(capture_queue, prediction_queue, run_for_seconds=2)

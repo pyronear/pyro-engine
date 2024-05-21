@@ -121,7 +121,7 @@ class ReolinkCamera:
         logging.error(f"Failed to capture image after {retries} attempts")
         return None
 
-    def move_camera(self, operation: str, speed: int = 1, id: int = 0):
+    def move_camera(self, operation: str, speed: int = 1, idx: int = 0):
         """
         Sends a command to move the camera.
 
@@ -131,7 +131,7 @@ class ReolinkCamera:
             id (int): The ID of the position to move to (relevant for PTZ cameras).
         """
         url = self._build_url("PtzCtrl")
-        data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": id, "speed": speed}}]
+        data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
         response = requests.post(url, json=data, verify=False)
         self._handle_response(response, "PTZ operation successful.")
 
@@ -165,32 +165,32 @@ class ReolinkCamera:
         else:
             return response_data
 
-    def set_ptz_preset(self, id: Optional[int] = None):
+    def set_ptz_preset(self, idx: Optional[int] = None):
         """
         Sets a PTZ preset position. If no ID is provided, finds the next available slot.
 
         Args:
-            id (Optional[int]): The preset ID to set. If None, finds an available ID automatically.
+            idx (Optional[int]): The preset ID to set. If None, finds an available ID automatically.
 
         Raises:
             ValueError: If no slots are available for new presets.
         """
-        if id is None:
+        if idx is None:
             presets_ptz = self.get_ptz_preset()
             for cfg in presets_ptz:
                 if cfg["enable"] == 0:
-                    id = cfg["id"]
+                    idx = cfg["id"]
                     break
-            if id is None:
+            if idx is None:
                 raise ValueError("No available slots for new presets.")
 
         url = self._build_url("SetPtzPreset")
-        name = f"pos{id}"
+        name = f"pos{idx}"
         data = [
             {
                 "cmd": "SetPtzPreset",
                 "action": 0,  # The action code for setting data
-                "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": id, "name": name}},
+                "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
         response = requests.post(url, json=data, verify=False)

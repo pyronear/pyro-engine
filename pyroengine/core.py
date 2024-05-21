@@ -116,7 +116,7 @@ class SystemController:
         if self.day_time:
             try:
                 cam_id = f"{camera.ip_address}_{pose_id}" if pose_id is not None else camera.ip_address
-                capture_queue.put_nowait((idx, frame, cam_id, pose_id))
+                capture_queue.put_nowait((frame, cam_id))
                 logging.debug(f"[{process_name}] Putting frame from camera {camera.ip_address} into capture queue")
                 logging.debug(f"[{process_name}] Capture queue size: {capture_queue.qsize()}")
             except Full:
@@ -136,7 +136,7 @@ class SystemController:
             if not capture_queue.empty():
                 try:
                     logging.debug(f"[{process_name}] Waiting for frames in capture queue")
-                    idx, frame, cam_id, pose_id = capture_queue.get(timeout=5)
+                    frame, cam_id = capture_queue.get(timeout=5)
                     logging.debug(f"[{process_name}] Received frame from capture queue")
                     preds = self.engine.predict(frame, cam_id)
                     logging.debug(
