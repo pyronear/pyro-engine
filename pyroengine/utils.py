@@ -6,8 +6,9 @@
 
 import cv2  # type: ignore[import-untyped]
 import numpy as np
+from tqdm import tqdm  # type: ignore[import-untyped]
 
-__all__ = ["letterbox", "nms", "xywh2xyxy"]
+__all__ = ["letterbox", "nms", "xywh2xyxy", "DownloadProgressBar"]
 
 
 def xywh2xyxy(x: np.ndarray):
@@ -20,14 +21,14 @@ def xywh2xyxy(x: np.ndarray):
 
 
 def letterbox(
-    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
+    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (0, 0, 0), auto: bool = False, stride: int = 32
 ):
     """Letterbox image transform for yolo models
     Args:
         im (np.ndarray): Input image
         new_shape (tuple, optional): Image size. Defaults to (640, 640).
         color (tuple, optional): Pixel fill value for the area outside the transformed image.
-        Defaults to (114, 114, 114).
+        Defaults to (0, 0, 0).
         auto (bool, optional): auto padding. Defaults to True.
         stride (int, optional): padding stride. Defaults to 32.
     Returns:
@@ -109,3 +110,10 @@ def nms(boxes: np.ndarray, overlapThresh: int = 0):
             indices = indices[indices != i]
 
     return boxes[indices]
+
+
+class DownloadProgressBar(tqdm):
+    def update_to(self, b=1, bsize=1, tsize=None):
+        if tsize is not None:
+            self.total = tsize
+        self.update(b * bsize - self.n)
