@@ -7,7 +7,7 @@ import logging
 import signal
 import time
 from multiprocessing import Process, Queue, current_process
-from queue import Empty, Full
+from queue import Full
 from types import FrameType
 from typing import Optional, Tuple
 

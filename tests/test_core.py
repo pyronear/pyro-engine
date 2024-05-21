@@ -1,4 +1,3 @@
-import time
 from multiprocessing import Queue
 from unittest.mock import MagicMock, patch
 
