@@ -11,11 +11,11 @@ import numpy as np
 import onnxruntime
 from PIL import Image
 
-from .utils import letterbox, nms, xywh2xyxy
+from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://github.com/pyronear/pyro-vision/releases/download/v0.2.0/yolov8s_v001.onnx"
+MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/yolov8s.onnx"
 
 
 class Classifier:
@@ -29,14 +29,16 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (384, 640)) -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (1024, 1024)) -> None:
         if model_path is None:
             model_path = "data/model.onnx"
 
         if not os.path.isfile(model_path):
             os.makedirs(os.path.split(model_path)[0], exist_ok=True)
             print(f"Downloading model from {MODEL_URL} ...")
-            urlretrieve(MODEL_URL, model_path)
+            with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
+                urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
+            print("Model downloaded!")
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
