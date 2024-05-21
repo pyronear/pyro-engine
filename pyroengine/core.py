@@ -52,11 +52,14 @@ class SystemController:
         self.cameras = cameras
         self.day_time = True
 
-    def capture_images(self, capture_queue: Queue, capture_interval: int = 30):
+    def capture_images(self, capture_queue: Queue, capture_interval: int = 30, run_for_seconds: Optional[int] = None):
         """Capture images from cameras and put them into the queue."""
         process_name = current_process().name
         logging.debug(f"[{process_name}] Capture process started")
+        start_time = time.time()
         while True:
+            if run_for_seconds and (time.time() - start_time) > run_for_seconds:
+                break
             try:
                 start_ts = time.time()
 
@@ -91,10 +94,6 @@ class SystemController:
                                 if frame is not None:
                                     logging.debug(f"[{process_name}] Captured frame from camera {camera.ip_address}")
                                     self.process_frame(idx, frame, capture_queue, camera)
-                                else:
-                                    logging.error(
-                                        f"[{process_name}] Failed to capture image from camera {camera.ip_address}"
-                                    )
                         except Exception as e:
                             logging.exception(
                                 f"[{process_name}] Exception during image capture from camera {camera.ip_address}: {e}"
@@ -127,10 +126,13 @@ class SystemController:
         else:
             logging.info(f"[{process_name}] Not running prediction at night on camera {camera.ip_address}")
 
-    def run_predictions(self, capture_queue: Queue, prediction_queue: Queue):
+    def run_predictions(self, capture_queue: Queue, prediction_queue: Queue, run_for_seconds: Optional[int] = None):
         """Run predictions on captured images."""
         process_name = current_process().name
+        start_time = time.time()
         while True:
+            if run_for_seconds and (time.time() - start_time) > run_for_seconds:
+                break
             if not capture_queue.empty():
                 try:
                     logging.debug(f"[{process_name}] Waiting for frames in capture queue")
@@ -146,33 +148,29 @@ class SystemController:
             else:
                 time.sleep(1)
 
-    def process_alerts(self, prediction_queue: Queue):
+    def process_alerts(self, prediction_queue: Queue, run_for_seconds: Optional[int] = None):
         """Process prediction results and send alerts."""
         process_name = current_process().name
         logging.debug(f"[{process_name}] Alert process started")
+        start_time = time.time()
         while True:
+            if run_for_seconds and (time.time() - start_time) > run_for_seconds:
+                break
             try:
                 if not prediction_queue.empty():
-                    try:
-                        logging.debug(f"[{process_name}] Waiting for prediction results in prediction queue")
-                        preds, frame, cam_id = prediction_queue.get(timeout=5)
-                        logging.debug(f"[{process_name}] Processing prediction results for camera {cam_id}")
-                        self.engine.process_prediction(preds, frame, cam_id)
-                        logging.debug(
-                            f"[{process_name}] Prediction queue size after processing: {prediction_queue.qsize()}"
-                        )
+                    logging.debug(f"[{process_name}] Waiting for prediction results in prediction queue")
+                    preds, frame, cam_id = prediction_queue.get(timeout=5)
+                    logging.debug(f"[{process_name}] Processing prediction results for camera {cam_id}")
+                    self.engine.process_prediction(preds, frame, cam_id)
+                    logging.debug(
+                        f"[{process_name}] Prediction queue size after processing: {prediction_queue.qsize()}"
+                    )
 
-                        # Process all pending alerts
-                        if len(self.engine._alerts) > 0:
-                            logging.debug(f"[{process_name}] Processing pending alerts")
-                            self.engine._process_alerts()
-                    except Empty:
-                        logging.debug(f"[{process_name}] Prediction queue is empty, sleeping for 1 second")
-                        time.sleep(1)
-                    except Exception as e:
-                        logging.exception(f"[{process_name}] Exception during alert processing: {e}")
+                    # Process all pending alerts
+                    if len(self.engine._alerts) > 0:
+                        logging.debug(f"[{process_name}] Processing pending alerts")
+                        self.engine._process_alerts()
                 else:
-                    logging.debug(f"[{process_name}] Prediction queue is empty, sleeping for 1 second")
                     time.sleep(1)
             except Exception as e:
                 logging.exception(f"[{process_name}] Unexpected error in alert process: {e}")
