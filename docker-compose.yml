@@ -1,6 +1,7 @@
 services:
-  pyro-engine:
+  run:
     image: pyronear/pyro-engine:latest
+    container_name: pyro-engine-run
     environment:
       - API_URL=${API_URL}
       - LAT=${LAT}
