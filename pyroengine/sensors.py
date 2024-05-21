@@ -92,7 +92,7 @@ class ReolinkCamera:
             Image.Image: An image captured from the camera, or None if there was an error.
         """
         if pos_id is not None:
-            self.move_camera("ToPos", id=pos_id, speed=20)
+            self.move_camera("ToPos", idx=pos_id, speed=20)
             time.sleep(1)
 
         url = self._build_url("Snap")
