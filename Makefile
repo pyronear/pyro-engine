@@ -31,7 +31,7 @@ run:
 
 # Get log from engine wrapper
 log: 
-	docker logs -f --tail 50 pyro-engine_pyro-engine_1
+	docker logs -f --tail 50 pyro-engine-run
 
 # Stop the engine wrapper
 stop:
