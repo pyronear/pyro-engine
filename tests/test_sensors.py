@@ -37,7 +37,7 @@ def test_move_camera_success():
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
-        camera.move_camera("Left", speed=2, id=1)
+        camera.move_camera("Left", speed=2, idx=1)
         # Assert that a successful operation logs the correct message
         assert mock_response.json.call_count == 1
 
@@ -50,7 +50,7 @@ def test_move_camera_failure():
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
-        camera.move_camera("Left", speed=2, id=1)
+        camera.move_camera("Left", speed=2, idx=1)
         # Assert that a failed operation logs an error message
         assert mock_response.json.call_count == 1
 
@@ -76,7 +76,7 @@ def test_set_ptz_preset_success():
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
-        camera.set_ptz_preset(id=1)
+        camera.set_ptz_preset(idx=1)
         # Assert that the set_ptz_preset method was called successfully
         assert mock_response.json.call_count == 1
 
