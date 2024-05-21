@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   pyro-engine:
     image: pyronear/pyro-engine:latest
