@@ -1,5 +1,4 @@
 # Copyright (C) 2022-2024, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
@@ -35,10 +34,10 @@ class ReolinkCamera:
 
     Methods:
         capture(pos_id): Captures an image from the camera. Moves to position `pos_id` if provided.
-        move_camera(operation, speed, id): Moves the camera based on the operation type and speed.
+        move_camera(operation, speed, idx): Moves the camera based on the operation type and speed.
         move_in_seconds(s, operation, speed): Moves the camera for a specific duration and then stops.
         get_ptz_preset(): Retrieves preset positions for a PTZ camera.
-        set_ptz_preset(id): Sets a PTZ preset position using an ID.
+        set_ptz_preset(idx): Sets a PTZ preset position using an ID.
     """
 
     def __init__(
@@ -68,7 +67,6 @@ class ReolinkCamera:
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
-
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:
@@ -128,7 +126,7 @@ class ReolinkCamera:
         Args:
             operation (str): The operation to perform, e.g., 'Left', 'Right'.
             speed (int): The speed of the operation.
-            id (int): The ID of the position to move to (relevant for PTZ cameras).
+            idx (int): The ID of the position to move to (relevant for PTZ cameras).
         """
         url = self._build_url("PtzCtrl")
         data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
