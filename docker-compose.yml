@@ -18,18 +18,3 @@ services:
       options:
         max-size: "100m"
         max-file: "5"
-
-  promtail:
-    image: grafana/promtail:2.7.3
-    ports:
-      - 8300:8300
-    volumes:
-      - /var/log:/var/log
-      - ./promtail/config.yml:/etc/promtail/config.yml
-      - /var/lib/docker/containers:/var/lib/docker/containers
-    env_file:
-      - .env
-    command: 
-      -config.file=/etc/promtail/config.yml
-      -config.expand-env=true
-    restart: always
