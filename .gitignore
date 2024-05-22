@@ -120,3 +120,4 @@ pyroengine/version.py
 conda-dist/
 
 docker-compose.yml.bak
+docker-compose.override.yml

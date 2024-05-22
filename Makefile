@@ -26,9 +26,10 @@ build:
 
 # Run the engine wrapper
 run:
-	bash setup-docker-compose.sh
+	bash scripts/setup-docker-compose.sh
 	docker build . -t pyronear/pyro-engine:latest
 	docker compose up -d
+	rm docker-compose.yml.bak
 
 # Get log from engine wrapper
 log: 

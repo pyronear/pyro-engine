@@ -28,6 +28,6 @@ in_limits && /memory:/ {
     $0 = gensub(/memory:.*/, "memory: " mem_limit, 1)
 }
 { print }
-' "${DOCKER_COMPOSE_FILE}.bak" > $DOCKER_COMPOSE_FILE
+' "${DOCKER_COMPOSE_FILE}.bak" > "docker-compose.override.yml"
 
 echo "Memory limits set to $LIMIT_MEM_MB in $DOCKER_COMPOSE_FILE"
