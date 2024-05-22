@@ -1,21 +1,38 @@
 # Copyright (C) 2022-2024, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import os
+import json
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import numpy as np
 import onnxruntime
 from PIL import Image
-
+from huggingface_hub import HfApi
 from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
 MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/yolov8s.onnx"
+MODEL_ID = "pyronear/yolov8s"
+MODEL_NAME = "yolov8s.onnx"
+METADATA_PATH = "data/model_metadata.json"
+
+
+# Utility function to save metadata
+def save_metadata(metadata_path, metadata):
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f)
+
+
+# Utility function to load metadata
+def load_metadata(metadata_path):
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r") as f:
+            return json.load(f)
+    return None
 
 
 class Classifier:
@@ -33,15 +50,50 @@ class Classifier:
         if model_path is None:
             model_path = "data/model.onnx"
 
-        if not os.path.isfile(model_path):
-            os.makedirs(os.path.split(model_path)[0], exist_ok=True)
-            print(f"Downloading model from {MODEL_URL} ...")
-            with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-                urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
-            print("Model downloaded!")
+        # Get the expected SHA256 from Hugging Face
+        api = HfApi()
+        model_info = api.model_info(MODEL_ID, files_metadata=True)
+        expected_sha256 = None
+
+        # Extract the SHA256 hash from the model files metadata
+        for file in model_info.siblings:
+            if file.rfilename == os.path.basename(MODEL_NAME):
+                expected_sha256 = file.lfs.sha256
+                break
+
+        if not expected_sha256:
+            raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
+
+        # Check if the model file exists
+        if os.path.isfile(model_path):
+            # Load existing metadata
+            metadata = load_metadata(METADATA_PATH)
+            if metadata and metadata.get("sha256") == expected_sha256:
+                print("Model already exists and the SHA256 hash matches. No download needed.")
+            else:
+                print("Model exists but the SHA256 hash does not match. Downloading the new model...")
+                os.remove(model_path)
+                self.download_model(model_path, expected_sha256)
+        else:
+            self.download_model(model_path, expected_sha256)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
+
+    def download_model(self, model_path, expected_sha256):
+        # Ensure the directory exists
+        os.makedirs(os.path.split(model_path)[0], exist_ok=True)
+
+        # Download the model
+        print(f"Downloading model from {MODEL_URL} ...")
+        with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
+            urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
+        print("Model downloaded!")
+
+        # Save the metadata
+        metadata = {"sha256": expected_sha256}
+        save_metadata(METADATA_PATH, metadata)
+        print("Metadata saved!")
 
     def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
@@ -54,7 +106,6 @@ class Classifier:
             - The resized and normalized image of shape (1, C, H, W).
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
-
         np_img, pad = letterbox(np.array(pil_img), self.img_size)  # Applies letterbox resize with padding
         np_img = np.expand_dims(np_img.astype("float"), axis=0)  # Add batch dimension
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
