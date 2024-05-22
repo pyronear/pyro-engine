@@ -141,7 +141,11 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
+            "-1": {
+                "last_predictions": deque([], self.nb_consecutive_frames),
+                "frame_count": 0,
+                "ongoing": False,
+            },
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
@@ -245,7 +249,6 @@ class Engine:
             conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
 
             if len(combine_predictions):
-
                 # send only preds boxes that match combine_predictions
                 ious = box_iou(combine_predictions[:, :4], preds[:, :4])
                 iou_match = [np.max(iou) > 0 for iou in ious]
@@ -256,7 +259,13 @@ class Engine:
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
+            (
+                frame,
+                preds,
+                output_predictions.tolist(),
+                datetime.utcnow().isoformat(),
+                False,
+            )
         )
 
         # update state
@@ -309,7 +318,13 @@ class Engine:
                 ):
                     if not is_staged:
                         self._stage_alert(frame, cam_id, ts, localization)
-                        self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+                        self._states[cam_key]["last_predictions"][idx] = (
+                            frame,
+                            preds,
+                            localization,
+                            ts,
+                            True,
+                        )
 
         else:
             conf = 0  # return default value

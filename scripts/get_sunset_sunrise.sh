@@ -20,4 +20,3 @@ sunset=$(date --date="$SUNS" +%R)
 
 echo $sunrise > /home/pi/pyro-engine/data/sunset_sunrise.txt
 echo $sunset >> /home/pi/pyro-engine/data/sunset_sunrise.txt
-

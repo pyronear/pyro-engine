@@ -48,7 +48,7 @@ engine = Engine()
 
 im = Image.open("path/to/your/image.jpg").convert('RGB')
 
-prediction = engine.predict(image) 
+prediction = engine.predict(image)
 ```
 
 ## Setup

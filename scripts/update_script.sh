@@ -20,11 +20,10 @@ UPSTREAMHASH=$(git rev-parse refs/remotes/origin/main)
 # Compare hashes and update if they are different
 if [ "$HEADHASH" != "$UPSTREAMHASH" ]
 then
-    echo "$(date): New changes detected! Updating and executing script..."    
+    echo "$(date): New changes detected! Updating and executing script..."
     git pull origin main
     bash /home/pi/pyro-engine/scripts/debug_script.sh
     echo "$(date): Update done!"
 else
     echo "$(date): No changes detected"
 fi
-

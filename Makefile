@@ -32,7 +32,7 @@ run:
 	rm docker-compose.yml.bak
 
 # Get log from engine wrapper
-log: 
+log:
 	docker logs -f --tail 50 pyro-engine-run
 
 # Stop the engine wrapper

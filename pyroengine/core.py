@@ -42,7 +42,7 @@ class SystemController:
             img = self.cameras[idx].capture()
             try:
                 self.engine.predict(img, self.cameras[idx].ip_address)
-            except Exception as e: 
+            except Exception as e:
                 logging.warning(f"Unable to analyze stream from camera {self.cameras[idx]}")
                 logging.warning(e)
         except Exception:

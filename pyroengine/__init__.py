@@ -1,3 +1,1 @@
-from .core import *
-from . import engine, sensors, utils
-from .version import __version__
+from .core import *  # noqa: F403
