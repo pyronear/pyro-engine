@@ -29,14 +29,6 @@ def save_metadata(metadata_path, metadata):
         json.dump(metadata, f)
 
 
-# Utility function to load metadata
-def load_metadata(metadata_path):
-    if os.path.exists(metadata_path):
-        with open(metadata_path, "r") as f:
-            return json.load(f)
-    return None
-
-
 class Classifier:
     """Implements an image classification model using ONNX backend.
 
@@ -55,13 +47,7 @@ class Classifier:
         # Get the expected SHA256 from Hugging Face
         api = HfApi()
         model_info = api.model_info(MODEL_ID, files_metadata=True)
-        expected_sha256 = None
-
-        # Extract the SHA256 hash from the model files metadata
-        for file in model_info.siblings:
-            if file.rfilename == os.path.basename(MODEL_NAME):
-                expected_sha256 = file.lfs.sha256
-                break
+        expected_sha256 = self.get_sha(model_info.siblings)
 
         if not expected_sha256:
             raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
@@ -69,11 +55,11 @@ class Classifier:
         # Check if the model file exists
         if os.path.isfile(model_path):
             # Load existing metadata
-            metadata = load_metadata(METADATA_PATH)
+            metadata = self.load_metadata(METADATA_PATH)
             if metadata and metadata.get("sha256") == expected_sha256:
                 print("Model already exists and the SHA256 hash matches. No download needed.")
             else:
-                print("Model exists but the SHA256 hash does not match. Downloading the new model...")
+                print("Model exists but the SHA256 hash does not match or the file doesn't exist.")
                 os.remove(model_path)
                 self.download_model(model_path, expected_sha256)
         else:
@@ -81,6 +67,14 @@ class Classifier:
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
+
+    def get_sha(self, siblings):
+        # Extract the SHA256 hash from the model files metadata
+        for file in siblings:
+            if file.rfilename == os.path.basename(MODEL_NAME):
+                expected_sha256 = file.lfs.sha256
+                break
+        return expected_sha256
 
     def download_model(self, model_path, expected_sha256):
         # Ensure the directory exists
@@ -96,6 +90,13 @@ class Classifier:
         metadata = {"sha256": expected_sha256}
         save_metadata(METADATA_PATH, metadata)
         print("Metadata saved!")
+
+    # Utility function to load metadata
+    def load_metadata(self, metadata_path):
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                return json.load(f)
+        return None
 
     def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
