@@ -2,15 +2,16 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-import os
 import json
+import os
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import numpy as np
 import onnxruntime
-from PIL import Image
 from huggingface_hub import HfApi
+from PIL import Image
+
 from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
