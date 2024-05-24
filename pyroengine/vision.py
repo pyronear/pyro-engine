@@ -9,7 +9,7 @@ from urllib.request import urlretrieve
 
 import numpy as np
 import onnxruntime
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
 
 from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
