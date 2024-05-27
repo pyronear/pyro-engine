@@ -119,5 +119,3 @@ pyroengine/version.py
 *.onnx
 # Release
 conda-dist/
-
-src/requirements.txt
