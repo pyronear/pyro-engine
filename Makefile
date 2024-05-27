@@ -20,9 +20,20 @@ single-docs:
 	sphinx-build docs/source docs/_build -a
 
 # Build the docker
-build:
+build-app:
+	cd src; poetry lock
+	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
 	docker build . -t pyronear/pyro-engine:python3.8.1-slim
 	docker build . -t pyronear/pyro-engine:latest
+
+build-lib:
+	pip install -e .
+
+build-optional-lib:
+	pip install -e .[test]
+	pip install -e .[quality]
+	pip install -e .[docs]
+	pip install -e .[dev]
 
 # Run the engine wrapper
 run:

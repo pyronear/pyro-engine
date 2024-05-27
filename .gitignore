@@ -89,6 +89,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+venv*
 
 # Spyder project settings
 .spyderproject
@@ -118,3 +119,5 @@ pyroengine/version.py
 *.onnx
 # Release
 conda-dist/
+
+src/requirements.txt
