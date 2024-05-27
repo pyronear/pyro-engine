@@ -37,6 +37,7 @@ build-optional-lib:
 
 # Run the engine wrapper
 run:
+	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
 	docker build . -t pyronear/pyro-engine:latest
 	docker compose up -d
 

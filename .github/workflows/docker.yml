@@ -12,6 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build docker image
-        run: docker build . -t pyronear/pyro-engine:python3.8.1-slim
+        run: make build-app
       - name: Run docker container
         run: docker run pyronear/pyro-engine:python3.8.1-slim python -c 'import pyroengine'
