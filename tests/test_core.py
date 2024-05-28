@@ -6,7 +6,7 @@ import numpy.testing as npt
 import pytest
 from PIL import Image
 
-from pyroengine.core import SystemController
+from pyroengine.core import SystemController, terminate_processes
 
 
 @pytest.fixture
@@ -135,3 +135,23 @@ def test_repr_method(system_controller):
     repr_str = repr(system_controller)
     # Check if the representation is a string
     assert isinstance(repr_str, str)
+
+
+def test_terminate_processes():
+    # Create mock processes
+    mock_process1 = MagicMock()
+    mock_process2 = MagicMock()
+    mock_processes = [mock_process1, mock_process2]
+
+    # Patch the exit function to prevent the test from stopping
+    with patch("builtins.exit") as mock_exit:
+        # Call the terminate_processes function
+        terminate_processes(mock_processes)
+
+        # Assert that terminate and join were called on each process
+        for mock_process in mock_processes:
+            mock_process.terminate.assert_called_once()
+            mock_process.join.assert_called_once()
+
+        # Assert that exit was called once
+        mock_exit.assert_called_once()
