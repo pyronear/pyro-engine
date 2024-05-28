@@ -48,6 +48,21 @@ def test_capture_images(system_controller):
         assert isinstance(frame, Image.Image)
 
 
+def test_capture_images_day_time_false(system_controller):
+    capture_queue = Queue(maxsize=10)
+    system_controller.day_time = False  # Ensure it's day time
+
+    with patch("pyroengine.core.is_day_time", return_value=False):
+        # Run the capture_images method for a limited time
+        system_controller.capture_images(capture_queue, capture_interval=1, run_for_seconds=2)
+
+        # Check the size of the queue
+        print(f"Queue size: {capture_queue.qsize()}")
+
+        # Check if the queue is empty
+        assert capture_queue.empty()
+
+
 def test_run_predictions(system_controller):
     capture_queue = Queue(maxsize=10)
     prediction_queue = Queue(maxsize=10)
