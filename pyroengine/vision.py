@@ -44,7 +44,7 @@ class Classifier:
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.base_img_size = base_img_size
 
-    def preprocess_image(self, pil_img: Image.Image, new_img_size: tuple) -> Tuple[np.ndarray, Tuple[int, int]]:
+    def preprocess_image(self, pil_img: Image.Image, new_img_size: list) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
 
         Args:
@@ -67,8 +67,8 @@ class Classifier:
 
         w, h = pil_img.size
         ratio = self.base_img_size / max(w, h)
-        new_img_size = (int(ratio * w), int(ratio * h))
-        new_img_size = tuple([x - x % 32 for x in new_img_size])  # size need to be a multiple of 32 to fit the model
+        new_img_size = [int(ratio * w), int(ratio * h)]
+        new_img_size = [x - x % 32 for x in new_img_size]  # size need to be a multiple of 32 to fit the model
         np_img = self.preprocess_image(pil_img, new_img_size)
 
         # ONNX inference
