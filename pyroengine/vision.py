@@ -68,6 +68,7 @@ class Classifier:
         w, h = pil_img.size
         ratio = self.base_img_size / max(w, h)
         new_img_size = (int(ratio * w), int(ratio * h))
+        new_img_size = [x - x % 32 for x in new_img_size]  # size need to be a multiple of 32 to fit the model
         np_img = self.preprocess_image(pil_img, new_img_size)
 
         # ONNX inference
