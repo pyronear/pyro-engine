@@ -7,7 +7,7 @@
 import numpy as np
 from tqdm import tqdm  # type: ignore[import-untyped]
 
-__all__ = ["letterbox", "nms", "xywh2xyxy", "DownloadProgressBar"]
+__all__ = ["nms", "xywh2xyxy", "DownloadProgressBar"]
 
 
 def xywh2xyxy(x: np.ndarray):
