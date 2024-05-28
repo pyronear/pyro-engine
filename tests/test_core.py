@@ -26,8 +26,23 @@ def mock_cameras():
 
 
 @pytest.fixture
+def mock_cameras_ptz():
+    camera = MagicMock()
+    camera.capture.return_value = Image.new("RGB", (100, 100))  # Mock captured image
+    camera.cam_type = "ptz"
+    camera.cam_type = [1, 2]
+    camera.ip_address = "192.168.1.1"
+    return [camera]
+
+
+@pytest.fixture
 def system_controller(mock_engine, mock_cameras):
     return SystemController(engine=mock_engine, cameras=mock_cameras)
+
+
+@pytest.fixture
+def system_controller_ptz(mock_engine, mock_cameras_ptz):
+    return SystemController(engine=mock_engine, cameras=mock_cameras_ptz)
 
 
 def test_capture_images(system_controller):
@@ -43,6 +58,24 @@ def test_capture_images(system_controller):
 
         # Check if the image was captured and put in the queue
         assert not capture_queue.empty()
+        frame, cam_id = capture_queue.get_nowait()
+        assert cam_id == "192.168.1.1"
+        assert isinstance(frame, Image.Image)
+
+
+def test_capture_images_ptz(system_controller_ptz):
+    capture_queue = Queue(maxsize=10)
+    system_controller_ptz.day_time = True  # Ensure it's day time
+
+    with patch("pyroengine.core.is_day_time", return_value=True):
+        # Run the capture_images method for a limited time
+        system_controller_ptz.capture_images(capture_queue, capture_interval=1, run_for_seconds=2)
+
+        # Check the size of the queue
+        print(f"Queue size: {capture_queue.qsize()}")
+
+        # Check if the image was captured and put in the queue
+        assert capture_queue.qsize() == 2
         frame, cam_id = capture_queue.get_nowait()
         assert cam_id == "192.168.1.1"
         assert isinstance(frame, Image.Image)
