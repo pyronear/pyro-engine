@@ -68,6 +68,22 @@ def test_run_predictions(system_controller):
     assert cam_id == "192.168.1.1"
 
 
+def test_system_controller_run(system_controller):
+    # Mock the required methods to prevent actual long-running processes
+    with patch.object(system_controller, "capture_images"), patch.object(
+        system_controller, "run_predictions"
+    ), patch.object(system_controller, "process_alerts"), patch("signal.signal"), patch(
+        "time.sleep", side_effect=InterruptedError
+    ):  # Mock sleep to exit the loop
+
+        try:
+            system_controller.run(
+                capture_interval=1, capture_queue_size=10, prediction_queue_size=10, watchdog_interval=1
+            )
+        except InterruptedError:
+            pass
+
+
 def test_process_alerts(system_controller, mock_engine):
     prediction_queue = Queue(maxsize=10)
 
