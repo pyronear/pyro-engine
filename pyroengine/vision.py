@@ -16,7 +16,7 @@ from .utils import DownloadProgressBar, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/yolov8s.onnx"
+MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/model.onnx"
 
 
 class Classifier:
