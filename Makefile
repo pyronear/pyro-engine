@@ -27,7 +27,6 @@ lock:
 
 # Build the docker
 build-app:
-	docker build . -t pyronear/pyro-engine:python3.8.1-slim
 	docker build . -t pyronear/pyro-engine:latest
 
 build-lib:
