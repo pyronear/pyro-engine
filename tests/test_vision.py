@@ -7,10 +7,9 @@ def test_classifier(mock_wildfire_image):
     # Instantiate the ONNX model
     model = Classifier()
     # Check preprocessing
-    out, pad = model.preprocess_image(mock_wildfire_image)
+    out = model.preprocess_image(mock_wildfire_image, (1024, 576))
     assert isinstance(out, np.ndarray) and out.dtype == np.float32
-    assert out.shape == (1, 3, 1024, 1024)
-    assert isinstance(pad, tuple)
+    assert out.shape == (1, 3, 576, 1024)
     # Check inference
     out = model(mock_wildfire_image)
     assert out.shape == (1, 5)
@@ -18,7 +17,7 @@ def test_classifier(mock_wildfire_image):
     assert conf >= 0 and conf <= 1
 
     # Test mask
-    mask = np.ones((1024, 640))
+    mask = np.ones((1024, 576))
     out = model(mock_wildfire_image, mask)
     assert out.shape == (1, 5)
 
