@@ -118,3 +118,6 @@ pyroengine/version.py
 *.onnx
 # Release
 conda-dist/
+
+docker-compose.yml.bak
+docker-compose.override.yml
