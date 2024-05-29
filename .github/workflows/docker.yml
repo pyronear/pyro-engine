@@ -14,4 +14,4 @@ jobs:
       - name: Build docker image
         run: make build-app
       - name: Run docker container
-        run: docker run pyronear/pyro-engine:python3.8.1-slim python -c 'import pyroengine'
+        run: make run
