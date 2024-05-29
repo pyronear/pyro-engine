@@ -40,7 +40,6 @@ build-optional-lib:
 
 # Run the engine wrapper
 run:
-	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
 	docker compose up -d
 
 # Get log from engine wrapper
