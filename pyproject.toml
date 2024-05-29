@@ -36,7 +36,8 @@ dependencies = [
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#egg=pkg&subdirectory=client",
     "requests>=2.20.0,<3.0.0",
     "opencv-python==4.5.5.64",
-    "tqdm>=4.62.0", 
+    "tqdm>=4.62.0",
+    "huggingface_hub==0.23.1", 
 ]
 
 [project.optional-dependencies]
