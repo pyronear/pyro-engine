@@ -8,6 +8,7 @@ from pyroengine.vision import Classifier
 
 METADATA_PATH = "data/model_metadata.json"
 model_path = "data/model.onnx"
+sha = "12b9b5728dfa2e60502dcde2914bfdc4e9378caa57611c567a44cdd6228838c2"
 
 
 def custom_isfile_false(path):
@@ -29,10 +30,9 @@ def test_classifier(mock_wildfire_image):
         # Instantiate the ONNX model
         model = Classifier()
         # Check preprocessing
-        out, pad = model.preprocess_image(mock_wildfire_image)
+        out = model.preprocess_image(mock_wildfire_image, (1024, 576))
         assert isinstance(out, np.ndarray) and out.dtype == np.float32
-        assert out.shape == (1, 3, 1024, 1024)
-        assert isinstance(pad, tuple)
+        assert out.shape == (1, 3, 576, 1024)
         # Check inference
         out = model(mock_wildfire_image)
         assert out.shape == (1, 5)
@@ -40,7 +40,7 @@ def test_classifier(mock_wildfire_image):
         assert conf >= 0 and conf <= 1
 
         # Test mask
-        mask = np.ones((1024, 640))
+        mask = np.ones((1024, 576))
         out = model(mock_wildfire_image, mask)
         assert out.shape == (1, 5)
 
@@ -54,7 +54,7 @@ def test_classifier(mock_wildfire_image):
 # Test that the model is not loaded
 def test_no_download():
     print("test_no_download")
-    data = {"sha256": "00083a41dc6468e998a40d9f6f348c10e4c7c998a7bfec9f8dbf58db6bd3471d"}
+    data = {"sha256": sha}
     with patch("os.path.isfile", side_effect=custom_isfile_true):
         with patch("pyroengine.vision.Classifier.load_metadata", return_value=data):
             with patch("onnxruntime.InferenceSession", return_value=None):
@@ -67,7 +67,7 @@ def test_no_download():
 @patch("pyroengine.vision.DownloadProgressBar")
 def test_sha_inequality(mock_download_progress, mock_urlretrieve):
     print("test_sha_inequality")
-    data = {"sha256": "00083a41dc6468e998a40d9f6f348c10e4c7c998a7bfec9f8dbf58db6bd3471d"}
+    data = {"sha256": "falsesha"}
 
     # Mock urlretrieve to create a fake file
     def fake_urlretrieve(url, filename, reporthook=None):
@@ -83,7 +83,7 @@ def test_sha_inequality(mock_download_progress, mock_urlretrieve):
         with patch("pyroengine.vision.Classifier.load_metadata", return_value=data):
             with patch(
                 "pyroengine.vision.Classifier.get_sha",
-                return_value="00083a41dc6468e998a40d9f6f348c10e4c7c998a7bfec9f8dbf58db6bd3471e",
+                return_value=sha,
             ):
                 with patch("onnxruntime.InferenceSession", return_value=None):
                     with patch("os.remove", return_value=True):
