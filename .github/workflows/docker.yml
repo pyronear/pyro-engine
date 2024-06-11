@@ -15,4 +15,3 @@ jobs:
         run: make build-app
       - name: Run docker container
         run: make run
-        
