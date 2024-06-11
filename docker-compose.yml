@@ -16,7 +16,6 @@ services:
       resources:
         limits:
           cpus: "3"
-          memory: ""
     logging:
       driver: "json-file"
       options:
