@@ -12,6 +12,10 @@ services:
     volumes:
       - ./data:/usr/src/app/data
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "3"
     logging:
       driver: "json-file"
       options:

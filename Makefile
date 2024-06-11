@@ -40,6 +40,7 @@ build-optional-lib:
 
 # Run the engine wrapper
 run:
+	bash scripts/setup-docker-compose.sh
 	docker compose up -d
 
 # Get log from engine wrapper
