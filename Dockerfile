@@ -10,8 +10,6 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # set work directory
 WORKDIR /usr/src/app
 
-
-COPY ./pyproject.toml /tmp/pyproject.toml
 COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
