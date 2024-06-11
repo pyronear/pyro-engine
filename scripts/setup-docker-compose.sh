@@ -3,14 +3,6 @@
 # Define the percentage of host memory you want to allocate
 PERCENTAGE=90
 
-# Check if the necessary tools are installed
-for cmd in grep awk; do
-    if ! command -v $cmd &> /dev/null; then
-        echo "$cmd could not be found, please install it before running this script."
-        exit 1
-    fi
-done
-
 # Get the total memory of the host system in kilobytes
 TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 
