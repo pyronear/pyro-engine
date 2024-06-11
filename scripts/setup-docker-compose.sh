@@ -1,10 +1,24 @@
 #!/bin/bash
 
 # Define the percentage of host memory you want to allocate
-PERCENTAGE=70
+PERCENTAGE=90
+
+# Check if the necessary tools are installed
+for cmd in grep awk; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "$cmd could not be found, please install it before running this script."
+        exit 1
+    fi
+done
 
 # Get the total memory of the host system in kilobytes
 TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+
+# Check if TOTAL_MEM_KB was successfully retrieved
+if [ -z "$TOTAL_MEM_KB" ]; then
+    echo "Failed to retrieve total memory."
+    exit 1
+fi
 
 # Calculate the memory limit in kilobytes
 LIMIT_MEM_KB=$((TOTAL_MEM_KB * PERCENTAGE / 100))
@@ -12,22 +26,17 @@ LIMIT_MEM_KB=$((TOTAL_MEM_KB * PERCENTAGE / 100))
 # Convert the limit to a format Docker understands (e.g., "m" for megabytes)
 LIMIT_MEM_MB=$((LIMIT_MEM_KB / 1024))m
 
-# Define the Docker Compose file to modify
-DOCKER_COMPOSE_FILE="docker-compose.yml"
+# Define the Docker Compose override file to create/update
+DOCKER_COMPOSE_OVERRIDE_FILE="docker-compose.override.yml"
 
-# Backup the original Docker Compose file
-cp $DOCKER_COMPOSE_FILE "${DOCKER_COMPOSE_FILE}.bak"
+# Create/update the docker-compose.override.yml with the memory limit
+cat <<EOF > "$DOCKER_COMPOSE_OVERRIDE_FILE"
+services:
+  run:
+    deploy:
+      resources:
+        limits:
+          memory: $LIMIT_MEM_MB
+EOF
 
-# Use awk to update the memory limits in the Docker Compose file, preserving indentation
-awk -v mem_limit="$LIMIT_MEM_MB" '
-/services:/ { in_services=1 }
-in_services && /deploy:/ { in_deploy=1 }
-in_deploy && /resources:/ { in_resources=1 }
-in_resources && /limits:/ { in_limits=1 }
-in_limits && /memory:/ {
-    $0 = gensub(/memory:.*/, "memory: " mem_limit, 1)
-}
-{ print }
-' "${DOCKER_COMPOSE_FILE}.bak" > "docker-compose.override.yml"
-
-echo "Memory limits set to $LIMIT_MEM_MB in $DOCKER_COMPOSE_FILE"
+echo "Memory limits set to $LIMIT_MEM_MB in $DOCKER_COMPOSE_OVERRIDE_FILE"
