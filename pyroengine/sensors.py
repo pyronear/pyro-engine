@@ -105,7 +105,7 @@ class ReolinkCamera:
             logging.error(f"Request failed: {e}")
         return None
 
-    def move_camera(self, operation: str, speed: int = 1, idx: int = 0):
+    def move_camera(self, operation: str, speed: int = 20, idx: int = 0):
         """
         Sends a command to move the camera.
 
@@ -119,7 +119,7 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 1):
+    def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 20):
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
