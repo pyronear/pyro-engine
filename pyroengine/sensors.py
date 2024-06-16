@@ -180,3 +180,22 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {name} set successfully.")
+
+    def delete_ptz_preset(self, idx: int):
+        """
+        Deletes a PTZ preset position by setting its enable value to 0.
+
+        Args:
+            idx (int): The preset ID to delete.
+        """
+        url = self._build_url("SetPtzPreset")
+        data = [
+            {
+                "cmd": "SetPtzPreset",
+                "action": 0,  # The action code for setting data
+                "param": {"PtzPreset": {"channel": 0, "enable": 0, "id": idx}},
+            }
+        ]
+        response = requests.post(url, json=data, verify=False)
+        # Utilizing the shared response handling method
+        self._handle_response(response, f"Preset {idx} deleted successfully.")

@@ -101,3 +101,29 @@ def test_move_in_seconds():
         # Assert that the move_camera method was called with the correct arguments
         mock_move_camera.assert_any_call("Right", 2)
         mock_move_camera.assert_any_call("Stop")
+
+
+def test_delete_ptz_preset_success():
+    # Mock the response of requests.post to return a successful response for deleting preset
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
+        camera.delete_ptz_preset(idx=1)
+        # Assert that the delete_ptz_preset method was called successfully
+        assert mock_response.json.call_count == 1
+
+
+def test_delete_ptz_preset_failure():
+    # Mock the response of requests.post to return a failed response
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 1, "error": "Some error"}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
+        camera.delete_ptz_preset(idx=1)
+        # Assert that a failed operation logs an error message
+        assert mock_response.json.call_count == 1
