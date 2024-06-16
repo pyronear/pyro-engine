@@ -30,7 +30,7 @@ class ReolinkCamera:
         password (str): Password for accessing the camera.
         cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom).
         cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.
-        protocol (str): Protocol used for communication, defaults to 'http'.
+        protocol (str): Protocol used for communication, defaults to 'https'.
 
     Methods:
         capture(pos_id): Captures an image from the camera. Moves to position `pos_id` if provided.
@@ -74,7 +74,7 @@ class ReolinkCamera:
             return response_data
         else:
             logging.error(f"Failed operation: {response.status_code}, {response.text}")
-            return None  # Added to explicitly return None on failure
+            return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
@@ -89,8 +89,7 @@ class ReolinkCamera:
         """
         if pos_id is not None:
             self.move_camera("ToPos", idx=int(pos_id), speed=50)
-            time.sleep(1)  # Sleep to allow the camera to move to the position
-
+            time.sleep(1)
         url = self._build_url("Snap")
         logging.debug("Start capture")
 
@@ -117,11 +116,8 @@ class ReolinkCamera:
         """
         url = self._build_url("PtzCtrl")
         data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
-        try:
-            response = requests.post(url, json=data, verify=False)
-            self._handle_response(response, "PTZ operation successful.")
-        except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+        response = requests.post(url, json=data, verify=False)
+        self._handle_response(response, "PTZ operation successful.")
 
     def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 1):
         """
@@ -146,15 +142,11 @@ class ReolinkCamera:
         """
         url = self._build_url("GetPtzPreset")
         data = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
-        try:
-            response = requests.post(url, json=data, verify=False)
-            response_data = self._handle_response(response, "Presets retrieved successfully.")
-            if response_data and response_data[0]["code"] == 0:
-                return response_data[0].get("value", {}).get("PtzPreset", [])
-            else:
-                return None
-        except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+        response = requests.post(url, json=data, verify=False)
+        response_data = self._handle_response(response, "Presets retrieved successfully.")
+        if response_data and response_data[0]["code"] == 0:
+            return response_data[0].get("value", {}).get("PtzPreset", [])
+        else:
             return None
 
     def set_ptz_preset(self, idx: Optional[int] = None):
@@ -169,9 +161,6 @@ class ReolinkCamera:
         """
         if idx is None:
             presets_ptz = self.get_ptz_preset()
-            if presets_ptz is None:
-                raise ValueError("Failed to retrieve PTZ presets.")
-
             for cfg in presets_ptz:
                 if cfg["enable"] == 0:
                     idx = cfg["id"]
@@ -188,8 +177,6 @@ class ReolinkCamera:
                 "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
-        try:
-            response = requests.post(url, json=data, verify=False)
-            self._handle_response(response, f"Preset {name} set successfully.")
-        except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+        response = requests.post(url, json=data, verify=False)
+        # Utilizing the shared response handling method
+        self._handle_response(response, f"Preset {name} set successfully.")
