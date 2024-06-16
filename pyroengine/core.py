@@ -8,7 +8,7 @@ import signal
 from multiprocessing import Manager, Pool
 from multiprocessing import Queue as MPQueue
 from types import FrameType
-from typing import List, Optional, Tuple, cast
+from typing import Any, List, Optional, Tuple, cast
 
 import urllib3
 from PIL import Image
