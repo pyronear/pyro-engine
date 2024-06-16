@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import urllib3
@@ -78,7 +79,11 @@ def main(args):
         cameras,
     )
 
-    sys_controller.run(args.period)
+    while True:
+        start_ts = time.time()
+        sys_controller.run(args.period)
+        # Sleep only once all images are processed
+        time.sleep(max(args.period - time.time() + start_ts, 0))
 
 
 if __name__ == "__main__":
