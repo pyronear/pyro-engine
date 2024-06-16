@@ -11,7 +11,7 @@ import os
 import shutil
 import time
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -165,7 +165,7 @@ class Engine:
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
         assert self._cache.is_dir()
         self._load_cache()
-        self.last_cache_dump = datetime.utcnow()
+        self.last_cache_dump = datetime.now(timezone.utc)
 
     def clear_cache(self) -> None:
         """Clear local cache"""
@@ -256,7 +256,7 @@ class Engine:
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
+            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
         )
 
         # update state
@@ -315,7 +315,7 @@ class Engine:
             conf = 0  # return default value
 
         # Check if it's time to backup pending alerts
-        ts = datetime.utcnow()
+        ts = datetime.now(timezone.utc)
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
