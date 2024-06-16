@@ -144,7 +144,7 @@ class SystemController:
             # Disable the alarm
             signal.alarm(0)
         except Exception:
-            logging.warning(f"Analyze stream timeout")
+            logging.warning("Analyze stream timeout")
 
     def __repr__(self) -> str:
         """
