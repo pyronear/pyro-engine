@@ -324,22 +324,6 @@ class Engine:
             self._dump_cache()
             self.last_cache_dump = ts
 
-        # save frame
-        if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self._states[cam_key]["frame_count"] += 1
-            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
-                # Save frame on device
-                self._local_backup(frame_resize, cam_id, is_alert=False)
-                # Send frame to the api
-                stream = io.BytesIO()
-                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
-                try:
-                    self._upload_frame(cam_id, stream.getvalue())
-                    # Reset frame counter
-                    self._states[cam_key]["frame_count"] = 0
-                except ConnectionError:
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-
         return float(conf)
 
     def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
