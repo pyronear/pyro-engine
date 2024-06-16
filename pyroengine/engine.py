@@ -141,13 +141,12 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
+            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "ongoing": False},
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 self._states[cam_id] = {
                     "last_predictions": deque([], self.nb_consecutive_frames),
-                    "frame_count": 0,
                     "ongoing": False,
                 }
 

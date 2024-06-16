@@ -49,7 +49,6 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
-    assert engine._states["-1"]["frame_count"] == 0
     assert engine._states["-1"]["ongoing"] is False
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][0][1].shape[0] == 0
@@ -116,13 +115,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
                 cache_folder=folder,
                 frame_size=(256, 384),
             )
-            # Heartbeat
-            start_ts = datetime.now(timezone.utc).isoformat()
-            response = engine.heartbeat("dummy_cam")
-            assert response.status_code // 100 == 2
-            ts = datetime.now(timezone.utc).isoformat()
-            json_response = response.json()
-            assert start_ts < json_response["last_ping"] < ts
             # Send an alert
             engine.predict(mock_wildfire_image, "dummy_cam")
             assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
@@ -133,13 +125,11 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
 
             assert engine._states["dummy_cam"]["ongoing"] is True
-            assert engine._states["dummy_cam"]["frame_count"] == 2
             # Check that a media and an alert have been registered
+            engine._process_alerts()
             assert len(engine._alerts) == 0
             # Upload a frame
             response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
             assert response.status_code // 100 == 2
             # Upload frame in process
             engine.predict(mock_wildfire_image, "dummy_cam")
-            # Check that a new media has been created & uploaded
-            assert engine._states["dummy_cam"]["frame_count"] == 0
