@@ -355,7 +355,7 @@ class Engine:
             logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id, is_alert=True)
+            self._local_backup(frame_info["frame"], cam_id)
 
             try:
                 # Media creation

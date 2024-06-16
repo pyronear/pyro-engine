@@ -5,8 +5,10 @@
 
 import logging
 import signal
-from multiprocessing import Manager, Pool, Queue
-from typing import List
+from multiprocessing import Manager, Pool
+from multiprocessing import Queue as MPQueue
+from types import FrameType
+from typing import List, Optional, Tuple
 
 import urllib3
 from PIL import Image
@@ -22,17 +24,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def handler(signum: int) -> None:
+def handler(signum: int, frame: Optional[FrameType]) -> None:
     """
     Signal handler for timeout.
 
     Args:
         signum (int): The signal number.
+        frame (Optional[FrameType]): The current stack frame (or None).
     """
     raise Exception("Analyze stream timeout")
 
 
-def capture_camera_image(args):
+def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
     """
     Captures an image from the camera and puts it into a queue.
 
@@ -77,12 +80,12 @@ class SystemController:
         self.engine = engine
         self.cameras = cameras
 
-    def capture_images(self) -> Queue:
+    def capture_images(self) -> MPQueue:
         """
         Captures images from all cameras using multiprocessing.
 
         Returns:
-            Queue: A queue containing the captured images and their camera IDs.
+            MPQueue: A queue containing the captured images and their camera IDs.
         """
         manager = Manager()
         queue = manager.Queue()
