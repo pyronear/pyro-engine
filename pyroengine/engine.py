@@ -395,19 +395,18 @@ class Engine:
                 logging.warning(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: str) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
-            is_alert (bool, optional): is alert or backup frame. Defaults to False.
         """
-        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/")
+        backup_cache = self._cache.joinpath("backup/alerts/")
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
-        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%S')}.jpg")
+        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:
