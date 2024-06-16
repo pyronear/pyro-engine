@@ -314,10 +314,6 @@ class Engine:
         else:
             conf = 0  # return default value
 
-        # Uploading pending alerts
-        if len(self._alerts) > 0:
-            self._process_alerts()
-
         # Check if it's time to backup pending alerts
         ts = datetime.utcnow()
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
