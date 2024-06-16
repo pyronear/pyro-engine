@@ -8,7 +8,7 @@ import signal
 from multiprocessing import Manager, Pool
 from multiprocessing import Queue as MPQueue
 from types import FrameType
-from typing import List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, cast
 
 import urllib3
 from PIL import Image
@@ -88,10 +88,11 @@ class SystemController:
             MPQueue: A queue containing the captured images and their camera IDs.
         """
         manager = Manager()
-        queue = manager.Queue()
+        queue = manager.Queue()  # type: Any
+        queue = cast(MPQueue, queue)
 
         # Create a list of arguments to pass to capture_camera_image
-        args_list = [(camera, queue) for camera in self.cameras]
+        args_list: List[Tuple[ReolinkCamera, MPQueue]] = [(camera, queue) for camera in self.cameras]
 
         # Use a pool of processes to capture images concurrently
         with Pool(processes=len(self.cameras)) as pool:
