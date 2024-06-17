@@ -86,11 +86,11 @@ def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
             for pose_id in camera.cam_poses:
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture(pose_id)
-                if not frame is None:
+                if frame is not None:
                     queue.put((cam_id, frame))
         else:
             frame = camera.capture()
-            if not frame is None:
+            if frame is not None:
                 queue.put((cam_id, frame))
     except Exception as e:
         logging.exception(f"Error during image capture from camera {cam_id}: {e}")
