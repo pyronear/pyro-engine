@@ -184,8 +184,8 @@ class SystemController:
                         except Exception as e:
                             logging.error(f"Error running prediction: {e}")
 
-                # Use the last frame to check if it's day_time
-                self.day_time = is_day_time(None, img, "ir")
+                    # Use the last frame to check if it's day_time
+                    self.day_time = is_day_time(None, img, "ir")
 
                 # Process alerts
                 try:
