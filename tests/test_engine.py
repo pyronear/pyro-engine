@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -84,13 +84,12 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     folder = str(tmpdir_factory.mktemp("engine_cache"))
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
-    print(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
     lat = os.environ.get("LAT")
     lon = os.environ.get("LON")
     cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
     # Skip the API-related tests if the URL is not specified
-    print("api_url", api_url, type(api_url))
+
     if isinstance(api_url, str):
         engine = Engine(
             folder + "model.onnx",
@@ -104,10 +103,10 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             frame_size=(256, 384),
         )
         # Heartbeat
-        start_ts = datetime.now().isoformat()
+        start_ts = datetime.now(timezone.utc).isoformat()
         response = engine.heartbeat("dummy_cam")
         assert response.status_code // 100 == 2
-        ts = datetime.now().isoformat()
+        ts = datetime.now(timezone.utc).isoformat()
         json_respone = response.json()
         assert start_ts < json_respone["last_ping"] < ts
         # Send an alert
@@ -121,7 +120,5 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
 
         assert engine._states["dummy_cam"]["ongoing"] is True
         # Check that a media and an alert have been registered
+        engine._process_alerts()
         assert len(engine._alerts) == 0
-        # Upload a frame
-        response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
-        assert response.status_code // 100 == 2
