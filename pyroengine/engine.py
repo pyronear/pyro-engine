@@ -31,39 +31,6 @@ __all__ = ["Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
-def is_day_time(cache, frame, strategy, delta=0):
-    """This function allows to know if it is daytime or not. We have two strategies.
-    The first one is to take the current time and compare it to the sunset time.
-    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
-    therefore produce black and white images. This function can use one or more strategies depending on the use case.
-
-    Args:
-        cache (Path): cache folder where sunset_sunrise.txt is located
-        frame (PIL image): frame to analyze with ir strategy
-        strategy (str): Strategy to define day time [None, time, ir or both]
-        delta (int): delta before and after sunset / sunrise in sec
-
-    Returns:
-        bool: is day time
-    """
-    is_day = True
-    if strategy in ["both", "time"]:
-        with open(cache.joinpath("sunset_sunrise.txt")) as f:
-            lines = f.readlines()
-        sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
-        sunset = datetime.strptime(lines[1][:-1], "%H:%M")
-        now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-        if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
-            is_day = False
-
-    if strategy in ["both", "ir"]:
-        frame = np.array(frame)
-        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
-            is_day = False
-
-    return is_day
-
-
 class Engine:
     """This implements an object to manage predictions and API interactions for wildfire alerts.
 
@@ -290,28 +257,24 @@ class Engine:
         else:
             frame_resize = frame
 
-        if is_day_time(self._cache, frame, self.day_time_strategy):
-            # Inference with ONNX
-            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
-            conf = self._update_states(frame_resize, preds, cam_key)
+        # Inference with ONNX
+        preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        conf = self._update_states(frame_resize, preds, cam_key)
 
-            # Log analysis result
-            device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        # Log analysis result
+        device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
+        pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
+        logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
-            # Alert
-            if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-                # Save the alert in cache to avoid connection issues
-                for idx, (frame, preds, localization, ts, is_staged) in enumerate(
-                    self._states[cam_key]["last_predictions"]
-                ):
-                    if not is_staged:
-                        self._stage_alert(frame, cam_id, ts, localization)
-                        self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
-
-        else:
-            conf = 0  # return default value
+        # Alert
+        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+            # Save the alert in cache to avoid connection issues
+            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+                self._states[cam_key]["last_predictions"]
+            ):
+                if not is_staged:
+                    self._stage_alert(frame, cam_id, ts, localization)
+                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)

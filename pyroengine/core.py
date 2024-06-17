@@ -5,23 +5,59 @@
 
 import logging
 import signal
+from datetime import datetime, timezone
 from multiprocessing import Manager, Pool
 from multiprocessing import Queue as MPQueue
 from types import FrameType
 from typing import List, Optional, Tuple, cast
 
+import numpy as np
 import urllib3
 from PIL import Image
 
 from .engine import Engine
 from .sensors import ReolinkCamera
 
-__all__ = ["SystemController"]
+__all__ = ["SystemController", "is_day_time"]
+
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Configure logging
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+
+
+def is_day_time(cache, frame, strategy, delta=0):
+    """This function allows to know if it is daytime or not. We have two strategies.
+    The first one is to take the current time and compare it to the sunset time.
+    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
+    therefore produce black and white images. This function can use one or more strategies depending on the use case.
+
+    Args:
+        cache (Path): cache folder where sunset_sunrise.txt is located
+        frame (PIL image): frame to analyze with ir strategy
+        strategy (str): Strategy to define day time [None, time, ir or both]
+        delta (int): delta before and after sunset / sunrise in sec
+
+    Returns:
+        bool: is day time
+    """
+    is_day = True
+    if strategy in ["both", "time"]:
+        with open(cache.joinpath("sunset_sunrise.txt")) as f:
+            lines = f.readlines()
+        sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
+        sunset = datetime.strptime(lines[1][:-1], "%H:%M")
+        now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
+        if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
+            is_day = False
+
+    if strategy in ["both", "ir"]:
+        frame = np.array(frame)
+        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
+            is_day = False
+
+    return is_day
 
 
 def handler(signum: int, frame: Optional[FrameType]) -> None:
@@ -43,21 +79,19 @@ def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
         args (tuple): A tuple containing the camera instance and a queue.
     """
     camera, queue = args
-    if camera.cam_type == "ptz":
-        for pose_id in camera.cam_poses:
-            try:
+
+    cam_id = camera.ip_address
+    try:
+        if camera.cam_type == "ptz":
+            for pose_id in camera.cam_poses:
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture(pose_id)
                 queue.put((cam_id, frame))
-            except Exception as e:
-                logging.exception(f"Error during image capture from camera {cam_id}: {e}")
-    else:
-        try:
-            cam_id = camera.ip_address
+        else:
             frame = camera.capture()
             queue.put((cam_id, frame))
-        except Exception as e:
-            logging.exception(f"Error during image capture from camera {cam_id}: {e}")
+    except Exception as e:
+        logging.exception(f"Error during image capture from camera {cam_id}: {e}")
 
 
 class SystemController:
@@ -79,6 +113,7 @@ class SystemController:
         """
         self.engine = engine
         self.cameras = cameras
+        self.day_time = True
 
     def capture_images(self) -> MPQueue:
         """
@@ -87,6 +122,7 @@ class SystemController:
         Returns:
             MPQueue: A queue containing the captured images and their camera IDs.
         """
+
         manager = Manager()
         queue: MPQueue = cast(MPQueue, manager.Queue())  # Cast to MPQueue
 
@@ -122,27 +158,40 @@ class SystemController:
             # Set the signal alarm
             signal.signal(signal.SIGALRM, handler)
             signal.alarm(period)
-            # Capture images
-            queue = None
-            try:
-                queue = self.capture_images()
-            except Exception as e:
-                logging.error(f"Error capturing images: {e}")
 
-            # Analyze each captured frame
-            if queue:
-                while not queue.empty():
-                    cam_id, img = queue.get()
-                    try:
-                        self.analyze_stream(img, cam_id)
-                    except Exception as e:
-                        logging.error(f"Error running prediction: {e}")
+            if not self.day_time:
+                try:
+                    frame = self.cameras[0].capture()
+                    self.day_time = is_day_time(None, frame, "ir")
+                except Exception as e:
+                    logging.exception(f"Exception during initial day time check: {e}")
 
-            # Process alerts
-            try:
-                self.engine._process_alerts()
-            except Exception as e:
-                logging.error(f"Error processing alerts: {e}")
+            else:
+
+                # Capture images
+                queue = None
+                try:
+                    queue = self.capture_images()
+                except Exception as e:
+                    logging.error(f"Error capturing images: {e}")
+
+                # Analyze each captured frame
+                if queue:
+                    while not queue.empty():
+                        cam_id, img = queue.get()
+                        try:
+                            self.analyze_stream(img, cam_id)
+                        except Exception as e:
+                            logging.error(f"Error running prediction: {e}")
+
+                # Use the last frame to check if it's day_time
+                self.day_time = is_day_time(None, img, "ir")
+
+                # Process alerts
+                try:
+                    self.engine._process_alerts()
+                except Exception as e:
+                    logging.error(f"Error processing alerts: {e}")
 
             # Disable the alarm
             signal.alarm(0)
