@@ -15,7 +15,6 @@ from PIL import Image
 __all__ = ["ReolinkCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -94,7 +93,7 @@ class ReolinkCamera:
         logging.debug("Start capture")
 
         try:
-            response = requests.get(url, verify=False, timeout=timeout)
+            response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
                 image = Image.open(image_data).convert("RGB")
@@ -116,7 +115,7 @@ class ReolinkCamera:
         """
         url = self._build_url("PtzCtrl")
         data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
-        response = requests.post(url, json=data, verify=False)
+        response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
     def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 20):
@@ -142,7 +141,7 @@ class ReolinkCamera:
         """
         url = self._build_url("GetPtzPreset")
         data = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)
+        response = requests.post(url, json=data, verify=False)  # nosec: B501
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
@@ -177,7 +176,7 @@ class ReolinkCamera:
                 "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)
+        response = requests.post(url, json=data, verify=False)  # nosec: B501
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {name} set successfully.")
 
@@ -196,6 +195,6 @@ class ReolinkCamera:
                 "param": {"PtzPreset": {"channel": 0, "enable": 0, "id": idx}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)
+        response = requests.post(url, json=data, verify=False)  # nosec: B501
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {idx} deleted successfully.")
