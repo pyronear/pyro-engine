@@ -128,8 +128,3 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             # Check that a media and an alert have been registered
             engine._process_alerts()
             assert len(engine._alerts) == 0
-            # Upload a frame
-            response = engine._upload_frame("dummy_cam", mock_wildfire_stream)
-            assert response.status_code // 100 == 2
-            # Upload frame in process
-            engine.predict(mock_wildfire_image, "dummy_cam")

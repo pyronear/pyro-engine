@@ -321,18 +321,6 @@ class Engine:
 
         return float(conf)
 
-    def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
-        """Save frame"""
-        logging.info(f"Camera '{cam_id}' - Uploading media...")
-        # Create a media
-        response = self.api_client[cam_id].create_media_from_device()
-        if response.status_code // 100 == 2:
-            media = response.json()
-            # Upload media
-            self.api_client[cam_id].upload_media(media_id=media["id"], media_data=media_data)
-
-        return response
-
     def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
         # Store information in the queue
         self._alerts.append(
