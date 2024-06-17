@@ -12,6 +12,7 @@ services:
     volumes:
       - ./data:/usr/src/app/data
     restart: always
+    network_mode: host
     deploy:
       resources:
         limits:
