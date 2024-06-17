@@ -170,7 +170,7 @@ class SystemController:
             signal.alarm(period)
 
             if not self.day_time:
-                self.check_day_time(self)
+                self.check_day_time()
 
             if self.day_time:
                 # Capture images
