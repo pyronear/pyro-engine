@@ -5,7 +5,7 @@
 
 import logging
 import signal
-from datetime import datetime, timezone
+from datetime import datetime
 from multiprocessing import Manager, Pool
 from multiprocessing import Queue as MPQueue
 from types import FrameType
