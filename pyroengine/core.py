@@ -86,10 +86,12 @@ def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
             for pose_id in camera.cam_poses:
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture(pose_id)
-                queue.put((cam_id, frame))
+                if not frame is None:
+                    queue.put((cam_id, frame))
         else:
             frame = camera.capture()
-            queue.put((cam_id, frame))
+            if not frame is None:
+                queue.put((cam_id, frame))
     except Exception as e:
         logging.exception(f"Error during image capture from camera {cam_id}: {e}")
 
@@ -162,7 +164,8 @@ class SystemController:
             if not self.day_time:
                 try:
                     frame = self.cameras[0].capture()
-                    self.day_time = is_day_time(None, frame, "ir")
+                    if frame is not None:
+                        self.day_time = is_day_time(None, frame, "ir")
                 except Exception as e:
                     logging.exception(f"Exception during initial day time check: {e}")
 
@@ -178,14 +181,16 @@ class SystemController:
                 # Analyze each captured frame
                 if queue:
                     while not queue.empty():
-                        cam_id, img = queue.get()
+                        cam_id, frame = queue.get()
                         try:
-                            self.analyze_stream(img, cam_id)
+                            if frame is not None:
+                                self.analyze_stream(frame, cam_id)
                         except Exception as e:
                             logging.error(f"Error running prediction: {e}")
 
                     # Use the last frame to check if it's day_time
-                    self.day_time = is_day_time(None, img, "ir")
+                    if frame is not None:
+                        self.day_time = is_day_time(None, frame, "ir")
 
                 # Process alerts
                 try:
