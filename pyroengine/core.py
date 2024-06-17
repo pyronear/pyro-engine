@@ -148,6 +148,14 @@ class SystemController:
         # Run the prediction using the engine
         self.engine.predict(img, cam_id)
 
+    def check_day_time(self) -> None:
+        try:
+            frame = self.cameras[0].capture()
+            if frame is not None:
+                self.day_time = is_day_time(None, frame, "ir")
+        except Exception as e:
+            logging.exception(f"Exception during initial day time check: {e}")
+
     def run(self, period: int = 30) -> None:
         """
         Captures and analyzes all camera streams, then processes alerts.
@@ -162,15 +170,9 @@ class SystemController:
             signal.alarm(period)
 
             if not self.day_time:
-                try:
-                    frame = self.cameras[0].capture()
-                    if frame is not None:
-                        self.day_time = is_day_time(None, frame, "ir")
-                except Exception as e:
-                    logging.exception(f"Exception during initial day time check: {e}")
+                self.check_day_time(self)
 
-            else:
-
+            if self.day_time:
                 # Capture images
                 queue = None
                 try:
