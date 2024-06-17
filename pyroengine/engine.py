@@ -11,7 +11,7 @@ import os
 import shutil
 import time
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -29,39 +29,6 @@ from .vision import Classifier
 __all__ = ["Engine"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
-
-
-def is_day_time(cache, frame, strategy, delta=0):
-    """This function allows to know if it is daytime or not. We have two strategies.
-    The first one is to take the current time and compare it to the sunset time.
-    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
-    therefore produce black and white images. This function can use one or more strategies depending on the use case.
-
-    Args:
-        cache (Path): cache folder where sunset_sunrise.txt is located
-        frame (PIL image): frame to analyze with ir strategy
-        strategy (str): Strategy to define day time [None, time, ir or both]
-        delta (int): delta before and after sunset / sunrise in sec
-
-    Returns:
-        bool: is day time
-    """
-    is_day = True
-    if strategy in ["both", "time"]:
-        with open(cache.joinpath("sunset_sunrise.txt")) as f:
-            lines = f.readlines()
-        sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
-        sunset = datetime.strptime(lines[1][:-1], "%H:%M")
-        now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-        if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
-            is_day = False
-
-    if strategy in ["both", "ir"]:
-        frame = np.array(frame)
-        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
-            is_day = False
-
-    return is_day
 
 
 class Engine:
@@ -141,13 +108,12 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "frame_count": 0, "ongoing": False},
+            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "ongoing": False},
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 self._states[cam_id] = {
                     "last_predictions": deque([], self.nb_consecutive_frames),
-                    "frame_count": 0,
                     "ongoing": False,
                 }
 
@@ -165,7 +131,7 @@ class Engine:
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
         assert self._cache.is_dir()
         self._load_cache()
-        self.last_cache_dump = datetime.utcnow()
+        self.last_cache_dump = datetime.now(timezone.utc)
 
     def clear_cache(self) -> None:
         """Clear local cache"""
@@ -256,7 +222,7 @@ class Engine:
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.utcnow().isoformat(), False)
+            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
         )
 
         # update state
@@ -291,68 +257,32 @@ class Engine:
         else:
             frame_resize = frame
 
-        if is_day_time(self._cache, frame, self.day_time_strategy):
-            # Inference with ONNX
-            preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
-            conf = self._update_states(frame_resize, preds, cam_key)
+        # Inference with ONNX
+        preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        conf = self._update_states(frame_resize, preds, cam_key)
 
-            # Log analysis result
-            device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-            logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        # Log analysis result
+        device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
+        pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
+        logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
-            # Alert
-            if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-                # Save the alert in cache to avoid connection issues
-                for idx, (frame, preds, localization, ts, is_staged) in enumerate(
-                    self._states[cam_key]["last_predictions"]
-                ):
-                    if not is_staged:
-                        self._stage_alert(frame, cam_id, ts, localization)
-                        self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
-
-        else:
-            conf = 0  # return default value
-
-        # Uploading pending alerts
-        if len(self._alerts) > 0:
-            self._process_alerts()
+        # Alert
+        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+            # Save the alert in cache to avoid connection issues
+            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+                self._states[cam_key]["last_predictions"]
+            ):
+                if not is_staged:
+                    self._stage_alert(frame, cam_id, ts, localization)
+                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
-        ts = datetime.utcnow()
+        ts = datetime.now(timezone.utc)
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
 
-        # save frame
-        if len(self.api_client) > 0 and isinstance(self.frame_saving_period, int) and isinstance(cam_id, str):
-            self._states[cam_key]["frame_count"] += 1
-            if self._states[cam_key]["frame_count"] == self.frame_saving_period:
-                # Save frame on device
-                self._local_backup(frame_resize, cam_id, is_alert=False)
-                # Send frame to the api
-                stream = io.BytesIO()
-                frame_resize.save(stream, format="JPEG", quality=self.jpeg_quality)
-                try:
-                    self._upload_frame(cam_id, stream.getvalue())
-                    # Reset frame counter
-                    self._states[cam_key]["frame_count"] = 0
-                except ConnectionError:
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-
         return float(conf)
-
-    def _upload_frame(self, cam_id: str, media_data: bytes) -> Response:
-        """Save frame"""
-        logging.info(f"Camera '{cam_id}' - Uploading media...")
-        # Create a media
-        response = self.api_client[cam_id].create_media_from_device()
-        if response.status_code // 100 == 2:
-            media = response.json()
-            # Upload media
-            self.api_client[cam_id].upload_media(media_id=media["id"], media_data=media_data)
-
-        return response
 
     def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
         # Store information in the queue
@@ -375,7 +305,7 @@ class Engine:
             logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id, is_alert=True)
+            self._local_backup(frame_info["frame"], cam_id)
 
             try:
                 # Media creation
@@ -411,19 +341,18 @@ class Engine:
                 logging.warning(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = False) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: str) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
-            is_alert (bool, optional): is alert or backup frame. Defaults to False.
         """
-        backup_cache = self._cache.joinpath("backup/alerts/") if is_alert else self._cache.joinpath("backup/frames/")
+        backup_cache = self._cache.joinpath("backup/alerts/")
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
-        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%S')}.jpg")
+        file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
 
     def _clean_local_backup(self, backup_cache) -> None:

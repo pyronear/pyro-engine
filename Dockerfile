@@ -30,4 +30,4 @@ RUN pip install -e /tmp/. \
     && rm -rf /root/.cache/pip
 
 COPY ./src/run.py /usr/src/app/run.py
-COPY ./src/capture.py /usr/src/app/capture.py
+COPY ./src/control_reolink_cam.py /usr/src/app/control_reolink_cam.py
