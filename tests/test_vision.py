@@ -8,7 +8,7 @@ from pyroengine.vision import Classifier
 
 METADATA_PATH = "data/model_metadata.json"
 model_path = "data/model.onnx"
-sha = "12b9b5728dfa2e60502dcde2914bfdc4e9378caa38411c567a44cdd6228838c2"
+sha = "9f1b1c2654d98bbed91e514ce20ea73a0a5fbd1111880f230d516ed40ea2dc58"
 
 
 def custom_isfile_false(path):
