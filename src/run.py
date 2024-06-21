@@ -92,7 +92,7 @@ if __name__ == "__main__":
     )
     # Model
     parser.add_argument("--model_path", type=str, default="data/model.onnx", help="model path")
-    parser.add_argument("--thresh", type=float, default=0.2, help="Confidence threshold")
+    parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
