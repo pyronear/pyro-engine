@@ -8,7 +8,7 @@ from pyroengine.vision import Classifier
 
 METADATA_PATH = "data/model_metadata.json"
 model_path = "data/model.onnx"
-sha = "12b9b5728dfa2e60502dcde2914bfdc4e9378caa57611c567a44cdd6228838c2"
+sha = "12b9b5728dfa2e60502dcde2914bfdc4e9378caa38411c567a44cdd6228838c2"
 
 
 def custom_isfile_false(path):
@@ -30,9 +30,9 @@ def test_classifier(mock_wildfire_image):
         # Instantiate the ONNX model
         model = Classifier()
         # Check preprocessing
-        out = model.preprocess_image(mock_wildfire_image, (1024, 576))
+        out = model.preprocess_image(mock_wildfire_image, (640, 384))
         assert isinstance(out, np.ndarray) and out.dtype == np.float32
-        assert out.shape == (1, 3, 576, 1024)
+        assert out.shape == (1, 3, 384, 640)
         # Check inference
         out = model(mock_wildfire_image)
         assert out.shape == (1, 5)
@@ -40,11 +40,11 @@ def test_classifier(mock_wildfire_image):
         assert conf >= 0 and conf <= 1
 
         # Test mask
-        mask = np.ones((1024, 576))
+        mask = np.ones((640, 384))
         out = model(mock_wildfire_image, mask)
         assert out.shape == (1, 5)
 
-        mask = np.zeros((1024, 1024))
+        mask = np.zeros((640, 384))
         out = model(mock_wildfire_image, mask)
         assert out.shape == (0, 5)
         os.remove(model_path)
