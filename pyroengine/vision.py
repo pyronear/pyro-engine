@@ -41,7 +41,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", base_img_size: int = 1024) -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", base_img_size: int = 640) -> None:
         if model_path is None:
             model_path = "data/model.onnx"
 
