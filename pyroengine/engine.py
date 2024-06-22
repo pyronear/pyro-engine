@@ -260,8 +260,9 @@ class Engine:
 
         # Inference with ONNX
         preds0 = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
-        print("original",preds0)
-        if len(preds0):
+        preds = preds0 
+        print(cam_id,"original",preds)
+        if len(preds):
             backup_cache = self._cache.joinpath("debug/")
 
             file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
@@ -269,10 +270,10 @@ class Engine:
             frame.save(file)
             im = Image.open(file)
             preds = self.model(im.convert("RGB"))
-            print("original, read ",preds)
+            print(cam_id,"original, read ",preds)
 
             preds = self.model(frame_resize.convert("RGB"))
-            print("resized ",preds)
+            print(cam_id,"resized ",preds)
 
             file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
 
@@ -280,8 +281,8 @@ class Engine:
             
             im = Image.open(file)
             preds = self.model(im.convert("RGB"))
-            print("resized, read ",preds)
-        preds = preds0 
+            print(cam_id,"resized, read ",preds)
+        
         conf = self._update_states(frame_resize, preds, cam_key)
 
         # Log analysis result
