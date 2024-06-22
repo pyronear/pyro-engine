@@ -250,6 +250,7 @@ class Engine:
             except ConnectionError:
                 logging.warning(f"Unable to reach the pyro-api with {cam_id}")
 
+
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
@@ -258,7 +259,29 @@ class Engine:
             frame_resize = frame
 
         # Inference with ONNX
-        preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        preds0 = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        print("original",preds0)
+        if len(preds):
+            backup_cache = self._cache.joinpath("debug/")
+
+            file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
+
+            frame.save(file)
+            im = Image.open(file)
+            preds = self.model(im.convert("RGB"))
+            print("original, read ",preds)
+
+            preds = self.model(frame_resize.convert("RGB"))
+            print("resized ",preds)
+
+            file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
+
+            frame_resize.save(file)
+            
+            im = Image.open(file)
+            preds = self.model(im.convert("RGB"))
+            print("resized, read ",preds)
+        preds = preds0 
         conf = self._update_states(frame_resize, preds, cam_key)
 
         # Log analysis result
