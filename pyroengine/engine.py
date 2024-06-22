@@ -261,7 +261,7 @@ class Engine:
         # Inference with ONNX
         preds0 = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
         print("original",preds0)
-        if len(preds):
+        if len(preds0):
             backup_cache = self._cache.joinpath("debug/")
 
             file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
