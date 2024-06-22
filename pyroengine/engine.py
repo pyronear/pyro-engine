@@ -275,7 +275,10 @@ class Engine:
             preds = self.model(frame_resize.convert("RGB"))
             print(cam_id,"resized ",preds)
 
-            file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_{str(preds[0, -1])[:5]}.jpg")
+            if len(preds):
+                p = preds[0, -1]
+
+            file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}_resized{str(p)[:5]}.jpg")
 
             frame_resize.save(file)
             
