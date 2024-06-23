@@ -129,8 +129,9 @@ class Classifier:
         y = np.transpose(y)
         y = xywh2xyxy(y)
         # Sort by confidence
-        y = y[y[:, 4].argsort()[::-1]]
+        y = y[y[:, 4].argsort()]
         y = nms(y)
+        y = y[::-1]
 
         # Normalize preds
         if len(y) > 0:
