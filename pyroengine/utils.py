@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
-import cv2
+import cv2  # type: ignore[import-untyped]
 import numpy as np
 from tqdm import tqdm  # type: ignore[import-untyped]
 
