@@ -21,7 +21,7 @@ def xywh2xyxy(x: np.ndarray):
 
 
 def letterbox(
-    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (0, 0, 0), auto: bool = False, stride: int = 32
+    im: np.ndarray, new_shape: tuple = (640, 640), color: tuple = (114, 114, 114), auto: bool = False, stride: int = 32
 ):
     """Letterbox image transform for yolo models
     Args:
