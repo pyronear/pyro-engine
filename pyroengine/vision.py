@@ -8,13 +8,12 @@ import os
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
-import cv2  # type: ignore[import-untyped]
 import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
 
-from .utils import DownloadProgressBar, nms, xywh2xyxy
+from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -41,7 +40,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", base_img_size: int = 640) -> None:
+    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (640, 640)) -> None:
         if model_path is None:
             model_path = "data/model.onnx"
 
@@ -67,7 +66,7 @@ class Classifier:
             self.download_model(model_path, expected_sha256)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
-        self.base_img_size = base_img_size
+        self.img_size = img_size
 
     def get_sha(self, siblings):
         # Extract the SHA256 hash from the model files metadata
@@ -99,7 +98,7 @@ class Classifier:
                 return json.load(f)
         return None
 
-    def preprocess_image(self, pil_img: Image.Image, new_img_size: list) -> Tuple[np.ndarray, Tuple[int, int]]:
+    def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
 
         Args:
@@ -111,20 +110,15 @@ class Classifier:
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
 
-        np_img = cv2.resize(np.array(pil_img), new_img_size, interpolation=cv2.INTER_LINEAR)
+        np_img, pad = letterbox(np.array(pil_img), self.img_size)  # Applies letterbox resize with padding
         np_img = np.expand_dims(np_img.astype("float"), axis=0)  # Add batch dimension
         np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
         np_img = np_img.astype("float32") / 255  # Normalize to [0, 1]
 
-        return np_img
+        return np_img, pad
 
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
-
-        w, h = pil_img.size
-        ratio = self.base_img_size / max(w, h)
-        new_img_size = [int(ratio * w), int(ratio * h)]
-        new_img_size = [x - x % 32 for x in new_img_size]  # size need to be a multiple of 32 to fit the model
-        np_img = self.preprocess_image(pil_img, new_img_size)
+        np_img, pad = self.preprocess_image(pil_img)
 
         # ONNX inference
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
@@ -136,12 +130,17 @@ class Classifier:
         # Sort by confidence
         y = y[y[:, 4].argsort()]
         y = nms(y)
+        y = y[::-1]
 
         # Normalize preds
         if len(y) > 0:
-            # Normalize Output
-            y[:, :4:2] /= new_img_size[0]
-            y[:, 1:4:2] /= new_img_size[1]
+            # Remove padding
+            left_pad, top_pad = pad
+            y[:, :4:2] -= left_pad
+            y[:, 1:4:2] -= top_pad
+            y[:, :4:2] /= self.img_size[1] - 2 * left_pad
+            y[:, 1:4:2] /= self.img_size[0] - 2 * top_pad
+            y = np.clip(y, 0, 1)
         else:
             y = np.zeros((0, 5))  # normalize output
 
@@ -162,4 +161,4 @@ class Classifier:
 
             y = y[keep]
 
-        return np.clip(y, 0, 1)
+        return y
