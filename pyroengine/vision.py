@@ -8,7 +8,6 @@ import os
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
-import cv2  # type: ignore[import-untyped]
 import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
