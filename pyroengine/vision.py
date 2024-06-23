@@ -141,6 +141,7 @@ class Classifier:
             y[:, 1:4:2] -= top_pad
             y[:, :4:2] /= self.img_size[1] - 2 * left_pad
             y[:, 1:4:2] /= self.img_size[0] - 2 * top_pad
+            y = np.clip(y, 0, 1)
         else:
             y = np.zeros((0, 5))  # normalize output
 
@@ -161,4 +162,4 @@ class Classifier:
 
             y = y[keep]
 
-        return np.clip(y, 0, 1)
+        return y
