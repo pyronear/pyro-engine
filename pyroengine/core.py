@@ -17,6 +17,7 @@ from PIL import Image
 
 from .engine import Engine
 from .sensors import ReolinkCamera
+import time
 
 __all__ = ["SystemController", "is_day_time"]
 
@@ -175,30 +176,42 @@ class SystemController:
             if self.day_time:
                 # Capture images
                 queue = None
+                start_time = time.time()
                 try:
                     queue = self.capture_images()
                 except Exception as e:
                     logging.error(f"Error capturing images: {e}")
+                capture_time = time.time() - start_time
+                logging.info(f"Time taken to capture images: {capture_time} seconds")
 
                 # Analyze each captured frame
                 if queue:
+                    analyze_start_time = time.time()
                     while not queue.empty():
                         cam_id, frame = queue.get()
                         try:
                             if frame is not None:
+                                frame_start_time = time.time()
                                 self.analyze_stream(frame, cam_id)
+                                frame_analyze_time = time.time() - frame_start_time
+                                logging.info(f"Time taken to analyze frame from camera {cam_id}: {frame_analyze_time} seconds")
                         except Exception as e:
                             logging.error(f"Error running prediction: {e}")
+                    analyze_time = time.time() - analyze_start_time
+                    logging.info(f"Total time taken to analyze frames: {analyze_time} seconds")
 
                     # Use the last frame to check if it's day_time
                     if frame is not None:
+                        check_day_time_start = time.time()
                         self.day_time = is_day_time(None, frame, "ir")
+                        check_day_time_time = time.time() - check_day_time_start
+                        logging.info(f"Time taken to check day_time: {check_day_time_time} seconds")
 
-                # Process alerts
-                try:
-                    self.engine._process_alerts()
-                except Exception as e:
-                    logging.error(f"Error processing alerts: {e}")
+                # # Process alerts
+                # try:
+                #     self.engine._process_alerts()
+                # except Exception as e:
+                #     logging.error(f"Error processing alerts: {e}")
 
             # Disable the alarm
             signal.alarm(0)

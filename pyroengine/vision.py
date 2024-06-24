@@ -12,7 +12,7 @@ import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
-
+import time
 from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
@@ -121,7 +121,10 @@ class Classifier:
         np_img, pad = self.preprocess_image(pil_img)
 
         # ONNX inference
+        start_time = time.time()
         y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
+        frame_analyze_time = time.time() - start_time
+        print(f"Onnx inference: {frame_analyze_time} seconds")
         # Drop low conf for speed-up
         y = y[:, y[-1, :] > 0.05]
         # Post processing
