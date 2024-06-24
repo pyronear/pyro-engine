@@ -44,7 +44,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine.clear_cache()
 
     # inference
-    engine = Engine(nb_consecutive_frames=4, cache_folder=folder)
+    engine = Engine(nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True)
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
