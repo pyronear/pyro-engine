@@ -48,6 +48,7 @@ class Engine:
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
         day_time_strategy: strategy to define if it's daytime
+        save_captured_frames: save all captured frames for debugging
         kwargs: keyword args of Classifier
 
     Examples:
@@ -346,12 +347,13 @@ class Engine:
                 logging.warning(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: str, is_alert: bool = True) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
+            is_alert (bool): is the frame an alert ?
         """
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
