@@ -194,11 +194,11 @@ class SystemController:
                     if frame is not None:
                         self.day_time = is_day_time(None, frame, "ir")
 
-                # Process alerts
-                try:
-                    self.engine._process_alerts()
-                except Exception as e:
-                    logging.error(f"Error processing alerts: {e}")
+                # # Process alerts
+                # try:
+                #     self.engine._process_alerts()
+                # except Exception as e:
+                #     logging.error(f"Error processing alerts: {e}")
 
             # Disable the alarm
             signal.alarm(0)

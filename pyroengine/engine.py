@@ -276,7 +276,7 @@ class Engine:
                 self._states[cam_key]["last_predictions"]
             ):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, localization)
+                    #self._stage_alert(frame, cam_id, ts, localization)
                     self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
