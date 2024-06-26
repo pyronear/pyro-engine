@@ -72,6 +72,7 @@ def main(args):
         cache_size=args.cache_size,
         jpeg_quality=args.jpeg_quality,
         day_time_strategy=args.day_time_strategy,
+        save_captured_frames=args.save_captured_frames,
     )
 
     sys_controller = SystemController(
@@ -117,6 +118,7 @@ if __name__ == "__main__":
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+    parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
