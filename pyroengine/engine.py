@@ -269,15 +269,18 @@ class Engine:
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
         logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
-        # Alert
-        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-            # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
-                if not is_staged:
-                    #self._stage_alert(frame, cam_id, ts, localization)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+        if conf>self.conf_thresh:
+            self._local_backup(frame_resize, cam_id)
+
+        # # Alert
+        # if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+        #     # Save the alert in cache to avoid connection issues
+        #     for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+        #         self._states[cam_key]["last_predictions"]
+        #     ):
+        #         if not is_staged:
+        #             #self._stage_alert(frame, cam_id, ts, localization)
+        #             self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
