@@ -168,6 +168,7 @@ class SystemController:
             # Set the signal alarm
             signal.signal(signal.SIGALRM, handler)
             signal.alarm(period)
+            start_time0 = time.time()
 
             if not self.day_time:
                 self.check_day_time()
@@ -206,10 +207,13 @@ class SystemController:
                 # except Exception as e:
                 #     logging.error(f"Error processing alerts: {e}")
 
-            # Disable the alarm
-            signal.alarm(0)
         except Exception:
             logging.warning("Analyze stream timeout")
+
+        signal.alarm(0)
+        # Disable the alarm
+        run_time = time.time() - start_time0
+        logging.info(f"Time run all: {run_time} seconds")
 
     def __repr__(self) -> str:
         """
