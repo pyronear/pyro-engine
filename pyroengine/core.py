@@ -10,7 +10,7 @@ from multiprocessing import Manager, Pool
 from multiprocessing import Queue as MPQueue
 from types import FrameType
 from typing import List, Optional, Tuple, cast
-
+import time
 import numpy as np
 import urllib3
 from PIL import Image
@@ -175,21 +175,27 @@ class SystemController:
             if self.day_time:
                 # Capture images
                 queue = None
+                start_time = time.time()
                 try:
                     queue = self.capture_images()
                 except Exception as e:
                     logging.error(f"Error capturing images: {e}")
+                capture_time = time.time() - start_time
+                logging.info(f"Time taken to capture images: {capture_time} seconds")
 
                 # Analyze each captured frame
                 if queue:
+                    analyze_start_time = time.time()
                     while not queue.empty():
                         cam_id, frame = queue.get()
                         try:
                             if frame is not None:
+                          
                                 self.analyze_stream(frame, cam_id)
                         except Exception as e:
                             logging.error(f"Error running prediction: {e}")
-
+                    analyze_time = time.time() - analyze_start_time
+                    logging.info(f"Total time taken to analyze frames: {analyze_time} seconds")
                     # Use the last frame to check if it's day_time
                     if frame is not None:
                         self.day_time = is_day_time(None, frame, "ir")
