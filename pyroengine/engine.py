@@ -48,6 +48,7 @@ class Engine:
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
         day_time_strategy: strategy to define if it's daytime
+        save_captured_frames: save all captured frames for debugging
         kwargs: keyword args of Classifier
 
     Examples:
@@ -76,6 +77,7 @@ class Engine:
         backup_size: int = 30,
         jpeg_quality: int = 80,
         day_time_strategy: Optional[str] = None,
+        save_captured_frames: Optional[bool] = False,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -102,6 +104,7 @@ class Engine:
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
+        self.save_captured_frames = save_captured_frames
 
         # Local backup
         self._backup_size = backup_size
@@ -282,6 +285,9 @@ class Engine:
             self._dump_cache()
             self.last_cache_dump = ts
 
+        if self.save_captured_frames:
+            self._local_backup(frame_resize, cam_id, is_alert=False)
+
         return float(conf)
 
     def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
@@ -341,14 +347,16 @@ class Engine:
                 logging.warning(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: str) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
+            is_alert (bool): is the frame an alert ?
         """
-        backup_cache = self._cache.joinpath("backup/alerts/")
+        folder = "alerts" if is_alert else "save"
+        backup_cache = self._cache.joinpath(f"backup/{folder}/")
         self._clean_local_backup(backup_cache)  # Dump old cache
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
