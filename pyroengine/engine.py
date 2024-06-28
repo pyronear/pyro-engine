@@ -297,8 +297,7 @@ class Engine:
                 "frame": frame,
                 "cam_id": cam_id,
                 "ts": ts,
-                "media_id": None,
-                "alert_id": None,
+                "detection_id": None,
                 "localization": localization,
             }
         )
@@ -308,39 +307,21 @@ class Engine:
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
-            logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+            logging.info(f"Camera '{cam_id}' - Create detection from {frame_info['ts']}...")
 
             # Save alert on device
             self._local_backup(frame_info["frame"], cam_id)
 
             try:
-                # Media creation
-                if not isinstance(self._alerts[0]["media_id"], int):
-                    self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-                # Alert creation
-                if not isinstance(self._alerts[0]["alert_id"], int):
-                    self._alerts[0]["alert_id"] = (
-                        self.api_client[cam_id]
-                        .send_alert_from_device(
-                            lat=self.latitude,
-                            lon=self.longitude,
-                            media_id=self._alerts[0]["media_id"],
-                            localization=self._alerts[0]["localization"],
-                        )
-                        .json()["id"]
-                    )
-                # Media upload
+                # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                response = self.api_client[cam_id].upload_media(
-                    self._alerts[0]["media_id"],
-                    media_data=stream.getvalue(),
-                )
+                response = self.api_client[cam_id].create_detection(stream.getvalue(), 123.2)
                 # Force a KeyError if the request failed
                 response.json()["id"]
                 # Clear
                 self._alerts.popleft()
-                logging.info(f"Camera '{cam_id}' - alert sent")
+                logging.info(f"Camera '{cam_id}' - detection created")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
                 logging.warning(f"Camera '{cam_id}' - unable to upload cache")
