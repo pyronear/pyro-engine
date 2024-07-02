@@ -84,14 +84,13 @@ def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
     try:
         if camera.cam_type == "ptz":
             for pose_id in camera.cam_poses:
-                cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture(pose_id)
                 if frame is not None:
-                    queue.put((cam_id, frame))
+                    queue.put((cam_id, pose_id, frame))
         else:
             frame = camera.capture()
             if frame is not None:
-                queue.put((cam_id, frame))
+                queue.put((cam_id, None, frame))
     except Exception as e:
         logging.exception(f"Error during image capture from camera {cam_id}: {e}")
 
@@ -137,16 +136,17 @@ class SystemController:
 
         return queue
 
-    def analyze_stream(self, img: Image.Image, cam_id: str) -> None:
+    def analyze_stream(self, img: Image.Image, cam_id: str, pose_id: int) -> None:
         """
         Analyzes the image stream from a specific camera.
 
         Args:
             img (Image.Image): The image to analyze.
             cam_id (str): The ID of the camera.
+            pose_id (int) : position of the camera, for ptz camera
         """
         # Run the prediction using the engine
-        self.engine.predict(img, cam_id)
+        self.engine.predict(img, cam_id, pose_id)
 
     def check_day_time(self) -> None:
         try:
@@ -178,17 +178,17 @@ class SystemController:
                 try:
                     queue = self.capture_images()
                 except Exception as e:
-                    logging.error(f"Error capturing images: {e}")
+                    logging.exception(f"Error capturing images: {e}")
 
                 # Analyze each captured frame
                 if queue:
                     while not queue.empty():
-                        cam_id, frame = queue.get()
+                        cam_id, pose_id, frame = queue.get()
                         try:
                             if frame is not None:
-                                self.analyze_stream(frame, cam_id)
+                                self.analyze_stream(frame, cam_id, pose_id)
                         except Exception as e:
-                            logging.error(f"Error running prediction: {e}")
+                            logging.exception(f"Error running prediction: {e}")
 
                     # Use the last frame to check if it's day_time
                     if frame is not None:
@@ -198,7 +198,7 @@ class SystemController:
                 try:
                     self.engine._process_alerts()
                 except Exception as e:
-                    logging.error(f"Error processing alerts: {e}")
+                    logging.exception(f"Error processing alerts: {e}")
 
             # Disable the alarm
             signal.alarm(0)

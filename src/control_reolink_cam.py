@@ -5,7 +5,7 @@
 
 
 import argparse
-
+import logging
 from pyroengine.sensors import ReolinkCamera
 
 
@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--duration", type=int, help="Duration in seconds for moving the camera", default=1)
 
     args = parser.parse_args()
-    print(args)
+    logging.info(args)
 
     # Create an instance of ReolinkCamera
     camera_controller = ReolinkCamera(
@@ -43,25 +43,25 @@ def main():
         if image is not None:
             image.save("im.jpg")
         else:
-            print("Failed to capture image.")
+            logging.info("Failed to capture image.")
     elif args.action == "move_camera":
         if args.operation:
             camera_controller.move_camera(operation=args.operation, speed=args.speed, idx=args.pos_id)
         else:
-            print("Operation type must be specified for moving the camera.")
+            logging.info("Operation type must be specified for moving the camera.")
     elif args.action == "move_in_seconds":
         if args.operation and args.duration:
             camera_controller.move_in_seconds(s=args.duration, operation=args.operation, speed=args.speed)
         else:
-            print("Operation type and duration must be specified for moving the camera.")
+            logging.info("Operation type and duration must be specified for moving the camera.")
     elif args.action == "get_ptz_preset":
         presets = camera_controller.get_ptz_preset()
-        print("PTZ Presets:", presets)
+        logging.info("PTZ Presets:", presets)
     elif args.action == "set_ptz_preset":
         if args.pos_id is not None:
             camera_controller.set_ptz_preset(idx=args.pos_id)
         else:
-            print("Position ID must be provided for setting a PTZ preset.")
+            logging.info("Position ID must be provided for setting a PTZ preset.")
 
 
 if __name__ == "__main__":

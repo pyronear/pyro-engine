@@ -7,7 +7,7 @@ import json
 import os
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
-
+import logging
 import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
@@ -57,9 +57,9 @@ class Classifier:
             # Load existing metadata
             metadata = self.load_metadata(METADATA_PATH)
             if metadata and metadata.get("sha256") == expected_sha256:
-                print("Model already exists and the SHA256 hash matches. No download needed.")
+                logging.info("Model already exists and the SHA256 hash matches. No download needed.")
             else:
-                print("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
                 os.remove(model_path)
                 self.download_model(model_path, expected_sha256)
         else:
@@ -81,15 +81,15 @@ class Classifier:
         os.makedirs(os.path.split(model_path)[0], exist_ok=True)
 
         # Download the model
-        print(f"Downloading model from {MODEL_URL} ...")
+        logging.info(f"Downloading model from {MODEL_URL} ...")
         with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
             urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
-        print("Model downloaded!")
+        logging.info("Model downloaded!")
 
         # Save the metadata
         metadata = {"sha256": expected_sha256}
         save_metadata(METADATA_PATH, metadata)
-        print("Metadata saved!")
+        logging.info("Metadata saved!")
 
     # Utility function to load metadata
     def load_metadata(self, metadata_path):

@@ -21,7 +21,6 @@ from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
-
 from pyroengine.utils import box_iou, nms
 
 from .vision import Classifier
@@ -64,7 +63,7 @@ class Engine:
         self,
         model_path: Optional[str] = "data/model.onnx",
         conf_thresh: float = 0.25,
-        api_url: Optional[str] = None,
+        api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
@@ -87,15 +86,15 @@ class Engine:
         self.conf_thresh = conf_thresh
 
         # API Setup
-        if isinstance(api_url, str):
+        if isinstance(api_host, str):
             assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
         self.latitude = latitude
         self.longitude = longitude
         self.api_client = {}
-        if isinstance(api_url, str) and isinstance(cam_creds, dict):
+        if isinstance(api_host, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, vals in cam_creds.items():
-                self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
+            for _id, camera_token in cam_creds.items():
+                self.api_client[_id] = client.Client(camera_token, api_host)
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
@@ -236,12 +235,13 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: str, pose_id: int) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
             frame: a PIL image
             cam_id: the name of the camera that sent this image
+            pose_id (int) : position of the camera, for ptz camera
         Returns:
             the predicted confidence
         """
@@ -251,7 +251,7 @@ class Engine:
             try:
                 self.heartbeat(cam_id)
             except ConnectionError:
-                logging.warning(f"Unable to reach the pyro-api with {cam_id}")
+                logging.exception(f"Unable to reach the pyro-api with {cam_id}")
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
@@ -276,7 +276,7 @@ class Engine:
                 self._states[cam_key]["last_predictions"]
             ):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, localization)
+                    self._stage_alert(frame, cam_id, pose_id, ts, localization)
                     self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
@@ -286,16 +286,17 @@ class Engine:
             self.last_cache_dump = ts
 
         if self.save_captured_frames:
-            self._local_backup(frame_resize, cam_id, is_alert=False)
+            self._local_backup(frame_resize, cam_id, pose_id, is_alert=False)
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, pose_id: int, ts: int, localization: list) -> None:
         # Store information in the queue
         self._alerts.append(
             {
                 "frame": frame,
                 "cam_id": cam_id,
+                "pose_id": pose_id,
                 "ts": ts,
                 "detection_id": None,
                 "localization": localization,
@@ -307,39 +308,47 @@ class Engine:
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
+            pose_id = frame_info["pose_id"]
             logging.info(f"Camera '{cam_id}' - Create detection from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id)
+            self._local_backup(frame_info["frame"], cam_id, pose_id)
 
             try:
                 # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                 response = self.api_client[cam_id].create_detection(stream.getvalue(), 123.2)
+
                 # Force a KeyError if the request failed
-                response.json()["id"]
-                # Clear
+                detection_id = response.json().get("id")
+                if detection_id is None:
+                    raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
                 self._alerts.popleft()
                 logging.info(f"Camera '{cam_id}' - detection created")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
-                logging.warning(f"Camera '{cam_id}' - unable to upload cache")
-                logging.warning(e)
+                logging.exception(f"Camera '{cam_id}' - unable to upload cache")
+                logging.exception(e)
+                break
+            except Exception as e:
+                logging.exception(f"Camera '{cam_id}' - unable to create detection")
+                logging.exception(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
+    def _local_backup(self, img: Image.Image, cam_id: Optional[str], pose_id: int, is_alert: bool = True) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
+            pose_id (int) : position of the camera, for ptz camera
             is_alert (bool): is the frame an alert ?
         """
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
         self._clean_local_backup(backup_cache)  # Dump old cache
-        backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
+        backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}/{pose_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
