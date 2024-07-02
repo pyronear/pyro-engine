@@ -41,16 +41,13 @@ def main(args):
 
     splitted_cam_creds = {}
     cameras = []
+    cam_poses = []
     for _ip, cam_data in cameras_credentials.items():
-        cam_poses = []
-        for creds in cam_data["credentials"]:
+        if _ip != "organization":
             if cam_data["type"] == "ptz":
-                splitted_cam_creds[_ip + "_" + str(creds["posid"])] = creds
-                cam_poses.append(creds["posid"])
-            else:
-                splitted_cam_creds[_ip] = creds
-
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+                cam_poses = cam_data["poses"]
+            splitted_cam_creds[_ip] = cam_data["token"]
+            cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
 
     # Check if model is available in cache
     cache = Path(args.cache)

@@ -69,10 +69,10 @@ class ReolinkCamera:
             if response_data[0]["code"] == 0:
                 logging.debug(success_message)
             else:
-                logging.error(f"Error: {response_data}")
+                logging.error(f"Error in camera call: {response_data}")
             return response_data
         else:
-            logging.error(f"Failed operation: {response.status_code}, {response.text}")
+            logging.error(f"Failed operation during camera control: {response.status_code}, {response.text}")
             return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:

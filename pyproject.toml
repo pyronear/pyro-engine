@@ -33,7 +33,7 @@ dependencies = [
     "Pillow>=8.4.0",
     "onnxruntime>=1.10.0,<2.0.0",
     "numpy>=1.19.5,<2.0.0",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@767be30a781b52b29d68579d543e3f45ac8c4713#egg=pyroclient&subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@21e83622c0b057d3ae767c8a8061130e267d8a8a#egg=pyroclient&subdirectory=client",
     "requests>=2.20.0,<3.0.0",
     "opencv-python==4.5.5.64",
     "tqdm>=4.62.0",
