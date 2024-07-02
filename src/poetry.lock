@@ -564,8 +564,8 @@ test = ["pytest (>=5.3.2)", "pytest-cov (>=3.0.0,<5.0.0)", "pytest-pretty (>=1.0
 [package.source]
 type = "git"
 url = "https://github.com/pyronear/pyro-api.git"
-reference = "e3198fbb358013cca671b969372a0245848eec03"
-resolved_reference = "e3198fbb358013cca671b969372a0245848eec03"
+reference = "21e83622c0b057d3ae767c8a8061130e267d8a8a"
+resolved_reference = "21e83622c0b057d3ae767c8a8061130e267d8a8a"
 subdirectory = "client"
 
 [[package]]
@@ -752,4 +752,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "27666dec769a2d77e0fc365de5e9aa67181f751a059616d254dc57782d5371b8"
+content-hash = "16b629a3552b57dd7ba296815e1e7cdf83ee33c2b560ceb58336b632c433dbbc"

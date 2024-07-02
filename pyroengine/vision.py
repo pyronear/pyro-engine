@@ -4,10 +4,11 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import json
+import logging
 import os
 from typing import Optional, Tuple
 from urllib.request import urlretrieve
-import logging
+
 import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]

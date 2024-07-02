@@ -6,6 +6,7 @@
 
 import argparse
 import logging
+
 from pyroengine.sensors import ReolinkCamera
 
 

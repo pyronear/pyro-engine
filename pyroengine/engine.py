@@ -21,6 +21,7 @@ from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
+
 from pyroengine.utils import box_iou, nms
 
 from .vision import Classifier
