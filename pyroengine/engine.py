@@ -264,7 +264,7 @@ class Engine:
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
-            self._local_backup(frame, cam_id, is_alert=False)
+            self._local_backup(frame, cam_id, pose_id, is_alert=False)
 
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
@@ -286,10 +286,6 @@ class Engine:
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
-
-        if self.save_captured_frames:
-            self._local_backup(frame_resize, cam_id, pose_id, is_alert=False)
-
 
         return float(conf)
 
