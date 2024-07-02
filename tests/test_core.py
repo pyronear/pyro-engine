@@ -79,8 +79,9 @@ def test_capture_images(system_controller):
         capture_camera_image((camera, queue))
 
     assert queue.qsize() == 1
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1"
+    assert pose_id == None
     assert isinstance(frame, Image.Image)
 
 
@@ -96,16 +97,18 @@ def test_capture_images_ptz(system_controller_ptz):
         retries -= 1
 
     assert queue.qsize() == 2
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
+    cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    assert cam_id == "192.168.1.1"
+    assert pose_id == 1
     assert isinstance(frame, Image.Image)
 
 
 def test_analyze_stream(system_controller):
     mock_frame = Image.new("RGB", (100, 100))
     cam_id = "192.168.1.1"
-    system_controller.analyze_stream(mock_frame, cam_id)
-    system_controller.engine.predict.assert_called_once_with(mock_frame, cam_id)
+    pose_id = None
+    system_controller.analyze_stream(mock_frame, cam_id, pose_id)
+    system_controller.engine.predict.assert_called_once_with(mock_frame, cam_id, pose_id)
 
 
 def test_run(system_controller):
@@ -186,8 +189,9 @@ def test_capture_camera_image():
     capture_camera_image((camera, queue))
 
     assert queue.qsize() == 1
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1"
+    assert pose_id == None
     assert isinstance(frame, Image.Image)
 
 
@@ -208,8 +212,9 @@ def test_capture_camera_image_ptz():
         retries -= 1
 
     assert queue.qsize() == 2
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
+    cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    assert cam_id == "192.168.1.1"
+    assert pose_id == 1
     assert isinstance(frame, Image.Image)
 
 
