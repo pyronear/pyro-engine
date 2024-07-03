@@ -29,6 +29,7 @@ class ReolinkCamera:
         password (str): Password for accessing the camera.
         cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom).
         cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.
+        cam_azimuths (Optional[List[float]]): List of preset azimuths for PTZ cameras.
         protocol (str): Protocol used for communication, defaults to 'https'.
 
     Methods:
@@ -46,6 +47,7 @@ class ReolinkCamera:
         password: str,
         cam_type: str,
         cam_poses: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
         protocol: str = "https",
     ):
         self.ip_address = ip_address
@@ -53,6 +55,7 @@ class ReolinkCamera:
         self.password = password
         self.cam_type = cam_type
         self.cam_poses = cam_poses if cam_poses is not None else []
+        self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
 
     def _build_url(self, command: str) -> str:

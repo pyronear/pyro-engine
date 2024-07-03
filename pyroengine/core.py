@@ -196,7 +196,7 @@ class SystemController:
 
                 # Process alerts
                 try:
-                    self.engine._process_alerts()
+                    self.engine._process_alerts(self.cameras)
                 except Exception as e:
                     logging.exception(f"Error processing alerts: {e}")
 

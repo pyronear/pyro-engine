@@ -13,7 +13,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2  # type: ignore[import-untyped]
 import numpy as np
@@ -24,6 +24,7 @@ from requests.models import Response
 
 from pyroengine.utils import box_iou, nms
 
+from .sensors import ReolinkCamera
 from .vision import Classifier
 
 __all__ = ["Engine"]
@@ -92,12 +93,9 @@ class Engine:
         self.latitude = latitude
         self.longitude = longitude
         self.api_client = {}
-        print("AVANT IS INSTANCE")
         if isinstance(api_host, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            print("AVANT FOR")
             for _id, camera_token in cam_creds.items():
-                print(_id)
                 self.api_client[_id] = client.Client(camera_token, api_host)
 
         # Cache & relaxation
@@ -190,8 +188,6 @@ class Engine:
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
-        print("ICI")
-        print(self.api_client)
         return self.api_client[cam_id].heartbeat()
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
@@ -310,7 +306,7 @@ class Engine:
             }
         )
 
-    def _process_alerts(self) -> None:
+    def _process_alerts(self, cameras: List[ReolinkCamera]) -> None:
         for _ in range(len(self._alerts)):
             # try to upload the oldest element
             frame_info = self._alerts[0]
@@ -325,7 +321,11 @@ class Engine:
                 # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                response = self.api_client[cam_id].create_detection(stream.getvalue(), 123.2)
+                for camera in cameras:
+                    if camera.ip_address == cam_id:
+                        azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else None
+                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth)
+                        break
 
                 # Force a KeyError if the request failed
                 detection_id = response.json().get("id")
