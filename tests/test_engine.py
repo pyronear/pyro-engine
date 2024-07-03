@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -17,7 +18,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache saving
     _ts = datetime.now().isoformat()
-    engine._stage_alert(mock_wildfire_image, 0, datetime.now().isoformat(), localization="dummy")
+    engine._stage_alert(mock_wildfire_image, 0, None, datetime.now().isoformat(), localization="dummy")
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["detection_id"] is None
@@ -31,6 +32,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert cache_dump[0] == {
         "frame_path": str(engine._cache.joinpath("pending_frame0.jpg")),
         "cam_id": 0,
+        "pose_id": None,
         "ts": engine._alerts[0]["ts"],
         "localization": "dummy",
     }
@@ -78,21 +80,52 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][2][4] is False
 
 
+def get_token(api_url: str, login: str, pwd: str) -> str:
+    response = requests.post(
+        f"{api_url}/login/creds",
+        data={"username": login, "password": pwd},
+        timeout=5,
+    )
+    if response.status_code != 200:
+        raise ValueError(response.json()["detail"])
+    return response.json()["access_token"]
+
+
 def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
-    api_url = os.environ.get("API_URL")
+    api_host = os.environ.get("API_URL")
+    camera_id = os.environ.get("CAMERA_ID")
+    superuser_login = os.environ.get("SUPERADMIN_LOGIN")
+    superuser_pwd = os.environ.get("SUPERADMIN_PWD")
     lat = os.environ.get("LAT")
     lon = os.environ.get("LON")
-    cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
-    # Skip the API-related tests if the URL is not specified
 
-    if isinstance(api_url, str):
+    # Skip the API-related tests if the URL is not specified
+    if isinstance(api_host, str):
+        api_url = api_host + "/api/v1"
+
+        superuser_auth = {
+            "Authorization": f"Bearer {get_token(api_url, superuser_login, superuser_pwd)}",
+            "Content-Type": "application/json",
+        }
+
+        token = requests.post(f"{api_url}/cameras/{camera_id}/token", headers=superuser_auth)["access_token"]
+
+        cam_creds = {
+            "dummy_cam": {
+                "brand": "reolink",
+                "name": "cam-1",
+                "type": "static",
+                "token": token,
+            }
+        }
+
         engine = Engine(
             folder + "model.onnx",
-            api_url=api_url,
+            api_host=api_host,
             cam_creds=cam_creds,
             latitude=float(lat),
             longitude=float(lon),

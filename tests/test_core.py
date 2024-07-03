@@ -81,7 +81,7 @@ def test_capture_images(system_controller):
     assert queue.qsize() == 1
     cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1"
-    assert pose_id == None
+    assert pose_id is None
     assert isinstance(frame, Image.Image)
 
 
@@ -191,7 +191,7 @@ def test_capture_camera_image():
     assert queue.qsize() == 1
     cam_id, pose_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1"
-    assert pose_id == None
+    assert pose_id is None
     assert isinstance(frame, Image.Image)
 
 

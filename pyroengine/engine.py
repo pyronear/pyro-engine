@@ -92,9 +92,12 @@ class Engine:
         self.latitude = latitude
         self.longitude = longitude
         self.api_client = {}
+        print("AVANT IS INSTANCE")
         if isinstance(api_host, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
+            print("AVANT FOR")
             for _id, camera_token in cam_creds.items():
+                print(_id)
                 self.api_client[_id] = client.Client(camera_token, api_host)
 
         # Cache & relaxation
@@ -162,6 +165,7 @@ class Engine:
                 {
                     "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
                     "cam_id": info["cam_id"],
+                    "pose_id": info["pose_id"],
                     "ts": info["ts"],
                     "localization": info["localization"],
                 }
@@ -186,6 +190,8 @@ class Engine:
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
+        print("ICI")
+        print(self.api_client)
         return self.api_client[cam_id].heartbeat()
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
@@ -236,7 +242,7 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: str, pose_id: int) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None, pose_id: Optional[int] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
@@ -289,7 +295,9 @@ class Engine:
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, pose_id: int, ts: int, localization: list) -> None:
+    def _stage_alert(
+        self, frame: Image.Image, cam_id: Optional[str], pose_id: Optional[int], ts: int, localization: list
+    ) -> None:
         # Store information in the queue
         self._alerts.append(
             {
@@ -335,7 +343,9 @@ class Engine:
                 logging.exception(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: Optional[str], pose_id: int, is_alert: bool = True) -> None:
+    def _local_backup(
+        self, img: Image.Image, cam_id: Optional[str], pose_id: Optional[int], is_alert: bool = True
+    ) -> None:
         """Save image on device
 
         Args:
