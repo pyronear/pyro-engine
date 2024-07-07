@@ -125,16 +125,15 @@ class SystemController:
                 break
             cam_id, frame = item
             try:
-                start_inference_time = time.time()
                 self.engine.predict(frame, cam_id)
-                logging.info(f"Inference in {time.time() - start_inference_time:.2f} seconds")
             except Exception as e:
                 logging.error(f"Error running prediction: {e}")
             finally:
                 if frame is not None:
-                    self.day_time = is_day_time(None, frame, "ir")
+                    self.day_time = is_day_time(None, frame.crop((0, 0, 200, 200)), "ir")
                     if not self.day_time:
                         logging.info("Switch to night mode")
+                        break
                 image_queue.task_done()  # Mark the task as done
 
     def check_day_time(self) -> None:
