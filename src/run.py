@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -28,6 +29,7 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
+    API_URL = "https://api.pyronear.org"
     LAT = float(os.environ.get("LAT"))
     LON = float(os.environ.get("LON"))
     assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
@@ -80,11 +82,7 @@ def main(args):
         cameras,
     )
 
-    while True:
-        start_ts = time.time()
-        sys_controller.run(args.period)
-        # Sleep only once all images are processed
-        time.sleep(max(args.period - time.time() + start_ts, 0))
+    asyncio.run(sys_controller.main_loop(args.period))
 
 
 if __name__ == "__main__":
@@ -121,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=45, help="Number of seconds between each camera stream analysis")
     args = parser.parse_args()
 
     main(args)
