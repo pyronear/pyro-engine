@@ -1,15 +1,8 @@
-# Copyright (C) 2022-2024, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
+import asyncio
 import logging
-import signal
+import time
 from datetime import datetime
-from multiprocessing import Manager, Pool
-from multiprocessing import Queue as MPQueue
-from types import FrameType
-from typing import List, Optional, Tuple, cast
+from typing import List, Optional
 
 import numpy as np
 import urllib3
@@ -19,7 +12,6 @@ from .engine import Engine
 from .sensors import ReolinkCamera
 
 __all__ = ["SystemController", "is_day_time"]
-
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -60,38 +52,31 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-def handler(signum: int, frame: Optional[FrameType]) -> None:
-    """
-    Signal handler for timeout.
-
-    Args:
-        signum (int): The signal number.
-        frame (Optional[FrameType]): The current stack frame (or None).
-    """
-    raise Exception("Analyze stream timeout")
-
-
-def capture_camera_image(args: Tuple[ReolinkCamera, MPQueue]) -> None:
+async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue) -> None:
     """
     Captures an image from the camera and puts it into a queue.
 
     Args:
-        args (tuple): A tuple containing the camera instance and a queue.
+        camera (ReolinkCamera): The camera instance.
+        image_queue (asyncio.Queue): The queue to put the captured image.
     """
-    camera, queue = args
-
     cam_id = camera.ip_address
     try:
         if camera.cam_type == "ptz":
-            for pose_id in camera.cam_poses:
+            for idx, pose_id in enumerate(camera.cam_poses):
                 cam_id = f"{camera.ip_address}_{pose_id}"
-                frame = camera.capture(pose_id)
+                frame = camera.capture()
+                # In order to avoid waiting for the camera to move we move it to the next pose
+                next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
+                camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                 if frame is not None:
-                    queue.put((cam_id, frame))
+                    await image_queue.put((cam_id, frame))
+                    await asyncio.sleep(0)  # Yield control
         else:
             frame = camera.capture()
             if frame is not None:
-                queue.put((cam_id, frame))
+                await image_queue.put((cam_id, frame))
+                await asyncio.sleep(0)  # Yield control
     except Exception as e:
         logging.exception(f"Error during image capture from camera {cam_id}: {e}")
 
@@ -117,36 +102,40 @@ class SystemController:
         self.cameras = cameras
         self.day_time = True
 
-    def capture_images(self) -> MPQueue:
+    async def capture_images(self, image_queue: asyncio.Queue) -> None:
         """
-        Captures images from all cameras using multiprocessing.
-
-        Returns:
-            MPQueue: A queue containing the captured images and their camera IDs.
-        """
-
-        manager = Manager()
-        queue: MPQueue = cast(MPQueue, manager.Queue())  # Cast to MPQueue
-
-        # Create a list of arguments to pass to capture_camera_image
-        args_list: List[Tuple[ReolinkCamera, MPQueue]] = [(camera, queue) for camera in self.cameras]
-
-        # Use a pool of processes to capture images concurrently
-        with Pool(processes=len(self.cameras)) as pool:
-            pool.map(capture_camera_image, args_list)
-
-        return queue
-
-    def analyze_stream(self, img: Image.Image, cam_id: str) -> None:
-        """
-        Analyzes the image stream from a specific camera.
+        Captures images from all cameras using asyncio.
 
         Args:
-            img (Image.Image): The image to analyze.
-            cam_id (str): The ID of the camera.
+            image_queue (asyncio.Queue): The queue to put the captured images.
         """
-        # Run the prediction using the engine
-        self.engine.predict(img, cam_id)
+        tasks = [capture_camera_image(camera, image_queue) for camera in self.cameras]
+        await asyncio.gather(*tasks)
+
+    async def analyze_stream(self, image_queue: asyncio.Queue) -> None:
+        """
+        Analyzes the image stream from the queue.
+
+        Args:
+            image_queue (asyncio.Queue): The queue with images to analyze.
+        """
+        while True:
+            item = await image_queue.get()
+            if item is None:
+                break
+            cam_id, frame = item
+            try:
+                start_inference_time = time.time()
+                self.engine.predict(frame, cam_id)
+                logging.info(f"Inference in {time.time() - start_inference_time:.2f} seconds")
+            except Exception as e:
+                logging.error(f"Error running prediction: {e}")
+            finally:
+                if frame is not None:
+                    self.day_time = is_day_time(None, frame, "ir")
+                    if not self.day_time:
+                        logging.info("Switch to night mode")
+                image_queue.task_done()  # Mark the task as done
 
     def check_day_time(self) -> None:
         try:
@@ -156,54 +145,51 @@ class SystemController:
         except Exception as e:
             logging.exception(f"Exception during initial day time check: {e}")
 
-    def run(self, period: int = 30) -> None:
+    async def run(self, period: int = 30) -> None:
         """
         Captures and analyzes all camera streams, then processes alerts.
 
         Args:
             period (int): The time period between captures in seconds.
         """
-
         try:
-            # Set the signal alarm
-            signal.signal(signal.SIGALRM, handler)
-            signal.alarm(period)
-
             if not self.day_time:
                 self.check_day_time()
 
             if self.day_time:
-                # Capture images
-                queue = None
-                try:
-                    queue = self.capture_images()
-                except Exception as e:
-                    logging.error(f"Error capturing images: {e}")
+                start_time = time.time()
+                image_queue = asyncio.Queue()
 
-                # Analyze each captured frame
-                if queue:
-                    while not queue.empty():
-                        cam_id, frame = queue.get()
-                        try:
-                            if frame is not None:
-                                self.analyze_stream(frame, cam_id)
-                        except Exception as e:
-                            logging.error(f"Error running prediction: {e}")
+                # Start the image processor task
+                processor_task = asyncio.create_task(self.analyze_stream(image_queue))
 
-                    # Use the last frame to check if it's day_time
-                    if frame is not None:
-                        self.day_time = is_day_time(None, frame, "ir")
+                # Capture images concurrently
+                await self.capture_images(image_queue)
 
-                # Process alerts
-                try:
-                    self.engine._process_alerts()
-                except Exception as e:
-                    logging.error(f"Error processing alerts: {e}")
+                # Wait for the image processor to finish processing
+                await image_queue.join()  # Ensure all tasks are marked as done
 
-            # Disable the alarm
-            signal.alarm(0)
-        except Exception:
-            logging.warning("Analyze stream timeout")
+                # Signal the image processor to stop processing
+                await image_queue.put(None)
+                await processor_task  # Ensure the processor task completes
+
+                logging.info(f"Total time for capturing and processing images: {time.time() - start_time:.2f} seconds")
+
+                # # Process alerts
+                # try:
+                #     self.engine._process_alerts()
+                # except Exception as e:
+                #     logging.error(f"Error processing alerts: {e}")
+
+        except Exception as e:
+            logging.warning(f"Analyze stream error: {e}")
+
+    async def main_loop(self, period: int):
+        while True:
+            start_ts = time.time()
+            await self.run(period)
+            # Sleep only once all images are processed
+            await asyncio.sleep(max(period - (time.time() - start_ts), 0))
 
     def __repr__(self) -> str:
         """
