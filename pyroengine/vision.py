@@ -12,21 +12,32 @@ import numpy as np
 import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
+import platform
+import logging
 
 from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/model.onnx"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov8s/resolve/main/"
 MODEL_ID = "pyronear/yolov8s"
-MODEL_NAME = "model.onnx"
+MODEL_NAME = "yolov8s.pt"
 METADATA_PATH = "data/model_metadata.json"
 
+
+logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+
+
+def is_arm_architecture():
+    # Check for ARM architecture
+    return platform.machine().startswith('arm') or platform.machine().startswith('aarch')
 
 # Utility function to save metadata
 def save_metadata(metadata_path, metadata):
     with open(metadata_path, "w") as f:
         json.dump(metadata, f)
+
+ 
 
 
 class Classifier:
@@ -40,30 +51,42 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (640, 640)) -> None:
+    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None) -> None:
+
         if model_path is None:
-            model_path = "data/model.onnx"
+            if format=="ncnn":
+                if is_arm_architecture():
+                    model = "yolov8s_ncnn_model.zip"
+                else:
+                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
+                    model = "yolov8s.onnx"
+            elif format in ["onnx","pt"]:
+                model = f"yolov8s.{format}"
+            
+            model_path = os.path.join(model_folder, model)
+            model_url = MODEL_URL_FOLDER + model
+        
+            # Get the expected SHA256 from Hugging Face
+            api = HfApi()
+            model_info = api.model_info(MODEL_ID, files_metadata=True)
+            expected_sha256 = self.get_sha(model_info.siblings)
 
-        # Get the expected SHA256 from Hugging Face
-        api = HfApi()
-        model_info = api.model_info(MODEL_ID, files_metadata=True)
-        expected_sha256 = self.get_sha(model_info.siblings)
+            if not expected_sha256:
+                raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
 
-        if not expected_sha256:
-            raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
 
-        # Check if the model file exists
-        if os.path.isfile(model_path):
-            # Load existing metadata
-            metadata = self.load_metadata(METADATA_PATH)
-            if metadata and metadata.get("sha256") == expected_sha256:
-                print("Model already exists and the SHA256 hash matches. No download needed.")
+            # Check if the model file exists
+            if os.path.isfile(model_path):
+                # Load existing metadata
+                metadata = self.load_metadata(METADATA_PATH)
+                if metadata and metadata.get("sha256") == expected_sha256:
+                    print("Model already exists and the SHA256 hash matches. No download needed.")
+                else:
+                    print("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                    os.remove(model_path)
+                    self.download_model(model_url, model_path, expected_sha256)
             else:
-                print("Model exists but the SHA256 hash does not match or the file doesn't exist.")
-                os.remove(model_path)
-                self.download_model(model_path, expected_sha256)
-        else:
-            self.download_model(model_path, expected_sha256)
+                self.download_model(model_url, model_path, expected_sha256)
 
         self.ort_session = onnxruntime.InferenceSession(model_path)
         self.img_size = img_size
