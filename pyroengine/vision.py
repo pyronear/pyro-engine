@@ -87,10 +87,10 @@ class Classifier:
             else:
                 self.download_model(model_url, model_path, expected_sha256)
 
-        file_name, ext = os.path.splitext(model_path)
-        if ext == ".zip":
-            shutil.unpack_archive(model_path, file_name)
-            model_path = file_name
+            file_name, ext = os.path.splitext(model_path)
+            if ext == ".zip":
+                shutil.unpack_archive(model_path, file_name)
+                model_path = file_name
 
         self.model = YOLO(model_path)
         self.imgsz = imgsz
