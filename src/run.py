@@ -54,13 +54,8 @@ def main(args):
 
         cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
 
-    # Check if model is available in cache
-    cache = Path(args.cache)
-
-    model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
-
     engine = Engine(
-        model_path,
+        args.model_path,
         args.thresh,
         API_URL,
         splitted_cam_creds,
