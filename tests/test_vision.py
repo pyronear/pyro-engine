@@ -8,7 +8,7 @@ from pyroengine.vision import Classifier
 
 METADATA_PATH = "data/model_metadata.json"
 model_path = "data/model.onnx"
-sha = "9f1b1c2654d98bbed91e514ce20ea73a0a5fbd1111880f230d516ed40ea2dc58"
+sha = "a79cedbe557230f2e16af2a3506cd524dcb6afd2a8fdd9c1c5b9173b5d8c94e6"
 
 
 def custom_isfile_false(path):
@@ -54,7 +54,7 @@ def test_classifier(mock_wildfire_image):
         os.remove(METADATA_PATH)
 
 
-# Test that the model is not loaded
+# Test that the model is not loaded. you need the updated hash
 def test_no_download():
     print("test_no_download")
     data = {"sha256": sha}

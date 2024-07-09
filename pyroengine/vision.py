@@ -18,9 +18,9 @@ from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/model.onnx"
+MODEL_NAME = "yolov8s.onnx"
 MODEL_ID = "pyronear/yolov8s"
-MODEL_NAME = "model.onnx"
+MODEL_URL = f"https://huggingface.co/{MODEL_ID}/resolve/main/{MODEL_NAME}"
 METADATA_PATH = "data/model_metadata.json"
 
 
@@ -75,6 +75,11 @@ class Classifier:
             if file.rfilename == os.path.basename(MODEL_NAME):
                 expected_sha256 = file.lfs.sha256
                 break
+        if expected_sha256 is None:
+            raise ValueError(
+                f"""No file matching {os.path.basename(MODEL_NAME)} found.
+                Ask your colleagues if they update the model in Hugging Face :) """
+            )
         return expected_sha256
 
     def download_model(self, model_path, expected_sha256):

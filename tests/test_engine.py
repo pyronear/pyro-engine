@@ -21,8 +21,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine._stage_alert(mock_wildfire_image, 0, None, datetime.now().isoformat(), localization="dummy")
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
-    assert engine._alerts[0]["detection_id"] is None
-
+    
     # Cache dump
     engine._dump_cache()
     assert engine._cache.joinpath("pending_alerts.json").is_file()

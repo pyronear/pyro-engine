@@ -184,7 +184,15 @@ class Engine:
             for entry in data:
                 # Open image
                 frame = Image.open(entry["frame_path"], mode="r")
-                self._alerts.append({"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]})
+                self._alerts.append(
+                    {
+                        "frame": frame,
+                        "cam_id": entry["cam_id"],
+                        "pose_id": entry["pose_id"],
+                        "localization": entry["localization"],
+                        "ts": entry["ts"],
+                    }
+                )
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
@@ -295,13 +303,13 @@ class Engine:
         self, frame: Image.Image, cam_id: Optional[str], pose_id: Optional[int], ts: int, localization: list
     ) -> None:
         # Store information in the queue
+
         self._alerts.append(
             {
                 "frame": frame,
                 "cam_id": cam_id,
                 "pose_id": pose_id,
                 "ts": ts,
-                "detection_id": None,
                 "localization": localization,
             }
         )
@@ -324,7 +332,10 @@ class Engine:
                 for camera in cameras:
                     if camera.ip_address == cam_id:
                         azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else None
-                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth)
+                        localization = self._alerts[0]["localization"]
+                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, localization)
+                        logging.info(f"Azimuth : {azimuth} , localization : {localization}")
+                        logging.info(f"Response : {response.json()}")
                         break
 
                 # Force a KeyError if the request failed
