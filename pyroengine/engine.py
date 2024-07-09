@@ -83,7 +83,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path)
+        self.model = Classifier(model_path=model_path)
         self.conf_thresh = conf_thresh
 
         # API Setup
