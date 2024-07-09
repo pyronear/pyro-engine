@@ -51,7 +51,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None) -> None:
+    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0.05, format="ncnn", model_path=None) -> None:
 
         if model_path is None:
             if format == "ncnn":
@@ -89,10 +89,11 @@ class Classifier:
 
             file_name, ext = os.path.splitext(model_path)
             if ext == ".zip":
-                shutil.unpack_archive(model_path, file_name)
+                if not os.path.isdir(file_name):
+                    shutil.unpack_archive(model_path, model_folder)
                 model_path = file_name
 
-        self.model = YOLO(model_path)
+        self.model = YOLO(model_path, task="detect")
         self.imgsz = imgsz
         self.conf = conf
         self.iou = iou
