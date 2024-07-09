@@ -129,7 +129,7 @@ class Classifier:
 
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
 
-        results = self.model(pil_img, imgsz=self.img_size, conf=self.conf, iou=self.iou)
+        results = self.model(pil_img, imgsz=self.imgsz, conf=self.conf, iou=self.iou)
         y = np.concatenate(
             (results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.conf.cpu().numpy().reshape((-1, 1))), axis=1
         )
