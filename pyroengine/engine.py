@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import cv2  # type: ignore[import-untyped]
 import numpy as np
 from PIL import Image
 from pyroclient import client
@@ -120,12 +119,12 @@ class Engine:
                     "ongoing": False,
                 }
 
-        self.occlusion_masks = {"-1": None}
+        self.occlusion_masks: Dict[str, np.ndarray] = {"-1": None}
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
                 if os.path.isfile(mask_file):
-                    self.occlusion_masks[cam_id] = cv2.imread(mask_file, 0)
+                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(('L')))
                 else:
                     self.occlusion_masks[cam_id] = None
 

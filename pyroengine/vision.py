@@ -8,15 +8,15 @@ import logging
 import os
 import platform
 import shutil
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.request import urlretrieve
 
 import numpy as np
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
-from ultralytics import YOLO
+from ultralytics import YOLO  # type: ignore[import-untyped]
 
-from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
+from .utils import DownloadProgressBar
 
 __all__ = ["Classifier"]
 
