@@ -40,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=5.3.2",
+    "pytest-asyncio>=0.14.0",
     "coverage[toml]>=4.5.4",
     "requests>=2.20.0,<3.0.0",
     "python-dotenv>=0.15.0",
@@ -63,6 +64,7 @@ docs = [
 dev = [
     # test
     "pytest>=5.3.2",
+    "pytest-asyncio>=0.14.0",
     "coverage[toml]>=4.5.4",
     "requests>=2.20.0,<3.0.0",
     # style
@@ -89,7 +91,6 @@ zip-safe = true
 
 [tool.setuptools.packages.find]
 exclude = ["docs*", "scripts*", "tests*", "src*"]
-
 
 [tool.mypy]
 files = "pyroengine/"
