@@ -331,7 +331,7 @@ class Engine:
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                 for camera in cameras:
                     if camera.ip_address == cam_id:
-                        azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else None
+                        azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
                         localization = self._alerts[0]["localization"]
                         response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, localization)
                         logging.info(f"Azimuth : {azimuth} , localization : {localization}")

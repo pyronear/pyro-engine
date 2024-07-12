@@ -48,6 +48,9 @@ def main(args):
             if cam_data["type"] == "ptz":
                 cam_poses = cam_data["poses"]
                 cam_azimuths = cam_data["azimuths"]
+            else:
+                cam_poses = []
+                cam_azimuths = [cam_data["azimuth"]]
             splitted_cam_creds[_ip] = cam_data["token"]
             cameras.append(
                 ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol)
