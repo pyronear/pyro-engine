@@ -335,7 +335,6 @@ class Engine:
                         localization = self._alerts[0]["localization"]
                         response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, localization)
                         logging.info(f"Azimuth : {azimuth} , localization : {localization}")
-                        logging.info(f"Response : {response.json()}")
                         break
 
                 # Force a KeyError if the request failed
