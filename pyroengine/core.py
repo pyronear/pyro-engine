@@ -2,11 +2,10 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import urllib3
-from PIL import Image
 
 from .engine import Engine
 from .sensors import ReolinkCamera
@@ -20,26 +19,28 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 
 
 def is_day_time(cache, frame, strategy, delta=0):
-    """This function allows to know if it is daytime or not. We have two strategies.
-    The first one is to take the current time and compare it to the sunset time.
-    The second is to see if we have a color image. The ir cameras switch to ir mode at night and
-    therefore produce black and white images. This function can use one or more strategies depending on the use case.
+    """
+    Determines if it is daytime using specified strategies.
+
+    Strategies:
+    1. Time-based: Compares the current time with sunrise and sunset times.
+    2. IR-based: Analyzes the color of the image; IR cameras produce black and white images at night.
 
     Args:
-        cache (Path): cache folder where sunset_sunrise.txt is located
-        frame (PIL image): frame to analyze with ir strategy
-        strategy (str): Strategy to define day time [None, time, ir or both]
-        delta (int): delta before and after sunset / sunrise in sec
+        cache (Path): Cache folder where `sunset_sunrise.txt` is located.
+        frame (PIL.Image): Frame to analyze with the IR strategy.
+        strategy (str): Strategy to define daytime ("time", "ir", or "both").
+        delta (int): Time delta in seconds before and after sunrise/sunset.
 
     Returns:
-        bool: is day time
+        bool: True if it is daytime, False otherwise.
     """
     is_day = True
     if strategy in ["both", "time"]:
         with open(cache.joinpath("sunset_sunrise.txt")) as f:
             lines = f.readlines()
-        sunrise = datetime.strptime(lines[0][:-1], "%H:%M")
-        sunset = datetime.strptime(lines[1][:-1], "%H:%M")
+        sunrise = datetime.strptime(lines[0].strip(), "%H:%M")
+        sunset = datetime.strptime(lines[1].strip(), "%H:%M")
         now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
         if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
             is_day = False
@@ -66,7 +67,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
             for idx, pose_id in enumerate(camera.cam_poses):
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture()
-                # In order to avoid waiting for the camera to move we move it to the next pose
+                # Move camera to the next pose to avoid waiting
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                 camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                 if frame is not None:
@@ -83,20 +84,20 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
 
 class SystemController:
     """
-    Implements the full system controller for capturing and analyzing camera streams.
+    Controls the system for capturing and analyzing camera streams.
 
     Attributes:
         engine (Engine): The image analyzer engine.
-        cameras (List[ReolinkCamera]): The list of cameras to get the visual streams from.
+        cameras (List[ReolinkCamera]): List of cameras to capture streams from.
     """
 
     def __init__(self, engine: Engine, cameras: List[ReolinkCamera]) -> None:
         """
-        Initializes the SystemController with an engine and a list of cameras.
+        Initializes the SystemController.
 
         Args:
             engine (Engine): The image analyzer engine.
-            cameras (List[ReolinkCamera]): The list of cameras to get the visual streams from.
+            cameras (List[ReolinkCamera]): List of cameras to capture streams from.
         """
         self.engine = engine
         self.cameras = cameras
@@ -137,6 +138,9 @@ class SystemController:
                 image_queue.task_done()  # Mark the task as done
 
     def check_day_time(self) -> None:
+        """
+        Checks and updates the day_time attribute based on the current frame.
+        """
         try:
             frame = self.cameras[0].capture()
             if frame is not None:
@@ -183,12 +187,21 @@ class SystemController:
         except Exception as e:
             logging.warning(f"Analyze stream error: {e}")
 
-    async def main_loop(self, period: int):
+    async def main_loop(self, period: int) -> None:
+        """
+        Main loop to capture and process images at regular intervals.
+
+        Args:
+            period (int): The time period between captures in seconds.
+        """
         while True:
             start_ts = time.time()
             await self.run(period)
             # Sleep only once all images are processed
-            await asyncio.sleep(max(period - (time.time() - start_ts), 0))
+            loop_time = time.time() - start_ts
+            sleep_time = max(period - (loop_time), 0)
+            logging.info(f"Loop run under {loop_time} seconds, sleeping for {sleep_time}")
+            await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:
         """
