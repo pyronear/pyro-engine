@@ -40,7 +40,11 @@ build-optional-lib:
 
 # Run the engine wrapper
 run:
-	bash scripts/setup-docker-compose.sh
+	docker build --build-arg ARCH=arm64 . -t pyronear/pyro-engine:latest
+	docker compose up -d
+
+# Run the engine wrapper
+run-linux:
 	docker build . -t pyronear/pyro-engine:latest
 	docker compose up -d
 

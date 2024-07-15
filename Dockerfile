@@ -1,4 +1,10 @@
-FROM python:3.8.16-slim
+# syntax=docker/dockerfile:1.4
+
+# Build argument to specify architecture (default to cpu)
+ARG ARCH=cpu
+
+# Use appropriate base image based on architecture
+FROM ultralytics/ultralytics:latest-${ARCH}
 
 # set environment variables
 ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
