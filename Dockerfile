@@ -16,10 +16,15 @@ COPY ./setup.py /tmp/setup.py
 # install git
 RUN apt-get update && apt-get install git -y
 
-COPY ./src/requirements.txt /tmp/requirements.txt
+
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
     && pip install --upgrade pip setuptools wheel \
-    && pip install --default-timeout=500 -r /tmp/requirements.txt \
+    && pip cache purge \
+    && rm -rf /root/.cache/pip
+
+COPY ./src/requirements.txt /tmp/requirements.txt
+
+RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
     && pip cache purge \
     && rm -rf /root/.cache/pip
 
