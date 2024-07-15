@@ -7,16 +7,7 @@
 import numpy as np
 from tqdm import tqdm  # type: ignore[import-untyped]
 
-__all__ = ["nms", "xywh2xyxy", "DownloadProgressBar", "letterbox"]
-
-
-def xywh2xyxy(x: np.ndarray):
-    y = np.copy(x)
-    y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
-    y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
-    y[..., 2] = x[..., 0] + x[..., 2] / 2  # bottom right x
-    y[..., 3] = x[..., 1] + x[..., 3] / 2  # bottom right y
-    return y
+__all__ = ["nms", "DownloadProgressBar", "letterbox"]
 
 
 def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):
