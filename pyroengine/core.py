@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
 import numpy as np
 import urllib3
@@ -161,7 +161,7 @@ class SystemController:
 
             if self.day_time:
                 start_time = time.time()
-                image_queue = asyncio.Queue()
+                image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
                 # Start the image processor task
                 processor_task = asyncio.create_task(self.analyze_stream(image_queue))

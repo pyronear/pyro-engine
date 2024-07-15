@@ -119,7 +119,7 @@ class Engine:
                     "ongoing": False,
                 }
 
-        self.occlusion_masks: Dict[str, np.ndarray] = {"-1": None}
+        self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
