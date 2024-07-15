@@ -67,7 +67,7 @@ def test_download(tmpdir_factory):
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
     # Instantiate the ONNX model
-    model = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder)
 
     model_path = os.path.join(folder, "yolov8s.onnx")
     model_creation_date = get_creation_date(model_path)
