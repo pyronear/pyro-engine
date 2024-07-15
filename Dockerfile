@@ -1,10 +1,4 @@
-# syntax=docker/dockerfile:1.4
-
-# Build argument to specify architecture (default to cpu)
-ARG ARCH=cpu
-
-# Use appropriate base image based on architecture
-FROM ultralytics/ultralytics:8.2.57-${ARCH}
+FROM python:3.8.16-slim
 
 # set environment variables
 ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
@@ -16,10 +10,20 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # set work directory
 WORKDIR /usr/src/app
 
+COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
-COPY ./src/requirements.txt /tmp/requirements.txt
+# install git
+RUN apt-get update && apt-get install git -y
 
+
+RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
+    && pip install --upgrade pip setuptools wheel \
+    && pip install --default-timeout=500 -r /tmp/requirements.txt \
+    && pip cache purge \
+    && rm -rf /root/.cache/pip
+
+COPY ./src/requirements.txt /tmp/requirements.txt
 RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
     && pip cache purge \
     && rm -rf /root/.cache/pip
