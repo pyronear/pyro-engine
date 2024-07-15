@@ -23,15 +23,10 @@ __all__ = ["Classifier"]
 MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov8s/resolve/main/"
 MODEL_ID = "pyronear/yolov8s"
 MODEL_NAME = "yolov8s.pt"
-METADATA_PATH = "data/model_metadata.json"
+METADATA_NAME = "model_metadata.json"
 
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
-
-
-def is_arm_architecture():
-    # Check for ARM architecture
-    return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
 
 
 # Utility function to save metadata
@@ -54,7 +49,7 @@ class Classifier:
     def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0.05, format="ncnn", model_path=None) -> None:
         if model_path is None:
             if format == "ncnn":
-                if is_arm_architecture():
+                if self.is_arm_architecture():
                     model = "yolov8s_ncnn_model.zip"
                 else:
                     logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
@@ -63,6 +58,7 @@ class Classifier:
                 model = f"yolov8s.{format}"
 
             model_path = os.path.join(model_folder, model)
+            metadata_path = os.path.join(model_folder, METADATA_NAME)
             model_url = MODEL_URL_FOLDER + model
 
             # Get the expected SHA256 from Hugging Face
@@ -76,15 +72,15 @@ class Classifier:
             # Check if the model file exists
             if os.path.isfile(model_path):
                 # Load existing metadata
-                metadata = self.load_metadata(METADATA_PATH)
+                metadata = self.load_metadata(metadata_path)
                 if metadata and metadata.get("sha256") == expected_sha256:
                     logging.info("Model already exists and the SHA256 hash matches. No download needed.")
                 else:
                     logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
                     os.remove(model_path)
-                    self.download_model(model_url, model_path, expected_sha256)
+                    self.download_model(model_url, model_path, expected_sha256, metadata_path)
             else:
-                self.download_model(model_url, model_path, expected_sha256)
+                self.download_model(model_url, model_path, expected_sha256, metadata_path)
 
             file_name, ext = os.path.splitext(model_path)
             if ext == ".zip":
@@ -97,6 +93,10 @@ class Classifier:
         self.conf = conf
         self.iou = iou
 
+    def is_arm_architecture(self):
+        # Check for ARM architecture
+        return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
+
     def get_sha(self, siblings):
         # Extract the SHA256 hash from the model files metadata
         for file in siblings:
@@ -104,7 +104,7 @@ class Classifier:
                 return file.lfs["sha256"]
         return None
 
-    def download_model(self, model_url, model_path, expected_sha256):
+    def download_model(self, model_url, model_path, expected_sha256, metadata_path):
         # Ensure the directory exists
         os.makedirs(os.path.split(model_path)[0], exist_ok=True)
 
@@ -116,7 +116,7 @@ class Classifier:
 
         # Save the metadata
         metadata = {"sha256": expected_sha256}
-        save_metadata(METADATA_PATH, metadata)
+        save_metadata(metadata_path, metadata)
         logging.info("Metadata saved!")
 
     # Utility function to load metadata
