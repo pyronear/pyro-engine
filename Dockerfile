@@ -4,7 +4,7 @@
 ARG ARCH=cpu
 
 # Use appropriate base image based on architecture
-FROM ultralytics/ultralytics:latest-${ARCH}
+FROM ultralytics/ultralytics:8.2.57-${ARCH}
 
 # set environment variables
 ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
@@ -16,17 +16,10 @@ ENV PYTHONDONTWRITEBYTECODE 1
 # set work directory
 WORKDIR /usr/src/app
 
-COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
 # install git
 RUN apt-get update && apt-get install git -y
-
-
-RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
-    && pip install --upgrade pip setuptools wheel \
-    && pip cache purge \
-    && rm -rf /root/.cache/pip
 
 COPY ./src/requirements.txt /tmp/requirements.txt
 
