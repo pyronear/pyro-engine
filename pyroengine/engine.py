@@ -124,7 +124,7 @@ class Engine:
             for cam_id in cam_creds:
                 mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
                 if os.path.isfile(mask_file):
-                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(('L')))
+                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
                 else:
                     self.occlusion_masks[cam_id] = None
 
