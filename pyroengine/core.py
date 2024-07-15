@@ -196,7 +196,7 @@ class SystemController:
             # Sleep only once all images are processed
             loop_time = time.time() - start_ts
             sleep_time = max(period - (loop_time), 0)
-            logging.info(f"Loop run under {loop_time} seconds, sleeping for {sleep_time}")
+            logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
             await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:
