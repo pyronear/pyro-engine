@@ -1,16 +1,13 @@
 FROM python:3.8.16-slim
 
 # set environment variables
-ENV PYTHONPATH "${PYTHONPATH}:/usr/src/app"
-ENV PATH /usr/local/bin:$PATH
-ENV LANG C.UTF-8
-ENV PYTHONUNBUFFERED 1
-ENV PYTHONDONTWRITEBYTECODE 1
-
+ENV PATH="/usr/local/bin:$PATH"
+ENV LANG="C.UTF-8"
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 # set work directory
 WORKDIR /usr/src/app
 
-COPY ./README.md /tmp/README.md
 COPY ./setup.py /tmp/setup.py
 
 # install git
