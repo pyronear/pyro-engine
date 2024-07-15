@@ -12,6 +12,3 @@ license = "Apache-2.0"
 [tool.poetry.dependencies]
 python = "^3.8"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", rev = "767be30a781b52b29d68579d543e3f45ac8c4713", subdirectory = "client" }
-pyroengine = "^0.2.0"
-python-dotenv = ">=0.15.0"
-ultralytics = "8.2.50"
