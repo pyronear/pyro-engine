@@ -18,9 +18,6 @@ WORKDIR /usr/src/app
 
 COPY ./setup.py /tmp/setup.py
 
-# install git
-RUN apt-get update && apt-get install git -y
-
 COPY ./src/requirements.txt /tmp/requirements.txt
 
 RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
