@@ -159,7 +159,6 @@ class SystemController:
             self.check_day_time()
 
             if self.day_time:
-                start_time = time.time()
                 image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
                 # Start the image processor task
@@ -175,13 +174,11 @@ class SystemController:
                 await image_queue.put(None)
                 await processor_task  # Ensure the processor task completes
 
-                logging.info(f"Total time for capturing and processing images: {time.time() - start_time:.2f} seconds")
-
-                # # Process alerts
-                # try:
-                #     self.engine._process_alerts()
-                # except Exception as e:
-                #     logging.error(f"Error processing alerts: {e}")
+                # Process alerts
+                try:
+                    self.engine._process_alerts()
+                except Exception as e:
+                    logging.error(f"Error processing alerts: {e}")
 
         except Exception as e:
             logging.warning(f"Analyze stream error: {e}")
