@@ -7,7 +7,7 @@
 import numpy as np
 from tqdm import tqdm  # type: ignore[import-untyped]
 
-__all__ = ["nms", "DownloadProgressBar", "letterbox"]
+__all__ = ["nms", "DownloadProgressBar"]
 
 
 def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):

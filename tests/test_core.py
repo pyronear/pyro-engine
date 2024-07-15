@@ -1,13 +1,11 @@
 import asyncio
-import time
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 from PIL import Image
 
-from pyroengine.core import SystemController, capture_camera_image, is_day_time
+from pyroengine.core import SystemController, is_day_time
 
 
 @pytest.fixture
