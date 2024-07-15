@@ -41,7 +41,7 @@ def save_metadata(metadata_path, metadata):
 
 
 class Classifier:
-    """Implements an image classification model using ONNX backend.
+    """Implements an image classification model using YOLO backend.
 
     Examples:
         >>> from pyroengine.vision import Classifier
@@ -52,7 +52,6 @@ class Classifier:
     """
 
     def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0.05, format="ncnn", model_path=None) -> None:
-
         if model_path is None:
             if format == "ncnn":
                 if is_arm_architecture():
@@ -102,9 +101,8 @@ class Classifier:
         # Extract the SHA256 hash from the model files metadata
         for file in siblings:
             if file.rfilename == os.path.basename(MODEL_NAME):
-                expected_sha256 = file.lfs.sha256
-                break
-        return expected_sha256
+                return file.lfs["sha256"]
+        return None
 
     def download_model(self, model_url, model_path, expected_sha256):
         # Ensure the directory exists
