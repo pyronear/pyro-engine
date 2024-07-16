@@ -75,7 +75,7 @@ def main(args):
         cameras,
     )
 
-    asyncio.run(sys_controller.main_loop(args.period))
+    asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
 
 
 if __name__ == "__main__":
@@ -109,7 +109,10 @@ if __name__ == "__main__":
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+
+    # Debug
     parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
+    parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
