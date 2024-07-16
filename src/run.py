@@ -111,7 +111,7 @@ if __name__ == "__main__":
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
     # Debug
-    parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
+    parser.add_argument("--save_captured_frames", type=bool, default=True, help="Save all captured frames locally")
     parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
