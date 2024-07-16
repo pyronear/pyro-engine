@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
     && pip install --upgrade pip setuptools wheel 
 
 COPY ./src/requirements.txt /tmp/requirements.txt
-RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
+RUN pip install --default-timeout=1000 -r /tmp/requirements.txt \
     && pip cache purge \
     && rm -rf /root/.cache/pip
 
