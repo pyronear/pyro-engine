@@ -30,12 +30,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "Pillow>=8.4.0",
-    "onnxruntime>=1.10.0,<2.0.0",
-    "numpy>=1.19.5,<2.0.0",
+    "ultralytics==8.2.50",
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@767be30a781b52b29d68579d543e3f45ac8c4713#egg=pyroclient&subdirectory=client",
     "requests>=2.20.0,<3.0.0",
-    "opencv-python==4.5.5.64",
     "tqdm>=4.62.0",
     "huggingface_hub==0.23.1", 
 ]
@@ -43,6 +40,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=5.3.2",
+    "pytest-asyncio>=0.14.0",
     "coverage[toml]>=4.5.4",
     "requests>=2.20.0,<3.0.0",
     "python-dotenv>=0.15.0",
@@ -66,6 +64,7 @@ docs = [
 dev = [
     # test
     "pytest>=5.3.2",
+    "pytest-asyncio>=0.14.0",
     "coverage[toml]>=4.5.4",
     "requests>=2.20.0,<3.0.0",
     # style
@@ -92,7 +91,6 @@ zip-safe = true
 
 [tool.setuptools.packages.find]
 exclude = ["docs*", "scripts*", "tests*", "src*"]
-
 
 [tool.mypy]
 files = "pyroengine/"

@@ -127,3 +127,58 @@ def test_delete_ptz_preset_failure():
         camera.delete_ptz_preset(idx=1)
         # Assert that a failed operation logs an error message
         assert mock_response.json.call_count == 1
+
+
+def test_reboot_camera_success():
+    # Mock the response of requests.post to return a successful response for reboot
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
+        response = camera.reboot_camera()
+        # Assert that the reboot_camera method was called successfully
+        assert mock_response.json.call_count == 1
+        assert response == mock_response.json.return_value
+
+
+def test_get_auto_focus_success():
+    # Mock the response of requests.post to return a successful response with autofocus data
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0, "value": {"AutoFocus": [{"channel": 0, "disable": 0}]}}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
+        response = camera.get_auto_focus()
+        # Assert that the get_auto_focus method returns the correct data
+        assert response == mock_response.json.return_value
+
+
+def test_set_auto_focus_success():
+    # Mock the response of requests.post to return a successful response for setting autofocus
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
+        response = camera.set_auto_focus(disable=True)
+        # Assert that the set_auto_focus method was called successfully
+        assert mock_response.json.call_count == 1
+        assert response == mock_response.json.return_value
+
+
+def test_start_zoom_focus_success():
+    # Mock the response of requests.post to return a successful response for starting zoom focus
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
+        response = camera.start_zoom_focus(position=100)
+        # Assert that the start_zoom_focus method was called successfully
+        assert mock_response.json.call_count == 1
+        assert response == mock_response.json.return_value
