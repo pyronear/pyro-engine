@@ -55,6 +55,9 @@ class ReolinkCamera:
         self.cam_poses = cam_poses if cam_poses is not None else []
         self.protocol = protocol
 
+        if len(self.cam_poses):
+            self.move_camera("ToPos", idx=int(self.cam_poses[0]), speed=50)
+
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
         return (
@@ -198,3 +201,33 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {idx} deleted successfully.")
+
+    def reboot_camera(self):
+        url = self._build_url("Reboot")
+        data = [{"cmd": "Reboot"}]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, "Camera reboot initiated successfully.")
+
+    def get_auto_focus(self):
+        url = self._build_url("GetAutoFocus")
+        data = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, "Fetched AutoFocus settings successfully.")
+
+    def set_auto_focus(self, disable: bool):
+        url = self._build_url("SetAutoFocus")
+        data = [{"cmd": "SetAutoFocus", "action": 0, "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}}}]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, "Set AutoFocus settings successfully.")
+
+    def start_zoom_focus(self, position: int):
+        url = self._build_url("StartZoomFocus")
+        data = [
+            {
+                "cmd": "StartZoomFocus",
+                "action": 0,
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
+            }
+        ]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, "Started ZoomFocus successfully.")

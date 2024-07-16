@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import cv2  # type: ignore[import-untyped]
 import numpy as np
 from PIL import Image
 from pyroclient import client
@@ -57,12 +56,12 @@ class Engine:
         >>> "cam_id_1": {'login':'log1', 'password':'pwd1'},
         >>> "cam_id_2": {'login':'log2', 'password':'pwd2'},
         >>> }
-        >>> pyroEngine = Engine("data/model.onnx", 0.25, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
+        >>> pyroEngine = Engine(None, 0.25, 'https://api.pyronear.org', cam_creds, 48.88, 2.38)
     """
 
     def __init__(
         self,
-        model_path: Optional[str] = "data/model.onnx",
+        model_path: Optional[str] = None,
         conf_thresh: float = 0.25,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
@@ -83,7 +82,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path)
+        self.model = Classifier(model_path=model_path)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -120,12 +119,12 @@ class Engine:
                     "ongoing": False,
                 }
 
-        self.occlusion_masks = {"-1": None}
+        self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
                 if os.path.isfile(mask_file):
-                    self.occlusion_masks[cam_id] = cv2.imread(mask_file, 0)
+                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
                 else:
                     self.occlusion_masks[cam_id] = None
 

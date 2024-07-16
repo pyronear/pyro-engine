@@ -4,11 +4,10 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import argparse
+import asyncio
 import json
 import logging
 import os
-import time
-from pathlib import Path
 
 import urllib3
 from dotenv import load_dotenv
@@ -28,6 +27,7 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
+    API_URL = "https://api.pyronear.org"
     LAT = float(os.environ.get("LAT"))
     LON = float(os.environ.get("LON"))
     assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
@@ -52,13 +52,8 @@ def main(args):
 
         cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
 
-    # Check if model is available in cache
-    cache = Path(args.cache)
-
-    model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
-
     engine = Engine(
-        model_path,
+        args.model_path,
         args.thresh,
         API_URL,
         splitted_cam_creds,
@@ -80,11 +75,7 @@ def main(args):
         cameras,
     )
 
-    while True:
-        start_ts = time.time()
-        sys_controller.run(args.period)
-        # Sleep only once all images are processed
-        time.sleep(max(args.period - time.time() + start_ts, 0))
+    asyncio.run(sys_controller.main_loop(args.period))
 
 
 if __name__ == "__main__":
@@ -92,7 +83,7 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--model_path", type=str, default="data/model.onnx", help="model path")
+    parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")

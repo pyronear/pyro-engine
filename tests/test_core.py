@@ -1,13 +1,11 @@
-import time
+import asyncio
 from datetime import datetime
-from multiprocessing import Queue
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 from PIL import Image
 
-from pyroengine.core import SystemController, capture_camera_image, is_day_time
+from pyroengine.core import SystemController, is_day_time
 
 
 @pytest.fixture
@@ -47,11 +45,11 @@ def system_controller_ptz(mock_engine, mock_cameras_ptz):
 
 
 def test_is_day_time_ir_strategy(mock_wildfire_image):
-    # Use the mock_forest_stream image to simulate daylight image
+    # Use day image
     assert is_day_time(None, mock_wildfire_image, "ir")
 
-    # Create a black and white image to simulate night image
-    frame = Image.fromarray(np.zeros((100, 100, 3), dtype=np.uint8))
+    # Create a grayscale image to simulate night image
+    frame = Image.new("RGB", (100, 100), (255, 255, 255))
     assert not is_day_time(None, frame, "ir")
 
 
@@ -73,144 +71,62 @@ def test_is_day_time_time_strategy(tmp_path):
         assert not is_day_time(cache, None, "time")
 
 
-def test_capture_images(system_controller):
-    queue = Queue(maxsize=10)
-    for camera in system_controller.cameras:
-        capture_camera_image((camera, queue))
+@pytest.mark.asyncio
+async def test_capture_images(system_controller):
+    queue = asyncio.Queue(maxsize=10)
+    await system_controller.capture_images(queue)
 
     assert queue.qsize() == 1
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    cam_id, frame = await queue.get()  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1"
     assert isinstance(frame, Image.Image)
 
 
-def test_capture_images_ptz(system_controller_ptz):
-    queue = Queue(maxsize=10)
-    for camera in system_controller_ptz.cameras:
-        capture_camera_image((camera, queue))
-
-    # Retry logic to account for potential timing issues
-    retries = 10
-    while retries > 0 and queue.qsize() < 2:
-        time.sleep(0.1)
-        retries -= 1
+@pytest.mark.asyncio
+async def test_capture_images_ptz(system_controller_ptz):
+    queue = asyncio.Queue(maxsize=10)
+    await system_controller_ptz.capture_images(queue)
 
     assert queue.qsize() == 2
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
+    cam_id, frame = await queue.get()  # Use timeout to wait for the item
     assert cam_id == "192.168.1.1_1"
     assert isinstance(frame, Image.Image)
 
 
-def test_analyze_stream(system_controller):
+@pytest.mark.asyncio
+async def test_analyze_stream(system_controller):
+    queue = asyncio.Queue()
     mock_frame = Image.new("RGB", (100, 100))
-    cam_id = "192.168.1.1"
-    system_controller.analyze_stream(mock_frame, cam_id)
-    system_controller.engine.predict.assert_called_once_with(mock_frame, cam_id)
+    await queue.put(("192.168.1.1", mock_frame))
+
+    analyze_task = asyncio.create_task(system_controller.analyze_stream(queue))
+    await queue.put(None)  # Signal the end of the stream
+    await analyze_task
+
+    system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
 
 
-def test_run(system_controller):
-    with patch.object(system_controller, "capture_images", return_value=Queue()), patch.object(
-        system_controller, "analyze_stream"
-    ), patch.object(system_controller.engine, "_process_alerts"), patch("signal.signal"), patch("signal.alarm"), patch(
-        "time.sleep", side_effect=InterruptedError
-    ):  # Mock sleep to exit the loop
+@pytest.mark.asyncio
+async def test_capture_images_method(system_controller):
+    with patch("pyroengine.core.capture_camera_image", new_callable=AsyncMock) as mock_capture:
+        queue = asyncio.Queue()
+        await system_controller.capture_images(queue)
 
-        try:
-            system_controller.run(period=2)
-        except InterruptedError:
-            pass
+        for camera in system_controller.cameras:
+            mock_capture.assert_any_call(camera, queue)
+        assert mock_capture.call_count == len(system_controller.cameras)
 
 
-def test_run_no_images(system_controller):
-    with patch.object(system_controller, "capture_images", return_value=Queue()), patch.object(
-        system_controller, "analyze_stream"
-    ) as mock_analyze_stream, patch.object(system_controller.engine, "_process_alerts"), patch("signal.signal"), patch(
-        "signal.alarm"
-    ), patch(
-        "time.sleep", side_effect=InterruptedError
-    ):  # Mock sleep to exit the loop
+@pytest.mark.asyncio
+async def test_analyze_stream_method(system_controller):
+    queue = asyncio.Queue()
+    mock_frame = Image.new("RGB", (100, 100))
+    await queue.put(("192.168.1.1", mock_frame))
+    await queue.put(None)  # Signal the end of the stream
 
-        try:
-            system_controller.run(period=2)
-        except InterruptedError:
-            pass
+    await system_controller.analyze_stream(queue)
 
-        mock_analyze_stream.assert_not_called()
-
-
-def test_run_capture_exception(system_controller):
-    with patch.object(system_controller, "capture_images", side_effect=Exception("Capture error")), patch.object(
-        system_controller.engine, "_process_alerts"
-    ), patch("signal.signal"), patch("signal.alarm"), patch(
-        "time.sleep", side_effect=InterruptedError
-    ):  # Mock sleep to exit the loop
-
-        try:
-            system_controller.run(period=2)
-        except InterruptedError:
-            pass
-
-
-def test_capture_camera_image_exception():
-    queue = Queue(maxsize=10)
-    camera = MagicMock()
-    camera.cam_type = "static"
-    camera.ip_address = "192.168.1.1"
-    camera.capture.side_effect = Exception("Capture error")
-
-    capture_camera_image((camera, queue))
-
-    assert queue.qsize() == 0
-
-
-def test_repr_method(system_controller):
-    repr_str = repr(system_controller)
-    # Check if the representation is a string
-    assert isinstance(repr_str, str)
-
-
-def test_repr_method_no_cameras(mock_engine):
-    system_controller = SystemController(engine=mock_engine, cameras=[])
-    repr_str = repr(system_controller)
-    # Check if the representation is a string
-    assert isinstance(repr_str, str)
-
-
-def test_capture_camera_image():
-    queue = Queue(maxsize=10)
-    camera = MagicMock()
-    camera.cam_type = "static"
-    camera.ip_address = "192.168.1.1"
-    camera.capture.return_value = Image.new("RGB", (100, 100))  # Mock captured image
-
-    capture_camera_image((camera, queue))
-
-    assert queue.qsize() == 1
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1"
-    assert isinstance(frame, Image.Image)
-
-
-def test_capture_camera_image_ptz():
-    queue = Queue(maxsize=10)
-    camera = MagicMock()
-    camera.cam_type = "ptz"
-    camera.cam_poses = [1, 2]
-    camera.ip_address = "192.168.1.1"
-    camera.capture.return_value = Image.new("RGB", (100, 100))  # Mock captured image
-
-    capture_camera_image((camera, queue))
-
-    # Retry logic to account for potential timing issues
-    retries = 10
-    while retries > 0 and queue.qsize() < 2:
-        time.sleep(0.1)
-        retries -= 1
-
-    assert queue.qsize() == 2
-    cam_id, frame = queue.get(timeout=1)  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
-    assert isinstance(frame, Image.Image)
+    system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
 
 
 def test_check_day_time(system_controller):
@@ -230,3 +146,16 @@ def test_check_day_time(system_controller):
         system_controller.check_day_time()
         mock_is_day_time.assert_called_once()
         mock_logging_exception.assert_called_once_with("Exception during initial day time check: Error in is_day_time")
+
+
+def test_repr_method(system_controller):
+    repr_str = repr(system_controller)
+    # Check if the representation is a string
+    assert isinstance(repr_str, str)
+
+
+def test_repr_method_no_cameras(mock_engine):
+    system_controller = SystemController(engine=mock_engine, cameras=[])
+    repr_str = repr(system_controller)
+    # Check if the representation is a string
+    assert isinstance(repr_str, str)

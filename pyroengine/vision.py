@@ -4,23 +4,29 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import json
+import logging
 import os
-from typing import Optional, Tuple
+import platform
+import shutil
+from typing import Optional
 from urllib.request import urlretrieve
 
 import numpy as np
-import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
+from ultralytics import YOLO  # type: ignore[import-untyped]
 
-from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
+from .utils import DownloadProgressBar
 
 __all__ = ["Classifier"]
 
-MODEL_URL = "https://huggingface.co/pyronear/yolov8s/resolve/main/model.onnx"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov8s/resolve/main/"
 MODEL_ID = "pyronear/yolov8s"
-MODEL_NAME = "model.onnx"
-METADATA_PATH = "data/model_metadata.json"
+MODEL_NAME = "yolov8s.pt"
+METADATA_NAME = "model_metadata.json"
+
+
+logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 # Utility function to save metadata
@@ -30,7 +36,7 @@ def save_metadata(metadata_path, metadata):
 
 
 class Classifier:
-    """Implements an image classification model using ONNX backend.
+    """Implements an image classification model using YOLO backend.
 
     Examples:
         >>> from pyroengine.vision import Classifier
@@ -40,56 +46,78 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_path: Optional[str] = "data/model.onnx", img_size: tuple = (640, 640)) -> None:
+    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0.05, format="ncnn", model_path=None) -> None:
         if model_path is None:
-            model_path = "data/model.onnx"
+            if format == "ncnn":
+                if self.is_arm_architecture():
+                    model = "yolov8s_ncnn_model.zip"
+                else:
+                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
+                    model = "yolov8s.onnx"
+            elif format in ["onnx", "pt"]:
+                model = f"yolov8s.{format}"
 
-        # Get the expected SHA256 from Hugging Face
-        api = HfApi()
-        model_info = api.model_info(MODEL_ID, files_metadata=True)
-        expected_sha256 = self.get_sha(model_info.siblings)
+            model_path = os.path.join(model_folder, model)
+            metadata_path = os.path.join(model_folder, METADATA_NAME)
+            model_url = MODEL_URL_FOLDER + model
 
-        if not expected_sha256:
-            raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
+            # Get the expected SHA256 from Hugging Face
+            api = HfApi()
+            model_info = api.model_info(MODEL_ID, files_metadata=True)
+            expected_sha256 = self.get_sha(model_info.siblings)
 
-        # Check if the model file exists
-        if os.path.isfile(model_path):
-            # Load existing metadata
-            metadata = self.load_metadata(METADATA_PATH)
-            if metadata and metadata.get("sha256") == expected_sha256:
-                print("Model already exists and the SHA256 hash matches. No download needed.")
+            if not expected_sha256:
+                raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
+
+            # Check if the model file exists
+            if os.path.isfile(model_path):
+                # Load existing metadata
+                metadata = self.load_metadata(metadata_path)
+                if metadata and metadata.get("sha256") == expected_sha256:
+                    logging.info("Model already exists and the SHA256 hash matches. No download needed.")
+                else:
+                    logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                    os.remove(model_path)
+                    self.download_model(model_url, model_path, expected_sha256, metadata_path)
             else:
-                print("Model exists but the SHA256 hash does not match or the file doesn't exist.")
-                os.remove(model_path)
-                self.download_model(model_path, expected_sha256)
-        else:
-            self.download_model(model_path, expected_sha256)
+                self.download_model(model_url, model_path, expected_sha256, metadata_path)
 
-        self.ort_session = onnxruntime.InferenceSession(model_path)
-        self.img_size = img_size
+            file_name, ext = os.path.splitext(model_path)
+            if ext == ".zip":
+                if not os.path.isdir(file_name):
+                    shutil.unpack_archive(model_path, model_folder)
+                model_path = file_name
+
+        self.model = YOLO(model_path, task="detect")
+        self.imgsz = imgsz
+        self.conf = conf
+        self.iou = iou
+
+    def is_arm_architecture(self):
+        # Check for ARM architecture
+        return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
 
     def get_sha(self, siblings):
         # Extract the SHA256 hash from the model files metadata
         for file in siblings:
             if file.rfilename == os.path.basename(MODEL_NAME):
-                expected_sha256 = file.lfs.sha256
-                break
-        return expected_sha256
+                return file.lfs["sha256"]
+        return None
 
-    def download_model(self, model_path, expected_sha256):
+    def download_model(self, model_url, model_path, expected_sha256, metadata_path):
         # Ensure the directory exists
         os.makedirs(os.path.split(model_path)[0], exist_ok=True)
 
         # Download the model
-        print(f"Downloading model from {MODEL_URL} ...")
+        logging.info(f"Downloading model from {model_url} ...")
         with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-            urlretrieve(MODEL_URL, model_path, reporthook=t.update_to)
-        print("Model downloaded!")
+            urlretrieve(model_url, model_path, reporthook=t.update_to)
+        logging.info("Model downloaded!")
 
         # Save the metadata
         metadata = {"sha256": expected_sha256}
-        save_metadata(METADATA_PATH, metadata)
-        print("Metadata saved!")
+        save_metadata(metadata_path, metadata)
+        logging.info("Metadata saved!")
 
     # Utility function to load metadata
     def load_metadata(self, metadata_path):
@@ -98,51 +126,14 @@ class Classifier:
                 return json.load(f)
         return None
 
-    def preprocess_image(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
-        """Preprocess an image for inference
-
-        Args:
-            pil_img: A valid PIL image.
-
-        Returns:
-            A tuple containing:
-            - The resized and normalized image of shape (1, C, H, W).
-            - Padding information as a tuple of integers (pad_height, pad_width).
-        """
-
-        np_img, pad = letterbox(np.array(pil_img), self.img_size)  # Applies letterbox resize with padding
-        np_img = np.expand_dims(np_img.astype("float"), axis=0)  # Add batch dimension
-        np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
-        np_img = np_img.astype("float32") / 255  # Normalize to [0, 1]
-
-        return np_img, pad
-
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
-        np_img, pad = self.preprocess_image(pil_img)
 
-        # ONNX inference
-        y = self.ort_session.run(["output0"], {"images": np_img})[0][0]
-        # Drop low conf for speed-up
-        y = y[:, y[-1, :] > 0.05]
-        # Post processing
-        y = np.transpose(y)
-        y = xywh2xyxy(y)
-        # Sort by confidence
-        y = y[y[:, 4].argsort()]
-        y = nms(y)
-        y = y[::-1]
+        results = self.model(pil_img, imgsz=self.imgsz, conf=self.conf, iou=self.iou)
+        y = np.concatenate(
+            (results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.conf.cpu().numpy().reshape((-1, 1))), axis=1
+        )
 
-        # Normalize preds
-        if len(y) > 0:
-            # Remove padding
-            left_pad, top_pad = pad
-            y[:, :4:2] -= left_pad
-            y[:, 1:4:2] -= top_pad
-            y[:, :4:2] /= self.img_size[1] - 2 * left_pad
-            y[:, 1:4:2] /= self.img_size[0] - 2 * top_pad
-            y = np.clip(y, 0, 1)
-        else:
-            y = np.zeros((0, 5))  # normalize output
+        y = np.reshape(y, (-1, 5))
 
         # Remove prediction in occlusion mask
         if occlusion_mask is not None:
