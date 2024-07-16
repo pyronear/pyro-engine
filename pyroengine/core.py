@@ -148,12 +148,13 @@ class SystemController:
         except Exception as e:
             logging.exception(f"Exception during initial day time check: {e}")
 
-    async def run(self, period: int = 30) -> None:
+    async def run(self, period: int = 30, send_alerts: bool = True) -> None:
         """
         Captures and analyzes all camera streams, then processes alerts.
 
         Args:
             period (int): The time period between captures in seconds.
+            send_alerts (bool): Boolean to activate / deactivate alert sending
         """
         try:
             self.check_day_time()
@@ -176,23 +177,25 @@ class SystemController:
 
                 # Process alerts
                 try:
-                    self.engine._process_alerts()
+                    if send_alerts:
+                        self.engine._process_alerts()
                 except Exception as e:
                     logging.error(f"Error processing alerts: {e}")
 
         except Exception as e:
             logging.warning(f"Analyze stream error: {e}")
 
-    async def main_loop(self, period: int) -> None:
+    async def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
         Main loop to capture and process images at regular intervals.
 
         Args:
             period (int): The time period between captures in seconds.
+            send_alerts (bool): Boolean to activate / deactivate alert sending
         """
         while True:
             start_ts = time.time()
-            await self.run(period)
+            await self.run(period, send_alerts)
             # Sleep only once all images are processed
             loop_time = time.time() - start_ts
             sleep_time = max(period - (loop_time), 0)
