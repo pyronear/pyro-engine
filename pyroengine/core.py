@@ -154,6 +154,7 @@ class SystemController:
 
         Args:
             period (int): The time period between captures in seconds.
+            send_alerts (bool): Boolean to activate / deactivate alert sending
         """
         try:
             self.check_day_time()
@@ -190,6 +191,7 @@ class SystemController:
 
         Args:
             period (int): The time period between captures in seconds.
+            send_alerts (bool): Boolean to activate / deactivate alert sending
         """
         while True:
             start_ts = time.time()
