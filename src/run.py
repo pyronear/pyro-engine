@@ -27,7 +27,6 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
-    API_URL = "https://api.pyronear.org"
     LAT = float(os.environ.get("LAT"))
     LON = float(os.environ.get("LON"))
     assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
