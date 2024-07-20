@@ -4,11 +4,10 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import argparse
+import asyncio
 import json
 import logging
 import os
-import time
-from pathlib import Path
 
 import urllib3
 from dotenv import load_dotenv
@@ -56,13 +55,8 @@ def main(args):
                 ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol)
             )
 
-    # Check if model is available in cache
-    cache = Path(args.cache)
-
-    model_path = cache.joinpath("model.onnx") if args.model_path is None else args.model_path
-
     engine = Engine(
-        model_path,
+        args.model_path,
         args.thresh,
         API_URL,
         splitted_cam_creds,
@@ -84,11 +78,7 @@ def main(args):
         cameras,
     )
 
-    while True:
-        start_ts = time.time()
-        sys_controller.run(args.period)
-        # Sleep only once all images are processed
-        time.sleep(max(args.period - time.time() + start_ts, 0))
+    asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
 
 
 if __name__ == "__main__":
@@ -96,7 +86,7 @@ if __name__ == "__main__":
         description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     # Model
-    parser.add_argument("--model_path", type=str, default="data/model.onnx", help="model path")
+    parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
@@ -122,7 +112,10 @@ if __name__ == "__main__":
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+
+    # Debug
     parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
+    parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
     parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")

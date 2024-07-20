@@ -123,8 +123,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         }
 
         engine = Engine(
-            folder + "model.onnx",
-            api_host=api_host,
+            api_url=api_url,
             cam_creds=cam_creds,
             latitude=float(lat),
             longitude=float(lon),
