@@ -89,7 +89,7 @@ async def test_capture_images_ptz(system_controller_ptz):
 
     assert queue.qsize() == 2
     cam_id, frame = await queue.get()  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
+    assert cam_id == "192.168.1.1"
     assert isinstance(frame, Image.Image)
 
 

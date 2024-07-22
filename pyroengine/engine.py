@@ -164,7 +164,7 @@ class Engine:
                     "cam_id": info["cam_id"],
                     "pose_id": info["pose_id"],
                     "ts": info["ts"],
-                    "localization": info["localization"],
+                    "bboxes": info["bboxes"],
                 }
             )
 
@@ -188,7 +188,7 @@ class Engine:
                         "frame": frame,
                         "cam_id": entry["cam_id"],
                         "pose_id": entry["pose_id"],
-                        "localization": entry["localization"],
+                        "bboxes": entry["bboxes"],
                         "ts": entry["ts"],
                     }
                 )
@@ -283,12 +283,10 @@ class Engine:
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
+            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, pose_id, ts, localization)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+                    self._stage_alert(frame, cam_id, pose_id, ts, bboxes)
+                    self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
@@ -299,7 +297,7 @@ class Engine:
         return float(conf)
 
     def _stage_alert(
-        self, frame: Image.Image, cam_id: Optional[str], pose_id: Optional[int], ts: int, localization: list
+        self, frame: Image.Image, cam_id: Optional[str], pose_id: Optional[int], ts: int, bboxes: list
     ) -> None:
         # Store information in the queue
 
@@ -309,7 +307,7 @@ class Engine:
                 "cam_id": cam_id,
                 "pose_id": pose_id,
                 "ts": ts,
-                "localization": localization,
+                "bboxes": bboxes,
             }
         )
 
@@ -331,9 +329,9 @@ class Engine:
                 for camera in cameras:
                     if camera.ip_address == cam_id:
                         azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
-                        localization = self._alerts[0]["localization"]
-                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, localization)
-                        logging.info(f"Azimuth : {azimuth} , localization : {localization}")
+                        bboxes = self._alerts[0]["bboxes"]
+                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
+                        logging.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
                         break
 
                 # Force a KeyError if the request failed

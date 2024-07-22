@@ -1376,8 +1376,8 @@ test = ["pytest (>=5.3.2)", "pytest-cov (>=3.0.0,<5.0.0)", "pytest-pretty (>=1.0
 [package.source]
 type = "git"
 url = "https://github.com/pyronear/pyro-api.git"
-reference = "5da3d23d38cb78a4a4e15cf2f9f83bf2da7cdaee"
-resolved_reference = "5da3d23d38cb78a4a4e15cf2f9f83bf2da7cdaee"
+reference = "f809a399bf8928e93da8e95056e811217f6c2a17"
+resolved_reference = "f809a399bf8928e93da8e95056e811217f6c2a17"
 subdirectory = "client"
 
 [[package]]
@@ -1865,4 +1865,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "80ad1e637eef8c91462c9b2952b2795800eb6a0a10d06a514af6ef3997b8b0de"
+content-hash = "5a2878fef12e172376b702ef6e9295cb229ae6fec68e815cfdcda1997577471d"

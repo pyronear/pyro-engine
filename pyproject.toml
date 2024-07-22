@@ -32,7 +32,7 @@ dynamic = ["version"]
 dependencies = [
     "ultralytics==8.2.50",
     "opencv-python",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@5da3d23d38cb78a4a4e15cf2f9f83bf2da7cdaee#egg=pyroclient&subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@f809a399bf8928e93da8e95056e811217f6c2a17#egg=pyroclient&subdirectory=client",
     "requests>=2.20.0,<3.0.0",
     "tqdm>=4.62.0",
     "huggingface_hub==0.23.1", 
