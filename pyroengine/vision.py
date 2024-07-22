@@ -101,6 +101,7 @@ class Classifier:
         # Extract the SHA256 hash from the model files metadata
         for file in siblings:
             if file.rfilename == os.path.basename(MODEL_NAME):
+
                 return file.lfs["sha256"]
         return None
 

@@ -70,7 +70,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
     try:
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
-                cam_id = f"{camera.ip_address}_{pose_id}"
+                cam_id = f"{camera.ip_address}"
                 frame = camera.capture()
                 # Move camera to the next pose to avoid waiting
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
@@ -160,6 +160,7 @@ class SystemController:
             self.check_day_time()
 
             if self.day_time:
+
                 image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
                 # Start the image processor task
@@ -178,9 +179,9 @@ class SystemController:
                 # Process alerts
                 try:
                     if send_alerts:
-                        self.engine._process_alerts()
+                        self.engine._process_alerts(self.cameras)
                 except Exception as e:
-                    logging.error(f"Error processing alerts: {e}")
+                    logging.exception(f"Error processing alerts: {e}")
 
         except Exception as e:
             logging.warning(f"Analyze stream error: {e}")

@@ -89,7 +89,7 @@ async def test_capture_images_ptz(system_controller_ptz):
 
     assert queue.qsize() == 2
     cam_id, frame = await queue.get()  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
+    assert cam_id == "192.168.1.1"
     assert isinstance(frame, Image.Image)
 
 
@@ -97,6 +97,7 @@ async def test_capture_images_ptz(system_controller_ptz):
 async def test_analyze_stream(system_controller):
     queue = asyncio.Queue()
     mock_frame = Image.new("RGB", (100, 100))
+
     await queue.put(("192.168.1.1", mock_frame))
 
     analyze_task = asyncio.create_task(system_controller.analyze_stream(queue))
@@ -125,7 +126,6 @@ async def test_analyze_stream_method(system_controller):
     await queue.put(None)  # Signal the end of the stream
 
     await system_controller.analyze_stream(queue)
-
     system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
 
 

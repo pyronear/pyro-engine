@@ -27,7 +27,6 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
-    API_URL = "https://api.pyronear.org"
     LAT = float(os.environ.get("LAT"))
     LON = float(os.environ.get("LON"))
     assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
@@ -41,16 +40,20 @@ def main(args):
 
     splitted_cam_creds = {}
     cameras = []
+    cam_poses = []
+    cam_azimuths = []
     for _ip, cam_data in cameras_credentials.items():
-        cam_poses = []
-        for creds in cam_data["credentials"]:
+        if _ip != "organization":
             if cam_data["type"] == "ptz":
-                splitted_cam_creds[_ip + "_" + str(creds["posid"])] = creds
-                cam_poses.append(creds["posid"])
+                cam_poses = cam_data["poses"]
+                cam_azimuths = cam_data["azimuths"]
             else:
-                splitted_cam_creds[_ip] = creds
-
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+                cam_poses = []
+                cam_azimuths = [cam_data["azimuth"]]
+            splitted_cam_creds[_ip] = cam_data["token"]
+            cameras.append(
+                ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol)
+            )
 
     engine = Engine(
         args.model_path,
