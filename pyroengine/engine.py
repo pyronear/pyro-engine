@@ -195,42 +195,35 @@ class Engine:
         if self._states[cam_key]["ongoing"]:
             conf_th *= 0.8
 
-        # nb detection
-        nb_detection = 0
-        if preds.shape[0]:
-            if np.max(preds[:, -1]) > conf_th:
-                nb_detection += 1
-
         # Get last predictions
         boxes = np.zeros((0, 5))
         boxes = np.concatenate([boxes, preds])
         for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
-                if box.shape[0]:
-                    if np.max(box[:, -1]) > conf_th:
-                        nb_detection += 1
 
         conf = 0
         output_predictions = np.zeros((0, 5))
         # Get the best ones
-        if boxes.shape[0] and nb_detection > 1:
+        if boxes.shape[0]:
             best_boxes = nms(boxes)
             ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
-            combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-            conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+            if np.sum(ious > 0, 0).max() > 1:  # at least two detection
+                best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+                combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
+                conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+                if len(combine_predictions):
 
-            if len(combine_predictions):
+                    # send only preds boxes that match combine_predictions
+                    ious = box_iou(combine_predictions[:, :4], preds[:, :4])
+                    iou_match = [np.max(iou) > 0 for iou in ious]
+                    output_predictions = preds[iou_match, :]
 
-                # send only preds boxes that match combine_predictions
-                ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                iou_match = [np.max(iou) > 0 for iou in ious]
-                output_predictions = preds[iou_match, :]
-
-                # Limit bbox size for api
-                output_predictions = np.round(output_predictions, 3)  # max 3 digit
-                output_predictions = output_predictions[:5, :]  # max 5 bbox
+                    # Limit bbox size for api
+                    output_predictions = np.round(output_predictions, 3)  # max 3 digit
+                    output_predictions = output_predictions[:5, :]  # max 5 bbox
+            else:
+                conf = 0
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
