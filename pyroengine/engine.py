@@ -195,17 +195,26 @@ class Engine:
         if self._states[cam_key]["ongoing"]:
             conf_th *= 0.8
 
+        # nb detection
+        nb_detection = 0
+        if preds.shape[0]:
+            if np.max(preds[:, -1]) > conf_th:
+                nb_detection += 1
+
         # Get last predictions
         boxes = np.zeros((0, 5))
         boxes = np.concatenate([boxes, preds])
         for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
+                if box.shape[0]:
+                    if np.max(box[:, -1]) > conf_th:
+                        nb_detection += 1
 
         conf = 0
         output_predictions = np.zeros((0, 5))
         # Get the best ones
-        if boxes.shape[0]:
+        if boxes.shape[0] and nb_detection > 1:
             best_boxes = nms(boxes)
             ious = box_iou(best_boxes[:, :4], boxes[:, :4])
             best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
