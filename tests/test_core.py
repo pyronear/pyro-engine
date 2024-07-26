@@ -16,18 +16,18 @@ def mock_engine():
 
 
 @pytest.fixture
-def mock_cameras():
+def mock_cameras(mock_wildfire_image):
     camera = MagicMock()
-    camera.capture.return_value = Image.new("RGB", (100, 100))  # Mock captured image
+    camera.capture.return_value = mock_wildfire_image  # Mock captured image
     camera.cam_type = "static"
     camera.ip_address = "192.168.1.1"
     return [camera]
 
 
 @pytest.fixture
-def mock_cameras_ptz():
+def mock_cameras_ptz(mock_wildfire_image):
     camera = MagicMock()
-    camera.capture.return_value = Image.new("RGB", (100, 100))  # Mock captured image
+    camera.capture.return_value = mock_wildfire_image  # Mock captured image
     camera.cam_type = "ptz"
     camera.cam_poses = [1, 2]
     camera.ip_address = "192.168.1.1"
@@ -94,9 +94,9 @@ async def test_capture_images_ptz(system_controller_ptz):
 
 
 @pytest.mark.asyncio
-async def test_analyze_stream(system_controller):
+async def test_analyze_stream(system_controller, mock_wildfire_image):
     queue = asyncio.Queue()
-    mock_frame = Image.new("RGB", (100, 100))
+    mock_frame = mock_wildfire_image
     await queue.put(("192.168.1.1", mock_frame))
 
     analyze_task = asyncio.create_task(system_controller.analyze_stream(queue))
@@ -118,9 +118,9 @@ async def test_capture_images_method(system_controller):
 
 
 @pytest.mark.asyncio
-async def test_analyze_stream_method(system_controller):
+async def test_analyze_stream_method(system_controller, mock_wildfire_image):
     queue = asyncio.Queue()
-    mock_frame = Image.new("RGB", (100, 100))
+    mock_frame = mock_wildfire_image
     await queue.put(("192.168.1.1", mock_frame))
     await queue.put(None)  # Signal the end of the stream
 
