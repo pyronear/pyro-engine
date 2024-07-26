@@ -129,25 +129,6 @@ async def test_analyze_stream_method(system_controller):
     system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
 
 
-def test_check_day_time(system_controller):
-    with patch("pyroengine.core.is_day_time", return_value=True) as mock_is_day_time:
-        system_controller.check_day_time()
-        assert system_controller.day_time is True
-        mock_is_day_time.assert_called_once()
-
-    with patch("pyroengine.core.is_day_time", return_value=False) as mock_is_day_time:
-        system_controller.check_day_time()
-        assert system_controller.day_time is False
-        mock_is_day_time.assert_called_once()
-
-    with patch("pyroengine.core.is_day_time", side_effect=Exception("Error in is_day_time")) as mock_is_day_time, patch(
-        "pyroengine.core.logging.exception"
-    ) as mock_logging_exception:
-        system_controller.check_day_time()
-        mock_is_day_time.assert_called_once()
-        mock_logging_exception.assert_called_once_with("Exception during initial day time check: Error in is_day_time")
-
-
 def test_repr_method(system_controller):
     repr_str = repr(system_controller)
     # Check if the representation is a string
