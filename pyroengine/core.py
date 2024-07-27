@@ -75,7 +75,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                 # Move camera to the next pose to avoid waiting
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                 camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
-                if frame is not None:
+                if frame is not None and is_day_time(None, frame, "ir"):
                     await image_queue.put((cam_id, frame))
                     await asyncio.sleep(0)  # Yield control
         else:
@@ -137,17 +137,6 @@ class SystemController:
             finally:
                 image_queue.task_done()  # Mark the task as done
 
-    def check_day_time(self) -> None:
-        """
-        Checks and updates the day_time attribute based on the current frame.
-        """
-        try:
-            frame = self.cameras[0].capture()
-            if frame is not None:
-                self.day_time = is_day_time(None, frame, "ir")
-        except Exception as e:
-            logging.exception(f"Exception during initial day time check: {e}")
-
     async def run(self, period: int = 30, send_alerts: bool = True) -> None:
         """
         Captures and analyzes all camera streams, then processes alerts.
@@ -157,7 +146,6 @@ class SystemController:
             send_alerts (bool): Boolean to activate / deactivate alert sending
         """
         try:
-            self.check_day_time()
 
             if self.day_time:
                 image_queue: asyncio.Queue[Any] = asyncio.Queue()
