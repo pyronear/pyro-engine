@@ -62,7 +62,7 @@ class Engine:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        conf_thresh: float = 0.25,
+        conf_thresh: float = 0.15,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -82,7 +82,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path)
+        self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -207,21 +207,27 @@ class Engine:
         # Get the best ones
         if boxes.shape[0]:
             best_boxes = nms(boxes)
-            ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
-            combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-            conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+            # We keep only detections with at least two boxes above conf_th
+            detections = boxes[boxes[:, -1] > self.conf_thresh, :]
+            ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
+            strong_detection = np.sum(ious_detections > 0, 0) > 1
+            best_boxes = best_boxes[strong_detection, :]
+            if best_boxes.shape[0]:
+                ious = box_iou(best_boxes[:, :4], boxes[:, :4])
 
-            if len(combine_predictions):
+                best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+                combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
+                conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+                if len(combine_predictions):
 
-                # send only preds boxes that match combine_predictions
-                ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                iou_match = [np.max(iou) > 0 for iou in ious]
-                output_predictions = preds[iou_match, :]
+                    # send only preds boxes that match combine_predictions
+                    ious = box_iou(combine_predictions[:, :4], preds[:, :4])
+                    iou_match = [np.max(iou) > 0 for iou in ious]
+                    output_predictions = preds[iou_match, :]
 
-                # Limit bbox size for api
-                output_predictions = np.round(output_predictions, 3)  # max 3 digit
-                output_predictions = output_predictions[:5, :]  # max 5 bbox
+                    # Limit bbox size for api
+                    output_predictions = np.round(output_predictions, 3)  # max 3 digit
+                    output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
@@ -259,6 +265,7 @@ class Engine:
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        print(preds)
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
