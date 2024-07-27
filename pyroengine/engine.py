@@ -82,7 +82,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path)
+        self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -207,8 +207,15 @@ class Engine:
         # Get the best ones
         if boxes.shape[0]:
             best_boxes = nms(boxes)
-            ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-            if np.sum(ious > 0, 0).max() > 1:  # at least two detection
+            # We keep only detections with at least two boxes above conf_th
+            detections = boxes[boxes[:, -1] > conf_th, :]
+            ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
+            strong_detection = np.sum(ious_detections > 0, 0) > 1
+            best_boxes = best_boxes[strong_detection, :]
+            if best_boxes.shape[0]:
+
+                ious = box_iou(best_boxes[:, :4], boxes[:, :4])
+
                 best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
                 combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
                 conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
@@ -261,6 +268,7 @@ class Engine:
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        print(preds)
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
