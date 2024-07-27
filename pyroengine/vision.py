@@ -46,7 +46,7 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0.05, format="ncnn", model_path=None) -> None:
+    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None) -> None:
         if model_path is None:
             if format == "ncnn":
                 if self.is_arm_architecture():
@@ -128,7 +128,7 @@ class Classifier:
 
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
 
-        results = self.model(pil_img, imgsz=self.imgsz, conf=self.conf, iou=self.iou)
+        results = self.model(pil_img, imgsz=self.imgsz, conf=self.conf, iou=self.iou, verbose=False)
         y = np.concatenate(
             (results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.conf.cpu().numpy().reshape((-1, 1))), axis=1
         )

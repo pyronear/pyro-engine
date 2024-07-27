@@ -62,7 +62,7 @@ class Engine:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        conf_thresh: float = 0.25,
+        conf_thresh: float = 0.15,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -208,12 +208,11 @@ class Engine:
         if boxes.shape[0]:
             best_boxes = nms(boxes)
             # We keep only detections with at least two boxes above conf_th
-            detections = boxes[boxes[:, -1] > conf_th, :]
+            detections = boxes[boxes[:, -1] > self.conf_thresh, :]
             ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
             strong_detection = np.sum(ious_detections > 0, 0) > 1
             best_boxes = best_boxes[strong_detection, :]
             if best_boxes.shape[0]:
-
                 ious = box_iou(best_boxes[:, :4], boxes[:, :4])
 
                 best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
@@ -229,8 +228,6 @@ class Engine:
                     # Limit bbox size for api
                     output_predictions = np.round(output_predictions, 3)  # max 3 digit
                     output_predictions = output_predictions[:5, :]  # max 5 bbox
-            else:
-                conf = 0
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
