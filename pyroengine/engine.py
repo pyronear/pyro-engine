@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,23 @@ from .vision import Classifier
 __all__ = ["Engine"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+
+
+def handler(signum, frame):
+    raise TimeoutError("Heartbeat check timed out")
+
+
+def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout)
+    try:
+        api_instance.heartbeat(cam_id)
+    except TimeoutError:
+        logging.warning(f"Heartbeat check timed out for {cam_id}")
+    except ConnectionError:
+        logging.warning(f"Unable to reach the pyro-api with {cam_id}")
+    finally:
+        signal.alarm(0)
 
 
 class Engine:
@@ -253,10 +271,7 @@ class Engine:
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            try:
-                self.heartbeat(cam_id)
-            except ConnectionError:
-                logging.warning(f"Unable to reach the pyro-api with {cam_id}")
+            heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
