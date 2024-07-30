@@ -35,6 +35,16 @@ def mock_cameras_ptz(mock_wildfire_image):
 
 
 @pytest.fixture
+def mock_cameras_ptz_night():
+    camera = MagicMock()
+    camera.capture.return_value = Image.new("RGB", (100, 100), (255, 255, 255))  # Mock captured image
+    camera.cam_type = "ptz"
+    camera.cam_poses = [1, 2]
+    camera.ip_address = "192.168.1.1"
+    return [camera]
+
+
+@pytest.fixture
 def system_controller(mock_engine, mock_cameras):
     return SystemController(engine=mock_engine, cameras=mock_cameras)
 
@@ -42,6 +52,21 @@ def system_controller(mock_engine, mock_cameras):
 @pytest.fixture
 def system_controller_ptz(mock_engine, mock_cameras_ptz):
     return SystemController(engine=mock_engine, cameras=mock_cameras_ptz)
+
+
+@pytest.fixture
+def system_controller_ptz_night(mock_engine, mock_cameras_ptz_night):
+    return SystemController(engine=mock_engine, cameras=mock_cameras_ptz_night)
+
+
+@pytest.mark.asyncio
+async def test_night_mode(system_controller):
+    assert await system_controller.night_mode()
+
+
+@pytest.mark.asyncio
+async def test_night_mode_ptz(system_controller_ptz_night):
+    assert not await system_controller_ptz_night.night_mode()
 
 
 def test_is_day_time_ir_strategy(mock_wildfire_image):
