@@ -81,15 +81,15 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                 if frame is not None:
                     await image_queue.put((cam_id, frame))
                     await asyncio.sleep(0)  # Yield control
-                if not is_day_time(None, frame, "ir"):
-                    return False
+                    if not is_day_time(None, frame, "ir"):
+                        return False
         else:
             frame = camera.capture()
             if frame is not None:
                 await image_queue.put((cam_id, frame))
                 await asyncio.sleep(0)  # Yield control
-            if not is_day_time(None, frame, "ir"):
-                return False
+                if not is_day_time(None, frame, "ir"):
+                    return False
     except Exception as e:
         logging.exception(f"Error during image capture from camera {cam_id}: {e}")
     return True
@@ -166,12 +166,14 @@ class SystemController:
                         # Move camera to the next pose to avoid waiting
                         next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                         camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
-                        if not is_day_time(None, frame, "ir"):
-                            return False
+                        if frame is not None:
+                            if not is_day_time(None, frame, "ir"):
+                                return False
                 else:
                     frame = camera.capture()
-                    if not is_day_time(None, frame, "ir"):
-                        return False
+                    if frame is not None:
+                        if not is_day_time(None, frame, "ir"):
+                            return False
             except Exception as e:
                 logging.exception(f"Error during image capture from camera {cam_id}: {e}")
         return True
