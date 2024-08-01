@@ -50,7 +50,7 @@ def main(args):
             else:
                 splitted_cam_creds[_ip] = creds
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+        cameras.append(ReolinkCamera(_ip, cam_data["cam_user"], cam_data["cam_pwd"], cam_data["type"], cam_poses, args.protocol))
 
     engine = Engine(
         args.model_path,

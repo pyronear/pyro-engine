@@ -95,6 +95,8 @@ Additionally, you'll need a `./data` folder which contains:
     "169.254.40.1": {
         "brand": "reolink",
         "type": "ptz",
+        "cam_user": "admin",
+        "cam_pwd": "password"
         "credentials": [
             {
                 "login": "dummy_login_1",
@@ -116,6 +118,8 @@ Additionally, you'll need a `./data` folder which contains:
     "169.254.40.3": {
         "brand": "reolink",
         "type": "static",
+        "cam_user": "admin",
+        "cam_pwd": "password"
         "credentials": [
             {
                 "login": "dummy_login_4",
