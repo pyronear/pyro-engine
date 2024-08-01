@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import subprocess
 import time
 from io import BytesIO
 from typing import List, Optional
@@ -92,19 +93,48 @@ class ReolinkCamera:
         if pos_id is not None:
             self.move_camera("ToPos", idx=int(pos_id), speed=50)
             time.sleep(1)
-        url = self._build_url("Snap")
+
         logging.debug("Start capture")
 
         try:
-            response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
-            if response.status_code == 200:
-                image_data = BytesIO(response.content)
-                image = Image.open(image_data).convert("RGB")
-                return image
+            start_time = time.time()
+            # Define the RTSP stream URL
+            rtsp_url = f"rtsp://{self.username}:{self.password}@{self.ip_address}:554/h264Preview_01_main"
+
+            # Construct the FFmpeg command
+            output_filename = f"snapshot_{self.ip_address}.jpg"
+            ffmpeg_command = [
+                "ffmpeg",
+                "-i",
+                rtsp_url,
+                "-frames:v",
+                "1",
+                "-q:v",
+                "2",
+                "-y",  # Overwrite output file if it exists
+                output_filename,
+            ]
+
+            logging.info(f"Starting FFmpeg command: {' '.join(ffmpeg_command)}")
+
+            # Execute the FFmpeg command
+            process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            _, stderr = process.communicate()
+
+            if process.returncode == 0:
+                capture_time = time.time()
+                logging.info(f"Frame captured successfully")
+                logging.info(f"Time to capture frame: {capture_time - start_time} seconds")
+
+                # Open the captured image
+                with open(output_filename, "rb") as img_file:
+                    image_data = BytesIO(img_file.read())
+                    image = Image.open(image_data).convert("RGB")
+                    return image
             else:
-                logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
-        except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+                logging.error(f"Error capturing frame: {stderr.decode()}")
+        except Exception as e:
+            logging.error(f"Capture failed: {e}")
         return None
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0):
