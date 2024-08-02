@@ -291,10 +291,10 @@ class Engine:
             output_predictions = preds
             conf = 0
 
-        ts = datetime.now(timezone.utc).isoformat()
+        ts = datetime.now(timezone.utc)
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-            self._stage_alert(frame, cam_id, ts, output_predictions.tolist())
+            self._stage_alert(frame, cam_id, ts.isoformat(), output_predictions.tolist())
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False)
