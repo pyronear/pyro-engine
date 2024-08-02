@@ -287,6 +287,7 @@ class Engine:
         output_predictions = np.round(preds, 3)  # max 3 digit
         output_predictions = output_predictions[:5, :]  # max 5 bbox
 
+        ts = datetime.now(timezone.utc).isoformat()
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             self._stage_alert(frame, cam_id, ts, output_predictions.tolist())
@@ -310,7 +311,7 @@ class Engine:
         #             self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
 
         # Check if it's time to backup pending alerts
-        ts = datetime.now(timezone.utc)
+       
         if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
             self._dump_cache()
             self.last_cache_dump = ts
