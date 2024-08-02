@@ -282,10 +282,14 @@ class Engine:
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
         print(preds)
         # conf = self._update_states(frame, preds, cam_key)
-        conf = np.max(preds[:, -1])
-        # Limit bbox size for api
-        output_predictions = np.round(preds, 3)  # max 3 digit
-        output_predictions = output_predictions[:5, :]  # max 5 bbox
+        if preds.shape[0]:
+            conf = np.max(preds[:, -1])
+            # Limit bbox size for api
+            output_predictions = np.round(preds, 3)  # max 3 digit
+            output_predictions = output_predictions[:5, :]  # max 5 bbox
+        else:
+            output_predictions = preds
+            conf = 0
 
         ts = datetime.now(timezone.utc).isoformat()
         # Alert
