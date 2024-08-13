@@ -1,6 +1,7 @@
 import argparse
 import os
 from pyroengine.sensors import ReolinkCamera
+from dotenv import load_dotenv 
 
 
 def main():
@@ -54,6 +55,8 @@ def main():
         python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1  --type ptz --zoom_position 5
     """
     # Load environment variables
+    # Load environment variables from .env file
+    load_dotenv()
     cam_user = os.getenv("CAM_USER")
     cam_pwd = os.getenv("CAM_PWD")
 
