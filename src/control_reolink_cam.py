@@ -1,14 +1,62 @@
-# Copyright (C) 2023-2024, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
 import argparse
-
+import os
 from pyroengine.sensors import ReolinkCamera
 
 
 def main():
+    """
+    Control Reolink Camera for various operations.
+
+    This script allows you to interact with a Reolink camera to perform various actions like capturing images,
+    moving the camera, handling PTZ presets, and more.
+
+    Available actions:
+    - `capture`: Captures an image from the camera.
+    - `move_camera`: Moves the camera in a specified direction or to a preset position.
+    - `move_in_seconds`: Moves the camera in a specified direction for a certain duration.
+    - `get_ptz_preset`: Retrieves the list of PTZ preset positions.
+    - `set_ptz_preset`: Sets a PTZ preset position.
+    - `delete_ptz_preset`: Deletes a PTZ preset position.
+    - `reboot_camera`: Reboots the camera.
+    - `get_auto_focus`: Retrieves the current auto-focus settings.
+    - `set_auto_focus`: Enables or disables the auto-focus.
+    - `start_zoom_focus`: Starts zooming the camera to a specific focus position.
+
+    Examples:
+    - Capture an image:
+        python src/control_reolink_cam.py capture --ip 169.254.40.1  --type ptz
+
+    - Move the camera to a preset position:
+        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --type ptz --pos_id 0 --operation ToPos
+
+    - Move the camera to the right for 3 seconds:
+        python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1  --type ptz --operation Right --duration 3
+
+    - Get the list of PTZ presets:
+        python src/control_reolink_cam.py get_ptz_preset --ip 169.254.40.1  --type ptz
+
+    - Set a PTZ preset at position 1:
+        python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1  --type ptz --pos_id 1
+
+    - Delete a PTZ preset at position 1:
+        python src/control_reolink_cam.py delete_ptz_preset --ip 169.254.40.1  --type ptz --pos_id 1
+
+    - Reboot the camera:
+        python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1  --type ptz
+
+    - Get the auto-focus settings:
+        python src/control_reolink_cam.py get_auto_focus --ip 169.254.40.1  --type ptz
+
+    - Disable auto-focus:
+        python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1  --type ptz --disable_autofocus
+
+    - Start zooming to focus position 5:
+        python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1  --type ptz --zoom_position 5
+    """
+    # Load environment variables
+    cam_user = os.getenv("CAM_USER")
+    cam_pwd = os.getenv("CAM_PWD")
+
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Control Reolink Camera for various operations.")
     parser.add_argument(
@@ -28,8 +76,8 @@ def main():
         help="Action to perform on the camera",
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument("--username", required=True, help="Username for camera access")
-    parser.add_argument("--password", required=True, help="Password for camera access")
+    parser.add_argument("--username", help="Username for camera access", default=cam_user)
+    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--type", required=True, choices=["static", "ptz"], help="Type of the camera")
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
