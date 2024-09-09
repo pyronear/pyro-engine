@@ -26,7 +26,8 @@ lock:
 	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
 
 # Build the docker
-build-app:
+build-app: 
+	$(info if you need to update the client change the hash in the .toml and use make lock before)
 	docker build . -t pyronear/pyro-engine:latest
 
 build-lib:

@@ -232,9 +232,10 @@ class Engine:
                 # Limit bbox size for api
                 output_predictions = np.round(output_predictions, 3)  # max 3 digit
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
+        output_predictions_tuples = [tuple(row) for row in output_predictions]
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
+            (frame, preds, output_predictions_tuples, datetime.now(timezone.utc).isoformat(), False)
         )
 
         # update state
@@ -317,7 +318,7 @@ class Engine:
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
             pose_id = frame_info["pose_id"]
-            logging.info(f"Camera '{cam_id}' - Create detection from {frame_info['ts']}...")
+            logging.info(f"Camera '{cam_id}' - Process detection from {frame_info['ts']}...")
 
             # Save alert on device
             self._local_backup(frame_info["frame"], cam_id, pose_id)
@@ -330,16 +331,19 @@ class Engine:
                     if camera.ip_address == cam_id:
                         azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
                         bboxes = self._alerts[0]["bboxes"]
-                        response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
                         logging.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
+                        if len(bboxes) != 0:
+                            response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
+                            # Force a KeyError if the request failed
+                            detection_id = response.json().get("id")
+                            if detection_id is None:
+                                print(response.json())
+                                raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
+                            else:
+                                logging.info(f"Camera '{cam_id}' - detection created")
                         break
 
-                # Force a KeyError if the request failed
-                detection_id = response.json().get("id")
-                if detection_id is None:
-                    raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
                 self._alerts.popleft()
-                logging.info(f"Camera '{cam_id}' - detection created")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
                 logging.exception(f"Camera '{cam_id}' - unable to upload cache")
