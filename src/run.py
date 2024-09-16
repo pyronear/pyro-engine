@@ -27,9 +27,7 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
-    LAT = float(os.environ.get("LAT"))
-    LON = float(os.environ.get("LON"))
-    assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
+    assert isinstance(API_URL, str)
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
     assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
@@ -60,8 +58,6 @@ def main(args):
         args.thresh,
         API_URL,
         splitted_cam_creds,
-        LAT,
-        LON,
         cache_folder=args.cache,
         backup_size=args.backup_size,
         nb_consecutive_frames=args.nb_consecutive_frames,

@@ -66,8 +66,6 @@ class Engine:
         conf_thresh: float = 0.25,
         api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
@@ -88,9 +86,8 @@ class Engine:
 
         # API Setup
         if isinstance(api_host, str):
-            assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
-        self.latitude = latitude
-        self.longitude = longitude
+            assert isinstance(cam_creds, dict)
+
         self.api_client = {}
         if isinstance(api_host, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
