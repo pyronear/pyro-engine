@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import json
-import logging
 import os
 import platform
 import shutil
@@ -16,6 +15,7 @@ from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
 from ultralytics import YOLO  # type: ignore[import-untyped]
 
+from .logger_config import logger
 from .utils import DownloadProgressBar
 
 __all__ = ["Classifier"]
@@ -24,9 +24,6 @@ MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov8s/resolve/main/"
 MODEL_ID = "pyronear/yolov8s"
 MODEL_NAME = "yolov8s.pt"
 METADATA_NAME = "model_metadata.json"
-
-
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 # Utility function to save metadata
@@ -52,7 +49,7 @@ class Classifier:
                 if self.is_arm_architecture():
                     model = "yolov8s_ncnn_model.zip"
                 else:
-                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
+                    logger.info("NCNN format is optimized for arm architecture only, switching to onnx")
                     model = "yolov8s.onnx"
             elif format in ["onnx", "pt"]:
                 model = f"yolov8s.{format}"
@@ -74,9 +71,9 @@ class Classifier:
                 # Load existing metadata
                 metadata = self.load_metadata(metadata_path)
                 if metadata and metadata.get("sha256") == expected_sha256:
-                    logging.info("Model already exists and the SHA256 hash matches. No download needed.")
+                    logger.info("Model already exists and the SHA256 hash matches. No download needed.")
                 else:
-                    logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                    logger.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
                     os.remove(model_path)
                     self.download_model(model_url, model_path, expected_sha256, metadata_path)
             else:
@@ -110,15 +107,15 @@ class Classifier:
         os.makedirs(os.path.split(model_path)[0], exist_ok=True)
 
         # Download the model
-        logging.info(f"Downloading model from {model_url} ...")
+        logger.info(f"Downloading model from {model_url} ...")
         with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
             urlretrieve(model_url, model_path, reporthook=t.update_to)
-        logging.info("Model downloaded!")
+        logger.info("Model downloaded!")
 
         # Save the metadata
         metadata = {"sha256": expected_sha256}
         save_metadata(metadata_path, metadata)
-        logging.info("Metadata saved!")
+        logger.info("Metadata saved!")
 
     # Utility function to load metadata
     def load_metadata(self, metadata_path):

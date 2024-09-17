@@ -6,7 +6,6 @@
 import glob
 import io
 import json
-import logging
 import os
 import shutil
 import time
@@ -23,12 +22,11 @@ from requests.models import Response
 
 from pyroengine.utils import box_iou, nms
 
+from .logger_config import logger
 from .sensors import ReolinkCamera
 from .vision import Classifier
 
 __all__ = ["Engine"]
-
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 class Engine:
@@ -80,7 +78,6 @@ class Engine:
     ) -> None:
         """Init engine"""
         # Engine Setup
-
         self.model = Classifier(model_path=model_path)
         self.conf_thresh = conf_thresh
 
@@ -259,7 +256,7 @@ class Engine:
             try:
                 self.heartbeat(cam_id)
             except ConnectionError:
-                logging.exception(f"Unable to reach the pyro-api with {cam_id}")
+                logger.exception(f"Unable to reach the pyro-api with {cam_id}")
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
@@ -276,7 +273,7 @@ class Engine:
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-        logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -315,7 +312,7 @@ class Engine:
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
             pose_id = frame_info["pose_id"]
-            logging.info(f"Camera '{cam_id}' - Process detection from {frame_info['ts']}...")
+            logger.info(f"Camera '{cam_id}' - Process detection from {frame_info['ts']}...")
 
             # Save alert on device
             self._local_backup(frame_info["frame"], cam_id, pose_id)
@@ -328,7 +325,7 @@ class Engine:
                     if camera.ip_address == cam_id:
                         azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
                         bboxes = self._alerts[0]["bboxes"]
-                        logging.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
+                        logger.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
                         if len(bboxes) != 0:
                             response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
                             # Force a KeyError if the request failed
@@ -337,18 +334,18 @@ class Engine:
                                 print(response.json())
                                 raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
                             else:
-                                logging.info(f"Camera '{cam_id}' - detection created")
+                                logger.info(f"Camera '{cam_id}' - detection created")
                         break
 
                 self._alerts.popleft()
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
-                logging.exception(f"Camera '{cam_id}' - unable to upload cache")
-                logging.exception(e)
+                logger.exception(f"Camera '{cam_id}' - unable to upload cache")
+                logger.exception(e)
                 break
             except Exception as e:
-                logging.exception(f"Camera '{cam_id}' - unable to create detection")
-                logging.exception(e)
+                logger.exception(f"Camera '{cam_id}' - unable to create detection")
+                logger.exception(e)
                 break
 
     def _local_backup(

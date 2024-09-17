@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import asyncio
-import logging
 import time
 from datetime import datetime
 from typing import Any, List
@@ -13,14 +12,12 @@ import numpy as np
 import urllib3
 
 from .engine import Engine
+from .logger_config import logger
 from .sensors import ReolinkCamera
 
 __all__ = ["SystemController", "is_day_time"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# Configure logging
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 def is_day_time(cache, frame, strategy, delta=0):
@@ -84,7 +81,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                 await image_queue.put((cam_id, frame))
                 await asyncio.sleep(0)  # Yield control
     except Exception as e:
-        logging.exception(f"Error during image capture from camera {cam_id}: {e}")
+        logger.exception(f"Error during image capture from camera {cam_id}: {e}")
 
 
 class SystemController:
@@ -133,7 +130,7 @@ class SystemController:
             try:
                 self.engine.predict(frame, cam_id)
             except Exception as e:
-                logging.error(f"Error running prediction: {e}")
+                logger.error(f"Error running prediction: {e}")
             finally:
                 image_queue.task_done()  # Mark the task as done
 
@@ -146,7 +143,7 @@ class SystemController:
             if frame is not None:
                 self.day_time = is_day_time(None, frame, "ir")
         except Exception as e:
-            logging.exception(f"Exception during initial day time check: {e}")
+            logger.exception(f"Exception during initial day time check: {e}")
 
     async def run(self, period: int = 30, send_alerts: bool = True) -> None:
         """
@@ -181,10 +178,10 @@ class SystemController:
                     if send_alerts:
                         self.engine._process_alerts(self.cameras)
                 except Exception as e:
-                    logging.exception(f"Error processing alerts: {e}")
+                    logger.exception(f"Error processing alerts: {e}")
 
         except Exception as e:
-            logging.warning(f"Analyze stream error: {e}")
+            logger.warning(f"Analyze stream error: {e}")
 
     async def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
@@ -200,7 +197,7 @@ class SystemController:
             # Sleep only once all images are processed
             loop_time = time.time() - start_ts
             sleep_time = max(period - (loop_time), 0)
-            logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
+            logger.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
             await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:

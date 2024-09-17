@@ -3,7 +3,6 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-import logging
 import time
 from io import BytesIO
 from typing import List, Optional
@@ -16,7 +15,7 @@ __all__ = ["ReolinkCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+from .logger_config import logger
 
 
 class ReolinkCamera:
@@ -73,12 +72,12 @@ class ReolinkCamera:
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:
-                logging.debug(success_message)
+                logger.debug(success_message)
             else:
-                logging.error(f"Error in camera call: {response_data}")
+                logger.error(f"Error in camera call: {response_data}")
             return response_data
         else:
-            logging.error(f"Failed operation during camera control: {response.status_code}, {response.text}")
+            logger.error(f"Failed operation during camera control: {response.status_code}, {response.text}")
             return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
@@ -96,7 +95,7 @@ class ReolinkCamera:
             self.move_camera("ToPos", idx=int(pos_id), speed=50)
             time.sleep(1)
         url = self._build_url("Snap")
-        logging.debug("Start capture")
+        logger.debug("Start capture")
 
         try:
             response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
@@ -105,9 +104,9 @@ class ReolinkCamera:
                 image = Image.open(image_data).convert("RGB")
                 return image
             else:
-                logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
+                logger.error(f"Failed to capture image: {response.status_code}, {response.text}")
         except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+            logger.error(f"Request failed: {e}")
         return None
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0):

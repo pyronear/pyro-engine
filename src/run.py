@@ -6,7 +6,6 @@
 import argparse
 import asyncio
 import json
-import logging
 import os
 
 import urllib3
@@ -17,8 +16,6 @@ from pyroengine.engine import Engine
 from pyroengine.sensors import ReolinkCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 def main(args):
