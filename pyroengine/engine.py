@@ -8,6 +8,7 @@ import io
 import json
 import os
 import shutil
+import signal
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,23 @@ from .sensors import ReolinkCamera
 from .vision import Classifier
 
 __all__ = ["Engine"]
+
+
+def handler(signum, frame):
+    raise TimeoutError("Heartbeat check timed out")
+
+
+def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(timeout)
+    try:
+        api_instance.heartbeat(cam_id)
+    except TimeoutError:
+        logger.warning(f"Heartbeat check timed out for {cam_id}")
+    except ConnectionError:
+        logger.warning(f"Unable to reach the pyro-api with {cam_id}")
+    finally:
+        signal.alarm(0)
 
 
 class Engine:
@@ -61,7 +79,7 @@ class Engine:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        conf_thresh: float = 0.25,
+        conf_thresh: float = 0.15,
         api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         nb_consecutive_frames: int = 4,
@@ -78,7 +96,7 @@ class Engine:
     ) -> None:
         """Init engine"""
         # Engine Setup
-        self.model = Classifier(model_path=model_path)
+        self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -211,22 +229,29 @@ class Engine:
         # Get the best ones
         if boxes.shape[0]:
             best_boxes = nms(boxes)
-            ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-            best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
-            combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-            conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+            # We keep only detections with at least two boxes above conf_th
+            detections = boxes[boxes[:, -1] > self.conf_thresh, :]
+            ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
+            strong_detection = np.sum(ious_detections > 0, 0) > 1
+            best_boxes = best_boxes[strong_detection, :]
+            if best_boxes.shape[0]:
+                ious = box_iou(best_boxes[:, :4], boxes[:, :4])
 
-            if len(combine_predictions):
+                best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
+                combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
+                conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+                if len(combine_predictions):
 
-                # send only preds boxes that match combine_predictions
-                ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                iou_match = [np.max(iou) > 0 for iou in ious]
-                output_predictions = preds[iou_match, :]
+                    # send only preds boxes that match combine_predictions
+                    ious = box_iou(combine_predictions[:, :4], preds[:, :4])
+                    iou_match = [np.max(iou) > 0 for iou in ious]
+                    output_predictions = preds[iou_match, :]
 
                 # Limit bbox size for api
                 output_predictions = np.round(output_predictions, 3)  # max 3 digit
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
         output_predictions_tuples = [tuple(row) for row in output_predictions]
+
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions_tuples, datetime.now(timezone.utc).isoformat(), False)
@@ -253,10 +278,7 @@ class Engine:
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            try:
-                self.heartbeat(cam_id)
-            except ConnectionError:
-                logger.exception(f"Unable to reach the pyro-api with {cam_id}")
+            heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
@@ -265,6 +287,7 @@ class Engine:
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
+        print(preds)
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:

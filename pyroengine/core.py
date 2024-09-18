@@ -55,13 +55,16 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue) -> None:
+async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue) -> bool:
     """
-    Captures an image from the camera and puts it into a queue.
+    Captures an image from the camera and puts it into a queue. Returns whether it is daytime for this camera.
 
     Args:
         camera (ReolinkCamera): The camera instance.
         image_queue (asyncio.Queue): The queue to put the captured image.
+
+    Returns:
+        bool: True if it is daytime according to this camera, False otherwise.
     """
     cam_id = camera.ip_address
     try:
@@ -75,14 +78,18 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                 if frame is not None:
                     await image_queue.put((cam_id, frame))
                     await asyncio.sleep(0)  # Yield control
+                    if not is_day_time(None, frame, "ir"):
+                        return False
         else:
             frame = camera.capture()
             if frame is not None:
                 await image_queue.put((cam_id, frame))
                 await asyncio.sleep(0)  # Yield control
+                if not is_day_time(None, frame, "ir"):
+                    return False
     except Exception as e:
         logger.exception(f"Error during image capture from camera {cam_id}: {e}")
-
+    return True
 
 class SystemController:
     """
@@ -103,17 +110,21 @@ class SystemController:
         """
         self.engine = engine
         self.cameras = cameras
-        self.day_time = True
+        self.is_day = True
 
-    async def capture_images(self, image_queue: asyncio.Queue) -> None:
+    async def capture_images(self, image_queue: asyncio.Queue) -> bool:
         """
         Captures images from all cameras using asyncio.
 
         Args:
             image_queue (asyncio.Queue): The queue to put the captured images.
+
+        Returns:
+            bool: True if it is daytime according to all cameras, False otherwise.
         """
         tasks = [capture_camera_image(camera, image_queue) for camera in self.cameras]
-        await asyncio.gather(*tasks)
+        day_times = await asyncio.gather(*tasks)
+        return all(day_times)
 
     async def analyze_stream(self, image_queue: asyncio.Queue) -> None:
         """
@@ -134,7 +145,7 @@ class SystemController:
             finally:
                 image_queue.task_done()  # Mark the task as done
 
-    def check_day_time(self) -> None:
+    async def night_mode(self) -> bool:
         """
         Checks and updates the day_time attribute based on the current frame.
         """
@@ -145,43 +156,67 @@ class SystemController:
         except Exception as e:
             logger.exception(f"Exception during initial day time check: {e}")
 
-    async def run(self, period: int = 30, send_alerts: bool = True) -> None:
+        for camera in self.cameras:
+            cam_id = camera.ip_address
+            try:
+                if camera.cam_type == "ptz":
+                    for idx, pose_id in enumerate(camera.cam_poses):
+                        cam_id = f"{camera.ip_address}_{pose_id}"
+                        frame = camera.capture()
+                        # Move camera to the next pose to avoid waiting
+                        next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
+                        camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
+                        if frame is not None:
+                            if not is_day_time(None, frame, "ir"):
+                                return False
+                else:
+                    frame = camera.capture()
+                    if frame is not None:
+                        if not is_day_time(None, frame, "ir"):
+                            return False
+            except Exception as e:
+                logger.exception(f"Error during image capture from camera {cam_id}: {e}")
+        return True
+
+    async def run(self, period: int = 30, send_alerts: bool = True) -> bool:
         """
         Captures and analyzes all camera streams, then processes alerts.
 
         Args:
             period (int): The time period between captures in seconds.
-            send_alerts (bool): Boolean to activate / deactivate alert sending
+            send_alerts (bool): Boolean to activate / deactivate alert sending.
+
+        Returns:
+            bool: True if it is daytime according to all cameras, False otherwise.
         """
         try:
-            self.check_day_time()
+            image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-            if self.day_time:
+            # Start the image processor task
+            processor_task = asyncio.create_task(self.analyze_stream(image_queue))
 
-                image_queue: asyncio.Queue[Any] = asyncio.Queue()
+            # Capture images concurrently
+            self.is_day = await self.capture_images(image_queue)
 
-                # Start the image processor task
-                processor_task = asyncio.create_task(self.analyze_stream(image_queue))
+            # Wait for the image processor to finish processing
+            await image_queue.join()  # Ensure all tasks are marked as done
 
-                # Capture images concurrently
-                await self.capture_images(image_queue)
+            # Signal the image processor to stop processing
+            await image_queue.put(None)
+            await processor_task  # Ensure the processor task completes
 
-                # Wait for the image processor to finish processing
-                await image_queue.join()  # Ensure all tasks are marked as done
-
-                # Signal the image processor to stop processing
-                await image_queue.put(None)
-                await processor_task  # Ensure the processor task completes
-
-                # Process alerts
+            # Process alerts
+            if send_alerts:
                 try:
-                    if send_alerts:
-                        self.engine._process_alerts(self.cameras)
+                    self.engine._process_alerts(self.cameras)
                 except Exception as e:
                     logger.exception(f"Error processing alerts: {e}")
 
+            return self.is_day
+
         except Exception as e:
             logger.warning(f"Analyze stream error: {e}")
+            return True
 
     async def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
@@ -189,16 +224,22 @@ class SystemController:
 
         Args:
             period (int): The time period between captures in seconds.
-            send_alerts (bool): Boolean to activate / deactivate alert sending
+            send_alerts (bool): Boolean to activate / deactivate alert sending.
         """
         while True:
             start_ts = time.time()
             await self.run(period, send_alerts)
-            # Sleep only once all images are processed
-            loop_time = time.time() - start_ts
-            sleep_time = max(period - (loop_time), 0)
-            logger.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
-            await asyncio.sleep(sleep_time)
+
+            if not self.is_day:
+                while not await self.night_mode():
+                    logger.info("Nighttime detected by at least one camera, sleeping for 1 hour.")
+                    await asyncio.sleep(3600)  # Sleep for 1 hour
+            else:
+                # Sleep only once all images are processed
+                loop_time = time.time() - start_ts
+                sleep_time = max(period - (loop_time), 0)
+                logger.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
+                await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:
         """
