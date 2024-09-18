@@ -252,7 +252,6 @@ class Engine:
                 output_predictions = output_predictions[:5, :]  # max 5 bbox
         output_predictions_tuples = [tuple(row) for row in output_predictions]
 
-
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions_tuples, datetime.now(timezone.utc).isoformat(), False)
         )

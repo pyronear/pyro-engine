@@ -91,6 +91,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
         logger.exception(f"Error during image capture from camera {cam_id}: {e}")
     return True
 
+
 class SystemController:
     """
     Controls the system for capturing and analyzing camera streams.
