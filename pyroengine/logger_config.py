@@ -6,6 +6,11 @@ from logging.handlers import TimedRotatingFileHandler
 log_format = "%(asctime)s | %(levelname)s: %(message)s"
 os.makedirs(os.path.dirname("/var/log/engine.log"), exist_ok=True)
 
+if not os.path.exists("/var/log/engine.log"):
+    open("/var/log/engine.log", "a").close()  # Create the file if it doesn't exist
+
+os.chmod("/var/log/engine.log", 0o664)
+
 # Create a StreamHandler (for stdout)
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(logging.Formatter(log_format))
