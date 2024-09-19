@@ -1,7 +1,7 @@
-# Copyright (C) <FILE_CREATION_YEAR>-2024, Pyronear.
+# Copyright (C) 2022-2024, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://www.apache.org/licenses/LICENSE-2.0> for full license details.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
 from logging.handlers import TimedRotatingFileHandler
