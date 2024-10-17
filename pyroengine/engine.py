@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+import requests
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
@@ -45,6 +46,17 @@ def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
         logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
+
+
+def get_token(api_url: str, login: str, pwd: str) -> str:
+    response = requests.post(
+        f"{api_url}/login/creds",
+        data={"username": login, "password": pwd},
+        timeout=5,
+    )
+    if response.status_code != 200:
+        raise ValueError(response.json()["detail"])
+    return response.json()["access_token"]
 
 
 class Engine:
@@ -82,6 +94,7 @@ class Engine:
         conf_thresh: float = 0.15,
         api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
+        static_cam_id: Optional[str] = None,
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
@@ -99,16 +112,24 @@ class Engine:
         self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
-        # API Setup
-        if isinstance(api_host, str):
-            assert isinstance(cam_creds, dict)
+        if static_cam_id is not None:
+            self.static = True
+            superuser_login = os.environ.get("SUPERADMIN_LOGIN")
+            superuser_pwd = os.environ.get("SUPERADMIN_PWD")
+            if superuser_login is None or superuser_pwd is None:
+                raise RuntimeError("SUPERADMIN_LOGIN and SUPERADMIN_PWD are not set") 
 
         self.api_client = {}
-        if isinstance(api_host, str) and isinstance(cam_creds, dict):
-            # Instantiate clients for each camera
-            for _id, camera_token in cam_creds.items():
-                self.api_client[_id] = client.Client(camera_token, api_host)
-
+        if isinstance(api_host, str):
+            if isinstance(cam_creds, dict):
+                # Instantiate clients for each camera
+                for _id, camera_token in cam_creds.items():
+                    self.api_client[_id] = client.Client(camera_token, api_host)
+            else:
+                if static_cam_id is not None:
+                    self.api_client[static_cam_id] = client.Client(
+                        get_token(api_host, superuser_login, superuser_pwd), api_host  # type: ignore[arg-type]
+                    )
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
         self.nb_consecutive_frames = nb_consecutive_frames
@@ -131,6 +152,12 @@ class Engine:
                     "last_predictions": deque([], self.nb_consecutive_frames),
                     "ongoing": False,
                 }
+        else:
+            if static_cam_id is not None:
+                self._states[static_cam_id] = {
+                    "last_predictions": deque([], self.nb_consecutive_frames),
+                    "ongoing": False,
+                }
 
         self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
         if isinstance(cam_creds, dict):
@@ -140,6 +167,13 @@ class Engine:
                     self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
                 else:
                     self.occlusion_masks[cam_id] = None
+        else:
+            if static_cam_id is not None:
+                mask_file = cache_folder + "/occlusion_masks/" + static_cam_id + ".jpg"
+                if os.path.isfile(mask_file):
+                    self.occlusion_masks[static_cam_id] = np.array(Image.open(mask_file).convert(("L")))
+                else:
+                    self.occlusion_masks[static_cam_id] = None
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -276,7 +310,7 @@ class Engine:
         """
 
         # Heartbeat
-        if len(self.api_client) > 0 and isinstance(cam_id, str):
+        if len(self.api_client) > 0 and isinstance(cam_id, str) and self.static is False:
             heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
@@ -286,7 +320,7 @@ class Engine:
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
-        print(preds)
+
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
