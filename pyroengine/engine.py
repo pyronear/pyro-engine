@@ -112,6 +112,7 @@ class Engine:
         self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
+        self.static = False
         if static_cam_id is not None:
             self.static = True
             superuser_login = os.environ.get("SUPERADMIN_LOGIN")
