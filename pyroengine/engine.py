@@ -348,7 +348,9 @@ class Engine:
                 if cameras is not None:
                     for camera in cameras:
                         if camera.ip_address == cam_id:
-                            azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
+                            azimuth = (
+                                camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
+                            )
                             break
 
                 bboxes = self._alerts[0]["bboxes"]
@@ -362,7 +364,7 @@ class Engine:
                         raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
                     else:
                         logger.info(f"Camera '{cam_id}' - detection created")
-                
+
                 self._alerts.popleft()
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
