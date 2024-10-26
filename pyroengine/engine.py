@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import requests
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
@@ -46,17 +45,6 @@ def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
         logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
-
-
-def get_token(api_url: str, login: str, pwd: str) -> str:
-    response = requests.post(
-        f"{api_url}/login/creds",
-        data={"username": login, "password": pwd},
-        timeout=5,
-    )
-    if response.status_code != 200:
-        raise ValueError(response.json()["detail"])
-    return response.json()["access_token"]
 
 
 class Engine:
@@ -94,7 +82,7 @@ class Engine:
         conf_thresh: float = 0.15,
         api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        static_cam_id: Optional[str] = None,
+        external_sources: Optional[bool] = False,
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
@@ -112,13 +100,7 @@ class Engine:
         self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
-        self.static = False
-        if static_cam_id is not None:
-            self.static = True
-            superuser_login = os.environ.get("SUPERADMIN_LOGIN")
-            superuser_pwd = os.environ.get("SUPERADMIN_PWD")
-            if superuser_login is None or superuser_pwd is None:
-                raise RuntimeError("SUPERADMIN_LOGIN and SUPERADMIN_PWD are not set") 
+        self.external_sources = external_sources
 
         self.api_client = {}
         if isinstance(api_host, str):
@@ -126,11 +108,7 @@ class Engine:
                 # Instantiate clients for each camera
                 for _id, camera_token in cam_creds.items():
                     self.api_client[_id] = client.Client(camera_token, api_host)
-            else:
-                if static_cam_id is not None:
-                    self.api_client[static_cam_id] = client.Client(
-                        get_token(api_host, superuser_login, superuser_pwd), api_host  # type: ignore[arg-type]
-                    )
+
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
         self.nb_consecutive_frames = nb_consecutive_frames
@@ -153,12 +131,6 @@ class Engine:
                     "last_predictions": deque([], self.nb_consecutive_frames),
                     "ongoing": False,
                 }
-        else:
-            if static_cam_id is not None:
-                self._states[static_cam_id] = {
-                    "last_predictions": deque([], self.nb_consecutive_frames),
-                    "ongoing": False,
-                }
 
         self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
         if isinstance(cam_creds, dict):
@@ -168,13 +140,6 @@ class Engine:
                     self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
                 else:
                     self.occlusion_masks[cam_id] = None
-        else:
-            if static_cam_id is not None:
-                mask_file = cache_folder + "/occlusion_masks/" + static_cam_id + ".jpg"
-                if os.path.isfile(mask_file):
-                    self.occlusion_masks[static_cam_id] = np.array(Image.open(mask_file).convert(("L")))
-                else:
-                    self.occlusion_masks[static_cam_id] = None
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
@@ -311,7 +276,7 @@ class Engine:
         """
 
         # Heartbeat
-        if len(self.api_client) > 0 and isinstance(cam_id, str) and self.static is False:
+        if len(self.api_client) > 0 and isinstance(cam_id, str) and self.external_sources:
             heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
@@ -363,37 +328,41 @@ class Engine:
             }
         )
 
-    def _process_alerts(self, cameras: List[ReolinkCamera]) -> None:
+    def _process_alerts(self, cameras: Optional[List[ReolinkCamera]] = None) -> None:
         for _ in range(len(self._alerts)):
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
             pose_id = frame_info["pose_id"]
+            azimuth = 0
             logger.info(f"Camera '{cam_id}' - Process detection from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id, pose_id)
+            if not self.external_sources:
+                self._local_backup(frame_info["frame"], cam_id, pose_id)
 
             try:
                 # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                for camera in cameras:
-                    if camera.ip_address == cam_id:
-                        azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
-                        bboxes = self._alerts[0]["bboxes"]
-                        logger.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
-                        if len(bboxes) != 0:
-                            response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
-                            # Force a KeyError if the request failed
-                            detection_id = response.json().get("id")
-                            if detection_id is None:
-                                print(response.json())
-                                raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
-                            else:
-                                logger.info(f"Camera '{cam_id}' - detection created")
-                        break
+                if cameras is not None:
+                    for camera in cameras:
+                        if camera.ip_address == cam_id:
+                            azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
+                            break
 
+                bboxes = self._alerts[0]["bboxes"]
+                logger.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
+                if len(bboxes) != 0:
+                    response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
+                    # Force a KeyError if the request failed
+                    detection_id = response.json().get("id")
+                    if detection_id is None:
+                        print(response.json())
+                        raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
+                    else:
+                        logger.info(f"Camera '{cam_id}' - detection created")
+                
                 self._alerts.popleft()
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
