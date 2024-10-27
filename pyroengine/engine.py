@@ -102,12 +102,15 @@ class Engine:
 
         self.external_sources = external_sources
 
-        self.api_client = {}
+        # API Setup
         if isinstance(api_host, str):
-            if isinstance(cam_creds, dict):
-                # Instantiate clients for each camera
-                for _id, camera_token in cam_creds.items():
-                    self.api_client[_id] = client.Client(camera_token, api_host)
+            assert isinstance(cam_creds, dict)
+
+        self.api_client = {}
+        if isinstance(api_host, str) and isinstance(cam_creds, dict):
+            # Instantiate clients for each camera
+            for _id, camera_token in cam_creds.items():
+                self.api_client[_id] = client.Client(camera_token, api_host)
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
