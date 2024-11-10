@@ -14,7 +14,7 @@
 #       matrix:
 #         os: [self-hosted]
 #     steps:
-#       - uses: actions/checkout@v2
+#       - uses: actions/checkout@v4
 #       - name: Install package
 #         run: |
 #           python -m pip install --upgrade pip
@@ -28,7 +28,7 @@
 #         os: [self-hosted]
 #     needs: build
 #     steps:
-#       - uses: actions/checkout@v2
+#       - uses: actions/checkout@v4
 #       - name: Install dependencies
 #         run: pip install -e ".[test]" --upgrade
 
