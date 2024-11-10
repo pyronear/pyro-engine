@@ -27,6 +27,7 @@ class ReolinkCamera:
         ip_address (str): IP address of the Reolink camera.
         username (str): Username for accessing the camera.
         password (str): Password for accessing the camera.
+        cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom), defaults to 'ptz'.
         cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.
         protocol (str): Protocol used for communication, defaults to 'https'.
 
@@ -43,12 +44,14 @@ class ReolinkCamera:
         ip_address: str,
         username: str,
         password: str,
+        cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
         protocol: str = "https",
     ):
         self.ip_address = ip_address
         self.username = username
         self.password = password
+        self.cam_type = cam_type
         self.cam_poses = cam_poses if cam_poses is not None else []
         self.protocol = protocol
 
