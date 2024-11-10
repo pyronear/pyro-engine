@@ -1,7 +1,9 @@
 import argparse
 import os
+
+from dotenv import load_dotenv
+
 from pyroengine.sensors import ReolinkCamera
-from dotenv import load_dotenv 
 
 
 def main():
@@ -28,19 +30,19 @@ def main():
         python src/control_reolink_cam.py capture --ip 169.254.40.1  --type ptz
 
     - Move the camera to a preset position:
-        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --type ptz --pos_id 0 --operation ToPos
+        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --pos_id 0 --operation ToPos
 
     - Move the camera to the right for 3 seconds:
-        python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1  --type ptz --operation Right --duration 3
+        python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1  --operation Right --duration 3
 
     - Get the list of PTZ presets:
         python src/control_reolink_cam.py get_ptz_preset --ip 169.254.40.1  --type ptz
 
     - Set a PTZ preset at position 1:
-        python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1  --type ptz --pos_id 1
+        python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1  --pos_id 1
 
     - Delete a PTZ preset at position 1:
-        python src/control_reolink_cam.py delete_ptz_preset --ip 169.254.40.1  --type ptz --pos_id 1
+        python src/control_reolink_cam.py delete_ptz_preset --ip 169.254.40.1  --pos_id 1
 
     - Reboot the camera:
         python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1  --type ptz
@@ -49,13 +51,12 @@ def main():
         python src/control_reolink_cam.py get_auto_focus --ip 169.254.40.1  --type ptz
 
     - Disable auto-focus:
-        python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1  --type ptz --disable_autofocus
+        python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1  --disable_autofocus
 
     - Start zooming to focus position 5:
-        python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1  --type ptz --zoom_position 5
+        python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1  --zoom_position 5
     """
     # Load environment variables
-    # Load environment variables from .env file
     load_dotenv()
     cam_user = os.getenv("CAM_USER")
     cam_pwd = os.getenv("CAM_PWD")
@@ -81,7 +82,6 @@ def main():
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
     parser.add_argument("--username", help="Username for camera access", default=cam_user)
     parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
-    parser.add_argument("--type", required=True, choices=["static", "ptz"], help="Type of the camera")
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
         "--pos_id", type=int, help="Position ID for moving the camera or capturing at a specific position", default=None
@@ -97,7 +97,7 @@ def main():
 
     # Create an instance of ReolinkCamera
     camera_controller = ReolinkCamera(
-        ip_address=args.ip, username=args.username, password=args.password, cam_type=args.type, protocol=args.protocol
+        ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol
     )
 
     # Handling different actions
