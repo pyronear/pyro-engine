@@ -6,7 +6,6 @@
 import glob
 import io
 import json
-import logging
 import os
 import shutil
 import signal
@@ -14,7 +13,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -24,11 +23,11 @@ from requests.models import Response
 
 from pyroengine.utils import box_iou, nms
 
+from .logger_config import logger
+from .sensors import ReolinkCamera
 from .vision import Classifier
 
 __all__ = ["Engine"]
-
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
 
 def handler(signum, frame):
@@ -41,9 +40,9 @@ def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
     try:
         api_instance.heartbeat(cam_id)
     except TimeoutError:
-        logging.warning(f"Heartbeat check timed out for {cam_id}")
+        logger.warning(f"Heartbeat check timed out for {cam_id}")
     except ConnectionError:
-        logging.warning(f"Unable to reach the pyro-api with {cam_id}")
+        logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
 
@@ -81,10 +80,8 @@ class Engine:
         self,
         model_path: Optional[str] = None,
         conf_thresh: float = 0.15,
-        api_url: Optional[str] = None,
+        api_host: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
@@ -99,20 +96,18 @@ class Engine:
     ) -> None:
         """Init engine"""
         # Engine Setup
-
         self.model = Classifier(model_path=model_path, conf=0.05)
         self.conf_thresh = conf_thresh
 
         # API Setup
-        if isinstance(api_url, str):
-            assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
-        self.latitude = latitude
-        self.longitude = longitude
+        if isinstance(api_host, str):
+            assert isinstance(cam_creds, dict)
+
         self.api_client = {}
-        if isinstance(api_url, str) and isinstance(cam_creds, dict):
+        if isinstance(api_host, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, vals in cam_creds.items():
-                self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
+            for _id, camera_token in cam_creds.items():
+                self.api_client[_id] = client.Client(camera_token, api_host)
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
@@ -179,8 +174,9 @@ class Engine:
                 {
                     "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
                     "cam_id": info["cam_id"],
+                    "pose_id": info["pose_id"],
                     "ts": info["ts"],
-                    "localization": info["localization"],
+                    "bboxes": info["bboxes"],
                 }
             )
 
@@ -199,7 +195,15 @@ class Engine:
             for entry in data:
                 # Open image
                 frame = Image.open(entry["frame_path"], mode="r")
-                self._alerts.append({"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]})
+                self._alerts.append(
+                    {
+                        "frame": frame,
+                        "cam_id": entry["cam_id"],
+                        "pose_id": entry["pose_id"],
+                        "bboxes": entry["bboxes"],
+                        "ts": entry["ts"],
+                    }
+                )
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
@@ -243,12 +247,13 @@ class Engine:
                     iou_match = [np.max(iou) > 0 for iou in ious]
                     output_predictions = preds[iou_match, :]
 
-                    # Limit bbox size for api
-                    output_predictions = np.round(output_predictions, 3)  # max 3 digit
-                    output_predictions = output_predictions[:5, :]  # max 5 bbox
+                # Limit bbox size for api
+                output_predictions = np.round(output_predictions, 3)  # max 3 digit
+                output_predictions = output_predictions[:5, :]  # max 5 bbox
+        output_predictions_tuples = [tuple(row) for row in output_predictions]
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
+            (frame, preds, output_predictions_tuples, datetime.now(timezone.utc).isoformat(), False)
         )
 
         # update state
@@ -259,12 +264,13 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None, pose_id: Optional[int] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
             frame: a PIL image
             cam_id: the name of the camera that sent this image
+            pose_id (int) : position of the camera, for ptz camera
         Returns:
             the predicted confidence
         """
@@ -284,22 +290,20 @@ class Engine:
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
-            self._local_backup(frame, cam_id, is_alert=False)
+            self._local_backup(frame, cam_id, pose_id, is_alert=False)
 
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-        logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
+            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, localization)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+                    self._stage_alert(frame, cam_id, pose_id, ts, bboxes)
+                    self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
@@ -309,75 +313,78 @@ class Engine:
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
+    def _stage_alert(
+        self, frame: Image.Image, cam_id: Optional[str], pose_id: Optional[int], ts: int, bboxes: list
+    ) -> None:
         # Store information in the queue
+
         self._alerts.append(
             {
                 "frame": frame,
                 "cam_id": cam_id,
+                "pose_id": pose_id,
                 "ts": ts,
-                "media_id": None,
-                "alert_id": None,
-                "localization": localization,
+                "bboxes": bboxes,
             }
         )
 
-    def _process_alerts(self) -> None:
+    def _process_alerts(self, cameras: List[ReolinkCamera]) -> None:
         for _ in range(len(self._alerts)):
             # try to upload the oldest element
             frame_info = self._alerts[0]
             cam_id = frame_info["cam_id"]
-            logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+            pose_id = frame_info["pose_id"]
+            logger.info(f"Camera '{cam_id}' - Process detection from {frame_info['ts']}...")
 
             # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id)
+            self._local_backup(frame_info["frame"], cam_id, pose_id)
 
             try:
-                # Media creation
-                if not isinstance(self._alerts[0]["media_id"], int):
-                    self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-                # Alert creation
-                if not isinstance(self._alerts[0]["alert_id"], int):
-                    self._alerts[0]["alert_id"] = (
-                        self.api_client[cam_id]
-                        .send_alert_from_device(
-                            lat=self.latitude,
-                            lon=self.longitude,
-                            media_id=self._alerts[0]["media_id"],
-                            localization=self._alerts[0]["localization"],
-                        )
-                        .json()["id"]
-                    )
-                # Media upload
+                # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                response = self.api_client[cam_id].upload_media(
-                    self._alerts[0]["media_id"],
-                    media_data=stream.getvalue(),
-                )
-                # Force a KeyError if the request failed
-                response.json()["id"]
-                # Clear
+                for camera in cameras:
+                    if camera.ip_address == cam_id:
+                        azimuth = camera.cam_azimuths[pose_id - 1] if pose_id is not None else camera.cam_azimuths[0]
+                        bboxes = self._alerts[0]["bboxes"]
+                        logger.info(f"Azimuth : {azimuth} , bboxes : {bboxes}")
+                        if len(bboxes) != 0:
+                            response = self.api_client[cam_id].create_detection(stream.getvalue(), azimuth, bboxes)
+                            # Force a KeyError if the request failed
+                            detection_id = response.json().get("id")
+                            if detection_id is None:
+                                print(response.json())
+                                raise KeyError(f"Missing 'id' in response from camera '{cam_id}'")  # Clear
+                            else:
+                                logger.info(f"Camera '{cam_id}' - detection created")
+                        break
+
                 self._alerts.popleft()
-                logging.info(f"Camera '{cam_id}' - alert sent")
                 stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
             except (KeyError, ConnectionError) as e:
-                logging.warning(f"Camera '{cam_id}' - unable to upload cache")
-                logging.warning(e)
+                logger.exception(f"Camera '{cam_id}' - unable to upload cache")
+                logger.exception(e)
+                break
+            except Exception as e:
+                logger.exception(f"Camera '{cam_id}' - unable to create detection")
+                logger.exception(e)
                 break
 
-    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
+    def _local_backup(
+        self, img: Image.Image, cam_id: Optional[str], pose_id: Optional[int], is_alert: bool = True
+    ) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
+            pose_id (int) : position of the camera, for ptz camera
             is_alert (bool): is the frame an alert ?
         """
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
         self._clean_local_backup(backup_cache)  # Dump old cache
-        backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
+        backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}/{pose_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
