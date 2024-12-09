@@ -26,12 +26,18 @@ lock:
 	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
 
 # Build the docker
-build-app: 
-	$(info if you need to update the client change the hash in the .toml and use make lock before)
+build-gpu-app: 
+	$(info If you need to update the client change the hash in the .toml and use make lock before)
 	docker build . -t pyronear/pyro-engine:latest
+
+# Build the light docker
+build-cpu-app: 
+	$(info The pyro-client version is hardcoded in the Dockerfile)
+	docker build . -t pyronear/pyro-engine:latest -f Dockerfile-cpu
 
 build-lib:
 	pip install -e .
+	python setup.py sdist bdist_wheel
 
 build-optional-lib:
 	pip install -e .[test]
