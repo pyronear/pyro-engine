@@ -26,7 +26,7 @@ class ReolinkCamera:
         ip_address (str): IP address of the Reolink camera.
         username (str): Username for accessing the camera.
         password (str): Password for accessing the camera.
-        cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom).
+        cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom), defaults to 'ptz'.
         cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.
         cam_azimuths (Optional[List[float]]): List of preset azimuths for PTZ cameras.
         protocol (str): Protocol used for communication, defaults to 'https'.
@@ -44,7 +44,7 @@ class ReolinkCamera:
         ip_address: str,
         username: str,
         password: str,
-        cam_type: str,
+        cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
         cam_azimuths: Optional[List[float]] = None,
         protocol: str = "https",
@@ -123,17 +123,21 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 20):
+    def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
         Args:
-            s (int): Duration in seconds to move the camera.
+            s (float): Duration in seconds to move the camera.
             operation (str): Direction to move the camera.
             speed (int): Speed of the movement.
+            save_path (str): After movement capture and save image at save_path
         """
         self.move_camera(operation, speed)
         time.sleep(s)
+        im = self.capture()
+        if im is not None:
+            im.save(save_path)
         self.move_camera("Stop")
         time.sleep(1)
 
@@ -184,25 +188,6 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {name} set successfully.")
-
-    def delete_ptz_preset(self, idx: int):
-        """
-        Deletes a PTZ preset position by setting its enable value to 0.
-
-        Args:
-            idx (int): The preset ID to delete.
-        """
-        url = self._build_url("SetPtzPreset")
-        data = [
-            {
-                "cmd": "SetPtzPreset",
-                "action": 0,  # The action code for setting data
-                "param": {"PtzPreset": {"channel": 0, "enable": 0, "id": idx}},
-            }
-        ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
-        # Utilizing the shared response handling method
-        self._handle_response(response, f"Preset {idx} deleted successfully.")
 
     def reboot_camera(self):
         url = self._build_url("Reboot")
