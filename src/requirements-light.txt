@@ -1,0 +1,10 @@
+python-dotenv==1.0.1 ; python_version >= "3.8" and python_version < "4.0"
+coloredlogs==15.0.1 ; python_version >= "3.8" and python_version < "4.0"
+flatbuffers==24.3.25 ; python_version >= "3.8" and python_version < "4.0"
+humanfriendly==10.0 ; python_version >= "3.8" and python_version < "4.0"
+onnx==1.17.0 ; python_version >= "3.8" and python_version < "4.0"
+onnxruntime==1.19.2 ; python_version >= "3.8" and python_version < "4.0"
+protobuf==5.28.2 ; python_version >= "3.8" and python_version < "4.0"
+
+huggingface-hub==0.24.6 ; python_version >= "3.8" and python_version < "4"
+ultralytics==8.2.50 ; python_version >= "3.8" and python_version < "4.0"
