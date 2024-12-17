@@ -99,8 +99,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     camera_id = os.environ.get("CAMERA_ID")
     superuser_login = os.environ.get("SUPERADMIN_LOGIN")
     superuser_pwd = os.environ.get("SUPERADMIN_PWD")
-    lat = os.environ.get("LAT")
-    lon = os.environ.get("LON")
 
     # Skip the API-related tests if the URL is not specified
     if isinstance(api_host, str):
@@ -125,8 +123,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         engine = Engine(
             api_url=api_url,
             cam_creds=cam_creds,
-            latitude=float(lat),
-            longitude=float(lon),
             nb_consecutive_frames=4,
             frame_saving_period=3,
             cache_folder=folder,

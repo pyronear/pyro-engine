@@ -23,7 +23,7 @@ RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
     && pip cache purge \
     && rm -rf /root/.cache/pip
 
-RUN pip install --no-cache-dir git+https://github.com/pyronear/pyro-api.git@92b9e28fe4b329aa28c7833b28f3bc89ab1b756c#subdirectory=client
+RUN pip install --no-cache-dir git+https://github.com/pyronear/pyro-api.git@40cda4aa84d801f908d66730a74b379aee57aec1#subdirectory=client
 
 COPY ./pyroengine /tmp/pyroengine
 
