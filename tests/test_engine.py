@@ -97,8 +97,8 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_host = os.environ.get("API_URL")
     camera_id = os.environ.get("CAMERA_ID")
-    superuser_login = os.environ.get("SUPERADMIN_LOGIN")
-    superuser_pwd = os.environ.get("SUPERADMIN_PWD")
+    superuser_login = os.environ.get("API_LOGIN")
+    superuser_pwd = os.environ.get("API_PWD")
 
     # Skip the API-related tests if the URL is not specified
     if isinstance(api_host, str):
