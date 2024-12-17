@@ -18,7 +18,7 @@ jobs:
       run: echo "${{ secrets.DOCKERHUB_PW }}" | docker login -u "${{ secrets.DOCKERHUB_LOGIN }}" --password-stdin
 
     - name: Build Docker image
-      run: make build-app
+      run: make build-cpu-app:
 
     - name: Push Docker image
       run: docker push pyronear/pyro-engine:latest
