@@ -140,6 +140,9 @@ class ReolinkCamera:
             im.save(save_path)
         self.move_camera("Stop")
         time.sleep(1)
+        im = self.capture()
+        if im is not None:
+            im.save(save_path)
 
     def get_ptz_preset(self):
         """
