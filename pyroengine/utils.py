@@ -5,7 +5,7 @@
 
 
 import numpy as np
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore[import-untyped]
 
 __all__ = ["nms", "DownloadProgressBar"]
 
