@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from PIL import Image
 
 from pyroengine.engine import Engine
-
+from pyroengine.sensors import ReolinkCamera
 
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     # Cache
@@ -81,7 +81,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
 def get_token(api_url: str, login: str, pwd: str) -> str:
     response = requests.post(
-        f"{api_url}/login/creds",
+        f"{api_url}/api/v1/login/creds",
         data={"username": login, "password": pwd},
         timeout=5,
     )
@@ -95,34 +95,31 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     folder = str(tmpdir_factory.mktemp("engine_cache"))
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
-    api_host = os.environ.get("API_URL")
-    camera_id = os.environ.get("CAMERA_ID")
+    api_url = os.environ.get("API_URL")
     superuser_login = os.environ.get("API_LOGIN")
     superuser_pwd = os.environ.get("API_PWD")
 
+    camera_id = 7 #created in the dev env
+
     # Skip the API-related tests if the URL is not specified
-    if isinstance(api_host, str):
-        api_url = api_host + "/api/v1"
+    if isinstance(api_url, str):
 
         superuser_auth = {
             "Authorization": f"Bearer {get_token(api_url, superuser_login, superuser_pwd)}",
             "Content-Type": "application/json",
         }
 
-        token = requests.post(f"{api_url}/cameras/{camera_id}/token", headers=superuser_auth)["access_token"]
 
-        cam_creds = {
-            "dummy_cam": {
-                "brand": "reolink",
-                "name": "cam-1",
-                "type": "static",
-                "token": token,
+        token = requests.post(f"{api_url}/api/v1/cameras/{camera_id}/token", headers=superuser_auth).json()["access_token"]
+
+        splitted_cam_creds = {
+            "dummy_cam": f"{ token }",
             }
-        }
-
+        
+        
         engine = Engine(
-            api_url=api_url,
-            cam_creds=cam_creds,
+            api_host=api_url,
+            cam_creds=splitted_cam_creds,
             nb_consecutive_frames=4,
             frame_saving_period=3,
             cache_folder=folder,
@@ -133,8 +130,9 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         response = engine.heartbeat("dummy_cam")
         assert response.status_code // 100 == 2
         ts = datetime.now(timezone.utc).isoformat()
-        json_respone = response.json()
-        assert start_ts < json_respone["last_ping"] < ts
+        json_response = response.json()
+
+        assert start_ts < json_response["last_active_at"] < ts
         # Send an alert
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
@@ -146,5 +144,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
 
         assert engine._states["dummy_cam"]["ongoing"] is True
         # Check that a media and an alert have been registered
-        engine._process_alerts()
+        CAM_USER = os.environ.get("CAM_USER")
+        CAM_PWD = os.environ.get("CAM_PWD")
+        engine._process_alerts([ReolinkCamera("dummy_cam",CAM_USER, CAM_PWD, cam_azimuths=[120])])
         assert len(engine._alerts) == 0
