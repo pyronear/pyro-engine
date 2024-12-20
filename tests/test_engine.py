@@ -10,6 +10,7 @@ from PIL import Image
 from pyroengine.engine import Engine
 from pyroengine.sensors import ReolinkCamera
 
+
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
@@ -99,7 +100,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     superuser_login = os.environ.get("API_LOGIN")
     superuser_pwd = os.environ.get("API_PWD")
 
-    camera_id = 7 #created in the dev env
+    camera_id = 7  # created in the dev env
 
     # Skip the API-related tests if the URL is not specified
     if isinstance(api_url, str):
@@ -109,14 +110,14 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             "Content-Type": "application/json",
         }
 
-
-        token = requests.post(f"{api_url}/api/v1/cameras/{camera_id}/token", headers=superuser_auth).json()["access_token"]
+        token = requests.post(f"{api_url}/api/v1/cameras/{camera_id}/token", headers=superuser_auth).json()[
+            "access_token"
+        ]
 
         splitted_cam_creds = {
             "dummy_cam": f"{ token }",
-            }
-        
-        
+        }
+
         engine = Engine(
             api_host=api_url,
             cam_creds=splitted_cam_creds,
@@ -146,5 +147,5 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         # Check that a media and an alert have been registered
         CAM_USER = os.environ.get("CAM_USER")
         CAM_PWD = os.environ.get("CAM_PWD")
-        engine._process_alerts([ReolinkCamera("dummy_cam",CAM_USER, CAM_PWD, cam_azimuths=[120])])
+        engine._process_alerts([ReolinkCamera("dummy_cam", CAM_USER, CAM_PWD, cam_azimuths=[120])])
         assert len(engine._alerts) == 0
