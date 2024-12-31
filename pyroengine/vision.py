@@ -58,7 +58,7 @@ class Classifier:
                 self.format = "ncnn"
 
             elif format == "onnx":
-                model = f"yolov8s.onnx"
+                model = "yolov8s.onnx"
                 self.format = "onnx"
 
             model_path = os.path.join(model_folder, model)
