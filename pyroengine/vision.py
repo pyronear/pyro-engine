@@ -52,7 +52,7 @@ class Classifier:
 
             if format == "ncnn":
                 if not self.is_arm_architecture():
-                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
+                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
 
                 model = "yolov8s_ncnn_model.zip"
                 self.format = "ncnn"
