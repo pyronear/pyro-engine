@@ -72,12 +72,10 @@ def test_download(tmpdir_factory):
     os.remove(model_path)
     _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date3 = get_creation_date(model_path)
-    print(model_creation_date, model_creation_date3)
     assert model_creation_date != model_creation_date3
 
     # Download if sha is not the same
     with patch.object(Classifier, "get_sha", return_value="sha12"):
-        _ = Classifier(model_folder=folder)
+        _ = Classifier(model_folder=folder, format="onnx")
         model_creation_date4 = get_creation_date(model_path)
-        print(model_creation_date, model_creation_date3)
         assert model_creation_date4 != model_creation_date3
