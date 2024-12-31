@@ -54,21 +54,23 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 def test_download(tmpdir_factory):
     print("test_classifier")
     folder = str(tmpdir_factory.mktemp("engine_cache"))
+    # Instantiate ncnn model
+    _ = Classifier(model_folder=folder, format="ncnn")
 
     # Instantiate the ONNX model
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
 
     model_path = os.path.join(folder, "yolov8s.onnx")
     model_creation_date = get_creation_date(model_path)
 
     # No download if exist
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date2 = get_creation_date(model_path)
     assert model_creation_date == model_creation_date2
 
     # Download if does not exist
     os.remove(model_path)
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date3 = get_creation_date(model_path)
     print(model_creation_date, model_creation_date3)
     assert model_creation_date != model_creation_date3
