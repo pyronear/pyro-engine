@@ -9,7 +9,7 @@ authors = [
     {name = "Pyronear", email = "contact@pyronear.org"}
 ]
 readme = "README.md"
-requires-python = ">=3.6,<4"
+requires-python = ">=3.10,<4"
 license = {file = "LICENSE"}
 keywords = ["pytorch", "deep learning", "vision", "cnn", "wildfire"]
 classifiers = [
@@ -20,22 +20,19 @@ classifiers = [
     "Natural Language :: English",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dynamic = ["version"]
 dependencies = [
-    "ultralytics==8.2.50",
-    "opencv-python",
+    "onnxruntime==1.18.1",
+    "ncnn==1.0.20240410",
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@40cda4aa84d801f908d66730a74b379aee57aec1#egg=pyroclient&subdirectory=client",
     "requests>=2.20.0,<3.0.0",
     "tqdm>=4.62.0",
     "huggingface_hub==0.23.1", 
+    "pillow==11.0.0",
 ]
 
 [project.optional-dependencies]
