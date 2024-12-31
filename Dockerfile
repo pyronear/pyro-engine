@@ -1,4 +1,4 @@
-FROM python:3.8.16-slim
+FROM python:3.10.16-slim
 
 # set environment variables
 ENV PATH="/usr/local/bin:$PATH"
