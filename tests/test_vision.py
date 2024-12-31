@@ -50,17 +50,6 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     out = model(mock_wildfire_image, mask)
     assert out.shape == (0, 5)
 
-    # Test dl pt model
-    _ = Classifier(model_folder=folder, format="pt")
-    model_path = os.path.join(folder, "yolov8s.pt")
-    assert os.path.isfile(model_path)
-
-    # Test dl ncnn model
-    with patch.object(Classifier, "is_arm_architecture", return_value=True):
-        _ = Classifier(model_folder=folder)
-        model_path = os.path.join(folder, "yolov8s_ncnn_model")
-        assert os.path.isdir(model_path)
-
 
 def test_download(tmpdir_factory):
     print("test_classifier")
