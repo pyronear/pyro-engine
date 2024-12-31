@@ -183,4 +183,3 @@ class Classifier:
             pred = pred[keep]
 
         return pred
-
