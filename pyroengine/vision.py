@@ -1,3 +1,8 @@
+# Copyright (C) 2023-2024, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
 import json
 import os
 import platform
@@ -178,3 +183,4 @@ class Classifier:
             pred = pred[keep]
 
         return pred
+
