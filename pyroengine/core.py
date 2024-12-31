@@ -148,15 +148,11 @@ class SystemController:
 
     async def night_mode(self) -> bool:
         """
-        Checks and updates the day_time attribute based on the current frame.
-        """
-        try:
-            frame = self.cameras[0].capture()
-            if frame is not None:
-                self.day_time = is_day_time(None, frame, "ir")
-        except Exception as e:
-            logger.exception(f"Exception during initial day time check: {e}")
+        Checks if it is nighttime for any camera.
 
+        Returns:
+            bool: True if it is daytime for all cameras, False otherwise.
+        """
         for camera in self.cameras:
             cam_id = camera.ip_address
             try:
