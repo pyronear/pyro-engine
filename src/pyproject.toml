@@ -15,3 +15,5 @@ pyroclient = { git = "https://github.com/pyronear/pyro-api.git", rev = "767be30a
 pyroengine = "^0.2.0"
 python-dotenv = ">=0.15.0"
 ultralytics = "8.2.50"
+onnxruntime = "1.18.1"
+ncnn = "1.0.20240410"
