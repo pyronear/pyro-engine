@@ -36,6 +36,7 @@ dependencies = [
     "requests>=2.20.0,<3.0.0",
     "tqdm>=4.62.0",
     "huggingface_hub==0.23.1", 
+    "pillow==11.0.0",
 ]
 
 [project.optional-dependencies]
