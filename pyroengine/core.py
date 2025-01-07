@@ -153,6 +153,7 @@ class SystemController:
         Returns:
             bool: True if it is daytime for all cameras, False otherwise.
         """
+  
         for camera in self.cameras:
             cam_id = camera.ip_address
             try:
@@ -165,12 +166,12 @@ class SystemController:
                         camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                         if frame is not None:
                             if not is_day_time(None, frame, "ir"):
-                                return False
+                                return True
                 else:
                     frame = camera.capture()
                     if frame is not None:
                         if not is_day_time(None, frame, "ir"):
-                            return False
+                            return True
             except Exception as e:
                 logger.exception(f"Error during image capture from camera {cam_id}: {e}")
         return True
