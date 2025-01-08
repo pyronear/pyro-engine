@@ -59,6 +59,7 @@ def main(args):
     engine = Engine(
         args.model_path,
         args.thresh,
+        args.model_format,
         API_URL,
         splitted_cam_creds,
         LAT,
@@ -89,6 +90,7 @@ if __name__ == "__main__":
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
+    parser.add_argument("--model_format", type=str, default="onnx", help="Model format")
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
@@ -111,7 +113,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
-    parser.add_argument("--cam_type", type=str, default="reolink", help="Camera type")
+    parser.add_argument("--cam_type", type=str, default="rtsp", help="Camera type")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
