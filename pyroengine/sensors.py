@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import signal
 import time
 from io import BytesIO
 from typing import List, Optional
@@ -13,7 +14,7 @@ import requests
 import urllib3
 from PIL import Image
 
-__all__ = ["ReolinkCamera"]
+__all__ = ["ReolinkCamera", "RTSPCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Configure logging
@@ -240,9 +241,8 @@ class RTSPCamera:
 
     Attributes:
         rtsp_url (str): Full RTSP URL of the camera.
-
-    Methods:
-        capture(): Captures an image from the camera.
+        ip_address (str): IP address of the camera.
+        cam_type (str): Type of the camera.
     """
 
     def __init__(self, rtsp_url: str, ip_address: str, cam_type: str):
@@ -250,13 +250,23 @@ class RTSPCamera:
         self.ip_address = ip_address
         self.cam_type = cam_type
 
-    def capture(self) -> Optional[Image.Image]:
+    def _timeout_handler(self, signum, frame):
+        raise TimeoutError("Capture operation timed out.")
+
+    def capture(self, timeout: int = 10) -> Optional[Image.Image]:
         """
         Captures an image from the camera and returns it as a PIL Image.
 
+        Args:
+            timeout (int): Timeout in seconds for the capture operation.
+
         Returns:
-            Image.Image: The captured image, or None if an error occurred.
+            Image.Image: The captured image, or None if an error occurred or timeout.
         """
+        # Register the signal handler for timeout
+        signal.signal(signal.SIGALRM, self._timeout_handler)
+        signal.alarm(timeout)  # Set the timeout
+
         try:
             # Open the RTSP stream
             cap = cv2.VideoCapture(self.rtsp_url)
@@ -270,15 +280,20 @@ class RTSPCamera:
 
             if not ret:
                 logging.error("Unable to read frame from RTSP stream.")
-                cap.release()
                 return None
-            # Release the capture
-            cap.release()
 
             # Convert the frame to a PIL Image
             image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             return image
 
+        except TimeoutError:
+            logging.error("Capture operation timed out.")
+            return None
+
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             return None
+
+        finally:
+            cap.release()
+            signal.alarm(0)  # Cancel the alarm
