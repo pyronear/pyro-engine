@@ -7,15 +7,11 @@ import logging
 import time
 from io import BytesIO
 from typing import List, Optional
+
 import cv2
-import time
-import logging
-
-from PIL import Image
-
 import requests
 import urllib3
-
+from PIL import Image
 
 __all__ = ["ReolinkCamera"]
 
@@ -286,5 +282,3 @@ class RTSPCamera:
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             return None
-
-
