@@ -7,10 +7,15 @@ import logging
 import time
 from io import BytesIO
 from typing import List, Optional
+import cv2
+import time
+import logging
+
+from PIL import Image
 
 import requests
 import urllib3
-from PIL import Image
+
 
 __all__ = ["ReolinkCamera"]
 
@@ -27,7 +32,7 @@ class ReolinkCamera:
         ip_address (str): IP address of the Reolink camera.
         username (str): Username for accessing the camera.
         password (str): Password for accessing the camera.
-        cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom), defaults to 'ptz'.
+        cam_type (str): Type of the camera, e.g., 'static' or 'ptz' (pan-tilt-zoom).
         cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.
         protocol (str): Protocol used for communication, defaults to 'https'.
 
@@ -44,7 +49,7 @@ class ReolinkCamera:
         ip_address: str,
         username: str,
         password: str,
-        cam_type: str = "ptz",
+        cam_type: str,
         cam_poses: Optional[List[int]] = None,
         protocol: str = "https",
     ):
@@ -121,23 +126,19 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
+    def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 20):
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
         Args:
-            s (float): Duration in seconds to move the camera.
+            s (int): Duration in seconds to move the camera.
             operation (str): Direction to move the camera.
             speed (int): Speed of the movement.
-            save_path (str): After movement capture and save image at save_path
         """
         self.move_camera(operation, speed)
         time.sleep(s)
         self.move_camera("Stop")
         time.sleep(1)
-        im = self.capture()
-        if im is not None:
-            im.save(save_path)
 
     def get_ptz_preset(self):
         """
@@ -187,6 +188,25 @@ class ReolinkCamera:
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {name} set successfully.")
 
+    def delete_ptz_preset(self, idx: int):
+        """
+        Deletes a PTZ preset position by setting its enable value to 0.
+
+        Args:
+            idx (int): The preset ID to delete.
+        """
+        url = self._build_url("SetPtzPreset")
+        data = [
+            {
+                "cmd": "SetPtzPreset",
+                "action": 0,  # The action code for setting data
+                "param": {"PtzPreset": {"channel": 0, "enable": 0, "id": idx}},
+            }
+        ]
+        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        # Utilizing the shared response handling method
+        self._handle_response(response, f"Preset {idx} deleted successfully.")
+
     def reboot_camera(self):
         url = self._build_url("Reboot")
         data = [{"cmd": "Reboot"}]
@@ -216,3 +236,55 @@ class ReolinkCamera:
         ]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Started ZoomFocus successfully.")
+
+
+class RTSPCamera:
+    """
+    A class for interacting with cameras via RTSP.
+
+    Attributes:
+        rtsp_url (str): Full RTSP URL of the camera.
+
+    Methods:
+        capture(): Captures an image from the camera.
+    """
+
+    def __init__(self, rtsp_url: str, ip_address: str, cam_type: str):
+        self.rtsp_url = rtsp_url
+        self.ip_address = ip_address
+        self.cam_type = cam_type
+
+    def capture(self) -> Optional[Image.Image]:
+        """
+        Captures an image from the camera and returns it as a PIL Image.
+
+        Returns:
+            Image.Image: The captured image, or None if an error occurred.
+        """
+        try:
+            # Open the RTSP stream
+            cap = cv2.VideoCapture(self.rtsp_url)
+
+            if not cap.isOpened():
+                logging.error("Unable to open RTSP stream.")
+                return None
+
+            # Read a single frame
+            ret, frame = cap.read()
+
+            if not ret:
+                logging.error("Unable to read frame from RTSP stream.")
+                cap.release()
+                return None
+            # Release the capture
+            cap.release()
+
+            # Convert the frame to a PIL Image
+            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            return image
+
+        except Exception as e:
+            logging.error(f"An error occurred: {e}")
+            return None
+
+
