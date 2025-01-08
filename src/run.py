@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from pyroengine import SystemController
 from pyroengine.engine import Engine
-from pyroengine.sensors import ReolinkCamera
+from pyroengine.sensors import ReolinkCamera, RTSPCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -27,6 +27,7 @@ def main(args):
     # .env loading
     load_dotenv(".env")
     API_URL = os.environ.get("API_URL")
+    API_URL = "https://api.pyronear.org"
     LAT = float(os.environ.get("LAT"))
     LON = float(os.environ.get("LON"))
     assert isinstance(API_URL, str) and isinstance(LAT, float) and isinstance(LON, float)
@@ -40,6 +41,7 @@ def main(args):
 
     splitted_cam_creds = {}
     cameras = []
+
     for _ip, cam_data in cameras_credentials.items():
         cam_poses = []
         for creds in cam_data["credentials"]:
@@ -49,7 +51,10 @@ def main(args):
             else:
                 splitted_cam_creds[_ip] = creds
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+        if args.cam_type == "reolink":
+            cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+        else:
+            cameras.append(RTSPCamera(cam_data["rtsp_url"], _ip, cam_data["type"]))
 
     engine = Engine(
         args.model_path,
@@ -106,6 +111,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
+    parser.add_argument("--cam_type", type=str, default="reolink", help="Camera type")
     # Backup
     parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
 
