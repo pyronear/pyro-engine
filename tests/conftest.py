@@ -7,7 +7,7 @@ from PIL import Image
 
 @pytest.fixture(scope="session")
 def mock_wildfire_stream(tmpdir_factory):
-    url = "https://github.com/pyronear/pyro-vision/releases/download/v0.1.2/fire_sample_image.jpg"
+    url = "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/forest_sample.jpg"
     return requests.get(url).content
 
 
