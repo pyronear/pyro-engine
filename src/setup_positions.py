@@ -25,7 +25,8 @@ def main():
     - Move to pose 24 and save as pose_id 2
     - Move to pose 25 and save as pose_id 3
 
-    After saving, if demo mode is enabled, moves to each pose in sequence at speed 64 with a 2-second pause, repeating 3 times.
+    After saving, if demo mode is enabled, moves to each pose in sequence at speed 64 with a 2-second pause,
+    repeating 3 times.
     """
     # Load environment variables
     load_dotenv()
