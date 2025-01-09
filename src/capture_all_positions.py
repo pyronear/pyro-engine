@@ -181,7 +181,7 @@ def main():
                 # Save the modified image
                 filename = f"im_{args.ip.split('.')[-1]}_{i}.jpg"
                 image_path = os.path.join(args.output_folder, filename)
-                image_np = cv2.resize(image_np, (640,360))
+                image_np = cv2.resize(image_np, (640, 360))
                 cv2.imwrite(image_path, image_np)
                 print(f"Image saved at {image_path}")
             else:
