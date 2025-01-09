@@ -158,6 +158,10 @@ def main():
         print("Moving down for 10 seconds at speed 64.")
         camera.move_in_seconds(s=10, operation="Down", speed=64)
 
+        # Move down for 2 seconds at speed 2
+        print("Moving down for 2 seconds at speed 2.")
+        camera.move_in_seconds(s=2, operation="Down", speed=2)
+
         # Move right for calculated shift time at speed 1
         print(f"Moving right for {shift_time:.2f} seconds at speed 1.")
         camera.move_in_seconds(s=shift_time, operation="Right", speed=1)
