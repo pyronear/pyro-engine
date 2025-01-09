@@ -47,7 +47,9 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None) -> None:
+    def __init__(
+        self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
+    ) -> None:
         if model_path is None:
 
             if format == "ncnn":
@@ -103,6 +105,7 @@ class Classifier:
         self.imgsz = imgsz
         self.conf = conf
         self.iou = iou
+        self.max_bbox_size = max_bbox_size
 
     def is_arm_architecture(self):
         # Check for ARM architecture
@@ -221,7 +224,7 @@ class Classifier:
 
         # drop big detections
         pred = np.clip(pred, 0, 1)
-        pred = pred[(pred[:, 2] - pred[:, 0]) > 0.4, :]
+        pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
         # Remove prediction in occlusion mask
