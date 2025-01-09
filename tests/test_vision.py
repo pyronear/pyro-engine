@@ -50,43 +50,32 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     out = model(mock_wildfire_image, mask)
     assert out.shape == (0, 5)
 
-    # Test dl pt model
-    _ = Classifier(model_folder=folder, format="pt")
-    model_path = os.path.join(folder, "yolov8s.pt")
-    assert os.path.isfile(model_path)
-
-    # Test dl ncnn model
-    with patch.object(Classifier, "is_arm_architecture", return_value=True):
-        _ = Classifier(model_folder=folder)
-        model_path = os.path.join(folder, "yolov8s_ncnn_model")
-        assert os.path.isdir(model_path)
-
 
 def test_download(tmpdir_factory):
     print("test_classifier")
     folder = str(tmpdir_factory.mktemp("engine_cache"))
+    # Instantiate ncnn model
+    _ = Classifier(model_folder=folder, format="ncnn")
 
     # Instantiate the ONNX model
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
 
     model_path = os.path.join(folder, "yolov8s.onnx")
     model_creation_date = get_creation_date(model_path)
 
     # No download if exist
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date2 = get_creation_date(model_path)
     assert model_creation_date == model_creation_date2
 
     # Download if does not exist
     os.remove(model_path)
-    _ = Classifier(model_folder=folder)
+    _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date3 = get_creation_date(model_path)
-    print(model_creation_date, model_creation_date3)
     assert model_creation_date != model_creation_date3
 
     # Download if sha is not the same
     with patch.object(Classifier, "get_sha", return_value="sha12"):
-        _ = Classifier(model_folder=folder)
+        _ = Classifier(model_folder=folder, format="onnx")
         model_creation_date4 = get_creation_date(model_path)
-        print(model_creation_date, model_creation_date3)
         assert model_creation_date4 != model_creation_date3

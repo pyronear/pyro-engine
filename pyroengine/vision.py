@@ -1,4 +1,4 @@
-# Copyright (C) 2023-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -8,15 +8,16 @@ import logging
 import os
 import platform
 import shutil
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
+import ncnn  # type: ignore
 import numpy as np
+import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
-from ultralytics import YOLO  # type: ignore[import-untyped]
 
-from .utils import DownloadProgressBar
+from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -46,16 +47,21 @@ class Classifier:
         model_path: model path
     """
 
-    def __init__(self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None) -> None:
+    def __init__(
+        self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
+    ) -> None:
         if model_path is None:
+
             if format == "ncnn":
-                if self.is_arm_architecture():
-                    model = "yolov8s_ncnn_model.zip"
-                else:
-                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx")
-                    model = "yolov8s.onnx"
-            elif format in ["onnx", "pt"]:
-                model = f"yolov8s.{format}"
+                if not self.is_arm_architecture():
+                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
+
+                model = "yolov8s_ncnn_model.zip"
+                self.format = "ncnn"
+
+            elif format == "onnx":
+                model = "yolov8s.onnx"
+                self.format = "onnx"
 
             model_path = os.path.join(model_folder, model)
             metadata_path = os.path.join(model_folder, METADATA_NAME)
@@ -88,10 +94,18 @@ class Classifier:
                     shutil.unpack_archive(model_path, model_folder)
                 model_path = file_name
 
-        self.model = YOLO(model_path, task="detect")
+        if self.format == "ncnn":
+            self.model = ncnn.Net()
+            self.model.load_param(os.path.join(model_path, "model.ncnn.param"))
+            self.model.load_model(os.path.join(model_path, "model.ncnn.bin"))
+
+        else:
+            self.ort_session = onnxruntime.InferenceSession(model_path)
+
         self.imgsz = imgsz
         self.conf = conf
         self.iou = iou
+        self.max_bbox_size = max_bbox_size
 
     def is_arm_architecture(self):
         # Check for ARM architecture
@@ -126,20 +140,98 @@ class Classifier:
                 return json.load(f)
         return None
 
+    def prep_process(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
+        """Preprocess an image for inference
+
+        Args:
+            pil_img: A valid PIL image.
+
+        Returns:
+            A tuple containing:
+            - The resized and normalized image of shape (1, C, H, W).
+            - Padding information as a tuple of integers (pad_height, pad_width).
+        """
+        np_img, pad = letterbox(np.array(pil_img), self.imgsz)  # Applies letterbox resize with padding
+
+        if self.format == "ncnn":
+            np_img = ncnn.Mat.from_pixels(np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0])
+            mean = [0, 0, 0]
+            std = [1 / 255, 1 / 255, 1 / 255]
+            np_img.substract_mean_normalize(mean=mean, norm=std)
+        else:
+            np_img = np.expand_dims(np_img.astype("float32"), axis=0)  # Add batch dimension
+            np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+            np_img /= 255.0  # Normalize to [0, 1]
+
+        return np_img, pad
+
+    def post_process(self, pred: np.ndarray, pad: Tuple[int, int]) -> np.ndarray:
+        """Post-process model predictions.
+
+        Args:
+            pred: Raw predictions from the model.
+            pad: Padding information as (left_pad, top_pad).
+
+        Returns:
+            Processed predictions as a numpy array.
+        """
+        pred = pred[:, pred[-1, :] > self.conf]  # Drop low-confidence predictions
+        pred = np.transpose(pred)
+        pred = xywh2xyxy(pred)
+        pred = pred[pred[:, 4].argsort()]  # Sort by confidence
+        pred = nms(pred)
+        pred = pred[::-1]  # Reverse for highest confidence first
+
+        if len(pred) > 0:
+            left_pad, top_pad = pad  # Unpack the tuple
+            pred[:, :4:2] -= left_pad
+            pred[:, 1:4:2] -= top_pad
+            pred[:, :4:2] /= self.imgsz - 2 * left_pad
+            pred[:, 1:4:2] /= self.imgsz - 2 * top_pad
+            pred = np.clip(pred, 0, 1)
+        else:
+            pred = np.zeros((0, 5))  # Return empty prediction array
+
+        return pred
+
     def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
+        """Run the classifier on an input image.
 
-        results = self.model(pil_img, imgsz=self.imgsz, conf=self.conf, iou=self.iou, verbose=False)
-        y = np.concatenate(
-            (results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.conf.cpu().numpy().reshape((-1, 1))), axis=1
-        )
+        Args:
+            pil_img: The input PIL image.
+            occlusion_mask: Optional occlusion mask to exclude certain areas.
 
-        y = np.reshape(y, (-1, 5))
+        Returns:
+            Processed predictions.
+        """
+        np_img, pad = self.prep_process(pil_img)
+
+        if self.format == "ncnn":
+            extractor = self.model.create_extractor()
+            extractor.set_light_mode(True)
+            extractor.input("in0", np_img)
+            pred = ncnn.Mat()
+            extractor.extract("out0", pred)
+            pred = np.asarray(pred)
+        else:
+            pred = self.ort_session.run(["output0"], {"images": np_img})[0][0]
+
+        # Convert pad to a tuple if required
+        if isinstance(pad, list):
+            pad = tuple(pad)
+
+        pred = self.post_process(pred, pad)  # Ensure pad is passed as a tuple
+
+        # drop big detections
+        pred = np.clip(pred, 0, 1)
+        pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
+        pred = np.reshape(pred, (-1, 5))
 
         # Remove prediction in occlusion mask
         if occlusion_mask is not None:
             hm, wm = occlusion_mask.shape
             keep = []
-            for p in y.copy():
+            for p in pred.copy():
                 p[:4:2] *= wm
                 p[1:4:2] *= hm
                 p[:4:2] = np.clip(p[:4:2], 0, wm)
@@ -150,6 +242,6 @@ class Classifier:
                 else:
                     keep.append(False)
 
-            y = y[keep]
+            pred = pred[keep]
 
-        return y
+        return pred

@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -24,7 +24,6 @@ def main():
     - `move_in_seconds`: Moves the camera in a specified direction for a certain duration.
     - `get_ptz_preset`: Retrieves the list of PTZ preset positions.
     - `set_ptz_preset`: Sets a PTZ preset position.
-    - `delete_ptz_preset`: Deletes a PTZ preset position.
     - `reboot_camera`: Reboots the camera.
     - `get_auto_focus`: Retrieves the current auto-focus settings.
     - `set_auto_focus`: Enables or disables the auto-focus.
@@ -45,9 +44,6 @@ def main():
 
     - Set a PTZ preset at position 1:
         python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1  --pos_id 1
-
-    - Delete a PTZ preset at position 1:
-        python src/control_reolink_cam.py delete_ptz_preset --ip 169.254.40.1  --pos_id 1
 
     - Reboot the camera:
         python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1  --type ptz
@@ -76,7 +72,6 @@ def main():
             "move_in_seconds",
             "get_ptz_preset",
             "set_ptz_preset",
-            "delete_ptz_preset",
             "reboot_camera",
             "get_auto_focus",
             "set_auto_focus",
@@ -130,11 +125,6 @@ def main():
             camera_controller.set_ptz_preset(idx=args.pos_id)
         else:
             print("Position ID must be provided for setting a PTZ preset.")
-    elif args.action == "delete_ptz_preset":
-        if args.pos_id is not None:
-            camera_controller.delete_ptz_preset(idx=args.pos_id)
-        else:
-            print("Position ID must be provided for deleting a PTZ preset.")
     elif args.action == "reboot_camera":
         camera_controller.reboot_camera()
         print("Camera reboot initiated.")
