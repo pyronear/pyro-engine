@@ -54,6 +54,7 @@ def main(args):
     engine = Engine(
         args.model_path,
         args.thresh,
+        args.max_bbox_size,
         API_URL,
         splitted_cam_creds,
         LAT,
@@ -84,6 +85,8 @@ if __name__ == "__main__":
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
+    parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
+
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")

@@ -210,6 +210,11 @@ class Classifier:
 
         pred = self.post_process(pred, pad)
 
+        # drop big detections
+        pred = np.clip(pred, 0, 1)
+        pred = pred[(pred[:, 2] - pred[:, 0]) > 0.4, :]
+        pred = np.reshape(pred, (-1, 5))
+
         # Remove prediction in occlusion mask
         if occlusion_mask is not None:
             hm, wm = occlusion_mask.shape
