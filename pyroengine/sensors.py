@@ -67,6 +67,7 @@ class ReolinkCamera:
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
+        logging.info(f"{response.status_code}")
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:
@@ -136,7 +137,7 @@ class ReolinkCamera:
         self.move_camera("Stop")
         time.sleep(1)
         im = self.capture()
-        if im is not None:
+        if im is not None and save_path is not None:
             im.save(save_path)
 
     def get_ptz_preset(self):
