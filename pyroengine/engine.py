@@ -81,6 +81,7 @@ class Engine:
         self,
         model_path: Optional[str] = None,
         conf_thresh: float = 0.15,
+        max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -100,7 +101,7 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path, conf=0.05)
+        self.model = Classifier(model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size)
         self.conf_thresh = conf_thresh
 
         # API Setup
