@@ -1,13 +1,13 @@
 <!doctype html>
-<html class="no-js" lang="en" data-content_root="">
+<html class="no-js" lang="en" data-content_root="../../">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
 
-    <!-- Generated with Sphinx 7.1.2 and Furo 2024.07.18 -->
+    <!-- Generated with Sphinx 7.3.7 and Furo 2024.08.06 -->
         <title>pyroengine.sensors - PyroEngine</title>
-      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=649a27d8" />
-    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=613ab9ff" />
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d75fae25" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../../_static/css/custom_theme.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=302659d7" />
@@ -247,19 +247,19 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pyroengine.sensors</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (C) 2022-2024, Pyronear.</span>
+<span></span><span class="c1"># Copyright (C) 2022-2025, Pyronear.</span>
 
 <span class="c1"># This program is licensed under the Apache License 2.0.</span>
 <span class="c1"># See LICENSE or go to &lt;https://opensource.org/licenses/Apache-2.0&gt; for full license details.</span>
 
-<span class="kn">import</span> <span class="nn">logging</span>
-<span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">io</span><span class="w"> </span><span class="kn">import</span> <span class="n">BytesIO</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
-<span class="kn">import</span> <span class="nn">requests</span>
-<span class="kn">import</span> <span class="nn">urllib3</span>
-<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib3</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ReolinkCamera&quot;</span><span class="p">]</span>
 
@@ -268,7 +268,9 @@
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="ReolinkCamera"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera">[docs]</a><span class="k">class</span> <span class="nc">ReolinkCamera</span><span class="p">:</span>
+<div class="viewcode-block" id="ReolinkCamera">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ReolinkCamera</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    A controller class for interacting with Reolink cameras.</span>
 
@@ -276,7 +278,7 @@
 <span class="sd">        ip_address (str): IP address of the Reolink camera.</span>
 <span class="sd">        username (str): Username for accessing the camera.</span>
 <span class="sd">        password (str): Password for accessing the camera.</span>
-<span class="sd">        cam_type (str): Type of the camera, e.g., &#39;static&#39; or &#39;ptz&#39; (pan-tilt-zoom).</span>
+<span class="sd">        cam_type (str): Type of the camera, e.g., &#39;static&#39; or &#39;ptz&#39; (pan-tilt-zoom), defaults to &#39;ptz&#39;.</span>
 <span class="sd">        cam_poses (Optional[List[int]]): List of preset positions for PTZ cameras.</span>
 <span class="sd">        protocol (str): Protocol used for communication, defaults to &#39;https&#39;.</span>
 
@@ -288,12 +290,12 @@
 <span class="sd">        set_ptz_preset(idx): Sets a PTZ preset position using an ID.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">ip_address</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">cam_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">cam_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ptz&quot;</span><span class="p">,</span>
         <span class="n">cam_poses</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">protocol</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https&quot;</span><span class="p">,</span>
     <span class="p">):</span>
@@ -307,15 +309,16 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;ToPos&quot;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_build_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">command</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_url</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">command</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Constructs a URL for API commands to the camera.&quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="si">}</span><span class="s2">://</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">/cgi-bin/api.cgi?&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;cmd=</span><span class="si">{</span><span class="n">command</span><span class="si">}</span><span class="s2">&amp;user=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">username</span><span class="si">}</span><span class="s2">&amp;password=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">password</span><span class="si">}</span><span class="s2">&amp;channel=0&quot;</span>
         <span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_handle_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">success_message</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_handle_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">success_message</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Handles HTTP responses, logging success or errors based on response data.&quot;&quot;&quot;</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
             <span class="n">response_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">response_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;code&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -327,7 +330,9 @@
             <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed operation: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="ReolinkCamera.capture"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.capture">[docs]</a>    <span class="k">def</span> <span class="nf">capture</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
+<div class="viewcode-block" id="ReolinkCamera.capture">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.capture">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">capture</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Captures an image from the camera. Optionally moves the camera to a preset position before capturing.</span>
 
@@ -356,7 +361,10 @@
             <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Request failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
-<div class="viewcode-block" id="ReolinkCamera.move_camera"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_camera">[docs]</a>    <span class="k">def</span> <span class="nf">move_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+
+<div class="viewcode-block" id="ReolinkCamera.move_camera">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_camera">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Sends a command to move the camera.</span>
 
@@ -370,21 +378,31 @@
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># nosec: B501</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;PTZ operation successful.&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReolinkCamera.move_in_seconds"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_in_seconds">[docs]</a>    <span class="k">def</span> <span class="nf">move_in_seconds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Right&quot;</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">):</span>
+
+<div class="viewcode-block" id="ReolinkCamera.move_in_seconds">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_in_seconds">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_in_seconds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Right&quot;</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;im.jpg&quot;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Moves the camera in a specified direction for a specified number of seconds.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            s (int): Duration in seconds to move the camera.</span>
+<span class="sd">            s (float): Duration in seconds to move the camera.</span>
 <span class="sd">            operation (str): Direction to move the camera.</span>
 <span class="sd">            speed (int): Speed of the movement.</span>
+<span class="sd">            save_path (str): After movement capture and save image at save_path</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">speed</span><span class="p">)</span>
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;Stop&quot;</span><span class="p">)</span>
-        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span></div>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">im</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">im</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">save_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">im</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">save_path</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="ReolinkCamera.get_ptz_preset"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.get_ptz_preset">[docs]</a>    <span class="k">def</span> <span class="nf">get_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+<div class="viewcode-block" id="ReolinkCamera.get_ptz_preset">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.get_ptz_preset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Retrieves the preset positions available for PTZ cameras.</span>
 
@@ -400,7 +418,10 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span></div>
 
-<div class="viewcode-block" id="ReolinkCamera.set_ptz_preset"><a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.set_ptz_preset">[docs]</a>    <span class="k">def</span> <span class="nf">set_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+
+<div class="viewcode-block" id="ReolinkCamera.set_ptz_preset">
+<a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.set_ptz_preset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Sets a PTZ preset position. If no ID is provided, finds the next available slot.</span>
 
@@ -432,44 +453,26 @@
         <span class="c1"># Utilizing the shared response handling method</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Preset </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> set successfully.&quot;</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">delete_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Deletes a PTZ preset position by setting its enable value to 0.</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            idx (int): The preset ID to delete.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;SetPtzPreset&quot;</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;SetPtzPreset&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>  <span class="c1"># The action code for setting data</span>
-                <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;PtzPreset&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;enable&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">}},</span>
-            <span class="p">}</span>
-        <span class="p">]</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># nosec: B501</span>
-        <span class="c1"># Utilizing the shared response handling method</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Preset </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> deleted successfully.&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">reboot_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reboot_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;Reboot&quot;</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;Reboot&quot;</span><span class="p">}]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Camera reboot initiated successfully.&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">get_auto_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_auto_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;GetAutoFocus&quot;</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;GetAutoFocus&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}}]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Fetched AutoFocus settings successfully.&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">set_auto_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">disable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_auto_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">disable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;SetAutoFocus&quot;</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;SetAutoFocus&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;AutoFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">disable</span><span class="p">)}}}]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Set AutoFocus settings successfully.&quot;</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">start_zoom_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">start_zoom_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">)</span>
         <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
             <span class="p">{</span>
@@ -480,6 +483,7 @@
         <span class="p">]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Started ZoomFocus successfully.&quot;</span><span class="p">)</span></div>
+
 </pre></div>
         </article>
       </div>
@@ -492,7 +496,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2024, Pyronear
+                Copyright &#169; 2020-2025, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -519,9 +523,9 @@
       
     </aside>
   </div>
-</div><script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js?v=f94d5cbb"></script>
-    <script src="../../_static/doctools.js?v=888ff710"></script>
-    <script src="../../_static/sphinx_highlight.js?v=4825356b"></script>
+</div><script src="../../_static/documentation_options.js?v=5e09a967"></script>
+    <script src="../../_static/doctools.js?v=9a2dae69"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=5fa4622c"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../../_static/copybutton.js?v=f281be69"></script>

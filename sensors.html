@@ -1,14 +1,14 @@
 <!doctype html>
-<html class="no-js" lang="en" data-content_root="">
+<html class="no-js" lang="en" data-content_root="./">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" />
 
-    <!-- Generated with Sphinx 7.1.2 and Furo 2024.07.18 -->
+    <!-- Generated with Sphinx 7.3.7 and Furo 2024.08.06 -->
         <title>pyroengine.sensors - PyroEngine</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=649a27d8" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=613ab9ff" />
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
     <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="_static/css/custom_theme.css" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=302659d7" />
@@ -258,11 +258,11 @@
         </div>
         <article role="main" id="furo-main-content">
           <section id="pyroengine-sensors">
-<h1>pyroengine.sensors<a class="headerlink" href="#pyroengine-sensors" title="Permalink to this heading">¶</a></h1>
+<h1>pyroengine.sensors<a class="headerlink" href="#pyroengine-sensors" title="Link to this heading">¶</a></h1>
 <p>The sensors module provides control over perception sensors connected to the system.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.sensors.</span></span><span class="sig-name descname"><span class="pre">ReolinkCamera</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ip_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_poses</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">protocol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'https'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.sensors.</span></span><span class="sig-name descname"><span class="pre">ReolinkCamera</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ip_address</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ptz'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cam_poses</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">protocol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'https'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera" title="Link to this definition">¶</a></dt>
 <dd><p>A controller class for interacting with Reolink cameras.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Variables<span class="colon">:</span></dt>
@@ -270,7 +270,7 @@
 <li><p><strong>ip_address</strong> (<em>str</em>) – IP address of the Reolink camera.</p></li>
 <li><p><strong>username</strong> (<em>str</em>) – Username for accessing the camera.</p></li>
 <li><p><strong>password</strong> (<em>str</em>) – Password for accessing the camera.</p></li>
-<li><p><strong>cam_type</strong> (<em>str</em>) – Type of the camera, e.g., ‘static’ or ‘ptz’ (pan-tilt-zoom).</p></li>
+<li><p><strong>cam_type</strong> (<em>str</em>) – Type of the camera, e.g., ‘static’ or ‘ptz’ (pan-tilt-zoom), defaults to ‘ptz’.</p></li>
 <li><p><strong>cam_poses</strong> (<em>Optional</em><em>[</em><em>List</em><em>[</em><em>int</em><em>]</em><em>]</em>) – List of preset positions for PTZ cameras.</p></li>
 <li><p><strong>protocol</strong> (<em>str</em>) – Protocol used for communication, defaults to ‘https’.</p></li>
 </ul>
@@ -278,31 +278,31 @@
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera.capture">
-<span class="sig-name descname"><span class="pre">capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.capture"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.capture" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">capture</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pos_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.capture"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.capture" title="Link to this definition">¶</a></dt>
 <dd><p>Captures an image from the camera. Moves to position <cite>pos_id</cite> if provided.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera.move_camera">
-<span class="sig-name descname"><span class="pre">move_camera</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.move_camera"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.move_camera" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">move_camera</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">operation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.move_camera"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.move_camera" title="Link to this definition">¶</a></dt>
 <dd><p>Moves the camera based on the operation type and speed.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera.move_in_seconds">
-<span class="sig-name descname"><span class="pre">move_in_seconds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.move_in_seconds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.move_in_seconds" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">move_in_seconds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">speed</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.move_in_seconds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.move_in_seconds" title="Link to this definition">¶</a></dt>
 <dd><p>Moves the camera for a specific duration and then stops.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera.get_ptz_preset">
-<span class="sig-name descname"><span class="pre">get_ptz_preset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.get_ptz_preset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.get_ptz_preset" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">get_ptz_preset</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.get_ptz_preset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.get_ptz_preset" title="Link to this definition">¶</a></dt>
 <dd><p>Retrieves preset positions for a PTZ camera.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="pyroengine.sensors.ReolinkCamera.set_ptz_preset">
-<span class="sig-name descname"><span class="pre">set_ptz_preset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.set_ptz_preset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.set_ptz_preset" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">set_ptz_preset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/sensors.html#ReolinkCamera.set_ptz_preset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.sensors.ReolinkCamera.set_ptz_preset" title="Link to this definition">¶</a></dt>
 <dd><p>Sets a PTZ preset position using an ID.</p>
 </dd></dl>
 
@@ -321,7 +321,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2024, Pyronear
+                Copyright &#169; 2020-2025, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -374,9 +374,9 @@
       
     </aside>
   </div>
-</div><script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=f94d5cbb"></script>
-    <script src="_static/doctools.js?v=888ff710"></script>
-    <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+</div><script src="_static/documentation_options.js?v=5e09a967"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=5fa4622c"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="_static/copybutton.js?v=f281be69"></script>
