@@ -123,3 +123,8 @@ conda-dist/
 
 docker-compose.yml.bak
 docker-compose.override.yml
+
+
+captured_images/
+captured_positions/
+*.jpg

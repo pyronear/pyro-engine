@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -69,6 +69,7 @@ class ReolinkCamera:
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
+        logging.info(f"{response.status_code}")
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:
@@ -123,19 +124,22 @@ class ReolinkCamera:
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(self, s: int, operation: str = "Right", speed: int = 20):
+    def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
         """
         Moves the camera in a specified direction for a specified number of seconds.
-
         Args:
-            s (int): Duration in seconds to move the camera.
+            s (float): Duration in seconds to move the camera.
             operation (str): Direction to move the camera.
             speed (int): Speed of the movement.
+            save_path (str): After movement capture and save image at save_path
         """
         self.move_camera(operation, speed)
         time.sleep(s)
         self.move_camera("Stop")
         time.sleep(1)
+        im = self.capture()
+        if im is not None and save_path is not None:
+            im.save(save_path)
 
     def get_ptz_preset(self):
         """

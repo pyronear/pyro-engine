@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -60,6 +60,7 @@ def main(args):
         args.model_path,
         args.thresh,
         args.model_format,
+        args.max_bbox_size,
         API_URL,
         splitted_cam_creds,
         LAT,
@@ -91,6 +92,8 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
     parser.add_argument("--model_format", type=str, default="onnx", help="Model format")
+    parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
+
     # Camera & cache
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")

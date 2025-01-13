@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -34,7 +34,7 @@ def main():
         python src/control_reolink_cam.py capture --ip 169.254.40.1  --type ptz
 
     - Move the camera to a preset position:
-        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --pos_id 0 --operation ToPos
+        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --operation ToPos --pos_id 10
 
     - Move the camera to the right for 3 seconds:
         python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1  --operation Right --duration 3
@@ -104,7 +104,7 @@ def main():
     if args.action == "capture":
         image = camera_controller.capture(pos_id=args.pos_id)
         if image is not None:
-            image.save("im.jpg")
+            image.resize((640, 360)).save("im.jpg")
         else:
             print("Failed to capture image.")
     elif args.action == "move_camera":

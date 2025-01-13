@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -82,6 +82,7 @@ class Engine:
         model_path: Optional[str] = None,
         conf_thresh: float = 0.15,
         model_format: Optional[str] = "ncnn",
+        max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         latitude: Optional[float] = None,
@@ -100,8 +101,7 @@ class Engine:
     ) -> None:
         """Init engine"""
         # Engine Setup
-
-        self.model = Classifier(model_path=model_path, conf=0.05, format=model_format)
+        self.model = Classifier(model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size, format=model_format)
         self.conf_thresh = conf_thresh
 
         # API Setup
