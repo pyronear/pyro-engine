@@ -52,7 +52,7 @@ prediction = engine.predict(im)
 
 ## Setup
 
-Python 3.10 (or higher) and [pip](https://pip.pypa.io/en/stable/)/[conda](https://docs.conda.io/en/latest/miniconda.html) are required to install PyroEngine.
+Python 3.9 (or higher) and [pip](https://pip.pypa.io/en/stable/)/[conda](https://docs.conda.io/en/latest/miniconda.html) are required to install PyroEngine.
 
 ### Developer installation
 
