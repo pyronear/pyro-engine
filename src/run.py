@@ -55,8 +55,8 @@ def main(args):
     engine = Engine(
         args.model_path,
         args.thresh,
-        args.max_bbox_size,
         API_URL,
+        args.max_bbox_size,
         splitted_cam_creds,
         cache_folder=args.cache,
         backup_size=args.backup_size,
