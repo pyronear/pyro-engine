@@ -27,7 +27,7 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "onnxruntime==1.20.1",
+    "onnxruntime==1.19",
     "ncnn>=1.0",
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#egg=pyroclient&subdirectory=client",
     "requests>=2.20.0,<3.0.0",

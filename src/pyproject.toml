@@ -14,5 +14,5 @@ python = "^3.9"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
 pyroengine = "^0.2.0"
 python-dotenv = ">=0.15.0"
-onnxruntime = "1.20.1"
+onnxruntime = "1.19"
 ncnn = ">1.0"
