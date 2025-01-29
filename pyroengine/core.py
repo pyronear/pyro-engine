@@ -139,11 +139,13 @@ class SystemController:
             if item is None:
                 break
             cam_id, frame = item
-            
             self.engine.predict(frame, cam_id)
-
-            # finally:
-            #     image_queue.task_done()  # Mark the task as done
+            try:
+                print("tt")
+            except Exception as e:
+                logger.error(f"Error running prediction: {e}")
+            finally:
+                image_queue.task_done()  # Mark the task as done
 
     async def night_mode(self) -> bool:
         """
