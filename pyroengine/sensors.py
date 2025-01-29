@@ -69,7 +69,7 @@ class ReolinkCamera:
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
-        logging.info(f"{response.status_code}")
+        logger.info(f"{response.status_code}")
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:

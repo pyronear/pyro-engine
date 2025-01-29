@@ -7,7 +7,7 @@ import json
 import os
 import platform
 import shutil
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import ncnn  # type: ignore
