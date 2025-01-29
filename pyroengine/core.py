@@ -70,7 +70,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
     try:
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
-                cam_id = f"{camera.ip_address}"
+                cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture()
                 # Move camera to the next pose to avoid waiting
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
@@ -153,7 +153,7 @@ class SystemController:
         Returns:
             bool: True if it is daytime for all cameras, False otherwise.
         """
-  
+
         for camera in self.cameras:
             cam_id = camera.ip_address
             try:
