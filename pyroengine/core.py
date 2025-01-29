@@ -166,12 +166,12 @@ class SystemController:
                         camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                         if frame is not None:
                             if not is_day_time(None, frame, "ir"):
-                                return True
+                                return False
                 else:
                     frame = camera.capture()
                     if frame is not None:
                         if not is_day_time(None, frame, "ir"):
-                            return True
+                            return False
             except Exception as e:
                 logger.exception(f"Error during image capture from camera {cam_id}: {e}")
         return True
