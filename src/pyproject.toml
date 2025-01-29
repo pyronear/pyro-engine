@@ -10,7 +10,7 @@ authors = ["Pyronear <pyronear@contact.org>"]
 license = "Apache-2.0"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.9"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
 pyroengine = "^0.2.0"
 python-dotenv = ">=0.15.0"
