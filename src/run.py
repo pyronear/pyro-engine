@@ -44,12 +44,12 @@ def main(args):
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
-            for pos_id in cam_poses:
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"]
+            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"], cam_azimuth
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
-            splitted_cam_creds[_ip] = cam_data["token"]
+            splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"]
 
         cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol))
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=5, help="Number of seconds between each camera stream analysis")
     args = parser.parse_args()
 
     main(args)
