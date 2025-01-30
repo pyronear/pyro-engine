@@ -41,15 +41,17 @@ def main(args):
     splitted_cam_creds = {}
     cameras = []
     for _ip, cam_data in cameras_credentials.items():
-        cam_poses = []
-        for creds in cam_data["credentials"]:
-            if cam_data["type"] == "ptz":
-                splitted_cam_creds[_ip + "_" + str(creds["posid"])] = creds
-                cam_poses.append(creds["posid"])
-            else:
-                splitted_cam_creds[_ip] = creds
+        if cam_data["type"] == "ptz":
+            cam_poses = cam_data["poses"]
+            cam_azimuths = cam_data["azimuths"]
+            for pos_id in cam_poses:
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"]
+        else:
+            cam_poses = []
+            cam_azimuths = [cam_data["azimuth"]]
+            splitted_cam_creds[_ip] = cam_data["token"]
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol))
 
     engine = Engine(
         args.model_path,
