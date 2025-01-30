@@ -334,8 +334,12 @@ class Engine:
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                 bboxes = self._alerts[0]["bboxes"]
+                bboxes = [tuple(bboxe) for bboxe in bboxes]
+                if len(bboxes)==0:
+                    bboxes = [()]
                 _, cam_azimuth = self.cam_creds[cam_id]
-                response = self.api_client[cam_id].create_detection(stream.getvalue(), cam_azimuth, bboxes)
+                ip = cam_id.split('_')[0]
+                response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
                 # Force a KeyError if the request failed
                 response.json()["id"]
                 # Clear
