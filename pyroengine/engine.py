@@ -112,8 +112,10 @@ class Engine:
         self.api_client = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, vals in cam_creds.items():
-                self.api_client[_id] = client.Client(api_url, vals["login"], vals["password"])
+            for _id, camera_token in cam_creds.items():
+                ip = _id.split('_')[0]
+                if ip not in self.api_client.keys():
+                    self.api_client[ip] = client.Client(camera_token, api_url)
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
