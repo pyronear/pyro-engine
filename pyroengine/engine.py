@@ -104,7 +104,7 @@ class Engine:
         self.api_client = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, camera_token in cam_creds.items():
+            for _id, (camera_token, _) in cam_creds.items():
                 ip = _id.split('_')[0]
                 if ip not in self.api_client.keys():
                     self.api_client[ip] = client.Client(camera_token, api_url)
@@ -117,6 +117,7 @@ class Engine:
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
+        self.cam_creds = cam_creds
 
         # Local backup
         self._backup_size = backup_size
@@ -175,7 +176,7 @@ class Engine:
                     "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
                     "cam_id": info["cam_id"],
                     "ts": info["ts"],
-                    "localization": info["localization"],
+                    "bboxes": info["bboxes"],
                 }
             )
 
@@ -290,12 +291,12 @@ class Engine:
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, localization, ts, is_staged) in enumerate(
+            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(
                 self._states[cam_key]["last_predictions"]
             ):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, localization)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, localization, ts, True
+                    self._stage_alert(frame, cam_id, ts, bboxes)
+                    self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
@@ -305,7 +306,7 @@ class Engine:
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, localization: list) -> None:
+    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
         # Store information in the queue
         self._alerts.append(
             {
@@ -314,7 +315,7 @@ class Engine:
                 "ts": ts,
                 "media_id": None,
                 "alert_id": None,
-                "localization": localization,
+                "bboxes": bboxes,
             }
         )
 
@@ -329,26 +330,12 @@ class Engine:
             self._local_backup(frame_info["frame"], cam_id)
 
             try:
-                # Media creation
-                if not isinstance(self._alerts[0]["media_id"], int):
-                    self._alerts[0]["media_id"] = self.api_client[cam_id].create_media_from_device().json()["id"]
-                # Alert creation
-                if not isinstance(self._alerts[0]["alert_id"], int):
-                    self._alerts[0]["alert_id"] = (
-                        self.api_client[cam_id]
-                        .send_alert_from_device(
-                            media_id=self._alerts[0]["media_id"],
-                            localization=self._alerts[0]["localization"],
-                        )
-                        .json()["id"]
-                    )
-                # Media upload
+                # Detection creation
                 stream = io.BytesIO()
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                response = self.api_client[cam_id].upload_media(
-                    self._alerts[0]["media_id"],
-                    media_data=stream.getvalue(),
-                )
+                bboxes = self._alerts[0]["bboxes"]
+                _, cam_azimuth = self.cam_creds[cam_id]
+                response = self.api_client[cam_id].create_detection(stream.getvalue(), cam_azimuth, bboxes)
                 # Force a KeyError if the request failed
                 response.json()["id"]
                 # Clear
