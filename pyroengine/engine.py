@@ -101,7 +101,7 @@ class Engine:
         self.conf_thresh = conf_thresh
 
         # API Setup
-        self.api_client = {}
+        self.api_client: dict[str, Any] = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, (camera_token, _) in cam_creds.items():
@@ -329,36 +329,37 @@ class Engine:
         )
 
     def _process_alerts(self) -> None:
-        for _ in range(len(self._alerts)):
-            # try to upload the oldest element
-            frame_info = self._alerts[0]
-            cam_id = frame_info["cam_id"]
-            logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+        if self.cam_creds is not None:
+            for _ in range(len(self._alerts)):
+                # try to upload the oldest element
+                frame_info = self._alerts[0]
+                cam_id = frame_info["cam_id"]
+                logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
-            # Save alert on device
-            self._local_backup(frame_info["frame"], cam_id)
+                # Save alert on device
+                self._local_backup(frame_info["frame"], cam_id)
 
-            try:
-                # Detection creation
-                stream = io.BytesIO()
-                frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                bboxes = self._alerts[0]["bboxes"]
-                bboxes = [tuple(bboxe) for bboxe in bboxes]
-                if len(bboxes) == 0:
-                    bboxes = [()]
-                _, cam_azimuth = self.cam_creds[cam_id]
-                ip = cam_id.split("_")[0]
-                response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
-                # Force a KeyError if the request failed
-                response.json()["id"]
-                # Clear
-                self._alerts.popleft()
-                logging.info(f"Camera '{cam_id}' - alert sent")
-                stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-            except (KeyError, ConnectionError) as e:
-                logging.warning(f"Camera '{cam_id}' - unable to upload cache")
-                logging.warning(e)
-                break
+                try:
+                    # Detection creation
+                    stream = io.BytesIO()
+                    frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                    bboxes = self._alerts[0]["bboxes"]
+                    bboxes = [tuple(bboxe) for bboxe in bboxes]
+                    if len(bboxes) == 0:
+                        bboxes = [()]
+                    _, cam_azimuth = self.cam_creds[cam_id]
+                    ip = cam_id.split("_")[0]
+                    response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
+                    # Force a KeyError if the request failed
+                    response.json()["id"]
+                    # Clear
+                    self._alerts.popleft()
+                    logging.info(f"Camera '{cam_id}' - alert sent")
+                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
+                except (KeyError, ConnectionError) as e:
+                    logging.warning(f"Camera '{cam_id}' - unable to upload cache")
+                    logging.warning(e)
+                    break
 
     def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
         """Save image on device
