@@ -254,6 +254,7 @@ class Engine:
         # Add default bbox
         if output_predictions.shape[0] == 0:
             output_predictions = np.zeros((1, 5))
+            output_predictions[:, 2:4] += 0.0001
 
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
@@ -345,8 +346,6 @@ class Engine:
                     frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                     bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    if len(bboxes) == 0:
-                        bboxes = [()]
                     _, cam_azimuth = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)

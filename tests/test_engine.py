@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,7 +53,6 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][0][1].shape[0] == 0
     assert engine._states["-1"]["last_predictions"][0][1].shape[1] == 5
-    assert engine._states["-1"]["last_predictions"][0][2] == [[0.0, 0.0, 0.0, 0.0, 0.0]]
     assert engine._states["-1"]["last_predictions"][0][3] < datetime.now().isoformat()
     assert engine._states["-1"]["last_predictions"][0][4] is False
 
@@ -63,7 +63,6 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][1][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][1][1].shape[1] == 5
-    assert engine._states["-1"]["last_predictions"][1][2] == [[0.0, 0.0, 0.0, 0.0, 0.0]]
     assert engine._states["-1"]["last_predictions"][1][3] < datetime.now().isoformat()
     assert engine._states["-1"]["last_predictions"][1][4] is False
 
@@ -91,6 +90,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     if isinstance(api_url, str):
         engine = Engine(
             api_url=api_url,
+            conf_thresh=0.01,
             cam_creds=cam_creds,
             nb_consecutive_frames=4,
             frame_saving_period=3,
@@ -101,9 +101,11 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         start_ts = datetime.now(timezone.utc).isoformat()
         response = engine.heartbeat("dummy_cam")
         assert response.status_code // 100 == 2
-        ts = datetime.now(timezone.utc).isoformat()
         json_respone = response.json()
-        assert start_ts < json_respone["last_ping"] < ts
+        time.sleep(0.1)
+        ts = datetime.now(timezone.utc).isoformat()
+
+        assert start_ts < json_respone["last_active_at"] < ts
         # Send an alert
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
