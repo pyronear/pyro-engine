@@ -56,8 +56,6 @@ class Engine:
         conf_thresh: confidence threshold to send an alert
         api_url: url of the pyronear API
         cam_creds: api credectials for each camera, the dictionary should be as the one in the example
-        latitude: device latitude
-        longitude: device longitude
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
             the number of consecutive negative detections before stopping the alert
         frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
@@ -84,8 +82,6 @@ class Engine:
         max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
         nb_consecutive_frames: int = 4,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
@@ -105,10 +101,6 @@ class Engine:
         self.conf_thresh = conf_thresh
 
         # API Setup
-        if isinstance(api_url, str):
-            assert isinstance(latitude, float) and isinstance(longitude, float) and isinstance(cam_creds, dict)
-        self.latitude = latitude
-        self.longitude = longitude
         self.api_client = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
@@ -344,8 +336,6 @@ class Engine:
                     self._alerts[0]["alert_id"] = (
                         self.api_client[cam_id]
                         .send_alert_from_device(
-                            lat=self.latitude,
-                            lon=self.longitude,
                             media_id=self._alerts[0]["media_id"],
                             localization=self._alerts[0]["localization"],
                         )
