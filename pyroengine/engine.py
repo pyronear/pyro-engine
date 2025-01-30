@@ -251,6 +251,9 @@ class Engine:
                     output_predictions = np.round(output_predictions, 3)  # max 3 digit
                     output_predictions = output_predictions[:5, :]  # max 5 bbox
 
+        if output_predictions.shape[0] == 0:
+            output_predictions = np.zeros(1, 5)
+
         self._states[cam_key]["last_predictions"].append(
             (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
         )
