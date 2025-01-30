@@ -198,7 +198,8 @@ class Engine:
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
-        return self.api_client[cam_id].heartbeat()
+        ip = cam_id.split('_')[0]
+        return self.api_client[ip].heartbeat()
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
         """Updates the detection states"""
