@@ -17,7 +17,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache saving
     _ts = datetime.now().isoformat()
-    engine._stage_alert(mock_wildfire_image, 0, datetime.now().isoformat(), localization="dummy")
+    engine._stage_alert(mock_wildfire_image, 0, datetime.now().isoformat(), bboxes="dummy")
     assert len(engine._alerts) == 1
     assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
@@ -33,7 +33,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
         "frame_path": str(engine._cache.joinpath("pending_frame0.jpg")),
         "cam_id": 0,
         "ts": engine._alerts[0]["ts"],
-        "localization": "dummy",
+        "bboxes": "dummy",
     }
     # Overrites cache files
     engine._dump_cache()
