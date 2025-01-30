@@ -105,7 +105,7 @@ class Engine:
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, (camera_token, _) in cam_creds.items():
-                ip = _id.split('_')[0]
+                ip = _id.split("_")[0]
                 if ip not in self.api_client.keys():
                     self.api_client[ip] = client.Client(camera_token, api_url)
 
@@ -199,7 +199,7 @@ class Engine:
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
-        ip = cam_id.split('_')[0]
+        ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
@@ -291,9 +291,7 @@ class Engine:
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
+            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
                     self._stage_alert(frame, cam_id, ts, bboxes)
                     self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
@@ -335,10 +333,10 @@ class Engine:
                 frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                 bboxes = self._alerts[0]["bboxes"]
                 bboxes = [tuple(bboxe) for bboxe in bboxes]
-                if len(bboxes)==0:
+                if len(bboxes) == 0:
                     bboxes = [()]
                 _, cam_azimuth = self.cam_creds[cam_id]
-                ip = cam_id.split('_')[0]
+                ip = cam_id.split("_")[0]
                 response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
                 # Force a KeyError if the request failed
                 response.json()["id"]
