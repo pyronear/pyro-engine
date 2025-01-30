@@ -54,13 +54,11 @@ def main(args):
         cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol))
 
     engine = Engine(
-        args.model_path,
-        args.thresh,
-        args.max_bbox_size,
-        API_URL,
-        splitted_cam_creds,
-        LAT,
-        LON,
+        model_path = args.model_path,
+        conf_thresh = args.thresh,
+        max_bbox_size = args.max_bbox_size,
+        api_url = API_URL,
+        cam_creds = splitted_cam_creds,
         cache_folder=args.cache,
         backup_size=args.backup_size,
         nb_consecutive_frames=args.nb_consecutive_frames,
