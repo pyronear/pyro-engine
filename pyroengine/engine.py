@@ -240,6 +240,13 @@ class Engine:
                     iou_match = [np.max(iou) > 0 for iou in ious]
                     output_predictions = preds[iou_match, :]
 
+                    # Add missing bboxes
+                    ious = box_iou(combine_predictions[:, :4], output_predictions[:, :4])
+                    missing_bbox = combine_predictions[ious[0] == 0, :]
+                    if len(missing_bbox):
+                        missing_bbox[:, -1] = 0
+                        output_predictions = np.concatenate([output_predictions, missing_bbox])
+
                     # Limit bbox size for api
                     output_predictions = np.round(output_predictions, 3)  # max 3 digit
                     output_predictions = output_predictions[:5, :]  # max 5 bbox
