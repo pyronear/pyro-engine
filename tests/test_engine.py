@@ -85,17 +85,13 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    lat = os.environ.get("LAT")
-    lon = os.environ.get("LON")
-    cam_creds = {"dummy_cam": {"login": os.environ.get("API_LOGIN"), "password": os.environ.get("API_PWD")}}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
         engine = Engine(
             api_url=api_url,
             cam_creds=cam_creds,
-            latitude=float(lat),
-            longitude=float(lon),
             nb_consecutive_frames=4,
             frame_saving_period=3,
             cache_folder=folder,
