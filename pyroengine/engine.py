@@ -252,7 +252,7 @@ class Engine:
                     output_predictions = output_predictions[:5, :]  # max 5 bbox
 
         # Add default bbox
-        if output_predictions.shape[0] == 0:
+        if len(output_predictions) == 0:
             output_predictions = np.zeros((1, 5))
             output_predictions[:, 2:4] += 0.0001
 
