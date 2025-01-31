@@ -242,6 +242,7 @@ class Engine:
 
                     if len(output_predictions) == 0:
                         missing_bbox = combine_predictions
+                        missing_bbox[:, -1] = 0
 
                     else:
                         # Add missing bboxes
