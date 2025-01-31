@@ -46,6 +46,7 @@ class ReolinkCamera:
         password: str,
         cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[int]] = None,
         protocol: str = "https",
     ):
         self.ip_address = ip_address
@@ -53,6 +54,7 @@ class ReolinkCamera:
         self.password = password
         self.cam_type = cam_type
         self.cam_poses = cam_poses if cam_poses is not None else []
+        self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
 
         if len(self.cam_poses):
