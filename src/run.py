@@ -41,24 +41,24 @@ def main(args):
     splitted_cam_creds = {}
     cameras = []
     for _ip, cam_data in cameras_credentials.items():
-        cam_poses = []
-        for creds in cam_data["credentials"]:
-            if cam_data["type"] == "ptz":
-                splitted_cam_creds[_ip + "_" + str(creds["posid"])] = creds
-                cam_poses.append(creds["posid"])
-            else:
-                splitted_cam_creds[_ip] = creds
+        if cam_data["type"] == "ptz":
+            cam_poses = cam_data["poses"]
+            cam_azimuths = cam_data["azimuths"]
+            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"], cam_azimuth
+        else:
+            cam_poses = []
+            cam_azimuths = [cam_data["azimuth"]]
+            splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"]
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, args.protocol))
+        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol))
 
     engine = Engine(
-        args.model_path,
-        args.thresh,
-        args.max_bbox_size,
-        API_URL,
-        splitted_cam_creds,
-        LAT,
-        LON,
+        model_path=args.model_path,
+        conf_thresh=args.thresh,
+        max_bbox_size=args.max_bbox_size,
+        api_url=API_URL,
+        cam_creds=splitted_cam_creds,
         cache_folder=args.cache,
         backup_size=args.backup_size,
         nb_consecutive_frames=args.nb_consecutive_frames,
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=5, help="Number of seconds between each camera stream analysis")
     args = parser.parse_args()
 
     main(args)

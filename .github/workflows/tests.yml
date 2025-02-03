@@ -34,10 +34,7 @@ jobs:
       - name: Run unittests
         env:
           API_URL: ${{ secrets.API_URL }}
-          API_LOGIN: ${{ secrets.API_LOGIN }}
-          API_PWD: ${{ secrets.API_PWD }}
-          LAT: 48.88
-          LON: 2.38
+          API_TOKEN: ${{ secrets.API_TOKEN }}
         run: |
           coverage run -m pytest tests/
           coverage xml
