@@ -4,8 +4,6 @@ services:
     container_name: pyro-engine-run
     environment:
       - API_URL=${API_URL}
-      - LAT=${LAT}
-      - LON=${LON}
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
     command: python run.py
