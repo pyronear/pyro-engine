@@ -68,8 +68,6 @@ pip install -e pyro-engine/.
 In order to run the project, you will need to specify some information, which can be done using a `.env` file.
 This file will have to hold the following information:
 - `API_URL`: the URL of the API where to send alerts
-- `LAT`: the latitude of the device
-- `LON`: the longitude of the device
 - `CAM_USER`: the username to access the camera
 - `CAM_PWD`: the password to access the camera
 
@@ -77,8 +75,6 @@ So your `.env` file should look something like this:
 
 ```
 API_URL=https://api.pyronear.org
-LAT=48.88
-LON=2.38
 CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
 ```
