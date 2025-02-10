@@ -115,7 +115,7 @@ if __name__ == "__main__":
     parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
 
     # Time config
-    parser.add_argument("--period", type=int, default=5, help="Number of seconds between each camera stream analysis")
+    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
     args = parser.parse_args()
 
     main(args)
