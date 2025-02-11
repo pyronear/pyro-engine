@@ -68,7 +68,6 @@ pip install -e pyro-engine/.
 In order to run the project, you will need to specify some information, which can be done using a `.env` file.
 This file will have to hold the following information:
 - `API_URL`: the URL of the API where to send alerts
-- `API_PWD`: the password of the user account
 - `CAM_USER`: the username to access the camera
 - `CAM_PWD`: the password to access the camera
 
