@@ -87,39 +87,41 @@ Additionally, you'll need a `./data` folder which contains:
 ### Example of `credentials.json`:
 
 ```json
-{
-    "169.254.40.1": {
-        "brand": "reolink",
-        "type": "ptz",
-        "credentials": [
-            {
-                "login": "dummy_login_1",
-                "password": "dummy_password_1",
-                "posid": 1
-            },
-            {
-                "login": "dummy_login_2",
-                "password": "dummy_password_2",
-                "posid": 2
-            },
-            {
-                "login": "dummy_login_3",
-                "password": "dummy_password_3",
-                "posid": 3
-            }
-        ]
-    },
-    "169.254.40.3": {
-        "brand": "reolink",
-        "type": "static",
-        "credentials": [
-            {
-                "login": "dummy_login_4",
-                "password": "dummy_password_4"
-            }
-        ]
-    }
-}
+  {
+      "169.254.7.1": {
+          "brand": "reolink",
+          "type": "static",
+          "token": "",
+          "azimuth": 322,
+          "id": 9,
+      },
+      "169.254.7.2": {
+          "brand": "reolink",
+          "type": "static",
+          "token": "",
+          "azimuth": 251,
+          "id": 10,
+      },
+      "169.254.7.3": {
+          "brand": "reolink",
+          "type": "ptz",
+          "token": "",
+          "id": 11,
+          "poses": [
+              0,
+              1,
+              2,
+              3,
+          ],
+          "azimuths": [
+              0,
+              90,
+              180,
+              270
+          ]
+      }
+  }
+
 ```
 
 ## Documentation
@@ -137,4 +139,3 @@ This project is developed and maintained by the repo owner and volunteers from [
 ## License
 
 Distributed under the Apache 2 License. See [`LICENSE`](LICENSE) for more information.
-
