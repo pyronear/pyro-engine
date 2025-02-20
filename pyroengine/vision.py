@@ -50,6 +50,16 @@ class Classifier:
     def __init__(
         self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
     ) -> None:
+        if model_path is not None:
+            if not os.path.isfile(model_path):
+                logging.warning(f"Model file not found: {model_path} - Getting model from HuggingFace")
+                model_path = None
+
+            if os.path.splitext(model_path)[-1] == ".onnx":
+                self.format = "onnx"
+            else:
+                logging.warning(f"Model should be an onnx export but currently is {model_path} - Getting model from HuggingFace")
+                model_path = None
         if model_path is None:
 
             if format == "ncnn":
@@ -101,6 +111,9 @@ class Classifier:
 
         else:
             self.ort_session = onnxruntime.InferenceSession(model_path)
+            if not self.ort_session:
+                raise RuntimeError("Failed to load the ONNX model.")
+            logging.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
         self.conf = conf
