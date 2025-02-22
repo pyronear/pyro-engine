@@ -58,7 +58,9 @@ class Classifier:
             if os.path.splitext(model_path)[-1] == ".onnx":
                 self.format = "onnx"
             else:
-                logging.warning(f"Model should be an onnx export but currently is {model_path} - Getting model from HuggingFace")
+                logging.warning(
+                    f"Model should be an onnx export but currently is {model_path} - Getting model from HuggingFace"
+                )
                 model_path = None
         if model_path is None:
 
