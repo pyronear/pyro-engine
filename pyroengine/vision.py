@@ -50,20 +50,15 @@ class Classifier:
     def __init__(
         self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
     ) -> None:
-        if model_path is not None:
+        if model_path:
+            # Checks that the file exists
             if not os.path.isfile(model_path):
-                logging.warning(f"Model file not found: {model_path} - Getting model from HuggingFace")
-                model_path = None
-
-            if os.path.splitext(model_path)[-1] == ".onnx":
-                self.format = "onnx"
-            else:
-                logging.warning(
-                    f"Model should be an onnx export but currently is {model_path} - Getting model from HuggingFace"
-                )
-                model_path = None
-        if model_path is None:
-
+                raise ValueError(f"Model file not found: {model_path}")
+            # Checks that file format is .onnx
+            if os.path.splitext(model_path)[-1].lower() != ".onnx":
+                raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
+            self.format = "onnx"
+        else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
                     logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
