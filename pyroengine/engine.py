@@ -14,6 +14,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from random import randint
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -202,6 +203,15 @@ class Engine:
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
+    def _update_last_image(self, cam_id: str, frame: Image.Image) -> None:
+        """Updates last ping of device"""
+        ip = cam_id.split("_")[0]
+
+        stream = io.BytesIO()
+        frame.save(stream, format="JPEG", quality=self.jpeg_quality)
+        logging.info("Update last image")
+        self.api_client[ip].update_last_image(stream.getvalue())
+
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
         """Updates the detection states"""
 
@@ -286,6 +296,9 @@ class Engine:
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
             heartbeat_with_timeout(self, cam_id, timeout=1)
+            random_number = randint(0, 20)
+            if random_number == 1:
+                self._update_last_image(cam_id, frame)
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
