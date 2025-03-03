@@ -3,9 +3,9 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-import pytest
 from unittest.mock import patch
 
+import pytest
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -79,29 +79,31 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][2][3] < datetime.now().isoformat()
     assert engine._states["-1"]["last_predictions"][2][4] is False
 
-# Testing the behavior Engine instanciation with model_path as input
 
 # mock_isfile is a mock of the os.path.isfile() function which allows to simulate file existence
 @patch("os.path.isfile")
 def test_valid_model_path(mock_isfile):
-    '''Tests Engine instanciation with a valid input model_path'''
+    """Tests Engine instanciation with a valid input model_path"""
     mock_isfile.return_value = True  # Simulates file existence
     instance = Engine(model_path="model.onnx")
     assert instance.format == "onnx"
 
+
 @patch("os.path.isfile")
 def test_nonexistent_model(mock_isfile):
-    '''Tests Engine instanciation with a non-existent input model_path'''
-    mock_isfile.return_value = False # Simulates file non-existence
+    """Tests Engine instanciation with a non-existent input model_path"""
+    mock_isfile.return_value = False  # Simulates file non-existence
     with pytest.raises(ValueError, match=r"Model file not found: .*"):
         Engine(model_path="nonexistent.onnx")
 
+
 @patch("os.path.isfile")
 def test_invalid_extension(mock_isfile):
-    '''Tests Engine instanciation with a file format different than .onnx'''
+    """Tests Engine instanciation with a file format different than .onnx"""
     mock_isfile.return_value = True  # Simulates file existence
     with pytest.raises(ValueError, match=r"Input model_path should point toward an onnx export but currently is *"):
         Engine(model_path="model.ncnn")
+
 
 def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
