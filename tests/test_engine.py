@@ -90,7 +90,7 @@ def create_dummy_onnx_model(model_path):
     node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
     model = onnx.helper.make_model(graph)
-    
+
     onnx.save(model, model_path)
 
 
