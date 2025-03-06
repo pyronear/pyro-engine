@@ -1,10 +1,12 @@
 import json
 import os
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import onnx
 import pytest
 from dotenv import load_dotenv
 from PIL import Image
@@ -80,15 +82,33 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][2][4] is False
 
 
-# mock_isfile is a mock of the os.path.isfile() function which allows to simulate file existence
-@patch("os.path.isfile")
-def test_valid_model_path(mock_isfile):
+def create_dummy_onnx_model(model_path):
+    """Creates a small dummy ONNX model."""
+    x = onnx.helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [1, 2])
+    y = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, 2])
+
+    node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
+    graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
+    model = onnx.helper.make_model(graph)
+    
+    onnx.save(model, model_path)
+
+
+@pytest.fixture
+def dummy_onnx_file():
+    """Fixture to create a temporary ONNX file."""
+    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmpfile:
+        create_dummy_onnx_model(tmpfile.name)
+        yield tmpfile.name  # returns file path
+
+
+def test_valid_model_path(dummy_onnx_file):
     """Tests Engine instanciation with a valid input model_path"""
-    mock_isfile.return_value = True  # Simulates file existence
-    instance = Engine(model_path="model.onnx")
+    instance = Engine(model_path=dummy_onnx_file)
     assert instance.format == "onnx"
 
 
+# mock_isfile is a mock of the os.path.isfile() function which allows to simulate file existence
 @patch("os.path.isfile")
 def test_nonexistent_model(mock_isfile):
     """Tests Engine instanciation with a non-existent input model_path"""
