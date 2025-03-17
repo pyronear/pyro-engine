@@ -107,9 +107,11 @@ class Classifier:
             self.model.load_model(os.path.join(model_path, "model.ncnn.bin"))
 
         else:
-            self.ort_session = onnxruntime.InferenceSession(model_path)
-            if not self.ort_session:
-                raise RuntimeError("Failed to load the ONNX model.")
+            try:
+                self.ort_session = onnxruntime.InferenceSession(model_path)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {str(e)}") from e
+
             logging.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz

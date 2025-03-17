@@ -109,6 +109,22 @@ def test_valid_model_path(dummy_onnx_file):
     assert instance.model.format == "onnx"
 
 
+@pytest.fixture
+def invalid_onnx_file():
+    """Fixture to create a temporary invalid ONNX file."""
+    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmpfile:
+        with open(tmpfile.name, "wb") as f:
+            f.write(b"Invalid content")
+        yield tmpfile.name  # returns file path
+
+
+def test_invalid_model_content(invalid_onnx_file):
+    """Tests Engine instantiation with an invalid ONNX model content."""
+    with pytest.raises(RuntimeError, match="Failed to load the ONNX model"):
+        # Engine instantiation with an invalid model : Classifier instnaciation should raise an error
+        Engine(model_path=invalid_onnx_file)
+
+
 # mock_isfile is a mock of the os.path.isfile() function which allows to simulate file existence
 @patch("os.path.isfile")
 def test_nonexistent_model(mock_isfile):
