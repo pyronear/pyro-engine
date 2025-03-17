@@ -89,7 +89,8 @@ def create_dummy_onnx_model(model_path):
 
     node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
-    model = onnx.helper.make_model(graph)
+
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 11)])
 
     onnx.save(model, model_path)
 
@@ -105,7 +106,7 @@ def dummy_onnx_file():
 def test_valid_model_path(dummy_onnx_file):
     """Tests Engine instanciation with a valid input model_path"""
     instance = Engine(model_path=dummy_onnx_file)
-    assert instance.format == "onnx"
+    assert instance.model.format == "onnx"
 
 
 # mock_isfile is a mock of the os.path.isfile() function which allows to simulate file existence
