@@ -38,7 +38,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "yolov8s.onnx")
+    model_path = os.path.join(folder, "yolov11s.onnx")
     assert os.path.isfile(model_path)
 
     # Test mask
@@ -60,7 +60,7 @@ def test_download(tmpdir_factory):
     # Instantiate the ONNX model
     _ = Classifier(model_folder=folder, format="onnx")
 
-    model_path = os.path.join(folder, "yolov8s.onnx")
+    model_path = os.path.join(folder, "yolov11s.onnx")
     model_creation_date = get_creation_date(model_path)
 
     # No download if exist
