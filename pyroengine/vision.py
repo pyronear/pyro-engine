@@ -21,9 +21,9 @@ from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov8s/resolve/main/"
-MODEL_ID = "pyronear/yolov8s"
-MODEL_NAME = "yolov8s.pt"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov11s/resolve/main/"
+MODEL_ID = "pyronear/yolov11s"
+MODEL_NAME = "yolov11s.pt"
 METADATA_NAME = "model_metadata.json"
 
 
@@ -63,11 +63,11 @@ class Classifier:
                 if not self.is_arm_architecture():
                     logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
 
-                model = "yolov8s_ncnn_model.zip"
+                model = "yolov11s_ncnn_model.zip"
                 self.format = "ncnn"
 
             elif format == "onnx":
-                model = "yolov8s.onnx"
+                model = "yolov11s.onnx"
                 self.format = "onnx"
 
             model_path = os.path.join(model_folder, model)
