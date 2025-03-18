@@ -50,8 +50,15 @@ class Classifier:
     def __init__(
         self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
     ) -> None:
-        if model_path is None:
-
+        if model_path:
+            # Checks that the file exists
+            if not os.path.isfile(model_path):
+                raise ValueError(f"Model file not found: {model_path}")
+            # Checks that file format is .onnx
+            if os.path.splitext(model_path)[-1].lower() != ".onnx":
+                raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
+            self.format = "onnx"
+        else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
                     logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
@@ -100,7 +107,12 @@ class Classifier:
             self.model.load_model(os.path.join(model_path, "model.ncnn.bin"))
 
         else:
-            self.ort_session = onnxruntime.InferenceSession(model_path)
+            try:
+                self.ort_session = onnxruntime.InferenceSession(model_path)
+            except Exception as e:
+                raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {str(e)}") from e
+
+            logging.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
         self.conf = conf
