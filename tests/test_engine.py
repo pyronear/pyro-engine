@@ -159,7 +159,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
             nb_consecutive_frames=4,
             frame_saving_period=3,
             cache_folder=folder,
-            frame_size=(256, 384),
         )
         # Heartbeat
         start_ts = datetime.now(timezone.utc).isoformat()
@@ -178,6 +177,9 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
 
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
+
+        engine.predict(mock_wildfire_image, "dummy_cam")
+        assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
 
         assert engine._states["dummy_cam"]["ongoing"] is True
         # Check that a media and an alert have been registered
