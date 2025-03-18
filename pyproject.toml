@@ -46,6 +46,7 @@ test = [
     "coverage[toml]>=4.5.4",
     "requests>=2.20.0,<3.0.0",
     "python-dotenv>=0.15.0",
+    "onnx>=1.17.0",
 ]
 quality = [
     "flake8>=3.9.0",
