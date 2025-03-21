@@ -137,6 +137,7 @@ class Engine:
                 self._states[cam_id] = {
                     "last_predictions": deque([], self.nb_consecutive_frames),
                     "ongoing": False,
+                    "last_image_sent": None,
                 }
 
         self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
