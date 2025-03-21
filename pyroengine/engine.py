@@ -303,6 +303,7 @@ class Engine:
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
             ):
                 # send image periodically
+                logging.info(f"Uploading periodical image for cam {cam_id}")
                 self._states[cam_key]["last_image_sent"] = time.time()
                 ip = cam_id.split("_")[0]
                 if ip in self.api_client.keys():
