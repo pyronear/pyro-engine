@@ -92,6 +92,7 @@ class Engine:
         jpeg_quality: int = 80,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
+        send_last_image_period: int = 10800,  # 3H,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -118,13 +119,18 @@ class Engine:
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
         self.cam_creds = cam_creds
+        self.send_last_image_period = send_last_image_period
 
         # Local backup
         self._backup_size = backup_size
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "ongoing": False},
+            "-1": {
+                "last_predictions": deque([], self.nb_consecutive_frames),
+                "ongoing": False,
+                "last_image_sent": None,
+            },
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
@@ -283,14 +289,26 @@ class Engine:
             the predicted confidence
         """
 
-        # Heartbeat
-        if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
-
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
+
+        # Heartbeat
+        if len(self.api_client) > 0 and isinstance(cam_id, str):
+            heartbeat_with_timeout(self, cam_id, timeout=1)
+            if (
+                self._states[cam_key]["last_image_sent"] is None
+                or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
+            ):
+                # send image periodically
+                self._states[cam_key]["last_image_sent"] = time.time()
+                ip = cam_id.split("_")[0]
+                if ip in self.api_client.keys():
+                    stream = io.BytesIO()
+                    frame.save(stream, format="JPEG", quality=self.jpeg_quality)
+                    response = self.api_client[ip].update_last_image(stream.getvalue())
+                    logging.info(response.text)
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
