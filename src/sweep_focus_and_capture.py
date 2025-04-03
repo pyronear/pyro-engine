@@ -43,7 +43,7 @@ for focus in focus_values:
     img = cam.capture()
     if img:
         path = os.path.join(output_dir, f"focus_{focus}.jpg")
-        img.save(path)
+        img.resize((1280, 720)).save(path)
         print(f"📸 Saved image at {path}")
     else:
         print(f"⚠️ Failed to capture image at focus {focus}")
