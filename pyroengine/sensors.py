@@ -219,3 +219,22 @@ class ReolinkCamera:
         ]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Started ZoomFocus successfully.")
+    
+    def set_manual_focus(self, position: int):
+        """
+        Set manual focus to a specific position.
+
+        Args:
+            position (int): Focus position (e.g., between 0 and 255).
+        """
+        url = self._build_url("StartZoomFocus")
+        data = [
+            {
+                "cmd": "StartZoomFocus",
+                "action": 0,
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
+            }
+        ]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, f"Manual focus set at position {position}")
+

@@ -76,6 +76,8 @@ def main():
             "get_auto_focus",
             "set_auto_focus",
             "start_zoom_focus",
+            "manual_focus_and_capture",  # ⬅️ nouvelle action
+            "set_manual_focus", 
         ],
         help="Action to perform on the camera",
     )
@@ -90,7 +92,7 @@ def main():
     parser.add_argument("--speed", type=int, help="Speed of the PTZ movement", default=1)
     parser.add_argument("--duration", type=int, help="Duration in seconds for moving the camera", default=1)
     parser.add_argument("--disable_autofocus", action="store_true", help="Disable autofocus if set")
-    parser.add_argument("--zoom_position", type=int, help="Zoom position for start_zoom_focus", default=None)
+    parser.add_argument("--zoom_position", type=int, help="Zoom position for start_zoom_focus or manual focus", default=None)
 
     args = parser.parse_args()
     print(args)
@@ -104,7 +106,8 @@ def main():
     if args.action == "capture":
         image = camera_controller.capture(pos_id=args.pos_id)
         if image is not None:
-            image.resize((640, 360)).save("im.jpg")
+            image.resize((1280, 720)).save("im.jpg")
+            print("Image captured and saved as im.jpg")
         else:
             print("Failed to capture image.")
     elif args.action == "move_camera":
@@ -139,6 +142,28 @@ def main():
             camera_controller.start_zoom_focus(position=args.zoom_position)
         else:
             print("Zoom position must be provided for starting zoom focus.")
+    elif args.action == "manual_focus_and_capture":
+        if args.zoom_position is None:
+            print("Zoom position must be provided for manual focus capture.")
+        else:
+            camera_controller.set_auto_focus(disable=True)
+            camera_controller.start_zoom_focus(position=args.zoom_position)
+            print(f"Manual focus set at position {args.zoom_position}")
+            image = camera_controller.capture(pos_id=args.pos_id)
+            if image is not None:
+                image.resize((1280, 720)).save("manual_focus.jpg")
+                print("Captured image with manual focus and saved as manual_focus.jpg.")
+            else:
+                print("Failed to capture image.")
+
+    elif args.action == "set_manual_focus":
+        if args.zoom_position is None:
+            print("You must provide --zoom_position for manual focus.")
+        else:
+            camera_controller.set_auto_focus(disable=True)
+            camera_controller.set_manual_focus(position=args.zoom_position)
+            print(f"Manual focus set at position {args.zoom_position}.")
+
 
 
 if __name__ == "__main__":
