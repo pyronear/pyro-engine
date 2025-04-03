@@ -48,6 +48,7 @@ class ReolinkCamera:
         cam_poses: Optional[List[int]] = None,
         cam_azimuths: Optional[List[int]] = None,
         protocol: str = "https",
+        focus_position: Optional[int] = None, 
     ):
         self.ip_address = ip_address
         self.username = username
@@ -57,9 +58,15 @@ class ReolinkCamera:
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
 
-        if len(self.cam_poses):
+        # Initialisation de position de caméra (si définie)
+        if self.cam_poses:
             self.move_camera("ToPos", idx=int(self.cam_poses[0]), speed=50)
 
+        # Fix focus position
+        if focus_position is not None:
+            self.set_auto_focus(disable=True)
+            self.set_manual_focus(position=focus_position)
+ 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
         return (
@@ -225,7 +232,7 @@ class ReolinkCamera:
         Set manual focus to a specific position.
 
         Args:
-            position (int): Focus position (e.g., between 0 and 255).
+            position (int): Focus position (e.g., between 0 and 1000).
         """
         url = self._build_url("StartZoomFocus")
         data = [
