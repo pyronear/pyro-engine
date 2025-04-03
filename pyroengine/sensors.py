@@ -48,7 +48,7 @@ class ReolinkCamera:
         cam_poses: Optional[List[int]] = None,
         cam_azimuths: Optional[List[int]] = None,
         protocol: str = "https",
-        focus_position: Optional[int] = None, 
+        focus_position: Optional[int] = None,
     ):
         self.ip_address = ip_address
         self.username = username
@@ -66,7 +66,7 @@ class ReolinkCamera:
         if focus_position is not None:
             self.set_auto_focus(disable=True)
             self.set_manual_focus(position=focus_position)
- 
+
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
         return (

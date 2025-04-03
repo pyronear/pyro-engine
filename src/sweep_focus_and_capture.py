@@ -1,7 +1,9 @@
+import argparse
 import os
 import time
-import argparse
+
 from dotenv import load_dotenv
+
 from pyroengine.sensors import ReolinkCamera
 
 # Chargement des identifiants depuis le .env

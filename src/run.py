@@ -52,7 +52,11 @@ def main(args):
             cam_azimuths = [cam_data["azimuth"]]
             splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"]
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol, focus_position))
+        cameras.append(
+            ReolinkCamera(
+                _ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol, focus_position
+            )
+        )
 
     engine = Engine(
         model_path=args.model_path,
