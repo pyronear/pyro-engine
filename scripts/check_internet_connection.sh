@@ -1,43 +1,68 @@
 #!/bin/bash
-# This script performs:
-# Ping google.com:
-#	- if success:
-#		Ping internal vpn ip:
-#		- if success: ok exit
-#		- if failure: restart vpn
+
+# ==========================================================
+# Script: check_internet_connection.sh
+# Description:
+#   This script checks for an active internet connection by 
+#   pinging google.com. If successful, it checks if the VPN 
+#   interface (tun0) is up and reachable. If the VPN is not 
+#   reachable or no IP is found, it restarts the VPN service.
+#   If the internet is not reachable, it tries restarting 
+#   the network. If the issue persists after a delay, the 
+#   system reboots.
 #
-#	- if failure: restart of network interfaces
-# Sleep 60 sec
-# Ping google again (to make sure that we have internet):
-#	- if success: ok exit
-#	- if failure: reboot
+# Cron setup:
+#   To run this script every 10 minutes, add the following
+#   line to your crontab (edit with `crontab -e`):
 #
-# This script must be run with a crontab, run every 10 mn
-# */10 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
+#   */10 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
+# ==========================================================
 
-set -u
+# Fix PATH for cron
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-PING_CMD=('ping' '-c' '1' '-W' '10' 'google.com')
+# Log file
+LOG_FILE="/home/pi/check_internet.log"
 
-if "${PING_CMD[@]}";
-then
-    iplocalhostvpn=$(ifconfig tun0 | awk '/inet / {print $2}')
-    PING_CMD_VPN=('ping' '-c' '1' '-W' '10' "$iplocalhostvpn")
-    if "${PING_CMD_VPN[@]}";
-    then
-          exit 0;
-    fi;
+# Add timestamp to logs
+echo "==== $(date) ====" >> "$LOG_FILE"
 
-    sudo systemctl restart openvpn@client;
-fi;
+# Step 1: Ping Google
+if ping -c 1 -W 10 google.com > /dev/null 2>&1; then
+    echo "✅ Internet OK (google.com reachable)" >> "$LOG_FILE"
 
-sudo service networking restart;
-sleep 60;
+    # Get local IP on tun0
+    iplocalhostvpn=$(ip -4 addr show dev tun0 | awk '/inet / {print $2}' | cut -d/ -f1)
 
-if "${PING_CMD[@]}";
-then
-    exit 0;
-fi;
+    if [[ -n "$iplocalhostvpn" ]]; then
+        echo "🔍 VPN IP detected: $iplocalhostvpn" >> "$LOG_FILE"
 
+        if ping -c 1 -W 10 "$iplocalhostvpn" > /dev/null 2>&1; then
+            echo "✅ VPN OK (IP reachable)" >> "$LOG_FILE"
+            exit 0
+        else
+            echo "⚠️ VPN IP detected but unreachable, restarting VPN" >> "$LOG_FILE"
+            sudo systemctl restart openvpn@client
+            exit 0
+        fi
+    else
+        echo "❌ No VPN IP found, restarting VPN" >> "$LOG_FILE"
+        sudo systemctl restart openvpn@client
+        exit 0
+    fi
+else
+    echo "❌ Internet unreachable, trying to restart network" >> "$LOG_FILE"
+    sudo systemctl restart dhcpcd || echo "⚠️ Failed to restart dhcpcd" >> "$LOG_FILE"
+fi
 
-sudo reboot;
+# Wait before retrying
+sleep 60
+
+# Check again after waiting
+if ping -c 1 -W 10 google.com > /dev/null 2>&1; then
+    echo "✅ Internet is back after network restart" >> "$LOG_FILE"
+    exit 0
+else
+    echo "🔥 Internet still down, rebooting the machine..." >> "$LOG_FILE"
+    sudo reboot
+fi
