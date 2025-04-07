@@ -15,7 +15,7 @@
 #   To run this script every 10 minutes, add the following
 #   line to your crontab (edit with `crontab -e`):
 #
-#   */10 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
+#   */20 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
 # ==========================================================
 
 # Fix PATH for cron
@@ -23,6 +23,12 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 # Log file
 LOG_FILE="/home/pi/check_internet.log"
+
+# Truncate log if it exceeds 10MB 
+MAX_SIZE=$((10 * 1024 * 1024))  # 10 MB
+if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE") -ge $MAX_SIZE ]; then
+    echo "🚮 Log file exceeded 7MB, truncating..." > "$LOG_FILE"
+fi
 
 # Add timestamp to logs
 echo "==== $(date) ====" >> "$LOG_FILE"
