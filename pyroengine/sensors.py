@@ -48,6 +48,7 @@ class ReolinkCamera:
         cam_poses: Optional[List[int]] = None,
         cam_azimuths: Optional[List[int]] = None,
         protocol: str = "https",
+        focus_position: Optional[int] = None,
     ):
         self.ip_address = ip_address
         self.username = username
@@ -57,8 +58,14 @@ class ReolinkCamera:
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
 
-        if len(self.cam_poses):
+        # Initialisation de position de caméra (si définie)
+        if self.cam_poses:
             self.move_camera("ToPos", idx=int(self.cam_poses[0]), speed=50)
+
+        # Fix focus position
+        if focus_position is not None:
+            self.set_auto_focus(disable=True)
+            self.set_manual_focus(position=focus_position)
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -219,3 +226,34 @@ class ReolinkCamera:
         ]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Started ZoomFocus successfully.")
+
+    def set_manual_focus(self, position: int):
+        """
+        Set manual focus to a specific position.
+
+        Args:
+            position (int): Focus position (e.g., between 0 and 1000).
+        """
+        url = self._build_url("StartZoomFocus")
+        data = [
+            {
+                "cmd": "StartZoomFocus",
+                "action": 0,
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
+            }
+        ]
+        response = requests.post(url, json=data, verify=False)
+        return self._handle_response(response, f"Manual focus set at position {position}")
+
+    def get_focus_level(self):
+        """Retrieve the current manual focus and zoom positions."""
+        url = self._build_url("GetZoomFocus")
+        data = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
+        response = requests.post(url, json=data, verify=False)
+        result = self._handle_response(response, "Got zoom/focus values")
+        if result and result[0]["code"] == 0:
+            zoom_focus = result[0]["value"]["ZoomFocus"]
+            focus = zoom_focus.get("focus", {}).get("pos")
+            zoom = zoom_focus.get("zoom", {}).get("pos")
+            return {"focus": focus, "zoom": zoom}
+        return None

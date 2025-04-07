@@ -106,6 +106,7 @@ Additionally, you'll need a `./data` folder which contains:
           "brand": "reolink",
           "type": "ptz",
           "token": "",
+          "focus_position": 700,
           "id": 11,
           "poses": [
               0,

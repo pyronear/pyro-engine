@@ -156,3 +156,43 @@ def test_start_zoom_focus_success():
         # Assert that the start_zoom_focus method was called successfully
         assert mock_response.json.call_count == 1
         assert response == mock_response.json.return_value
+
+
+def test_set_manual_focus_success():
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 0}]
+
+    with patch("requests.post", return_value=mock_response) as mock_post:
+        camera = ReolinkCamera("192.168.1.1", "user", "pass")
+        response = camera.set_manual_focus(position=300)
+
+        assert mock_post.called
+        assert mock_response.json.call_count == 1
+        assert response == mock_response.json.return_value
+
+
+def test_get_focus_level_success():
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [
+        {"code": 0, "value": {"ZoomFocus": {"focus": {"pos": 150}, "zoom": {"pos": 80}}}}
+    ]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "user", "pass")
+        result = camera.get_focus_level()
+
+        assert result == {"focus": 150, "zoom": 80}
+
+
+def test_get_focus_level_failure():
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [{"code": 1}]
+
+    with patch("requests.post", return_value=mock_response):
+        camera = ReolinkCamera("192.168.1.1", "user", "pass")
+        result = camera.get_focus_level()
+
+        assert result is None
