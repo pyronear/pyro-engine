@@ -15,7 +15,7 @@
 #   To run this script every 10 minutes, add the following
 #   line to your crontab (edit with `crontab -e`):
 #
-#   */20 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
+#   */10 * * * * bash /home/pi/pyro-engine/scripts/check_internet_connection.sh
 # ==========================================================
 
 # Fix PATH for cron
