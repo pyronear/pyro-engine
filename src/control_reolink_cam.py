@@ -30,32 +30,44 @@ def main():
     - `start_zoom_focus`: Starts zooming the camera to a specific focus position.
 
     Examples:
-    - Capture an image:
-        python src/control_reolink_cam.py capture --ip 169.254.40.1  --type ptz
+        - Capture an image:
+            python src/control_reolink_cam.py capture --ip 169.254.40.1
 
-    - Move the camera to a preset position:
-        python src/control_reolink_cam.py move_camera --ip 169.254.40.1  --operation ToPos --pos_id 10
+        - Move the camera to a preset position:
+            python src/control_reolink_cam.py move_camera --ip 169.254.40.1 --operation ToPos --pos_id 10
 
-    - Move the camera to the right for 3 seconds:
-        python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1  --operation Right --duration 3
+        - Move the camera to the right for 3 seconds:
+            python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1 --operation Right --duration 3
 
-    - Get the list of PTZ presets:
-        python src/control_reolink_cam.py get_ptz_preset --ip 169.254.40.1  --type ptz
+        - Get the list of PTZ presets:
+            python src/control_reolink_cam.py get_ptz_preset --ip 169.254.40.1
 
-    - Set a PTZ preset at position 1:
-        python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1  --pos_id 1
+        - Set a PTZ preset at position 1:
+            python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1 --pos_id 1
 
-    - Reboot the camera:
-        python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1  --type ptz
+        - Reboot the camera:
+            python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1
 
-    - Get the auto-focus settings:
-        python src/control_reolink_cam.py get_auto_focus --ip 169.254.40.1  --type ptz
+        - Get the auto-focus settings:
+            python src/control_reolink_cam.py get_auto_focus --ip 169.254.40.1
 
-    - Disable auto-focus:
-        python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1  --disable_autofocus
+        - Disable auto-focus:
+            python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1 --disable_autofocus
 
-    - Start zooming to focus position 5:
-        python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1  --zoom_position 5
+        - Enable auto-focus:
+            python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1
+
+        - Start zooming to zoom position 5:
+            python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1 --zoom_position 5
+
+        - Set manual focus to position 20:
+            python src/control_reolink_cam.py set_manual_focus --ip 169.254.40.1 --zoom_position 20
+
+        - Manually focus and capture an image:
+            python src/control_reolink_cam.py manual_focus_and_capture --ip 169.254.40.1 --zoom_position 20
+
+        - Get current manual focus and zoom levels:
+            python src/control_reolink_cam.py get_focus_level --ip 169.254.40.1
     """
     # Load environment variables
     load_dotenv()
@@ -76,6 +88,9 @@ def main():
             "get_auto_focus",
             "set_auto_focus",
             "start_zoom_focus",
+            "manual_focus_and_capture",
+            "set_manual_focus",
+            "get_focus_level",
         ],
         help="Action to perform on the camera",
     )
@@ -90,7 +105,9 @@ def main():
     parser.add_argument("--speed", type=int, help="Speed of the PTZ movement", default=1)
     parser.add_argument("--duration", type=int, help="Duration in seconds for moving the camera", default=1)
     parser.add_argument("--disable_autofocus", action="store_true", help="Disable autofocus if set")
-    parser.add_argument("--zoom_position", type=int, help="Zoom position for start_zoom_focus", default=None)
+    parser.add_argument(
+        "--zoom_position", type=int, help="Zoom position for start_zoom_focus or manual focus", default=None
+    )
 
     args = parser.parse_args()
     print(args)
@@ -104,7 +121,8 @@ def main():
     if args.action == "capture":
         image = camera_controller.capture(pos_id=args.pos_id)
         if image is not None:
-            image.resize((640, 360)).save("im.jpg")
+            image.resize((1280, 720)).save("im.jpg")
+            print("Image captured and saved as im.jpg")
         else:
             print("Failed to capture image.")
     elif args.action == "move_camera":
@@ -139,6 +157,34 @@ def main():
             camera_controller.start_zoom_focus(position=args.zoom_position)
         else:
             print("Zoom position must be provided for starting zoom focus.")
+    elif args.action == "manual_focus_and_capture":
+        if args.zoom_position is None:
+            print("Zoom position must be provided for manual focus capture.")
+        else:
+            camera_controller.set_auto_focus(disable=True)
+            camera_controller.start_zoom_focus(position=args.zoom_position)
+            print(f"Manual focus set at position {args.zoom_position}")
+            image = camera_controller.capture(pos_id=args.pos_id)
+            if image is not None:
+                image.resize((1280, 720)).save("manual_focus.jpg")
+                print("Captured image with manual focus and saved as manual_focus.jpg.")
+            else:
+                print("Failed to capture image.")
+
+    elif args.action == "set_manual_focus":
+        if args.zoom_position is None:
+            print("You must provide --zoom_position for manual focus.")
+        else:
+            camera_controller.set_auto_focus(disable=True)
+            camera_controller.set_manual_focus(position=args.zoom_position)
+            print(f"Manual focus set at position {args.zoom_position}.")
+
+    elif args.action == "get_focus_level":
+        level = camera_controller.get_focus_level()
+        if level:
+            print(f"Current Focus Level: {level['focus']}, Zoom Level: {level['zoom']}")
+        else:
+            print("Failed to get focus level.")
 
 
 if __name__ == "__main__":
