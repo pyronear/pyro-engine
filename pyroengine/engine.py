@@ -288,6 +288,8 @@ class Engine:
             heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
+        if self.save_captured_frames:
+            self._local_backup(frame, cam_id, is_alert=False)
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
@@ -297,8 +299,7 @@ class Engine:
         print(preds)
         conf = self._update_states(frame, preds, cam_key)
 
-        if self.save_captured_frames:
-            self._local_backup(frame, cam_id, is_alert=False)
+        
 
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
