@@ -292,6 +292,7 @@ class Engine:
             self._local_backup(frame, cam_id, is_alert=False)
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
+            frame_original = frame
             frame = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
 
         # Inference with ONNX
@@ -308,6 +309,7 @@ class Engine:
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+            self._local_backup(frame, cam_id, is_alert=False)
             # Save the alert in cache to avoid connection issues
             for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
