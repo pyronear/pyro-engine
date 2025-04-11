@@ -309,7 +309,7 @@ class Engine:
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-            self._local_backup(frame, cam_id, is_alert=False)
+            self._local_backup(frame_original, cam_id, is_alert=False)
             # Save the alert in cache to avoid connection issues
             for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
