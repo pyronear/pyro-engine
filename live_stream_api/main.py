@@ -37,13 +37,14 @@ MEDIAMTX_SERVER_IP = os.getenv("MEDIAMTX_SERVER_IP")
 STREAM_NAME = os.getenv("STREAM_NAME")
 
 # Load camera credentials
-with open("credentials.json", "r") as file:
+with open("data/credentials.json", "r") as file:
     credentials = json.load(file)
+
 
 # Build cameras dictionary
 CAMERAS = {
-    cam_id: {"ip": ip, "username": CAM_USER, "password": CAM_PWD}
-    for cam_id, ip in credentials["cameras"].items()
+    ip: {"ip": ip, "username": CAM_USER, "password": CAM_PWD}
+    for ip in credentials.keys()
 }
 
 # Build streams dictionary using config values
