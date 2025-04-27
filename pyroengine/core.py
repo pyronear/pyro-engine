@@ -25,20 +25,16 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 
 def is_day_time(cache, frame, strategy, delta=0):
     """
-    Determines if it is daytime using specified strategies.
-
-    Strategies:
-    1. Time-based: Compares the current time with sunrise and sunset times.
-    2. IR-based: Analyzes the color of the image; IR cameras produce black and white images at night.
+    Determine whether it is daytime based on the selected strategy.
 
     Args:
-        cache (Path): Cache folder where `sunset_sunrise.txt` is located.
-        frame (PIL.Image): Frame to analyze with the IR strategy.
-        strategy (str): Strategy to define daytime ("time", "ir", or "both").
-        delta (int): Time delta in seconds before and after sunrise/sunset.
+        cache (Path): Cache folder containing the `sunset_sunrise.txt` file (for time-based strategy).
+        frame (PIL.Image): Image frame to analyze (for IR-based strategy).
+        strategy (str): Strategy to determine daytime ("time", "ir", or "both").
+        delta (int, optional): Tolerance (in seconds) around sunrise/sunset for day/night transition.
 
     Returns:
-        bool: True if it is daytime, False otherwise.
+        bool: True if it is considered daytime, False otherwise.
     """
     is_day = True
     if strategy in ["both", "time"]:
@@ -58,44 +54,44 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue) -> bool:
+async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue, server_ip: str = None) -> bool:
     """
-    Captures an image from the camera and puts it into a queue. Returns whether it is daytime for this camera.
+    Capture an image from a camera and enqueue it for analysis.
 
     Args:
-        camera (ReolinkCamera): The camera instance.
-        image_queue (asyncio.Queue): The queue to put the captured image.
+        camera (ReolinkCamera): Camera object to capture an image from.
+        image_queue (asyncio.Queue): Queue to store captured images.
+        server_ip (str, optional): IP address of the live stream API (for levée de doute checks).
 
     Returns:
-        bool: True if it is daytime according to this camera, False otherwise.
+        bool: True if it is daytime according to the captured image, False otherwise.
     """
     cam_id = camera.ip_address
     try:
-        # Check if levee de doute is running for this cam
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
-                data = await resp.json()
-                if data.get("running"):
-                    logging.info(f"Levée de doute active for {cam_id}, skipping capture.")
-                    return True  # Skip capture but say it's OK
+        if server_ip:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"http://127.0.0.1:8081//is_stream_running/{cam_id}") as resp:
+                    data = await resp.json()
+                    if data.get("running"):
+                        logging.info(f"Levée de doute active for {cam_id}, skipping capture.")
+                        return True
         
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture()
-                # Move camera to the next pose to avoid waiting
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                 camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                 if frame is not None:
                     await image_queue.put((cam_id, frame))
-                    await asyncio.sleep(0)  # Yield control
+                    await asyncio.sleep(0)
                     if not is_day_time(None, frame, "ir"):
                         return False
         else:
             frame = camera.capture()
             if frame is not None:
                 await image_queue.put((cam_id, frame))
-                await asyncio.sleep(0)  # Yield control
+                await asyncio.sleep(0)
                 if not is_day_time(None, frame, "ir"):
                     return False
     except Exception as e:
@@ -105,45 +101,56 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
 
 class SystemController:
     """
-    Controls the system for capturing and analyzing camera streams.
+    Controller to manage multiple cameras, capture images, and perform detection.
 
     Attributes:
-        engine (Engine): The image analyzer engine.
-        cameras (List[ReolinkCamera]): List of cameras to capture streams from.
+        engine (Engine): Image detection engine.
+        cameras (List[ReolinkCamera]): List of camera instances.
+        mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
     """
 
-    def __init__(self, engine: Engine, cameras: List[ReolinkCamera]) -> None:
+    def __init__(self, engine: Engine, cameras: List[ReolinkCamera], mediamtx_server_ip: str = None) -> None:
         """
-        Initializes the SystemController.
+        Initialize the system controller.
 
         Args:
-            engine (Engine): The image analyzer engine.
-            cameras (List[ReolinkCamera]): List of cameras to capture streams from.
+            engine (Engine): Image analysis engine.
+            cameras (List[ReolinkCamera]): List of camera objects.
+            mediamtx_server_ip (str, optional): IP address of the MediaMTX server.
         """
         self.engine = engine
         self.cameras = cameras
         self.is_day = True
+        self.mediamtx_server_ip = mediamtx_server_ip
+
+        if self.mediamtx_server_ip:
+            logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
+        else:
+            logging.info("No MediaMTX server IP provided, skipping levée de doute checks.")
 
     async def capture_images(self, image_queue: asyncio.Queue) -> bool:
         """
-        Captures images from all cameras using asyncio.
+        Capture images from all cameras concurrently.
 
         Args:
-            image_queue (asyncio.Queue): The queue to put the captured images.
+            image_queue (asyncio.Queue): Queue to store captured images.
 
         Returns:
-            bool: True if it is daytime according to all cameras, False otherwise.
+            bool: True if all cameras detect daytime, False otherwise.
         """
-        tasks = [capture_camera_image(camera, image_queue) for camera in self.cameras]
+        tasks = [
+            capture_camera_image(camera, image_queue, server_ip=self.mediamtx_server_ip)
+            for camera in self.cameras
+        ]
         day_times = await asyncio.gather(*tasks)
         return all(day_times)
 
     async def analyze_stream(self, image_queue: asyncio.Queue) -> None:
         """
-        Analyzes the image stream from the queue.
+        Analyze incoming images from the queue.
 
         Args:
-            image_queue (asyncio.Queue): The queue with images to analyze.
+            image_queue (asyncio.Queue): Queue containing (camera_id, frame) tuples.
         """
         while True:
             item = await image_queue.get()
@@ -155,11 +162,11 @@ class SystemController:
             except Exception as e:
                 logging.error(f"Error running prediction: {e}")
             finally:
-                image_queue.task_done()  # Mark the task as done
+                image_queue.task_done()
 
     async def night_mode(self) -> bool:
         """
-        Checks if it is nighttime for any camera.
+        Check whether it is nighttime according to all cameras.
 
         Returns:
             bool: True if it is daytime for all cameras, False otherwise.
@@ -171,7 +178,6 @@ class SystemController:
                     for idx, pose_id in enumerate(camera.cam_poses):
                         cam_id = f"{camera.ip_address}_{pose_id}"
                         frame = camera.capture()
-                        # Move camera to the next pose to avoid waiting
                         next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                         camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                         if frame is not None:
@@ -188,11 +194,11 @@ class SystemController:
 
     async def run(self, period: int = 30, send_alerts: bool = True) -> bool:
         """
-        Captures and analyzes all camera streams, then processes alerts.
+        Capture images, analyze them, and process alerts if needed.
 
         Args:
-            period (int): The time period between captures in seconds.
-            send_alerts (bool): Boolean to activate / deactivate alert sending.
+            period (int, optional): Time between each capture loop (seconds).
+            send_alerts (bool, optional): Whether to process and send alerts.
 
         Returns:
             bool: True if it is daytime according to all cameras, False otherwise.
@@ -200,20 +206,13 @@ class SystemController:
         try:
             image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
-            # Start the image processor task
             processor_task = asyncio.create_task(self.analyze_stream(image_queue))
-
-            # Capture images concurrently
             self.is_day = await self.capture_images(image_queue)
 
-            # Wait for the image processor to finish processing
-            await image_queue.join()  # Ensure all tasks are marked as done
-
-            # Signal the image processor to stop processing
+            await image_queue.join()
             await image_queue.put(None)
-            await processor_task  # Ensure the processor task completes
+            await processor_task
 
-            # Process alerts
             if send_alerts:
                 try:
                     self.engine._process_alerts()
@@ -228,11 +227,11 @@ class SystemController:
 
     async def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
-        Main loop to capture and process images at regular intervals.
+        Run the main loop that regularly captures and analyzes camera feeds.
 
         Args:
-            period (int): The time period between captures in seconds.
-            send_alerts (bool): Boolean to activate / deactivate alert sending.
+            period (int): Interval between analysis loops (in seconds).
+            send_alerts (bool, optional): Whether to trigger alerts after analysis.
         """
         while True:
             start_ts = time.time()
@@ -240,20 +239,19 @@ class SystemController:
             if not self.is_day:
                 while not await self.night_mode():
                     logging.info("Nighttime detected by at least one camera, sleeping for 1 hour.")
-                    await asyncio.sleep(3600)  # Sleep for 1 hour
+                    await asyncio.sleep(3600)
             else:
-                # Sleep only once all images are processed
                 loop_time = time.time() - start_ts
-                sleep_time = max(period - (loop_time), 0)
-                logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
+                sleep_time = max(period - loop_time, 0)
+                logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f} seconds")
                 await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:
         """
-        Returns a string representation of the SystemController.
+        Represent the SystemController with its list of cameras.
 
         Returns:
-            str: A string representation of the SystemController.
+            str: String representation.
         """
         repr_str = f"{self.__class__.__name__}("
         for cam in self.cameras:

@@ -30,6 +30,7 @@ def main(args):
     assert isinstance(API_URL, str)
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
+    MEDIAMTX_SERVER_IP = os.environ.get("MEDIAMTX_SERVER_IP")
     assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
 
     # Loading camera creds
@@ -78,6 +79,7 @@ def main(args):
     sys_controller = SystemController(
         engine,
         cameras,
+        MEDIAMTX_SERVER_IP
     )
 
     asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
