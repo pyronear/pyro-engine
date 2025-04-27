@@ -73,7 +73,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                 async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
                     data = await resp.json()
                     if data.get("running"):
-                        logging.info(f"Levée de doute active for {cam_id}, skipping capture.")
+                        logging.info(f"{cam_id} Camera is streaming, skipping capture.")
                         return True
         
         if camera.cam_type == "ptz":
