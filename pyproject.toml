@@ -1,16 +1,10 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "pyroengine"
+version = "0.1.0"
 description = "Wildfire detection on edge devices"
-authors = [
-    {name = "Pyronear", email = "contact@pyronear.org"}
-]
+authors = ["Pyronear <contact@pyronear.org>"]
 readme = "README.md"
-requires-python = ">=3.6,<4"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
 keywords = ["pytorch", "deep learning", "vision", "cnn", "wildfire"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -21,74 +15,74 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dynamic = ["version"]
-dependencies = [
-    "onnxruntime==1.18.1",
-    "ncnn==1.0.20240410",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#egg=pyroclient&subdirectory=client",
-    "requests>=2.20.0,<3.0.0",
-    "tqdm>=4.62.0",
-    "huggingface_hub==0.23.1", 
-    "pillow==11.0.0",
-]
 
-[project.optional-dependencies]
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+requests = ">=2.20.0,<3.0.0"
+tqdm = ">=4.62.0"
+aiohttp = "==3.11.18"
+onnxruntime = "==1.18.1"
+huggingface_hub = "==0.23.1"
+pillow = "==11.0.0"
+ncnn = "==1.0.20240410"
+pyroclient = {git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client"}
+
+[tool.poetry.extras]
 test = [
-    "pytest>=5.3.2",
-    "pytest-asyncio>=0.14.0",
-    "coverage[toml]>=4.5.4",
-    "requests>=2.20.0,<3.0.0",
-    "python-dotenv>=0.15.0",
-    "onnx>=1.17.0",
+    "pytest",
+    "pytest-asyncio",
+    "coverage",
+    "python-dotenv",
+    "onnx",
 ]
 quality = [
-    "flake8>=3.9.0",
-    "isort>=5.7.0",
-    "mypy>=0.812",
-    "pydocstyle[toml]>=6.0.0",
-    "black>=22.1,<23.0",
+    "flake8",
+    "isort",
+    "mypy",
+    "pydocstyle",
+    "black",
 ]
 docs = [
-    "sphinx>=3.0.0,!=3.5.0",
-    "furo>=2022.3.4",
-    "sphinxemoji>=0.1.8",
-    "sphinx-copybutton>=0.3.1",
-    # Indirect deps
-    # cf. https://github.com/readthedocs/readthedocs.org/issues/9038
-    "Jinja2<3.1",
+    "sphinx",
+    "furo",
+    "sphinxemoji",
+    "sphinx-copybutton",
+    "Jinja2",
 ]
 dev = [
-    # test
-    "pytest>=5.3.2",
-    "pytest-asyncio>=0.14.0",
-    "coverage[toml]>=4.5.4",
-    "requests>=2.20.0,<3.0.0",
-    # style
-    "flake8>=3.9.0",
-    "isort>=5.7.0",
-    "mypy>=0.812",
-    "pydocstyle[toml]>=6.0.0",
-    "black>=22.1,<23.0",
-    # docs
-    "sphinx>=3.0.0,!=3.5.0",
-    "furo>=2022.3.4",
-    "sphinxemoji>=0.1.8",
-    "sphinx-copybutton>=0.3.1",
-    "Jinja2<3.1",
+    "pytest",
+    "pytest-asyncio",
+    "coverage",
+    "requests",
+    "flake8",
+    "isort",
+    "mypy",
+    "pydocstyle",
+    "black",
+    "sphinx",
+    "furo",
+    "sphinxemoji",
+    "sphinx-copybutton",
+    "Jinja2",
 ]
 
-[project.urls]
+
+[tool.poetry.urls]
 documentation = "https://pyronear.org/pyro-engine"
 repository = "https://github.com/pyronear/pyro-engine"
 tracker = "https://github.com/pyronear/pyro-engine/issues"
 
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
+
+# Optional: you can keep these too
 [tool.setuptools]
 zip-safe = true
 
@@ -129,4 +123,4 @@ source = ["pyroengine"]
 
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ['py39']

@@ -37,8 +37,14 @@ MEDIAMTX_SERVER_IP = os.getenv("MEDIAMTX_SERVER_IP")
 STREAM_NAME = os.getenv("STREAM_NAME")
 
 # Load camera credentials
-with open("data/credentials.json", "r") as file:
+CREDENTIALS_PATH = "/usr/src/app/data/credentials.json"
+
+if not os.path.exists(CREDENTIALS_PATH):
+    raise FileNotFoundError(f"Credentials file not found at {CREDENTIALS_PATH}")
+
+with open(CREDENTIALS_PATH, "r") as file:
     credentials = json.load(file)
+
 
 
 # Build cameras dictionary
@@ -284,3 +290,16 @@ async def zoom_camera(camera_id: str, level: int):
     )
     cam.zoom(level)
     return {"message": f"Camera {camera_id} zoom set to {level}"}
+
+
+@app.get("/is_stream_running/{camera_id}")
+async def is_stream_running(camera_id: str):
+    """Check if a specific camera is currently streaming."""
+    global last_command_time
+    last_command_time = time.time()
+
+    proc = processes.get(camera_id)
+    if proc and is_process_running(proc):
+        return {"running": True}
+    return {"running": False}
+

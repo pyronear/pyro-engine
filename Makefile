@@ -45,7 +45,11 @@ run:
 
 # Get log from engine wrapper
 log: 
-	docker logs -f --tail 50 pyro-engine-run
+	docker logs -f --tail 50 engine
+
+# Get log from live_stream wrapper
+log-stream: 
+	docker logs -f --tail 50 live_stream
 
 # Stop the engine wrapper
 stop:

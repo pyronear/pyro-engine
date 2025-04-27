@@ -8,7 +8,7 @@ import logging
 import time
 from datetime import datetime
 from typing import Any, List
-
+import aiohttp
 import numpy as np
 import urllib3
 
@@ -71,6 +71,14 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
     """
     cam_id = camera.ip_address
     try:
+        # Check if levee de doute is running for this cam
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
+                data = await resp.json()
+                if data.get("running"):
+                    logging.info(f"Levée de doute active for {cam_id}, skipping capture.")
+                    return True  # Skip capture but say it's OK
+        
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
                 cam_id = f"{camera.ip_address}_{pose_id}"
