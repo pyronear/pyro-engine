@@ -56,7 +56,7 @@ CAMERAS = {
 # Build streams dictionary using config values
 STREAMS = {
     cam_id: {
-        "input_url": f"rtsp://{CAM_USER}:{CAM_PWD}@{cam_info['ip']}/h264Preview_01_sub",
+        "input_url": f"rtsp://{CAM_USER}:{CAM_PWD}@{cam_info['ip']}:554/h264Preview_01_sub",
         "output_url": (
             f"srt://{MEDIAMTX_SERVER_IP}:{SRT_SETTINGS['port_start']}?"
             f"pkt_size={SRT_SETTINGS['pkt_size']}&"
@@ -67,7 +67,6 @@ STREAMS = {
     }
     for cam_id, cam_info in CAMERAS.items()
 }
-
 
 class ReolinkCamera:
     """Class to control a Reolink camera."""
