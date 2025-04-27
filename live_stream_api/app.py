@@ -196,6 +196,9 @@ async def start_stream(camera_id: str):
 
     command += ["-f", FFMPEG_PARAMS["output_format"], output_url]
 
+    logging.info("Running ffmpeg command: %s", " ".join(command))
+
+
     processes[camera_id] = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
