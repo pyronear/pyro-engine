@@ -70,7 +70,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
     try:
         if server_ip:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"http://127.0.0.1:8081//is_stream_running/{cam_id}") as resp:
+                async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
                     data = await resp.json()
                     if data.get("running"):
                         logging.info(f"Levée de doute active for {cam_id}, skipping capture.")
