@@ -295,9 +295,6 @@ async def zoom_camera(camera_id: str, level: int):
 @app.get("/is_stream_running/{camera_id}")
 async def is_stream_running(camera_id: str):
     """Check if a specific camera is currently streaming."""
-    global last_command_time
-    last_command_time = time.time()
-
     proc = processes.get(camera_id)
     if proc and is_process_running(proc):
         return {"running": True}
