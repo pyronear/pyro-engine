@@ -1,0 +1,19 @@
+srt_settings:
+  pkt_size: 1316         # Packet size in bytes (recommended for MPEG-TS)
+  mode: caller           # SRT mode: 'caller' means you initiate connection
+  latency: 50            # Latency in milliseconds (buffer for network stability)
+  port_start: 8890       # First SRT port number for streaming
+  streamid_prefix: publish  # Stream ID prefix to distinguish streams
+
+ffmpeg_params:
+  discardcorrupt: true   # Discard corrupt frames (important for stability)
+  low_delay: true        # Force low latency mode
+  rtsp_transport: udp    # Use UDP for RTSP (better for real-time)
+  video_codec: libx264   # H.264 video encoding
+  b_frames: 0            # Set B-frames to 0 (only I and P frames, reduces latency)
+  bitrate: 400k          # Target video bitrate
+  framerate: 10          # Frames per second
+  preset: veryfast       # x264 encoding speed preset
+  tune: zerolatency      # x264 optimization for zero latency
+  audio_disabled: true   # Disable audio stream
+  output_format: mpegts  # Output format (needed for SRT)
