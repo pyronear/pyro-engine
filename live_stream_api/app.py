@@ -303,3 +303,20 @@ async def is_stream_running(camera_id: str):
         return {"running": True}
     return {"running": False}
 
+@app.get("/camera_infos")
+async def get_camera_infos():
+    """Returns list of cameras with their IP addresses and azimuths."""
+    camera_infos = []
+
+    for ip, cam_info in credentials.items():
+        camera_infos.append({
+            "ip": ip,
+            "azimuths": cam_info.get("azimuths", []),
+            "name": cam_info.get("name", "Unknown"),
+            "id": cam_info.get("id"),
+            "type": cam_info.get("type", "Unknown"),
+        })
+
+    return {"cameras": camera_infos}
+
+
