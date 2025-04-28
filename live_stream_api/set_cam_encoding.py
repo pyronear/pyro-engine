@@ -37,13 +37,12 @@ NEW_GOP_SUB = 4
 
 # ----------------------------------------------------------------------
 
-
 def get_token(camera_ip):
     url = f"https://{camera_ip}/api.cgi?cmd=Login"
     payload = [
         {
             "cmd": "Login",
-            "param": {"User": {"Version": "0", "userName": CAM_USER, "password": CAM_USER}},
+            "param": {"User": {"Version": "0", "userName": CAM_USER, "password": CAM_PWD}},
         }
     ]
     headers = {"Content-Type": "application/json"}
@@ -61,6 +60,7 @@ def get_token(camera_ip):
     except Exception as e:
         print("❌ Error:", e)
         return None
+
 
 
 def get_encoding_settings(camera_ip, token):
@@ -143,8 +143,8 @@ if __name__ == "__main__":
 
     camera_ip = args.ip
 
-    if not CAM_USER or not CAM_USER:
-        print("❌ USERNAME or CAM_USER not found. Please set them in a .env file.")
+    if not CAM_USER or not CAM_PWD:
+        print("❌ CAM_USER or CAM_PWD not found. Please set them in a .env file.")
         exit(1)
 
     token = get_token(camera_ip)
