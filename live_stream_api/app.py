@@ -120,6 +120,12 @@ def is_process_running(proc):
     """Check if a process is still running."""
     return proc and proc.poll() is None
 
+def log_ffmpeg_output(proc, camera_id):
+    """Reads and logs stderr from ffmpeg."""
+    for line in proc.stderr:
+        logging.error(f"[FFMPEG {camera_id}] {line.decode('utf-8').strip()}")
+
+
 
 def stop_any_running_stream():
     """Stops any currently running stream."""
@@ -199,9 +205,20 @@ async def start_stream(camera_id: str):
     logging.info("Running ffmpeg command: %s", " ".join(command))
 
 
-    processes[camera_id] = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    # 1. Start ffmpeg process
+    proc = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,  # We don't need stdout
+        stderr=subprocess.PIPE      # We want to capture stderr
     )
+
+    # 2. Store the process
+    processes[camera_id] = proc
+
+    # 3. Start a background thread to read ffmpeg logs
+    threading.Thread(target=log_ffmpeg_output, args=(proc, camera_id), daemon=True).start()
+
+
 
     return {
         "message": f"Stream for {camera_id} started",
