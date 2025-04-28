@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-CAM_USER = os.getenv("USERNAME")
-CAM_PWD = os.getenv("PASSWORD")
+CAM_USER = os.getenv("CAM_USER")
+CAM_PWD = os.getenv("CAM_PWD")
 
 # ----------------------- NEW ENCODING SETTINGS -----------------------
 
@@ -42,7 +42,7 @@ def get_token(camera_ip):
     payload = [
         {
             "cmd": "Login",
-            "param": {"User": {"Version": "0", "userName": USERNAME, "password": PASSWORD}},
+            "param": {"User": {"Version": "0", "CAM_USER": CAM_USER, "CAM_PWD": CAM_PWD}},
         }
     ]
     headers = {"Content-Type": "application/json"}
@@ -142,8 +142,8 @@ if __name__ == "__main__":
 
     camera_ip = args.ip
 
-    if not USERNAME or not PASSWORD:
-        print("❌ USERNAME or PASSWORD not found. Please set them in a .env file.")
+    if not CAM_USER or not CAM_PWD:
+        print("❌ CAM_USER or CAM_PWD not found. Please set them in a .env file.")
         exit(1)
 
     token = get_token(camera_ip)
