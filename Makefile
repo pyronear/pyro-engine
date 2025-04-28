@@ -48,7 +48,7 @@ log:
 	docker logs -f --tail 50 engine
 
 # Get log from live_stream wrapper
-log-stream: 
+log-st: 
 	docker logs -f --tail 50 live_stream
 
 # Stop the engine wrapper
