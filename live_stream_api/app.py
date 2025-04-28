@@ -337,6 +337,7 @@ async def get_camera_infos():
             {
                 "ip": ip,
                 "azimuths": cam_info.get("azimuths", []),
+                "poses": cam_info.get("poses", []),
                 "name": cam_info.get("name", "Unknown"),
                 "id": cam_info.get("id"),
                 "type": cam_info.get("type", "Unknown"),
