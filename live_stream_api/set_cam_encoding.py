@@ -1,35 +1,44 @@
 import json
-
 import requests
+import argparse
+import os
+from dotenv import load_dotenv
 
 # ----------------------- CONFIGURATION -----------------------
 
-# Camera Credentials
-CAMERA_IP = "192.168.1.12"  # Change to your camera's IP
-USERNAME = "admin"  # Change to your username
-PASSWORD = "@Pyronear"  # Change to your password
+# Load environment variables from .env file
+load_dotenv()
 
-# Which stream to update: "mainStream" or "subStream"
-STREAM_TO_UPDATE = "subStream"  # Options: "mainStream" or "subStream"
+USERNAME = os.getenv("USERNAME")
+PASSWORD = os.getenv("PASSWORD")
 
-# New Encoding Settings
-NEW_BITRATE = 512  # Main Stream: [1024,1536,2048,3072,4096,5120,6144,7168,8192]
-# Sub Stream: [64,128,160,192,256,384,512]
+# ----------------------- NEW ENCODING SETTINGS -----------------------
 
-NEW_FRAMERATE = 10  # Main Stream: [25,22,20,18,16,15,12,10,8,6,4,2]
-# Sub Stream: [15,10,7,4]
+# Main Stream possible values:
+# size: "2304*1296", "2560*1440", "3840*2160"
+# bitRate (kbps): 1024, 1536, 2048, 3072, 4096, 5120, 6144, 7168, 8192
+# frameRate (fps): 25, 22, 20, 18, 16, 15, 12, 10, 8, 6, 4, 2
+# gop: 1, 2, 3, 4
+NEW_SIZE_MAIN = "3840*2160"  # 4K resolution
+NEW_BITRATE_MAIN = 4096  # kbps
+NEW_FRAMERATE_MAIN = 15  # fps
+NEW_GOP_MAIN = 2  # keyframe interval
 
-NEW_GOP = 4  # Keyframe interval (1 to 4)
+# Sub Stream possible values:
+# size: "640*360"
+# bitRate (kbps): 64, 128, 160, 192, 256, 384, 512
+# frameRate (fps): 15, 10, 7, 4
+# gop: 1, 2, 3, 4
+NEW_SIZE_SUB = "640*360"
+NEW_BITRATE_SUB = 512
+NEW_FRAMERATE_SUB = 10
+NEW_GOP_SUB = 4
 
-NEW_SIZE = "640*360"  # Main Stream options: "2304*1296", "2560*1440", "3840*2160"
-# Sub Stream: "640*360"
-
-# ---------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 
-# Function to get token
-def get_token():
-    url = f"https://{CAMERA_IP}/api.cgi?cmd=Login"
+def get_token(camera_ip):
+    url = f"https://{camera_ip}/api.cgi?cmd=Login"
     payload = [
         {
             "cmd": "Login",
@@ -39,7 +48,7 @@ def get_token():
     headers = {"Content-Type": "application/json"}
 
     try:
-        response = requests.post(url, json=payload, headers=headers, verify=False)  # Ignore SSL verification
+        response = requests.post(url, json=payload, headers=headers, verify=False)
         data = response.json()
         if data[0]["code"] == 0:
             token = data[0]["value"]["Token"]["name"]
@@ -53,9 +62,8 @@ def get_token():
         return None
 
 
-# Function to get current encoding settings
-def get_encoding_settings(token):
-    url = f"https://{CAMERA_IP}/api.cgi?cmd=GetEnc&token={token}"
+def get_encoding_settings(camera_ip, token):
+    url = f"https://{camera_ip}/api.cgi?cmd=GetEnc&token={token}"
     try:
         response = requests.get(url, verify=False)
         data = response.json()
@@ -71,30 +79,44 @@ def get_encoding_settings(token):
         return None
 
 
-# Function to set encoding settings for selected stream
-def set_stream_encoding(token):
-    current_settings = get_encoding_settings(token)
+def set_both_streams_encoding(camera_ip, token):
+    current_settings = get_encoding_settings(camera_ip, token)
     if not current_settings:
         return
 
-    stream_settings = current_settings[STREAM_TO_UPDATE]
+    main_stream = current_settings["mainStream"]
+    sub_stream = current_settings["subStream"]
 
-    # Keep existing values unless new ones are provided
-    updated_stream = {
-        "size": NEW_SIZE if NEW_SIZE else stream_settings["size"],
-        "frameRate": NEW_FRAMERATE if NEW_FRAMERATE else stream_settings["frameRate"],
-        "bitRate": NEW_BITRATE if NEW_BITRATE else stream_settings["bitRate"],
-        "gop": NEW_GOP if NEW_GOP else stream_settings["gop"],
-        "profile": stream_settings["profile"],
+    updated_main = {
+        "size": NEW_SIZE_MAIN if NEW_SIZE_MAIN else main_stream["size"],
+        "frameRate": NEW_FRAMERATE_MAIN if NEW_FRAMERATE_MAIN else main_stream["frameRate"],
+        "bitRate": NEW_BITRATE_MAIN if NEW_BITRATE_MAIN else main_stream["bitRate"],
+        "gop": NEW_GOP_MAIN if NEW_GOP_MAIN else main_stream["gop"],
+        "profile": main_stream["profile"],
     }
 
-    url = f"https://{CAMERA_IP}/api.cgi?cmd=SetEnc&token={token}"
+    updated_sub = {
+        "size": NEW_SIZE_SUB if NEW_SIZE_SUB else sub_stream["size"],
+        "frameRate": NEW_FRAMERATE_SUB if NEW_FRAMERATE_SUB else sub_stream["frameRate"],
+        "bitRate": NEW_BITRATE_SUB if NEW_BITRATE_SUB else sub_stream["bitRate"],
+        "gop": NEW_GOP_SUB if NEW_GOP_SUB else sub_stream["gop"],
+        "profile": sub_stream["profile"],
+    }
+
+    url = f"https://{camera_ip}/api.cgi?cmd=SetEnc&token={token}"
 
     payload = [
         {
             "cmd": "SetEnc",
             "action": 0,
-            "param": {"Enc": {"channel": 0, "audio": 0, STREAM_TO_UPDATE: updated_stream}},
+            "param": {
+                "Enc": {
+                    "channel": 0,
+                    "audio": 0,
+                    "mainStream": updated_main,
+                    "subStream": updated_sub,
+                }
+            },
         }
     ]
 
@@ -104,9 +126,9 @@ def set_stream_encoding(token):
         response = requests.post(url, json=payload, headers=headers, verify=False)
         data = response.json()
         if data[0]["code"] == 0:
-            print(f"✅ {STREAM_TO_UPDATE} updated successfully: {updated_stream}")
+            print(f"✅ Both streams updated successfully:\nMain Stream: {updated_main}\nSub Stream: {updated_sub}")
         else:
-            print("❌ Failed to update {STREAM_TO_UPDATE}:", data)
+            print("❌ Failed to update streams:", data)
     except Exception as e:
         print("❌ Error:", e)
 
@@ -114,6 +136,16 @@ def set_stream_encoding(token):
 # ----------------------- MAIN EXECUTION -----------------------
 
 if __name__ == "__main__":
-    token = get_token()
+    parser = argparse.ArgumentParser(description="Update Reolink camera streams settings.")
+    parser.add_argument("--ip", required=True, help="IP address of the camera")
+    args = parser.parse_args()
+
+    camera_ip = args.ip
+
+    if not USERNAME or not PASSWORD:
+        print("❌ USERNAME or PASSWORD not found. Please set them in a .env file.")
+        exit(1)
+
+    token = get_token(camera_ip)
     if token:
-        set_stream_encoding(token)
+        set_both_streams_encoding(camera_ip, token)
