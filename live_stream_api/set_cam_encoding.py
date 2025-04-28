@@ -9,8 +9,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-USERNAME = os.getenv("USERNAME")
-PASSWORD = os.getenv("PASSWORD")
+CAM_USER = os.getenv("USERNAME")
+CAM_PWD = os.getenv("PASSWORD")
 
 # ----------------------- NEW ENCODING SETTINGS -----------------------
 
