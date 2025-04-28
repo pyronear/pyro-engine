@@ -218,6 +218,8 @@ async def start_stream(camera_id: str):
     # 3. Start a background thread to read ffmpeg logs
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_id), daemon=True).start()
 
+    time.sleep(2)
+
 
 
     return {
