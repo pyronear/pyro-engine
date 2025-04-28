@@ -33,6 +33,7 @@ services:
     ports:
       - "8081:8081"   
     restart: always
+    network_mode: host 
     logging:
       driver: "json-file"
       options:
