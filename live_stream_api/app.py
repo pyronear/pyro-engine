@@ -171,7 +171,7 @@ async def start_stream(camera_id: str):
     output_url = stream_info["output_url"]
 
     # Build ffmpeg command dynamically based on config
-    command = ["ffmpeg"]
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "warning"]
 
     if FFMPEG_PARAMS["discardcorrupt"]:
         command += ["-fflags", "discardcorrupt+nobuffer"]
