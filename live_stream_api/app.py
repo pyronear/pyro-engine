@@ -1,14 +1,15 @@
+import json
 import logging
+import os
 import subprocess
 import threading
 import time
-import yaml
+
 import requests
 import urllib3
-from fastapi import FastAPI
+import yaml
 from dotenv import load_dotenv
-import os
-import json
+from fastapi import FastAPI
 
 app = FastAPI()
 processes = {}  # Store FFmpeg processes
@@ -46,12 +47,8 @@ with open(CREDENTIALS_PATH, "r") as file:
     credentials = json.load(file)
 
 
-
 # Build cameras dictionary
-CAMERAS = {
-    ip: {"ip": ip, "username": CAM_USER, "password": CAM_PWD}
-    for ip in credentials.keys()
-}
+CAMERAS = {ip: {"ip": ip, "username": CAM_USER, "password": CAM_PWD} for ip in credentials.keys()}
 
 # Build streams dictionary using config values
 STREAMS = {
@@ -68,12 +65,11 @@ STREAMS = {
     for cam_id, cam_info in CAMERAS.items()
 }
 
+
 class ReolinkCamera:
     """Class to control a Reolink camera."""
 
-    def __init__(
-        self, ip_address: str, username: str, password: str, protocol: str = "https"
-    ):
+    def __init__(self, ip_address: str, username: str, password: str, protocol: str = "https"):
         self.ip_address = ip_address
         self.username = username
         self.password = password
@@ -107,9 +103,7 @@ class ReolinkCamera:
             {
                 "cmd": "StartZoomFocus",
                 "action": 0,
-                "param": {
-                    "ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}
-                },
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
             }
         ]
         response = requests.post(url, json=data, verify=False)
@@ -120,11 +114,11 @@ def is_process_running(proc):
     """Check if a process is still running."""
     return proc and proc.poll() is None
 
+
 def log_ffmpeg_output(proc, camera_id):
     """Reads and logs stderr from ffmpeg."""
     for line in proc.stderr:
         logging.error(f"[FFMPEG {camera_id}] {line.decode('utf-8').strip()}")
-
 
 
 def stop_any_running_stream():
@@ -187,6 +181,8 @@ async def start_stream(camera_id: str):
         FFMPEG_PARAMS["video_codec"],
         "-bf",
         str(FFMPEG_PARAMS["b_frames"]),
+        "-g",
+        str(FFMPEG_PARAMS["gop_size"]),
         "-b:v",
         FFMPEG_PARAMS["bitrate"],
         "-r",
@@ -195,6 +191,8 @@ async def start_stream(camera_id: str):
         FFMPEG_PARAMS["preset"],
         "-tune",
         FFMPEG_PARAMS["tune"],
+        "-flush_packets",
+        "1",
     ]
 
     if FFMPEG_PARAMS["audio_disabled"]:
@@ -204,12 +202,9 @@ async def start_stream(camera_id: str):
 
     logging.info("Running ffmpeg command: %s", " ".join(command))
 
-
     # 1. Start ffmpeg process
     proc = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,  # We don't need stdout
-        stderr=subprocess.PIPE      # We want to capture stderr
+        command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE  # We don't need stdout  # We want to capture stderr
     )
 
     # 2. Store the process
@@ -220,13 +215,9 @@ async def start_stream(camera_id: str):
 
     time.sleep(2)
 
-
-
     return {
         "message": f"Stream for {camera_id} started",
-        "previous_stream": (
-            stopped_cam if stopped_cam else "No previous stream was running"
-        ),
+        "previous_stream": (stopped_cam if stopped_cam else "No previous stream was running"),
     }
 
 
@@ -248,9 +239,7 @@ async def stream_status():
     global last_command_time
     last_command_time = time.time()
 
-    active_streams = [
-        cam_id for cam_id, proc in processes.items() if is_process_running(proc)
-    ]
+    active_streams = [cam_id for cam_id, proc in processes.items() if is_process_running(proc)]
     if active_streams:
         return {"active_streams": active_streams}
     return {"message": "No stream is running"}
@@ -321,20 +310,21 @@ async def is_stream_running(camera_id: str):
         return {"running": True}
     return {"running": False}
 
+
 @app.get("/camera_infos")
 async def get_camera_infos():
     """Returns list of cameras with their IP addresses and azimuths."""
     camera_infos = []
 
     for ip, cam_info in credentials.items():
-        camera_infos.append({
-            "ip": ip,
-            "azimuths": cam_info.get("azimuths", []),
-            "name": cam_info.get("name", "Unknown"),
-            "id": cam_info.get("id"),
-            "type": cam_info.get("type", "Unknown"),
-        })
+        camera_infos.append(
+            {
+                "ip": ip,
+                "azimuths": cam_info.get("azimuths", []),
+                "name": cam_info.get("name", "Unknown"),
+                "id": cam_info.get("id"),
+                "type": cam_info.get("type", "Unknown"),
+            }
+        )
 
     return {"cameras": camera_infos}
-
-

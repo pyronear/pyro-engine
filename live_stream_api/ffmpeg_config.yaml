@@ -11,7 +11,7 @@ ffmpeg_params:
   rtsp_transport: tcp    # Use TCP for RTSP (because UDP doesn't work reliably)
   video_codec: libx264   # H.264 video encoding
   b_frames: 0            # Set B-frames to 0 (only I and P frames, reduces latency)
-  gop_size: 10           # 1 GOP = 1 second (better for recovery if packet loss)
+  gop_size: 5           # 1 GOP = 1 second (better for recovery if packet loss)
   bitrate: 500k          # Realistic bitrate (observed ~492k)
   framerate: 10          # Frames per second
   preset: veryfast       # x264 encoding speed preset
