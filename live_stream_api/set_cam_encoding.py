@@ -1,5 +1,6 @@
-import requests
 import json
+
+import requests
 
 # ----------------------- CONFIGURATION -----------------------
 
@@ -32,17 +33,13 @@ def get_token():
     payload = [
         {
             "cmd": "Login",
-            "param": {
-                "User": {"Version": "0", "userName": USERNAME, "password": PASSWORD}
-            },
+            "param": {"User": {"Version": "0", "userName": USERNAME, "password": PASSWORD}},
         }
     ]
     headers = {"Content-Type": "application/json"}
 
     try:
-        response = requests.post(
-            url, json=payload, headers=headers, verify=False
-        )  # Ignore SSL verification
+        response = requests.post(url, json=payload, headers=headers, verify=False)  # Ignore SSL verification
         data = response.json()
         if data[0]["code"] == 0:
             token = data[0]["value"]["Token"]["name"]
@@ -97,9 +94,7 @@ def set_stream_encoding(token):
         {
             "cmd": "SetEnc",
             "action": 0,
-            "param": {
-                "Enc": {"channel": 0, "audio": 0, STREAM_TO_UPDATE: updated_stream}
-            },
+            "param": {"Enc": {"channel": 0, "audio": 0, STREAM_TO_UPDATE: updated_stream}},
         }
     ]
 

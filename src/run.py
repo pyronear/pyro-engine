@@ -76,11 +76,7 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
     )
 
-    sys_controller = SystemController(
-        engine,
-        cameras,
-        MEDIAMTX_SERVER_IP
-    )
+    sys_controller = SystemController(engine, cameras, MEDIAMTX_SERVER_IP)
 
     asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
 

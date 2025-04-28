@@ -8,6 +8,7 @@ import logging
 import time
 from datetime import datetime
 from typing import Any, List
+
 import aiohttp
 import numpy as np
 import urllib3
@@ -75,7 +76,7 @@ async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue
                     if data.get("running"):
                         logging.info(f"{cam_id} Camera is streaming, skipping capture.")
                         return True
-        
+
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
                 cam_id = f"{camera.ip_address}_{pose_id}"
@@ -139,8 +140,7 @@ class SystemController:
             bool: True if all cameras detect daytime, False otherwise.
         """
         tasks = [
-            capture_camera_image(camera, image_queue, server_ip=self.mediamtx_server_ip)
-            for camera in self.cameras
+            capture_camera_image(camera, image_queue, server_ip=self.mediamtx_server_ip) for camera in self.cameras
         ]
         day_times = await asyncio.gather(*tasks)
         return all(day_times)
