@@ -37,6 +37,7 @@ NEW_GOP_SUB = 4
 
 # ----------------------------------------------------------------------
 
+
 def get_token(camera_ip):
     url = f"https://{camera_ip}/api.cgi?cmd=Login"
     payload = [
@@ -60,7 +61,6 @@ def get_token(camera_ip):
     except Exception as e:
         print("❌ Error:", e)
         return None
-
 
 
 def get_encoding_settings(camera_ip, token):

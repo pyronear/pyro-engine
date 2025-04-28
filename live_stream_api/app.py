@@ -4,7 +4,7 @@ import os
 import subprocess
 import threading
 import time
-
+from typing import Optional
 import requests
 import urllib3
 import yaml
@@ -79,16 +79,13 @@ class ReolinkCamera:
         """Builds the request URL for the camera API."""
         return f"{self.protocol}://{self.ip_address}/cgi-bin/api.cgi?cmd={command}&user={self.username}&password={self.password}&channel=0"
 
-    def move_camera(self, operation: str, speed: int = 10):
-        """Moves the camera in a given direction."""
+    def move_camera(self, operation: str, speed: int = 10, idx: Optional[int] = None):
+        """Moves the camera in a given direction or to a preset pose."""
         url = self._build_url("PtzCtrl")
-        data = [
-            {
-                "cmd": "PtzCtrl",
-                "action": 0,
-                "param": {"channel": 0, "op": operation, "speed": speed},
-            }
-        ]
+        param = {"channel": 0, "op": operation, "speed": speed}
+        if idx is not None:
+            param["id"] = idx
+        data = [{"cmd": "PtzCtrl", "action": 0, "param": param}]
         response = requests.post(url, json=data, verify=False)
         return response.json() if response.status_code == 200 else None
 
@@ -245,22 +242,41 @@ async def stream_status():
     return {"message": "No stream is running"}
 
 
-@app.post("/move/{camera_id}/{direction}/{speed}")
-async def move_camera(camera_id: str, direction: str, speed: int):
-    """Moves the camera in the specified direction (Up, Right, Down, Left) with a given speed."""
+@app.post("/move/{camera_id}")
+async def move_camera(
+    camera_id: str,
+    direction: Optional[str] = None,  # <- make direction Optional too
+    speed: int = 10,
+    pose_id: Optional[int] = None,
+):
+    """
+    Moves the camera:
+    - If 'pose_id' is provided, move to the preset pose.
+    - Otherwise, move in the specified 'direction' (Up, Down, Left, Right).
+    """
     global last_command_time
-    last_command_time = time.time()  # Update last command time
+    last_command_time = time.time()
 
     if camera_id not in CAMERAS:
-        return {"error": "Invalid camera ID. Use 'cam1' or 'cam2'."}
+        return {"error": "Invalid camera ID."}
 
     cam = ReolinkCamera(
         CAMERAS[camera_id]["ip"],
         CAMERAS[camera_id]["username"],
         CAMERAS[camera_id]["password"],
     )
-    cam.move_camera(direction, speed=speed)
-    return {"message": f"Camera {camera_id} moved {direction} at speed {speed}"}
+
+    try:
+        if pose_id is not None:
+            # Move to preset pose
+            cam.move_camera("ToPos", speed=speed, idx=pose_id)
+            return {"message": f"Camera {camera_id} moved to pose {pose_id} at speed {speed}"}
+        else:
+            # Move in direction
+            cam.move_camera(direction, speed=speed)
+            return {"message": f"Camera {camera_id} moved {direction} at speed {speed}"}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.post("/stop/{camera_id}")
