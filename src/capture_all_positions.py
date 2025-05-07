@@ -130,10 +130,10 @@ def main():
     parser.add_argument("--output_folder", help="Folder to save captured images", default="captured_images")
     parser.add_argument("--fov", type=float, default=54.2, help="Field of View of the camera")
     parser.add_argument("--overlap", type=float, default=6, help="Overlap angle between positions")
-    parser.add_argument("--cam_speed_1", type=float, default=1.4, help="Camera speed for PTZ operation")
+    parser.add_argument("--cam_speed_1", type=float, default=5.6160, help="Camera speed for PTZ operation")
     parser.add_argument("--cam_stop_time", type=float, default=0.5, help="Camera stop time after movement")
     parser.add_argument(
-        "--move_duration", type=float, default=34, help="Duration in seconds for the rightward move in each loop"
+        "--move_duration", type=float, default=8.547, help="Duration in seconds for the rightward move in each loop"
     )
     parser.add_argument("--shift_angle", type=float, default=0, help="Shift angle for time calculation adjustment")
 
@@ -164,7 +164,7 @@ def main():
 
         # Move right for calculated shift time at speed 1
         print(f"Moving right for {shift_time:.2f} seconds at speed 1.")
-        camera.move_in_seconds(s=shift_time, operation="Right", speed=1)
+        camera.move_in_seconds(s=shift_time, operation="Right", speed=4)
 
         # Loop to capture, register PTZ positions, and move right
         for i in range(8):
@@ -194,7 +194,7 @@ def main():
 
             # Move right for specified duration at speed 1
             print(f"Moving right for {args.move_duration} seconds at speed 1.")
-            camera.move_in_seconds(s=args.move_duration, operation="Right", speed=1)
+            camera.move_in_seconds(s=args.move_duration, operation="Right", speed=4)
 
             time.sleep(1)
 
