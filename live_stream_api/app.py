@@ -10,6 +10,9 @@ import urllib3
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from reolink import ReolinkCamera
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 
 app = FastAPI()
 processes = {}  # Store FFmpeg processes
@@ -48,7 +51,26 @@ with open(CREDENTIALS_PATH, "r") as file:
 
 
 # Build cameras dictionary
-CAMERAS = {ip: {"ip": ip, "username": CAM_USER, "password": CAM_PWD} for ip in credentials.keys()}
+CAMERAS = {
+    ip: {
+        "ip": ip,
+        "username": CAM_USER,
+        "password": CAM_PWD,
+        "brand": credentials[ip].get("brand", "unknown")
+    }
+    for ip in credentials
+}
+
+CAMERA_OBJECTS = {
+    ip: ReolinkCamera(
+        ip_address=ip,
+        username=cam_info["username"],
+        password=cam_info["password"],
+        cam_poses=credentials[ip].get("poses"),
+        cam_azimuths=credentials[ip].get("azimuths")
+    )
+    for ip, cam_info in CAMERAS.items()
+}
 
 # Build streams dictionary using config values
 STREAMS = {
@@ -66,45 +88,6 @@ STREAMS = {
 }
 
 
-class ReolinkCamera:
-    """Class to control a Reolink camera."""
-
-    def __init__(self, ip_address: str, username: str, password: str, protocol: str = "https"):
-        self.ip_address = ip_address
-        self.username = username
-        self.password = password
-        self.protocol = protocol
-
-    def _build_url(self, command: str) -> str:
-        """Builds the request URL for the camera API."""
-        return f"{self.protocol}://{self.ip_address}/cgi-bin/api.cgi?cmd={command}&user={self.username}&password={self.password}&channel=0"
-
-    def move_camera(self, operation: str, speed: int = 10, idx: Optional[int] = None):
-        """Moves the camera in a given direction or to a preset pose."""
-        url = self._build_url("PtzCtrl")
-        param = {"channel": 0, "op": operation, "speed": speed}
-        if idx is not None:
-            param["id"] = idx
-        data = [{"cmd": "PtzCtrl", "action": 0, "param": param}]
-        response = requests.post(url, json=data, verify=False)
-        return response.json() if response.status_code == 200 else None
-
-    def stop_camera(self):
-        """Stops the camera movement."""
-        return self.move_camera("Stop")
-
-    def zoom(self, position: int):
-        """Adjusts the zoom level of the camera."""
-        url = self._build_url("StartZoomFocus")
-        data = [
-            {
-                "cmd": "StartZoomFocus",
-                "action": 0,
-                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
-            }
-        ]
-        response = requests.post(url, json=data, verify=False)
-        return response.json() if response.status_code == 200 else None
 
 
 def is_process_running(proc):
@@ -130,14 +113,16 @@ def stop_any_running_stream():
 
 
 def stop_stream_if_idle():
-    """Background task that stops the stream if no command is received for 60 seconds."""
+    """Background task that stops the stream if no command is received for 120 seconds."""
     global last_command_time
     while True:
-        time.sleep(60)
-        if time.time() - last_command_time > 60:
+        time.sleep(120)
+        if time.time() - last_command_time > 120:
             stopped_cam = stop_any_running_stream()
             if stopped_cam:
                 logging.info(f"Stream for {stopped_cam} stopped due to inactivity")
+
+
 
 
 # Start background thread
@@ -147,14 +132,20 @@ timer_thread.start()
 
 @app.post("/start_stream/{camera_id}")
 async def start_stream(camera_id: str):
-    """Starts an FFmpeg stream for a given camera."""
+    """Starts an FFmpeg stream for a given camera (unless it's already running)."""
     global last_command_time
     last_command_time = time.time()
 
     if camera_id not in STREAMS:
         return {"error": "Invalid camera ID."}
 
-    # Stop any existing stream
+    # ✅ Check if stream is already running
+    existing_proc = processes.get(camera_id)
+    if is_process_running(existing_proc):
+        logging.info(f"Stream for {camera_id} is already running — skipping restart.")
+        return {"message": f"Stream for {camera_id} is already running."}
+
+    # Stop any existing stream (only if different one was running)
     stopped_cam = stop_any_running_stream()
 
     stream_info = STREAMS[camera_id]
@@ -199,24 +190,21 @@ async def start_stream(camera_id: str):
 
     logging.info("Running ffmpeg command: %s", " ".join(command))
 
-    # 1. Start ffmpeg process
+    # Start ffmpeg process
     proc = subprocess.Popen(
-        command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE  # We don't need stdout  # We want to capture stderr
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
 
-    # 2. Store the process
+    # Store and monitor the process
     processes[camera_id] = proc
-
-    # 3. Start a background thread to read ffmpeg logs
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_id), daemon=True).start()
-
-    time.sleep(2)
 
     return {
         "message": f"Stream for {camera_id} started",
         "previous_stream": (stopped_cam if stopped_cam else "No previous stream was running"),
     }
-
 
 @app.post("/stop_stream")
 async def stop_stream():
@@ -242,41 +230,114 @@ async def stream_status():
     return {"message": "No stream is running"}
 
 
+# Lookup dictionaries for pan speeds
+PAN_SPEEDS = {
+    "reolink-823S2": {
+        1: 1.4723,
+        2: 2.7747,
+        3: 4.2481,
+        4: 5.6113,
+        5: 7.3217
+    },
+    "reolink-823A16": {
+        1: 1.4403,
+        2: 2.714,
+        3: 4.1801,
+        4: 5.6259,
+        5: 7.2743
+    }
+}
+
+# Lookup dictionaries for tilt speeds
+TILT_SPEEDS = {
+    "reolink-823S2": {
+        1: 2.1392,
+        2: 3.9651,
+        3: 6.0554
+    },
+    "reolink-823A16": {
+        1: 1.7998,
+        2: 3.6733,
+        3: 5.5243
+    }
+}
+
+
+def get_pan_speed_per_sec(brand: str, level: int) -> Optional[float]:
+    return PAN_SPEEDS.get(brand, {}).get(level)
+
+
+def get_tilt_speed_per_sec(brand: str, level: int) -> Optional[float]:
+    return TILT_SPEEDS.get(brand, {}).get(level)
+
+
 @app.post("/move/{camera_id}")
 async def move_camera(
     camera_id: str,
-    direction: Optional[str] = None,  # <- make direction Optional too
+    direction: Optional[str] = None,
     speed: int = 10,
     pose_id: Optional[int] = None,
+    degrees: Optional[float] = None,
 ):
     """
     Moves the camera:
     - If 'pose_id' is provided, move to the preset pose.
+    - If 'degrees' is provided, move that many degrees in the given direction.
     - Otherwise, move in the specified 'direction' (Up, Down, Left, Right).
     """
     global last_command_time
     last_command_time = time.time()
 
-    if camera_id not in CAMERAS:
+    if camera_id not in CAMERAS or camera_id not in CAMERA_OBJECTS:
         return {"error": "Invalid camera ID."}
 
-    cam = ReolinkCamera(
-        CAMERAS[camera_id]["ip"],
-        CAMERAS[camera_id]["username"],
-        CAMERAS[camera_id]["password"],
-    )
+    cam_info = CAMERAS[camera_id]
+    cam = CAMERA_OBJECTS[camera_id]
+    brand = cam_info.get("brand", "unknown")
 
     try:
         if pose_id is not None:
-            # Move to preset pose
+            logging.info(f"Camera {camera_id}: moving to preset pose {pose_id} at speed {speed}")
             cam.move_camera("ToPos", speed=speed, idx=pose_id)
             return {"message": f"Camera {camera_id} moved to pose {pose_id} at speed {speed}"}
-        else:
-            # Move in direction
+
+        if degrees is not None and direction:
+            if direction in ["Left", "Right"]:
+                deg_per_sec = get_pan_speed_per_sec(brand, speed)
+            elif direction in ["Up", "Down"]:
+                deg_per_sec = get_tilt_speed_per_sec(brand, speed)
+            else:
+                return {"error": f"Unsupported direction '{direction}'."}
+
+            if deg_per_sec is None:
+                return {"error": f"Unsupported brand '{brand}' or speed level {speed}."}
+
+            duration_sec = abs(degrees) / deg_per_sec
+            logging.info(f"Camera {camera_id}: moving {direction} for {duration_sec:.2f}s at speed {speed} (brand={brand})")
+
+            cam.move_camera(direction, speed=speed)
+            time.sleep(duration_sec)
+            cam.move_camera("Stop")
+
+            logging.info(f"Camera {camera_id}: movement {direction} stopped after ~{duration_sec:.2f}s")
+
+            return {
+                "message": f"Camera {camera_id} moved {direction} to cover {degrees}° at speed {speed}",
+                "duration": round(duration_sec, 2),
+                "brand": brand,
+            }
+
+        if direction:
+            logging.info(f"Camera {camera_id}: moving {direction} at speed {speed}")
             cam.move_camera(direction, speed=speed)
             return {"message": f"Camera {camera_id} moved {direction} at speed {speed}"}
+
+        return {"error": "Either pose_id, degrees+direction, or direction must be specified."}
+
     except Exception as e:
+        logging.error(f"Camera {camera_id}: movement error - {e}")
         return {"error": str(e)}
+
 
 
 @app.post("/stop/{camera_id}")
@@ -285,16 +346,19 @@ async def stop_camera(camera_id: str):
     global last_command_time
     last_command_time = time.time()
 
-    if camera_id not in CAMERAS:
+    if camera_id not in CAMERAS or camera_id not in CAMERA_OBJECTS:
         return {"error": "Invalid camera ID."}
 
-    cam = ReolinkCamera(
-        CAMERAS[camera_id]["ip"],
-        CAMERAS[camera_id]["username"],
-        CAMERAS[camera_id]["password"],
-    )
-    cam.stop_camera()
-    return {"message": f"Camera {camera_id} stopped moving"}
+    cam = CAMERA_OBJECTS[camera_id]
+
+    try:
+        cam.move_camera("Stop")
+        logging.info(f"Camera {camera_id}: movement stopped")
+        return {"message": f"Camera {camera_id} stopped moving"}
+    except Exception as e:
+        logging.error(f"Camera {camera_id}: failed to stop - {e}")
+        return {"error": str(e)}
+
 
 
 @app.post("/zoom/{camera_id}/{level}")
@@ -303,19 +367,54 @@ async def zoom_camera(camera_id: str, level: int):
     global last_command_time
     last_command_time = time.time()
 
-    if camera_id not in CAMERAS:
+    if camera_id not in CAMERAS or camera_id not in CAMERA_OBJECTS:
         return {"error": "Invalid camera ID."}
 
     if not (0 <= level <= 64):
         return {"error": "Zoom level must be between 0 and 64."}
 
-    cam = ReolinkCamera(
-        CAMERAS[camera_id]["ip"],
-        CAMERAS[camera_id]["username"],
-        CAMERAS[camera_id]["password"],
-    )
-    cam.zoom(level)
-    return {"message": f"Camera {camera_id} zoom set to {level}"}
+    cam = CAMERA_OBJECTS[camera_id]
+
+    try:
+        cam.start_zoom_focus(level)
+        logging.info(f"Camera {camera_id}: zoom set to {level}")
+        return {"message": f"Camera {camera_id} zoom set to {level}"}
+    except Exception as e:
+        logging.error(f"Camera {camera_id}: failed to set zoom - {e}")
+        return {"error": str(e)}
+
+
+
+
+@app.get("/capture/{camera_id}")
+async def capture_image(camera_id: str, pose_id: Optional[int] = None):
+    """Captures an image from the camera (optionally after moving to a preset pose)."""
+    global last_command_time
+    last_command_time = time.time()
+
+    if camera_id not in CAMERAS or camera_id not in CAMERA_OBJECTS:
+        return {"error": "Invalid camera ID."}
+
+    cam = CAMERA_OBJECTS[camera_id]
+
+    try:
+        image = cam.capture(pos_id=pose_id)
+        if image is None:
+            logging.error(f"Camera {camera_id}: failed to capture image")
+            return {"error": "Failed to capture image from camera."}
+
+        img_io = BytesIO()
+        image.save(img_io, format="JPEG")
+        img_io.seek(0)
+
+        logging.info(f"Camera {camera_id}: image captured successfully (pose_id={pose_id})")
+        return StreamingResponse(img_io, media_type="image/jpeg")
+
+    except Exception as e:
+        logging.error(f"Camera {camera_id}: capture failed - {e}")
+        return {"error": str(e)}
+
+
 
 
 @app.get("/is_stream_running/{camera_id}")
@@ -329,7 +428,7 @@ async def is_stream_running(camera_id: str):
 
 @app.get("/camera_infos")
 async def get_camera_infos():
-    """Returns list of cameras with their IP addresses and azimuths."""
+    """Returns list of cameras with their IP addresses, azimuths, and other metadata."""
     camera_infos = []
 
     for ip, cam_info in credentials.items():
@@ -341,6 +440,7 @@ async def get_camera_infos():
                 "name": cam_info.get("name", "Unknown"),
                 "id": cam_info.get("id"),
                 "type": cam_info.get("type", "Unknown"),
+                "brand": cam_info.get("brand", "unknown")
             }
         )
 
