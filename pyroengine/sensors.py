@@ -84,9 +84,8 @@ class ReolinkCamera:
             else:
                 logging.error(f"Error: {response_data}")
             return response_data
-        else:
-            logging.error(f"Failed operation: {response.status_code}, {response.text}")
-            return None
+        logging.error(f"Failed operation: {response.status_code}, {response.text}")
+        return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
@@ -111,8 +110,7 @@ class ReolinkCamera:
                 image_data = BytesIO(response.content)
                 image = Image.open(image_data).convert("RGB")
                 return image
-            else:
-                logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
+            logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
         except requests.RequestException as e:
             logging.error(f"Request failed: {e}")
         return None
@@ -127,11 +125,23 @@ class ReolinkCamera:
             idx (int): The ID of the position to move to (relevant for PTZ cameras).
         """
         url = self._build_url("PtzCtrl")
-        data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
+        data = [
+            {
+                "cmd": "PtzCtrl",
+                "action": 0,
+                "param": {"channel": 0, "op": operation, "id": idx, "speed": speed},
+            }
+        ]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
+    def move_in_seconds(
+        self,
+        s: float,
+        operation: str = "Right",
+        speed: int = 20,
+        save_path: str = "im.jpg",
+    ):
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
@@ -162,8 +172,7 @@ class ReolinkCamera:
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
-        else:
-            return None
+        return None
 
     def set_ptz_preset(self, idx: Optional[int] = None):
         """
@@ -211,7 +220,13 @@ class ReolinkCamera:
 
     def set_auto_focus(self, disable: bool):
         url = self._build_url("SetAutoFocus")
-        data = [{"cmd": "SetAutoFocus", "action": 0, "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}}}]
+        data = [
+            {
+                "cmd": "SetAutoFocus",
+                "action": 0,
+                "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}},
+            }
+        ]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 

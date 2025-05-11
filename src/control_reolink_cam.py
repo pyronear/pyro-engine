@@ -99,14 +99,28 @@ def main():
     parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
-        "--pos_id", type=int, help="Position ID for moving the camera or capturing at a specific position", default=None
+        "--pos_id",
+        type=int,
+        help="Position ID for moving the camera or capturing at a specific position",
+        default=None,
     )
-    parser.add_argument("--operation", help="Operation type for moving the camera (e.g., 'Left', 'Right')")
+    parser.add_argument(
+        "--operation",
+        help="Operation type for moving the camera (e.g., 'Left', 'Right')",
+    )
     parser.add_argument("--speed", type=int, help="Speed of the PTZ movement", default=1)
-    parser.add_argument("--duration", type=int, help="Duration in seconds for moving the camera", default=1)
+    parser.add_argument(
+        "--duration",
+        type=int,
+        help="Duration in seconds for moving the camera",
+        default=1,
+    )
     parser.add_argument("--disable_autofocus", action="store_true", help="Disable autofocus if set")
     parser.add_argument(
-        "--zoom_position", type=int, help="Zoom position for start_zoom_focus or manual focus", default=None
+        "--zoom_position",
+        type=int,
+        help="Zoom position for start_zoom_focus or manual focus",
+        default=None,
     )
 
     args = parser.parse_args()
@@ -114,7 +128,10 @@ def main():
 
     # Create an instance of ReolinkCamera
     camera_controller = ReolinkCamera(
-        ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
     )
 
     # Handling different actions

@@ -41,7 +41,11 @@ def main():
     parser.add_argument("--username", help="Username for camera access", default=cam_user)
     parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
-    parser.add_argument("--output_folder", help="Folder to save captured images", default="captured_positions")
+    parser.add_argument(
+        "--output_folder",
+        help="Folder to save captured images",
+        default="captured_positions",
+    )
     parser.add_argument("--demo", action="store_true", help="If set, demo mode is activated")
 
     args = parser.parse_args()
@@ -52,7 +56,12 @@ def main():
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize camera
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
+    camera = ReolinkCamera(
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+    )
 
     # Mapping of original poses to new pose IDs
     pose_mapping = {22: 0, 23: 1, 24: 2, 25: 3}
@@ -87,7 +96,7 @@ def main():
         if args.demo:
             print("Running in demo mode...")
             for _ in range(3):  # Loop three times
-                for original_pose in pose_mapping.keys():
+                for original_pose in pose_mapping:
                     print(f"Moving to pose {original_pose} at speed 64 for demo...")
                     camera.move_camera(operation="ToPos", speed=64, idx=original_pose)
                     time.sleep(2)  # Pause for 2 seconds at each pose
