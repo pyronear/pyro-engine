@@ -56,9 +56,7 @@ def is_day_time(cache, frame, strategy, delta=0):
 
 
 async def capture_camera_image(
-    camera: ReolinkCamera,
-    image_queue: asyncio.Queue,
-    server_ip: Optional[str] = None
+    camera: ReolinkCamera, image_queue: asyncio.Queue, server_ip: Optional[str] = None
 ) -> bool:
     """
     Capture an image from a camera and enqueue it for analysis.
@@ -114,12 +112,7 @@ class SystemController:
         mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
     """
 
-    def __init__(
-    self,
-    engine: Engine,
-    cameras: List[ReolinkCamera],
-    mediamtx_server_ip: Optional[str] = None
-) -> None:
+    def __init__(self, engine: Engine, cameras: List[ReolinkCamera], mediamtx_server_ip: Optional[str] = None) -> None:
         """
         Initialize the system controller.
 
