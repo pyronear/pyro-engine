@@ -35,10 +35,11 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Stub version.py for tests
+      - name: Generate version.py from pyproject.toml
         run: |
-          mkdir -p pyroengine
-          echo "__version__ = '0.0.0'" > pyroengine/version.py
+          version=$(poetry version -s)
+          echo "__version__ = '${version}'" > pyroengine/version.py
+          
         
       - name: Install test dependencies
         run: poetry install --with dev
