@@ -1,7 +1,7 @@
-import json
-import requests
 import argparse
 import os
+
+import requests
 from dotenv import load_dotenv
 
 # ----------------------- CONFIGURATION -----------------------
@@ -55,9 +55,8 @@ def get_token(camera_ip):
             token = data[0]["value"]["Token"]["name"]
             print(f"✅ Token acquired: {token}")
             return token
-        else:
-            print("❌ Failed to get token:", data)
-            return None
+        print("❌ Failed to get token:", data)
+        return None
     except Exception as e:
         print("❌ Error:", e)
         return None
@@ -72,9 +71,8 @@ def get_encoding_settings(camera_ip, token):
             enc_settings = data[0]["value"]["Enc"]
             print(f"🔍 Current Encoding Settings: {enc_settings}")
             return enc_settings
-        else:
-            print("❌ Failed to get encoding settings:", data)
-            return None
+        print("❌ Failed to get encoding settings:", data)
+        return None
     except Exception as e:
         print("❌ Error:", e)
         return None
@@ -89,18 +87,18 @@ def set_both_streams_encoding(camera_ip, token):
     sub_stream = current_settings["subStream"]
 
     updated_main = {
-        "size": NEW_SIZE_MAIN if NEW_SIZE_MAIN else main_stream["size"],
-        "frameRate": NEW_FRAMERATE_MAIN if NEW_FRAMERATE_MAIN else main_stream["frameRate"],
-        "bitRate": NEW_BITRATE_MAIN if NEW_BITRATE_MAIN else main_stream["bitRate"],
-        "gop": NEW_GOP_MAIN if NEW_GOP_MAIN else main_stream["gop"],
+        "size": NEW_SIZE_MAIN or main_stream["size"],
+        "frameRate": NEW_FRAMERATE_MAIN or main_stream["frameRate"],
+        "bitRate": NEW_BITRATE_MAIN or main_stream["bitRate"],
+        "gop": NEW_GOP_MAIN or main_stream["gop"],
         "profile": main_stream["profile"],
     }
 
     updated_sub = {
-        "size": NEW_SIZE_SUB if NEW_SIZE_SUB else sub_stream["size"],
-        "frameRate": NEW_FRAMERATE_SUB if NEW_FRAMERATE_SUB else sub_stream["frameRate"],
-        "bitRate": NEW_BITRATE_SUB if NEW_BITRATE_SUB else sub_stream["bitRate"],
-        "gop": NEW_GOP_SUB if NEW_GOP_SUB else sub_stream["gop"],
+        "size": NEW_SIZE_SUB or sub_stream["size"],
+        "frameRate": NEW_FRAMERATE_SUB or sub_stream["frameRate"],
+        "bitRate": NEW_BITRATE_SUB or sub_stream["bitRate"],
+        "gop": NEW_GOP_SUB or sub_stream["gop"],
         "profile": sub_stream["profile"],
     }
 

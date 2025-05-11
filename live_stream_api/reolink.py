@@ -84,9 +84,8 @@ class ReolinkCamera:
             else:
                 logging.error(f"Error: {response_data}")
             return response_data
-        else:
-            logging.error(f"Failed operation: {response.status_code}, {response.text}")
-            return None
+        logging.error(f"Failed operation: {response.status_code}, {response.text}")
+        return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
@@ -111,8 +110,7 @@ class ReolinkCamera:
                 image_data = BytesIO(response.content)
                 image = Image.open(image_data).convert("RGB")
                 return image
-            else:
-                logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
+            logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
         except requests.RequestException as e:
             logging.error(f"Request failed: {e}")
         return None
@@ -162,8 +160,7 @@ class ReolinkCamera:
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
-        else:
-            return None
+        return None
 
     def set_ptz_preset(self, idx: Optional[int] = None):
         """

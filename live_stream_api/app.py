@@ -4,15 +4,15 @@ import os
 import subprocess
 import threading
 import time
+from io import BytesIO
 from typing import Optional
-import requests
+
 import urllib3
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from reolink import ReolinkCamera
 from fastapi.responses import StreamingResponse
-from io import BytesIO
+from reolink import ReolinkCamera
 
 app = FastAPI()
 processes = {}  # Store FFmpeg processes
@@ -194,7 +194,7 @@ async def start_stream(camera_id: str):
 
     return {
         "message": f"Stream for {camera_id} started",
-        "previous_stream": (stopped_cam if stopped_cam else "No previous stream was running"),
+        "previous_stream": (stopped_cam or "No previous stream was running"),
     }
 
 
