@@ -36,7 +36,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install test dependencies
-        run: poetry install --with test
+        run: poetry install --with dev
 
       - name: Run unittests
         env:
