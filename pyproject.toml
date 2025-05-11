@@ -38,6 +38,15 @@ ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
 python-dotenv = "==1.1.0"
 
+
+[tool.poetry.group.quality.dependencies]
+ruff = "^0.4.0"
+black = "^24.3.0"
+isort = "^5.13.2"
+mypy = "^1.9.0"
+pydocstyle = "^6.3.0"
+
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
 pytest-asyncio = "^0.23.0"
