@@ -1,15 +1,13 @@
-# this target runs checks on all files
+# This target runs checks on all files
 quality:
-	isort . -c
-	flake8
+	ruff format --check --diff .
+	ruff check --diff .
 	mypy
-	pydocstyle
-	black --check .
 
-# this target runs checks on all files and potentially modifies some of them
+# This target auto-fixes lint issues where possible
 style:
-	isort .
-	black .
+	ruff format --check --diff .
+	ruff check --diff .
 
 # Run tests for the library
 test:
@@ -22,8 +20,8 @@ single-docs:
 
 # update requirements.txt
 lock:
-	cd src; poetry lock
-	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
+	poetry lock
+	poetry export -f requirements.txt --without-hashes --output requirements.txt
 
 # Build the docker
 build-app:

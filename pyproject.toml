@@ -1,16 +1,14 @@
 [build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
 
-[project]
+[tool.poetry]
 name = "pyroengine"
+version = "3.0.0"
 description = "Wildfire detection on edge devices"
-authors = [
-    {name = "Pyronear", email = "contact@pyronear.org"}
-]
+authors = ["Pyronear <contact@pyronear.org>"]
 readme = "README.md"
-requires-python = ">=3.6,<4"
-license = {file = "LICENSE"}
+license = "Apache-2.0"
 keywords = ["pytorch", "deep learning", "vision", "cnn", "wildfire"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -21,81 +19,63 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Mathematics",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
-dynamic = ["version"]
-dependencies = [
-    "onnxruntime==1.18.1",
-    "ncnn==1.0.20240410",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#egg=pyroclient&subdirectory=client",
-    "requests>=2.20.0,<3.0.0",
-    "tqdm>=4.62.0",
-    "huggingface_hub==0.23.1", 
-    "pillow==11.0.0",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
 
-[project.optional-dependencies]
-test = [
-    "pytest>=5.3.2",
-    "pytest-asyncio>=0.14.0",
-    "coverage[toml]>=4.5.4",
-    "requests>=2.20.0,<3.0.0",
-    "python-dotenv>=0.15.0",
-    "onnx>=1.17.0",
-]
-quality = [
-    "flake8>=3.9.0",
-    "isort>=5.7.0",
-    "mypy>=0.812",
-    "pydocstyle[toml]>=6.0.0",
-    "black>=22.1,<23.0",
-]
-docs = [
-    "sphinx>=3.0.0,!=3.5.0",
-    "furo>=2022.3.4",
-    "sphinxemoji>=0.1.8",
-    "sphinx-copybutton>=0.3.1",
-    # Indirect deps
-    # cf. https://github.com/readthedocs/readthedocs.org/issues/9038
-    "Jinja2<3.1",
-]
-dev = [
-    # test
-    "pytest>=5.3.2",
-    "pytest-asyncio>=0.14.0",
-    "coverage[toml]>=4.5.4",
-    "requests>=2.20.0,<3.0.0",
-    # style
-    "flake8>=3.9.0",
-    "isort>=5.7.0",
-    "mypy>=0.812",
-    "pydocstyle[toml]>=6.0.0",
-    "black>=22.1,<23.0",
-    # docs
-    "sphinx>=3.0.0,!=3.5.0",
-    "furo>=2022.3.4",
-    "sphinxemoji>=0.1.8",
-    "sphinx-copybutton>=0.3.1",
-    "Jinja2<3.1",
-]
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+requests = "==2.31.0"
+tqdm = "==4.67.1"
+aiohttp = "==3.11.18"
+onnxruntime = "==1.18.1"
+huggingface_hub = "==0.23.1"
+pillow = "==11.0.0"
+ncnn = "==1.0.20240410"
+pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
+python-dotenv = "==1.1.0"
 
-[project.urls]
+
+[tool.poetry.group.quality.dependencies]
+ruff = "^0.11.9"
+black = "^24.3.0"
+isort = "^5.13.2"
+mypy = "^1.9.0"
+pydocstyle = "^6.3.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0"
+pytest-asyncio = "^0.23.0"
+coverage = "^7.4.0"
+requests = "^2.31.0"
+flake8 = "^7.0.0"
+isort = "^5.13.2"
+mypy = "^1.9.0"
+pydocstyle = "^6.3.0"
+black = "^24.3.0"
+onnx = "^1.15.0"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^7.2.6"
+furo = "^2024.1.29"
+sphinxemoji = "^0.2.0"
+sphinx-copybutton = "^0.5.2"
+Jinja2 = "^3.1.3"
+
+[tool.poetry.urls]
 documentation = "https://pyronear.org/pyro-engine"
 repository = "https://github.com/pyronear/pyro-engine"
 tracker = "https://github.com/pyronear/pyro-engine/issues"
 
-[tool.setuptools]
-zip-safe = true
-
-[tool.setuptools.packages.find]
-exclude = ["docs*", "scripts*", "tests*", "src*"]
+[tool.coverage.run]
+source = ["pyroengine"]
 
 [tool.mypy]
+python_version = "3.11"
 files = "pyroengine/"
 show_error_codes = true
 pretty = true
@@ -106,27 +86,67 @@ check_untyped_defs = true
 implicit_reexport = false
 
 [[tool.mypy.overrides]]
+module = "pyroengine.version"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pyroengine.__init__"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = [
     "onnxruntime.*",
     "requests.*",
     "PIL.*",
     "pyroclient.*",
-    "urllib3.*",
+    "urllib3.*"
 ]
 ignore_missing_imports = true
 
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+preview = true
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "I", "N",
+    "D201", "D202", "D207", "D208", "D214", "D215", "D300", "D301", "D417", "D419",
+    "YTT", "ANN", "ASYNC", "S", "BLE", "B", "A", "COM", "CPY", "C4", "T10", "ISC", "ICN", "LOG",
+    "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "PERF", "NPY", "FURB", "RUF"
+]
+ignore = [
+    "E501", "B008", "B904", "C901", "F403", "E731", "C416",
+    "ANN002", "ANN003", "COM812", "ISC001"
+]
+exclude = [".git"]
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+
+[tool.ruff.lint.isort]
+known-first-party = ["pyroengine"]
+known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["I001", "F401", "CPY001"]
+"src/**.py" = ["D", "T201", "S101", "ANN"]
+".github/**.py" = ["D", "T201", "ANN"]
+"tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
 [tool.isort]
 line_length = 120
-src_paths = ["pyroengine", "tests", "src", "docs", ".github", "scripts"]
 skip_glob = "**/__init__.py"
 
 [tool.pydocstyle]
 select = "D300,D301,D417"
 match = ".*\\.py"
 
-[tool.coverage.run]
-source = ["pyroengine"]
-
 [tool.black]
 line-length = 120
-target-version = ['py38']
+target-version = ['py39']

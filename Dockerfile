@@ -1,32 +1,39 @@
 FROM python:3.9.16-slim
 
 # set environment variables
-ENV PATH="/usr/local/bin:$PATH"
-ENV LANG="C.UTF-8"
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+ENV PATH="/usr/local/bin:$PATH" \
+    LANG="C.UTF-8" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 # set work directory
 WORKDIR /usr/src/app
-
-COPY ./setup.py /tmp/setup.py
 
 # install git
 RUN apt-get update && apt-get install git -y
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    ffmpeg \
+    libsm6 \
+    libxext6 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\
-    && pip install --upgrade pip setuptools wheel 
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+COPY ./requirements.txt /tmp/requirements.txt
 
-COPY ./src/requirements.txt /tmp/requirements.txt
-RUN pip install --default-timeout=500 -r /tmp/requirements.txt \
-    && pip cache purge \
+RUN pip install --no-cache-dir --default-timeout=500 -r /tmp/requirements.txt && \
+    rm -f /tmp/requirements.txt
+
+WORKDIR /opt/pyroengine_src
+COPY ./pyroengine ./pyroengine
+COPY ./setup.py ./setup.py
+
+RUN pip install --no-cache-dir -e . \
     && rm -rf /root/.cache/pip
 
-COPY ./pyroengine /tmp/pyroengine
-
-RUN pip install -e /tmp/. \
-    && pip cache purge \
-    && rm -rf /root/.cache/pip
+WORKDIR /usr/src/app
 
 COPY ./src/run.py /usr/src/app/run.py
 COPY ./src/control_reolink_cam.py /usr/src/app/control_reolink_cam.py

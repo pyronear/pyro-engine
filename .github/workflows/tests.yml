@@ -17,31 +17,46 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
+
       - name: Cache python modules
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-test
-      - name: Install dependencies
+
+      - name: Install Poetry
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[test]" --upgrade
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate version.py from pyproject.toml
+        run: |
+          version=$(poetry version -s)
+          echo "__version__ = '${version}'" > pyroengine/version.py
+          
+        
+      - name: Install test dependencies
+        run: poetry install --with dev
+
       - name: Run unittests
         env:
           API_URL: ${{ secrets.API_URL }}
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: |
-          coverage run -m pytest tests/
-          coverage xml
-      - uses: actions/upload-artifact@v4
+          poetry run coverage run -m pytest tests/
+          poetry run coverage xml
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-main
-          path: ./coverage.xml
+          path: coverage.xml
+      
 
   codecov-upload:
     runs-on: ubuntu-latest
@@ -79,12 +94,21 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-docs
-      - name: Install dependencies
+      - name: Install Poetry
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[docs]" --upgrade
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate version.py from pyproject.toml
+        run: |
+          version=$(poetry version -s)
+          echo "__version__ = '${version}'" > pyroengine/version.py
+      
+      - name: Install documentation dependencies
+        run: poetry install --with docs
+        
       - name: Build documentation
-        run: sphinx-build docs/source docs/build -a
+        run: poetry run sphinx-build docs/source docs/build -a
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit
 

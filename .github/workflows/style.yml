@@ -2,112 +2,63 @@ name: style
 
 on:
   push:
-    branches: [main, develop]
+    branches: main
   pull_request:
-    branches: [main, develop]
+    branches: develop
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.5.13"
+  POETRY_VERSION: "2.0.0"
 
 jobs:
-  flake8:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python: ['3.9']
+  ruff:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - name: Run flake8
-        run: |
-          pip install flake8
-          flake8 --version
-          flake8
-
-  isort:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python: ['3.9']
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: abatilo/actions-poetry@v4
         with:
-          python-version: ${{ matrix.python }}
-          architecture: x64
-      - name: Run isort
+          poetry-version: ${{ env.POETRY_VERSION }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Add poetry export plugin
+        run: poetry self add poetry-plugin-export
+      - name: Install quality dependencies
         run: |
-          pip install isort
-          isort --version
-          isort .
-          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then exit 1; else echo "All clear"; fi
+          poetry export -f requirements.txt --without-hashes --only quality --output requirements.txt
+          uv pip install --system -r requirements.txt
+      - name: Run ruff
+        run: |
+          ruff --version
+          ruff format --check --diff .
+          ruff check --diff .
 
   mypy:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python: ['3.9']
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - name: Cache python modules
-        uses: actions/cache@v4
+      - uses: abatilo/actions-poetry@v4
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}
-      - name: Install dependencies
+          poetry-version: ${{ env.POETRY_VERSION }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Add poetry export plugin
+        run: poetry self add poetry-plugin-export
+      - name: Install quality dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e . --upgrade
-          pip install mypy
+          poetry export -f requirements.txt --without-hashes --with quality --output requirements.txt
+          uv pip install --system -r requirements.txt
       - name: Run mypy
         run: |
           mypy --version
           mypy
-
-  pydocstyle:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python: ['3.9']
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python }}
-          architecture: x64
-      - name: Run pydocstyle
-        run: |
-          pip install pydocstyle[toml]
-          pydocstyle --version
-          pydocstyle
-
-  black:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python: ['3.9']
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python }}
-          architecture: x64
-      - name: Run black
-        run: |
-          pip install black
-          black --version
-          black --check --diff .

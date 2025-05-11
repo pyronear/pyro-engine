@@ -9,7 +9,6 @@ from pyroengine.vision import Classifier
 
 def get_creation_date(file_path):
     if os.path.exists(file_path):
-
         # For Unix-like systems
         stat = os.stat(file_path)
         try:
@@ -20,8 +19,7 @@ def get_creation_date(file_path):
 
         creation_date = datetime.datetime.fromtimestamp(creation_time)
         return creation_date
-    else:
-        return None
+    return None
 
 
 def test_classifier(tmpdir_factory, mock_wildfire_image):

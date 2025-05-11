@@ -249,5 +249,5 @@ class SystemController:
         """
         repr_str = f"{self.__class__.__name__}("
         for cam in self.cameras:
-            repr_str += f"\n\t{repr(cam)},"
+            repr_str += f"\n\t{cam!r},"
         return repr_str + "\n)"
