@@ -18,7 +18,7 @@ def calculate_center_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_ti
     """
     Calculates the time needed to center the camera based on FOV layout.
     """
-    effective_angle = (fov / 2 - (4 * fov - 3 * overlap - 180 + shift_angle) + overlap / 2)
+    effective_angle = fov / 2 - (4 * fov - 3 * overlap - 180 + shift_angle) + overlap / 2
     shift_time = effective_angle / cam_speed_deg_per_sec - cam_stop_time
     return shift_time - latency
 
@@ -55,7 +55,15 @@ def draw_axes_on_image(image, fov):
         cv2.line(image, (x_pos, line_y_top - 20), (x_pos, line_y_top + 20), (255, 255, 255), 2)
         text = f"{angle_right:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-        cv2.putText(image, text, (x_pos - text_width // 2, line_y_top + 40 + text_height), font, font_scale, text_color, font_thickness)
+        cv2.putText(
+            image,
+            text,
+            (x_pos - text_width // 2, line_y_top + 40 + text_height),
+            font,
+            font_scale,
+            text_color,
+            font_thickness,
+        )
 
     for i in range(num_graduations + 1):
         x_pos = int(i * width / num_graduations)
@@ -63,7 +71,9 @@ def draw_axes_on_image(image, fov):
         cv2.line(image, (x_pos, line_y_bottom - 20), (x_pos, line_y_bottom + 20), (255, 255, 255), 2)
         text = f"{angle_left:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-        cv2.putText(image, text, (x_pos - text_width // 2, line_y_bottom - 30), font, font_scale, text_color, font_thickness)
+        cv2.putText(
+            image, text, (x_pos - text_width // 2, line_y_bottom - 30), font, font_scale, text_color, font_thickness
+        )
 
     return image
 
@@ -87,9 +97,7 @@ def main():
     center_shift_time = calculate_center_shift_time(
         args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME, args.shift_angle
     )
-    overlap_shift_time = calculate_overlap_shift_time(
-        args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME
-    )
+    overlap_shift_time = calculate_overlap_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME)
 
     os.makedirs(args.output_folder, exist_ok=True)
     camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
@@ -109,7 +117,7 @@ def main():
         camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
 
         for i in range(8):
-            print(f"Loop {i+1}/8: Capturing image.")
+            print(f"Loop {i + 1}/8: Capturing image.")
             image = camera.capture()
             if image:
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)

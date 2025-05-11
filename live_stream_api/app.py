@@ -52,12 +52,7 @@ with open(CREDENTIALS_PATH, "r") as file:
 
 # Build cameras dictionary
 CAMERAS = {
-    ip: {
-        "ip": ip,
-        "username": CAM_USER,
-        "password": CAM_PWD,
-        "brand": credentials[ip].get("brand", "unknown")
-    }
+    ip: {"ip": ip, "username": CAM_USER, "password": CAM_PWD, "brand": credentials[ip].get("brand", "unknown")}
     for ip in credentials
 }
 
@@ -67,7 +62,7 @@ CAMERA_OBJECTS = {
         username=cam_info["username"],
         password=cam_info["password"],
         cam_poses=credentials[ip].get("poses"),
-        cam_azimuths=credentials[ip].get("azimuths")
+        cam_azimuths=credentials[ip].get("azimuths"),
     )
     for ip, cam_info in CAMERAS.items()
 }
@@ -86,8 +81,6 @@ STREAMS = {
     }
     for cam_id, cam_info in CAMERAS.items()
 }
-
-
 
 
 def is_process_running(proc):
@@ -121,8 +114,6 @@ def stop_stream_if_idle():
             stopped_cam = stop_any_running_stream()
             if stopped_cam:
                 logging.info(f"Stream for {stopped_cam} stopped due to inactivity")
-
-
 
 
 # Start background thread
@@ -206,6 +197,7 @@ async def start_stream(camera_id: str):
         "previous_stream": (stopped_cam if stopped_cam else "No previous stream was running"),
     }
 
+
 @app.post("/stop_stream")
 async def stop_stream():
     """Stops any active stream."""
@@ -232,35 +224,12 @@ async def stream_status():
 
 # Lookup dictionaries for pan speeds
 PAN_SPEEDS = {
-    "reolink-823S2": {
-        1: 1.4723,
-        2: 2.7747,
-        3: 4.2481,
-        4: 5.6113,
-        5: 7.3217
-    },
-    "reolink-823A16": {
-        1: 1.4403,
-        2: 2.714,
-        3: 4.1801,
-        4: 5.6259,
-        5: 7.2743
-    }
+    "reolink-823S2": {1: 1.4723, 2: 2.7747, 3: 4.2481, 4: 5.6113, 5: 7.3217},
+    "reolink-823A16": {1: 1.4403, 2: 2.714, 3: 4.1801, 4: 5.6259, 5: 7.2743},
 }
 
 # Lookup dictionaries for tilt speeds
-TILT_SPEEDS = {
-    "reolink-823S2": {
-        1: 2.1392,
-        2: 3.9651,
-        3: 6.0554
-    },
-    "reolink-823A16": {
-        1: 1.7998,
-        2: 3.6733,
-        3: 5.5243
-    }
-}
+TILT_SPEEDS = {"reolink-823S2": {1: 2.1392, 2: 3.9651, 3: 6.0554}, "reolink-823A16": {1: 1.7998, 2: 3.6733, 3: 5.5243}}
 
 
 def get_pan_speed_per_sec(brand: str, level: int) -> Optional[float]:
@@ -313,7 +282,9 @@ async def move_camera(
                 return {"error": f"Unsupported brand '{brand}' or speed level {speed}."}
 
             duration_sec = abs(degrees) / deg_per_sec
-            logging.info(f"Camera {camera_id}: moving {direction} for {duration_sec:.2f}s at speed {speed} (brand={brand})")
+            logging.info(
+                f"Camera {camera_id}: moving {direction} for {duration_sec:.2f}s at speed {speed} (brand={brand})"
+            )
 
             cam.move_camera(direction, speed=speed)
             time.sleep(duration_sec)
@@ -339,7 +310,6 @@ async def move_camera(
         return {"error": str(e)}
 
 
-
 @app.post("/stop/{camera_id}")
 async def stop_camera(camera_id: str):
     """Stops the camera movement."""
@@ -358,7 +328,6 @@ async def stop_camera(camera_id: str):
     except Exception as e:
         logging.error(f"Camera {camera_id}: failed to stop - {e}")
         return {"error": str(e)}
-
 
 
 @app.post("/zoom/{camera_id}/{level}")
@@ -382,8 +351,6 @@ async def zoom_camera(camera_id: str, level: int):
     except Exception as e:
         logging.error(f"Camera {camera_id}: failed to set zoom - {e}")
         return {"error": str(e)}
-
-
 
 
 @app.get("/capture/{camera_id}")
@@ -415,8 +382,6 @@ async def capture_image(camera_id: str, pose_id: Optional[int] = None):
         return {"error": str(e)}
 
 
-
-
 @app.get("/is_stream_running/{camera_id}")
 async def is_stream_running(camera_id: str):
     """Check if a specific camera is currently streaming."""
@@ -432,16 +397,14 @@ async def get_camera_infos():
     camera_infos = []
 
     for ip, cam_info in credentials.items():
-        camera_infos.append(
-            {
-                "ip": ip,
-                "azimuths": cam_info.get("azimuths", []),
-                "poses": cam_info.get("poses", []),
-                "name": cam_info.get("name", "Unknown"),
-                "id": cam_info.get("id"),
-                "type": cam_info.get("type", "Unknown"),
-                "brand": cam_info.get("brand", "unknown")
-            }
-        )
+        camera_infos.append({
+            "ip": ip,
+            "azimuths": cam_info.get("azimuths", []),
+            "poses": cam_info.get("poses", []),
+            "name": cam_info.get("name", "Unknown"),
+            "id": cam_info.get("id"),
+            "type": cam_info.get("type", "Unknown"),
+            "brand": cam_info.get("brand", "unknown"),
+        })
 
     return {"cameras": camera_infos}
