@@ -40,7 +40,7 @@ python-dotenv = "==1.1.0"
 
 
 [tool.poetry.group.quality.dependencies]
-ruff = "^0.4.0"
+ruff = "^0.11.9"
 black = "^24.3.0"
 isort = "^5.13.2"
 mypy = "^1.9.0"
