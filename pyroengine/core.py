@@ -71,16 +71,15 @@ async def capture_camera_image(
     """
     cam_id = camera.ip_address
     try:
-        if server_ip:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
-                    data = await resp.json()
-                    if data.get("running"):
-                        logging.info(f"{cam_id} Camera is streaming, skipping capture.")
-                        return True
-
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
+                if server_ip:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
+                            data = await resp.json()
+                            if data.get("running"):
+                                logging.info(f"{cam_id} Camera is streaming, skipping capture.")
+                                return True
                 cam_id = f"{camera.ip_address}_{pose_id}"
                 frame = camera.capture()
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
