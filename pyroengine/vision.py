@@ -27,7 +27,9 @@ MODEL_NAME = "yolov11s.pt"
 METADATA_NAME = "model_metadata.json"
 
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
 
 
 # Utility function to save metadata
@@ -48,7 +50,14 @@ class Classifier:
     """
 
     def __init__(
-        self, model_folder="data", imgsz=1024, conf=0.15, iou=0, format="ncnn", model_path=None, max_bbox_size=0.4
+        self,
+        model_folder="data",
+        imgsz=1024,
+        conf=0.15,
+        iou=0,
+        format="ncnn",
+        model_path=None,
+        max_bbox_size=0.4,
     ) -> None:
         if model_path:
             # Checks that the file exists
@@ -56,12 +65,16 @@ class Classifier:
                 raise ValueError(f"Model file not found: {model_path}")
             # Checks that file format is .onnx
             if os.path.splitext(model_path)[-1].lower() != ".onnx":
-                raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
+                raise ValueError(
+                    f"Input model_path should point to an ONNX export but currently is {model_path}"
+                )
             self.format = "onnx"
         else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
-                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
+                    logging.info(
+                        "NCNN format is optimized for arm architecture only, switching to onnx is recommended"
+                    )
 
                 model = "yolov11s_ncnn_model.zip"
                 self.format = "ncnn"
@@ -80,20 +93,30 @@ class Classifier:
             expected_sha256 = self.get_sha(model_info.siblings)
 
             if not expected_sha256:
-                raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
+                raise ValueError(
+                    "SHA256 hash for the model file not found in the Hugging Face model metadata."
+                )
 
             # Check if the model file exists
             if os.path.isfile(model_path):
                 # Load existing metadata
                 metadata = self.load_metadata(metadata_path)
                 if metadata and metadata.get("sha256") == expected_sha256:
-                    logging.info("Model already exists and the SHA256 hash matches. No download needed.")
+                    logging.info(
+                        "Model already exists and the SHA256 hash matches. No download needed."
+                    )
                 else:
-                    logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                    logging.info(
+                        "Model exists but the SHA256 hash does not match or the file doesn't exist."
+                    )
                     os.remove(model_path)
-                    self.download_model(model_url, model_path, expected_sha256, metadata_path)
+                    self.download_model(
+                        model_url, model_path, expected_sha256, metadata_path
+                    )
             else:
-                self.download_model(model_url, model_path, expected_sha256, metadata_path)
+                self.download_model(
+                    model_url, model_path, expected_sha256, metadata_path
+                )
 
             file_name, ext = os.path.splitext(model_path)
             if ext == ".zip":
@@ -110,7 +133,9 @@ class Classifier:
             try:
                 self.ort_session = onnxruntime.InferenceSession(model_path)
             except Exception as e:
-                raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {str(e)}") from e
+                raise RuntimeError(
+                    f"Failed to load the ONNX model from {model_path}: {str(e)}"
+                ) from e
 
             logging.info(f"ONNX model loaded successfully from {model_path}")
 
@@ -121,7 +146,9 @@ class Classifier:
 
     def is_arm_architecture(self):
         # Check for ARM architecture
-        return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
+        return platform.machine().startswith("arm") or platform.machine().startswith(
+            "aarch"
+        )
 
     def get_sha(self, siblings):
         # Extract the SHA256 hash from the model files metadata
@@ -136,7 +163,9 @@ class Classifier:
 
         # Download the model
         logging.info(f"Downloading model from {model_url} ...")
-        with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
+        with DownloadProgressBar(
+            unit="B", unit_scale=True, miniters=1, desc=model_path
+        ) as t:
             urlretrieve(model_url, model_path, reporthook=t.update_to)
         logging.info("Model downloaded!")
 
@@ -163,16 +192,24 @@ class Classifier:
             - The resized and normalized image of shape (1, C, H, W).
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
-        np_img, pad = letterbox(np.array(pil_img), self.imgsz)  # Applies letterbox resize with padding
+        np_img, pad = letterbox(
+            np.array(pil_img), self.imgsz
+        )  # Applies letterbox resize with padding
 
         if self.format == "ncnn":
-            np_img = ncnn.Mat.from_pixels(np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0])
+            np_img = ncnn.Mat.from_pixels(
+                np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0]
+            )
             mean = [0, 0, 0]
             std = [1 / 255, 1 / 255, 1 / 255]
             np_img.substract_mean_normalize(mean=mean, norm=std)
         else:
-            np_img = np.expand_dims(np_img.astype("float32"), axis=0)  # Add batch dimension
-            np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+            np_img = np.expand_dims(
+                np_img.astype("float32"), axis=0
+            )  # Add batch dimension
+            np_img = np.ascontiguousarray(
+                np_img.transpose((0, 3, 1, 2))
+            )  # Convert from BHWC to BCHW format
             np_img /= 255.0  # Normalize to [0, 1]
 
         return np_img, pad
@@ -206,7 +243,9 @@ class Classifier:
 
         return pred
 
-    def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def __call__(
+        self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None
+    ) -> np.ndarray:
         """Run the classifier on an input image.
 
         Args:

@@ -22,9 +22,14 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
 
     # Cache saving
     _ts = datetime.now().isoformat()
-    engine._stage_alert(mock_wildfire_image, 0, datetime.now().isoformat(), bboxes="dummy")
+    engine._stage_alert(
+        mock_wildfire_image, 0, datetime.now().isoformat(), bboxes="dummy"
+    )
     assert len(engine._alerts) == 1
-    assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
+    assert (
+        engine._alerts[0]["ts"] < datetime.now().isoformat()
+        and _ts < engine._alerts[0]["ts"]
+    )
     assert engine._alerts[0]["media_id"] is None
     assert engine._alerts[0]["alert_id"] is None
 
@@ -33,7 +38,11 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._cache.joinpath("pending_alerts.json").is_file()
     with open(engine._cache.joinpath("pending_alerts.json"), "rb") as f:
         cache_dump = json.load(f)
-    assert isinstance(cache_dump, list) and len(cache_dump) == 1 and len(engine._alerts) == 1
+    assert (
+        isinstance(cache_dump, list)
+        and len(cache_dump) == 1
+        and len(engine._alerts) == 1
+    )
     assert cache_dump[0] == {
         "frame_path": str(engine._cache.joinpath("pending_frame0.jpg")),
         "cam_id": 0,
@@ -49,7 +58,9 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine.clear_cache()
 
     # inference
-    engine = Engine(nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True)
+    engine = Engine(
+        nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True
+    )
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
@@ -90,7 +101,9 @@ def create_dummy_onnx_model(model_path):
     node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
 
-    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 11)])
+    model = onnx.helper.make_model(
+        graph, opset_imports=[onnx.helper.make_opsetid("", 11)]
+    )
 
     onnx.save(model, model_path)
 
@@ -138,7 +151,10 @@ def test_nonexistent_model(mock_isfile):
 def test_invalid_extension(mock_isfile):
     """Tests Engine instanciation with a file format different than .onnx"""
     mock_isfile.return_value = True  # Simulates file existence
-    with pytest.raises(ValueError, match=r"Input model_path should point to an ONNX export but currently is *"):
+    with pytest.raises(
+        ValueError,
+        match=r"Input model_path should point to an ONNX export but currently is *",
+    ):
         Engine(model_path="model.ncnn")
 
 

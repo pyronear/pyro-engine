@@ -48,7 +48,9 @@ SystemEnv = namedtuple(
 
 def run(command):
     """Returns (return-code, stdout, stderr)"""
-    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    p = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
     output, err = p.communicate()
     rc = p.returncode
     if PY3:
@@ -99,11 +101,15 @@ def get_windows_version(run_lambda):
 
 
 def get_lsb_version(run_lambda):
-    return run_and_parse_first_match(run_lambda, "lsb_release -a", r"Description:\t(.*)")
+    return run_and_parse_first_match(
+        run_lambda, "lsb_release -a", r"Description:\t(.*)"
+    )
 
 
 def check_release_file(run_lambda):
-    return run_and_parse_first_match(run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"')
+    return run_and_parse_first_match(
+        run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"'
+    )
 
 
 def get_os(run_lambda):

@@ -18,7 +18,9 @@ from pyroengine.sensors import ReolinkCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
 
 
 def main(args):
@@ -46,7 +48,10 @@ def main(args):
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
             for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"], cam_azimuth
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = (
+                    cam_data["token"],
+                    cam_azimuth,
+                )
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
@@ -54,7 +59,14 @@ def main(args):
 
         cameras.append(
             ReolinkCamera(
-                _ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol, focus_position
+                _ip,
+                CAM_USER,
+                CAM_PWD,
+                cam_data["type"],
+                cam_poses,
+                cam_azimuths,
+                args.protocol,
+                focus_position,
             )
         )
 
@@ -85,15 +97,22 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="Raspberry Pi system controller",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
-    parser.add_argument("--thresh", type=float, default=0.16, help="Confidence threshold")
-    parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
+    parser.add_argument(
+        "--thresh", type=float, default=0.16, help="Confidence threshold"
+    )
+    parser.add_argument(
+        "--max_bbox_size", type=float, default=0.4, help="Maximum bbox size"
+    )
 
     # Camera & cache
-    parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
+    parser.add_argument(
+        "--creds", type=str, default="data/credentials.json", help="Camera credentials"
+    )
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
     parser.add_argument(
         "--frame-size",
@@ -102,7 +121,12 @@ if __name__ == "__main__":
         help="Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)",
     )
     parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
-    parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
+    parser.add_argument(
+        "--cache-size",
+        type=int,
+        default=20,
+        help="Maximum number of alerts to save in cache",
+    )
     parser.add_argument(
         "--nb-consecutive_frames",
         type=int,
@@ -110,19 +134,47 @@ if __name__ == "__main__":
         help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
-        "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
+        "--cache_backup_period",
+        type=int,
+        default=60,
+        help="Number of minutes between each cache backup to disk",
     )
-    parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
+    parser.add_argument(
+        "--day_time_strategy",
+        type=str,
+        default="ir",
+        help="strategy to define if it's daytime",
+    )
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
-    parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+    parser.add_argument(
+        "--backup-size",
+        type=int,
+        default=10000,
+        help="Local backup can't be bigger than 10Go",
+    )
 
     # Debug
-    parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
-    parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
+    parser.add_argument(
+        "--save_captured_frames",
+        type=bool,
+        default=False,
+        help="Save all captured frames locally",
+    )
+    parser.add_argument(
+        "--send_alerts",
+        type=bool,
+        default=True,
+        help="Save all captured frames locally",
+    )
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument(
+        "--period",
+        type=int,
+        default=30,
+        help="Number of seconds between each camera stream analysis",
+    )
     args = parser.parse_args()
 
     main(args)

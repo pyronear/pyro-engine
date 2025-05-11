@@ -20,7 +20,9 @@ __all__ = ["SystemController", "is_day_time"]
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Configure logging
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
 
 
 def is_day_time(cache, frame, strategy, delta=0):
@@ -47,7 +49,9 @@ def is_day_time(cache, frame, strategy, delta=0):
         sunrise = datetime.strptime(lines[0].strip(), "%H:%M")
         sunset = datetime.strptime(lines[1].strip(), "%H:%M")
         now = datetime.strptime(datetime.now().isoformat().split("T")[1][:5], "%H:%M")
-        if (now - sunrise).total_seconds() < -delta or (sunset - now).total_seconds() < -delta:
+        if (now - sunrise).total_seconds() < -delta or (
+            sunset - now
+        ).total_seconds() < -delta:
             is_day = False
 
     if strategy in ["both", "ir"]:
@@ -58,7 +62,9 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue) -> bool:
+async def capture_camera_image(
+    camera: ReolinkCamera, image_queue: asyncio.Queue
+) -> bool:
     """
     Captures an image from the camera and puts it into a queue. Returns whether it is daytime for this camera.
 
@@ -164,7 +170,9 @@ class SystemController:
                         cam_id = f"{camera.ip_address}_{pose_id}"
                         frame = camera.capture()
                         # Move camera to the next pose to avoid waiting
-                        next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
+                        next_pos_id = camera.cam_poses[
+                            (idx + 1) % len(camera.cam_poses)
+                        ]
                         camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
                         if frame is not None:
                             if not is_day_time(None, frame, "ir"):
@@ -175,7 +183,9 @@ class SystemController:
                         if not is_day_time(None, frame, "ir"):
                             return False
             except Exception as e:
-                logging.exception(f"Error during image capture from camera {cam_id}: {e}")
+                logging.exception(
+                    f"Error during image capture from camera {cam_id}: {e}"
+                )
         return True
 
     async def run(self, period: int = 30, send_alerts: bool = True) -> bool:
@@ -231,13 +241,17 @@ class SystemController:
             await self.run(period, send_alerts)
             if not self.is_day:
                 while not await self.night_mode():
-                    logging.info("Nighttime detected by at least one camera, sleeping for 1 hour.")
+                    logging.info(
+                        "Nighttime detected by at least one camera, sleeping for 1 hour."
+                    )
                     await asyncio.sleep(3600)  # Sleep for 1 hour
             else:
                 # Sleep only once all images are processed
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - (loop_time), 0)
-                logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}")
+                logging.info(
+                    f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f}"
+                )
                 await asyncio.sleep(sleep_time)
 
     def __repr__(self) -> str:

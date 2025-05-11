@@ -1,15 +1,12 @@
-# this target runs checks on all files
+# This target runs checks on all files
 quality:
-	isort . -c
-	flake8
+	ruff check .
 	mypy
-	pydocstyle
-	black --check .
 
-# this target runs checks on all files and potentially modifies some of them
+# This target auto-fixes lint issues where possible
 style:
-	isort .
-	black .
+	ruff format .
+	ruff check --fix .
 
 # Run tests for the library
 test:

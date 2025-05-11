@@ -29,10 +29,18 @@ def main():
         description="Capture images from positions 20 to 27, resize to 1280x720, and save locally."
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument("--username", help="Username for camera access", default=cam_user)
-    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
+    parser.add_argument(
+        "--username", help="Username for camera access", default=cam_user
+    )
+    parser.add_argument(
+        "--password", help="Password for camera access", default=cam_pwd
+    )
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
-    parser.add_argument("--output_folder", help="Folder to save captured images", default="captured_positions")
+    parser.add_argument(
+        "--output_folder",
+        help="Folder to save captured images",
+        default="captured_positions",
+    )
 
     args = parser.parse_args()
 
@@ -40,7 +48,12 @@ def main():
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize camera
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
+    camera = ReolinkCamera(
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+    )
 
     try:
         for pose_id in range(20, 28):  # Positions 20 through 27

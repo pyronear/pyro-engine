@@ -9,7 +9,6 @@ from pyroengine.vision import Classifier
 
 def get_creation_date(file_path):
     if os.path.exists(file_path):
-
         # For Unix-like systems
         stat = os.stat(file_path)
         try:

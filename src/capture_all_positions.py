@@ -18,7 +18,9 @@ def calculate_shift_time(fov, overlap, cam_speed_1, cam_stop_time, shift_angle=0
     """
     Calculates the shift time based on FOV, overlap, camera speed, stop time, and shift angle.
     """
-    shift_time = (fov / 2 - (4 * fov - 3 * overlap - 180 + shift_angle) + overlap / 2) / cam_speed_1 - cam_stop_time
+    shift_time = (
+        fov / 2 - (4 * fov - 3 * overlap - 180 + shift_angle) + overlap / 2
+    ) / cam_speed_1 - cam_stop_time
     return shift_time
 
 
@@ -69,11 +71,19 @@ def draw_axes_on_image(image, fov):
         angle_right = i * (fov / num_graduations)
 
         # Graduation mark
-        cv2.line(image, (x_pos, line_y_top - 20), (x_pos, line_y_top + 20), (255, 255, 255), 2)
+        cv2.line(
+            image,
+            (x_pos, line_y_top - 20),
+            (x_pos, line_y_top + 20),
+            (255, 255, 255),
+            2,
+        )
 
         # Label
         text = f"{angle_right:.1f}"
-        (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
+        (text_width, text_height), _ = cv2.getTextSize(
+            text, font, font_scale, font_thickness
+        )
         cv2.putText(
             image,
             text,
@@ -91,11 +101,19 @@ def draw_axes_on_image(image, fov):
         angle_left = -fov + i * (fov / num_graduations)
 
         # Graduation mark
-        cv2.line(image, (x_pos, line_y_bottom - 20), (x_pos, line_y_bottom + 20), (255, 255, 255), 2)
+        cv2.line(
+            image,
+            (x_pos, line_y_bottom - 20),
+            (x_pos, line_y_bottom + 20),
+            (255, 255, 255),
+            2,
+        )
 
         # Label
         text = f"{angle_left:.1f}"
-        (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
+        (text_width, text_height), _ = cv2.getTextSize(
+            text, font, font_scale, font_thickness
+        )
         cv2.putText(
             image,
             text,
@@ -124,29 +142,63 @@ def main():
         description="Script to control Reolink camera for specific movements and capture images."
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument("--username", help="Username for camera access", default=cam_user)
-    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
-    parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
-    parser.add_argument("--output_folder", help="Folder to save captured images", default="captured_images")
-    parser.add_argument("--fov", type=float, default=54.2, help="Field of View of the camera")
-    parser.add_argument("--overlap", type=float, default=6, help="Overlap angle between positions")
-    parser.add_argument("--cam_speed_1", type=float, default=1.4, help="Camera speed for PTZ operation")
-    parser.add_argument("--cam_stop_time", type=float, default=0.5, help="Camera stop time after movement")
     parser.add_argument(
-        "--move_duration", type=float, default=34, help="Duration in seconds for the rightward move in each loop"
+        "--username", help="Username for camera access", default=cam_user
     )
-    parser.add_argument("--shift_angle", type=float, default=0, help="Shift angle for time calculation adjustment")
+    parser.add_argument(
+        "--password", help="Password for camera access", default=cam_pwd
+    )
+    parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
+    parser.add_argument(
+        "--output_folder",
+        help="Folder to save captured images",
+        default="captured_images",
+    )
+    parser.add_argument(
+        "--fov", type=float, default=54.2, help="Field of View of the camera"
+    )
+    parser.add_argument(
+        "--overlap", type=float, default=6, help="Overlap angle between positions"
+    )
+    parser.add_argument(
+        "--cam_speed_1", type=float, default=1.4, help="Camera speed for PTZ operation"
+    )
+    parser.add_argument(
+        "--cam_stop_time",
+        type=float,
+        default=0.5,
+        help="Camera stop time after movement",
+    )
+    parser.add_argument(
+        "--move_duration",
+        type=float,
+        default=34,
+        help="Duration in seconds for the rightward move in each loop",
+    )
+    parser.add_argument(
+        "--shift_angle",
+        type=float,
+        default=0,
+        help="Shift angle for time calculation adjustment",
+    )
 
     args = parser.parse_args()
 
     # Calculate shift time using the provided shift_angle parameter
-    shift_time = calculate_shift_time(args.fov, args.overlap, args.cam_speed_1, args.cam_stop_time, args.shift_angle)
+    shift_time = calculate_shift_time(
+        args.fov, args.overlap, args.cam_speed_1, args.cam_stop_time, args.shift_angle
+    )
 
     # Create output directory if it doesn't exist
     os.makedirs(args.output_folder, exist_ok=True)
 
     # Initialize camera
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
+    camera = ReolinkCamera(
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+    )
 
     try:
         # Move to position 10 at speed 64
@@ -169,7 +221,7 @@ def main():
         # Loop to capture, register PTZ positions, and move right
         for i in range(8):
             # Capture image
-            print(f"Loop {i+1}/8: Capturing image.")
+            print(f"Loop {i + 1}/8: Capturing image.")
             image = camera.capture()
             if image:
                 # Convert the image to an OpenCV-compatible format

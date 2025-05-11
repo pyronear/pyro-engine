@@ -38,11 +38,21 @@ def main():
         description="Set up camera positions by saving specific poses to new pose IDs and capturing images."
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument("--username", help="Username for camera access", default=cam_user)
-    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
+    parser.add_argument(
+        "--username", help="Username for camera access", default=cam_user
+    )
+    parser.add_argument(
+        "--password", help="Password for camera access", default=cam_pwd
+    )
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
-    parser.add_argument("--output_folder", help="Folder to save captured images", default="captured_positions")
-    parser.add_argument("--demo", action="store_true", help="If set, demo mode is activated")
+    parser.add_argument(
+        "--output_folder",
+        help="Folder to save captured images",
+        default="captured_positions",
+    )
+    parser.add_argument(
+        "--demo", action="store_true", help="If set, demo mode is activated"
+    )
 
     args = parser.parse_args()
 
@@ -52,7 +62,12 @@ def main():
     os.makedirs(output_folder, exist_ok=True)
 
     # Initialize camera
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
+    camera = ReolinkCamera(
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+    )
 
     # Mapping of original poses to new pose IDs
     pose_mapping = {22: 0, 23: 1, 24: 2, 25: 3}

@@ -19,7 +19,9 @@ CAM_PWD = os.getenv("CAM_PWD", "@Pyronear")
 PROTOCOL = "http"
 
 # Parse the camera IP address from CLI arguments
-parser = argparse.ArgumentParser(description="Sweep through focus values and capture images.")
+parser = argparse.ArgumentParser(
+    description="Sweep through focus values and capture images."
+)
 parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
 args = parser.parse_args()
 CAM_IP = args.ip

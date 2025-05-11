@@ -28,7 +28,9 @@ from .vision import Classifier
 
 __all__ = ["Engine"]
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True
+)
 
 
 def handler(signum, frame):
@@ -97,7 +99,9 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size)
+        self.model = Classifier(
+            model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size
+        )
         self.conf_thresh = conf_thresh
 
         # API Setup
@@ -124,7 +128,10 @@ class Engine:
 
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {"last_predictions": deque([], self.nb_consecutive_frames), "ongoing": False},
+            "-1": {
+                "last_predictions": deque([], self.nb_consecutive_frames),
+                "ongoing": False,
+            },
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
@@ -138,13 +145,17 @@ class Engine:
             for cam_id in cam_creds:
                 mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
                 if os.path.isfile(mask_file):
-                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
+                    self.occlusion_masks[cam_id] = np.array(
+                        Image.open(mask_file).convert(("L"))
+                    )
                 else:
                     self.occlusion_masks[cam_id] = None
 
         # Restore pending alerts cache
         self._alerts: deque = deque([], cache_size)
-        self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
+        self._cache = Path(
+            cache_folder
+        )  # with Docker, the path has to be a bind volume
         assert self._cache.is_dir()
         self._load_cache()
         self.last_cache_dump = datetime.now(timezone.utc)
@@ -195,14 +206,18 @@ class Engine:
             for entry in data:
                 # Open image
                 frame = Image.open(entry["frame_path"], mode="r")
-                self._alerts.append({"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]})
+                self._alerts.append(
+                    {"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]}
+                )
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
+    def _update_states(
+        self, frame: Image.Image, preds: np.ndarray, cam_key: str
+    ) -> int:
         """Updates the detection states"""
 
         conf_th = self.conf_thresh * self.nb_consecutive_frames
@@ -232,9 +247,10 @@ class Engine:
 
                 best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
                 combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-                conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
+                conf = np.max(best_boxes_scores) / (
+                    self.nb_consecutive_frames + 1
+                )  # memory + preds
                 if len(combine_predictions):
-
                     # send only preds boxes that match combine_predictions
                     ious = box_iou(combine_predictions[:, :4], preds[:, :4])
                     iou_match = [np.max(iou) > 0 for iou in ious]
@@ -246,11 +262,15 @@ class Engine:
 
                     else:
                         # Add missing bboxes
-                        ious = box_iou(combine_predictions[:, :4], output_predictions[:, :4])
+                        ious = box_iou(
+                            combine_predictions[:, :4], output_predictions[:, :4]
+                        )
                         missing_bbox = combine_predictions[ious[0] == 0, :]
                         if len(missing_bbox):
                             missing_bbox[:, -1] = 0
-                            output_predictions = np.concatenate([output_predictions, missing_bbox])
+                            output_predictions = np.concatenate(
+                                [output_predictions, missing_bbox]
+                            )
 
                     # Limit bbox size for api
                     output_predictions = np.round(output_predictions, 3)  # max 3 digit
@@ -262,7 +282,13 @@ class Engine:
             output_predictions[:, 2:4] += 0.0001
 
         self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
+            (
+                frame,
+                preds,
+                output_predictions.tolist(),
+                datetime.now(timezone.utc).isoformat(),
+                False,
+            )
         )
 
         # update state
@@ -306,12 +332,24 @@ class Engine:
         logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
         # Alert
-        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+        if (
+            conf > self.conf_thresh
+            and len(self.api_client) > 0
+            and isinstance(cam_id, str)
+        ):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
+            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(
+                self._states[cam_key]["last_predictions"]
+            ):
                 if not is_staged:
                     self._stage_alert(frame, cam_id, ts, bboxes)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
+                    self._states[cam_key]["last_predictions"][idx] = (
+                        frame,
+                        preds,
+                        bboxes,
+                        ts,
+                        True,
+                    )
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
@@ -321,7 +359,9 @@ class Engine:
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
+    def _stage_alert(
+        self, frame: Image.Image, cam_id: str, ts: int, bboxes: list
+    ) -> None:
         # Store information in the queue
         self._alerts.append(
             {
@@ -340,7 +380,9 @@ class Engine:
                 # try to upload the oldest element
                 frame_info = self._alerts[0]
                 cam_id = frame_info["cam_id"]
-                logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+                logging.info(
+                    f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}..."
+                )
 
                 # Save alert on device
                 self._local_backup(frame_info["frame"], cam_id)
@@ -348,24 +390,32 @@ class Engine:
                 try:
                     # Detection creation
                     stream = io.BytesIO()
-                    frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                    frame_info["frame"].save(
+                        stream, format="JPEG", quality=self.jpeg_quality
+                    )
                     bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
                     _, cam_azimuth = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
+                    response = self.api_client[ip].create_detection(
+                        stream.getvalue(), cam_azimuth, bboxes
+                    )
                     # Force a KeyError if the request failed
                     response.json()["id"]
                     # Clear
                     self._alerts.popleft()
                     logging.info(f"Camera '{cam_id}' - alert sent")
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
+                    stream.seek(
+                        0
+                    )  # "Rewind" the stream to the beginning so we can read its content
                 except (KeyError, ConnectionError) as e:
                     logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                     logging.warning(e)
                     break
 
-    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
+    def _local_backup(
+        self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True
+    ) -> None:
         """Save image on device
 
         Args:
