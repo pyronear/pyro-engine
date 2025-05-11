@@ -105,11 +105,11 @@ select = [
     "F", "E", "W", "I", "N",
     "D201", "D202", "D207", "D208", "D214", "D215", "D300", "D301", "D417", "D419",
     "YTT", "ANN", "ASYNC", "S", "BLE", "B", "A", "COM", "CPY", "C4", "T10", "ISC", "ICN", "LOG",
-    "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "PERF", "NPY", "FAST", "FURB", "RUF"
+    "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "PERF", "NPY", "FURB", "RUF"
 ]
 ignore = [
     "E501", "B008", "B904", "C901", "F403", "E731", "C416",
-    "ANN002", "ANN003", "COM812", "ISC001", "FAST002"
+    "ANN002", "ANN003", "COM812", "ISC001"
 ]
 exclude = [".git"]
 
