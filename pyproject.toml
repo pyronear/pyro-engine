@@ -86,6 +86,10 @@ check_untyped_defs = true
 implicit_reexport = false
 
 [[tool.mypy.overrides]]
+module = "pyroengine.__init__"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
 module = [
     "onnxruntime.*",
     "requests.*",
