@@ -52,7 +52,17 @@ def draw_axes_on_image(image, fov):
     for i in range(num_graduations + 1):
         x_pos = int(i * width / num_graduations)
         angle_right = i * (fov / num_graduations)
-        cv2.line(image, (x_pos, line_y_top - 20), (x_pos, line_y_top + 20), (255, 255, 255), 2)
+
+        # Graduation mark
+        cv2.line(
+            image,
+            (x_pos, line_y_top - 20),
+            (x_pos, line_y_top + 20),
+            (255, 255, 255),
+            2,
+        )
+
+        # Label
         text = f"{angle_right:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
         cv2.putText(image, text, (x_pos - text_width // 2, line_y_top + 40 + text_height), font, font_scale, text_color, font_thickness)
@@ -60,7 +70,17 @@ def draw_axes_on_image(image, fov):
     for i in range(num_graduations + 1):
         x_pos = int(i * width / num_graduations)
         angle_left = -fov + i * (fov / num_graduations)
-        cv2.line(image, (x_pos, line_y_bottom - 20), (x_pos, line_y_bottom + 20), (255, 255, 255), 2)
+
+        # Graduation mark
+        cv2.line(
+            image,
+            (x_pos, line_y_bottom - 20),
+            (x_pos, line_y_bottom + 20),
+            (255, 255, 255),
+            2,
+        )
+
+        # Label
         text = f"{angle_left:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
         cv2.putText(image, text, (x_pos - text_width // 2, line_y_bottom - 30), font, font_scale, text_color, font_thickness)
@@ -73,15 +93,41 @@ def main():
     cam_user = os.getenv("CAM_USER")
     cam_pwd = os.getenv("CAM_PWD")
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--ip", required=True, help="Reolink camera IP address")
-    parser.add_argument("--username", default=cam_user)
-    parser.add_argument("--password", default=cam_pwd)
-    parser.add_argument("--protocol", default="http")
-    parser.add_argument("--output_folder", default="captured_images")
-    parser.add_argument("--fov", type=float, default=54.2)
-    parser.add_argument("--overlap", type=float, default=6)
-    parser.add_argument("--shift_angle", type=float, default=0)
+    # Argument parsing
+    parser = argparse.ArgumentParser(
+        description="Script to control Reolink camera for specific movements and capture images."
+    )
+    parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
+    parser.add_argument("--username", help="Username for camera access", default=cam_user)
+    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
+    parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
+    parser.add_argument(
+        "--output_folder",
+        help="Folder to save captured images",
+        default="captured_images",
+    )
+    parser.add_argument("--fov", type=float, default=54.2, help="Field of View of the camera")
+    parser.add_argument("--overlap", type=float, default=6, help="Overlap angle between positions")
+    parser.add_argument("--cam_speed_1", type=float, default=1.4, help="Camera speed for PTZ operation")
+    parser.add_argument(
+        "--cam_stop_time",
+        type=float,
+        default=0.5,
+        help="Camera stop time after movement",
+    )
+    parser.add_argument(
+        "--move_duration",
+        type=float,
+        default=34,
+        help="Duration in seconds for the rightward move in each loop",
+    )
+    parser.add_argument(
+        "--shift_angle",
+        type=float,
+        default=0,
+        help="Shift angle for time calculation adjustment",
+    )
+
     args = parser.parse_args()
 
     center_shift_time = calculate_center_shift_time(
@@ -92,7 +138,14 @@ def main():
     )
 
     os.makedirs(args.output_folder, exist_ok=True)
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
+
+    # Initialize camera
+    camera = ReolinkCamera(
+        ip_address=args.ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+    )
 
     try:
         print("Moving to position 10 at speed 64.")
@@ -109,7 +162,8 @@ def main():
         camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
 
         for i in range(8):
-            print(f"Loop {i+1}/8: Capturing image.")
+            # Capture image
+            print(f"Loop {i + 1}/8: Capturing image.")
             image = camera.capture()
             if image:
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)

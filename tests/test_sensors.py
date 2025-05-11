@@ -176,7 +176,10 @@ def test_get_focus_level_success():
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = [
-        {"code": 0, "value": {"ZoomFocus": {"focus": {"pos": 150}, "zoom": {"pos": 80}}}}
+        {
+            "code": 0,
+            "value": {"ZoomFocus": {"focus": {"pos": 150}, "zoom": {"pos": 80}}},
+        }
     ]
 
     with patch("requests.post", return_value=mock_response):
