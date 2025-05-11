@@ -138,7 +138,7 @@ async def test_capture_images_method(system_controller):
         await system_controller.capture_images(queue)
 
         for camera in system_controller.cameras:
-            mock_capture.assert_any_call(camera, queue)
+            mock_capture.assert_any_call(camera, queue, server_ip=None)
         assert mock_capture.call_count == len(system_controller.cameras)
 
 

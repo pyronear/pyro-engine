@@ -125,23 +125,11 @@ class ReolinkCamera:
             idx (int): The ID of the position to move to (relevant for PTZ cameras).
         """
         url = self._build_url("PtzCtrl")
-        data = [
-            {
-                "cmd": "PtzCtrl",
-                "action": 0,
-                "param": {"channel": 0, "op": operation, "id": idx, "speed": speed},
-            }
-        ]
+        data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
-    def move_in_seconds(
-        self,
-        s: float,
-        operation: str = "Right",
-        speed: int = 20,
-        save_path: str = "im.jpg",
-    ):
+    def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
@@ -220,13 +208,7 @@ class ReolinkCamera:
 
     def set_auto_focus(self, disable: bool):
         url = self._build_url("SetAutoFocus")
-        data = [
-            {
-                "cmd": "SetAutoFocus",
-                "action": 0,
-                "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}},
-            }
-        ]
+        data = [{"cmd": "SetAutoFocus", "action": 0, "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}}}]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
