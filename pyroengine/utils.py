@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm  # type: ignore[import-untyped]
 
-__all__ = ["xywh2xyxy", "letterbox", "nms", "DownloadProgressBar"]
+__all__ = ["DownloadProgressBar", "letterbox", "nms", "xywh2xyxy"]
 
 
 def xywh2xyxy(x: np.ndarray):
@@ -77,13 +77,8 @@ def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):
     Returns:
         (np.ndarray): An NxM numpy array containing the pairwise IoU values for every element in box1 and box2.
     """
-
     (a1, a2), (b1, b2) = np.split(box1, 2, 1), np.split(box2, 2, 1)
-    inter = (
-        (np.minimum(a2, b2[:, None, :]) - np.maximum(a1, b1[:, None, :]))
-        .clip(0)
-        .prod(2)
-    )
+    inter = (np.minimum(a2, b2[:, None, :]) - np.maximum(a1, b1[:, None, :])).clip(0).prod(2)
 
     # IoU = inter / (area1 + area2 - inter)
     return inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:, None] - inter + eps)

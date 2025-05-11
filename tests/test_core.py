@@ -37,9 +37,7 @@ def mock_cameras_ptz(mock_wildfire_image):
 @pytest.fixture
 def mock_cameras_ptz_night():
     camera = MagicMock()
-    camera.capture.return_value = Image.new(
-        "RGB", (100, 100), (255, 255, 255)
-    )  # Mock captured image
+    camera.capture.return_value = Image.new("RGB", (100, 100), (255, 255, 255))  # Mock captured image
     camera.cam_type = "ptz"
     camera.cam_poses = [1, 2]
     camera.ip_address = "192.168.1.1"
@@ -135,9 +133,7 @@ async def test_analyze_stream(system_controller, mock_wildfire_image):
 
 @pytest.mark.asyncio
 async def test_capture_images_method(system_controller):
-    with patch(
-        "pyroengine.core.capture_camera_image", new_callable=AsyncMock
-    ) as mock_capture:
+    with patch("pyroengine.core.capture_camera_image", new_callable=AsyncMock) as mock_capture:
         queue = asyncio.Queue()
         await system_controller.capture_images(queue)
 

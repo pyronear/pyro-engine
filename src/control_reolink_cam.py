@@ -75,9 +75,7 @@ def main():
     cam_pwd = os.getenv("CAM_PWD")
 
     # Set up argument parsing
-    parser = argparse.ArgumentParser(
-        description="Control Reolink Camera for various operations."
-    )
+    parser = argparse.ArgumentParser(description="Control Reolink Camera for various operations.")
     parser.add_argument(
         "action",
         choices=[
@@ -97,12 +95,8 @@ def main():
         help="Action to perform on the camera",
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument(
-        "--username", help="Username for camera access", default=cam_user
-    )
-    parser.add_argument(
-        "--password", help="Password for camera access", default=cam_pwd
-    )
+    parser.add_argument("--username", help="Username for camera access", default=cam_user)
+    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
         "--pos_id",
@@ -114,18 +108,14 @@ def main():
         "--operation",
         help="Operation type for moving the camera (e.g., 'Left', 'Right')",
     )
-    parser.add_argument(
-        "--speed", type=int, help="Speed of the PTZ movement", default=1
-    )
+    parser.add_argument("--speed", type=int, help="Speed of the PTZ movement", default=1)
     parser.add_argument(
         "--duration",
         type=int,
         help="Duration in seconds for moving the camera",
         default=1,
     )
-    parser.add_argument(
-        "--disable_autofocus", action="store_true", help="Disable autofocus if set"
-    )
+    parser.add_argument("--disable_autofocus", action="store_true", help="Disable autofocus if set")
     parser.add_argument(
         "--zoom_position",
         type=int,
@@ -154,20 +144,14 @@ def main():
             print("Failed to capture image.")
     elif args.action == "move_camera":
         if args.operation:
-            camera_controller.move_camera(
-                operation=args.operation, speed=args.speed, idx=args.pos_id
-            )
+            camera_controller.move_camera(operation=args.operation, speed=args.speed, idx=args.pos_id)
         else:
             print("Operation type must be specified for moving the camera.")
     elif args.action == "move_in_seconds":
         if args.operation and args.duration:
-            camera_controller.move_in_seconds(
-                s=args.duration, operation=args.operation, speed=args.speed
-            )
+            camera_controller.move_in_seconds(s=args.duration, operation=args.operation, speed=args.speed)
         else:
-            print(
-                "Operation type and duration must be specified for moving the camera."
-            )
+            print("Operation type and duration must be specified for moving the camera.")
     elif args.action == "get_ptz_preset":
         presets = camera_controller.get_ptz_preset()
         print("PTZ Presets:", presets)

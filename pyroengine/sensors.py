@@ -84,13 +84,10 @@ class ReolinkCamera:
             else:
                 logging.error(f"Error: {response_data}")
             return response_data
-        else:
-            logging.error(f"Failed operation: {response.status_code}, {response.text}")
-            return None
+        logging.error(f"Failed operation: {response.status_code}, {response.text}")
+        return None
 
-    def capture(
-        self, pos_id: Optional[int] = None, timeout: int = 2
-    ) -> Optional[Image.Image]:
+    def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
         Captures an image from the camera. Optionally moves the camera to a preset position before capturing.
 
@@ -113,10 +110,7 @@ class ReolinkCamera:
                 image_data = BytesIO(response.content)
                 image = Image.open(image_data).convert("RGB")
                 return image
-            else:
-                logging.error(
-                    f"Failed to capture image: {response.status_code}, {response.text}"
-                )
+            logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
         except requests.RequestException as e:
             logging.error(f"Request failed: {e}")
         return None
@@ -175,13 +169,10 @@ class ReolinkCamera:
         url = self._build_url("GetPtzPreset")
         data = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
-        response_data = self._handle_response(
-            response, "Presets retrieved successfully."
-        )
+        response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
-        else:
-            return None
+        return None
 
     def set_ptz_preset(self, idx: Optional[int] = None):
         """
@@ -208,9 +199,7 @@ class ReolinkCamera:
             {
                 "cmd": "SetPtzPreset",
                 "action": 0,  # The action code for setting data
-                "param": {
-                    "PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}
-                },
+                "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
@@ -227,9 +216,7 @@ class ReolinkCamera:
         url = self._build_url("GetAutoFocus")
         data = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
         response = requests.post(url, json=data, verify=False)
-        return self._handle_response(
-            response, "Fetched AutoFocus settings successfully."
-        )
+        return self._handle_response(response, "Fetched AutoFocus settings successfully.")
 
     def set_auto_focus(self, disable: bool):
         url = self._build_url("SetAutoFocus")
@@ -249,9 +236,7 @@ class ReolinkCamera:
             {
                 "cmd": "StartZoomFocus",
                 "action": 0,
-                "param": {
-                    "ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}
-                },
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
             }
         ]
         response = requests.post(url, json=data, verify=False)
@@ -269,15 +254,11 @@ class ReolinkCamera:
             {
                 "cmd": "StartZoomFocus",
                 "action": 0,
-                "param": {
-                    "ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}
-                },
+                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
             }
         ]
         response = requests.post(url, json=data, verify=False)
-        return self._handle_response(
-            response, f"Manual focus set at position {position}"
-        )
+        return self._handle_response(response, f"Manual focus set at position {position}")
 
     def get_focus_level(self):
         """Retrieve the current manual focus and zoom positions."""

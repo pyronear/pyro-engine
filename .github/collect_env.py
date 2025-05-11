@@ -48,9 +48,7 @@ SystemEnv = namedtuple(
 
 def run(command):
     """Returns (return-code, stdout, stderr)"""
-    p = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     output, err = p.communicate()
     rc = p.returncode
     if PY3:
@@ -82,14 +80,13 @@ def run_and_parse_first_match(run_lambda, command, regex):
 def get_platform():
     if sys.platform.startswith("linux"):
         return "linux"
-    elif sys.platform.startswith("win32"):
+    if sys.platform.startswith("win32"):
         return "win32"
-    elif sys.platform.startswith("cygwin"):
+    if sys.platform.startswith("cygwin"):
         return "cygwin"
-    elif sys.platform.startswith("darwin"):
+    if sys.platform.startswith("darwin"):
         return "darwin"
-    else:
-        return sys.platform
+    return sys.platform
 
 
 def get_mac_version(run_lambda):
@@ -101,15 +98,11 @@ def get_windows_version(run_lambda):
 
 
 def get_lsb_version(run_lambda):
-    return run_and_parse_first_match(
-        run_lambda, "lsb_release -a", r"Description:\t(.*)"
-    )
+    return run_and_parse_first_match(run_lambda, "lsb_release -a", r"Description:\t(.*)")
 
 
 def check_release_file(run_lambda):
-    return run_and_parse_first_match(
-        run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"'
-    )
+    return run_and_parse_first_match(run_lambda, "cat /etc/*-release", r'PRETTY_NAME="(.*)"')
 
 
 def get_os(run_lambda):

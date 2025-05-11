@@ -29,12 +29,8 @@ def main():
         description="Capture images from positions 20 to 27, resize to 1280x720, and save locally."
     )
     parser.add_argument("--ip", required=True, help="IP address of the Reolink camera")
-    parser.add_argument(
-        "--username", help="Username for camera access", default=cam_user
-    )
-    parser.add_argument(
-        "--password", help="Password for camera access", default=cam_pwd
-    )
+    parser.add_argument("--username", help="Username for camera access", default=cam_user)
+    parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
         "--output_folder",

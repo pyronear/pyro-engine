@@ -59,9 +59,7 @@ def test_get_ptz_preset_success():
     # Mock the response of requests.post to return a successful response with preset data
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = [
-        {"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}
-    ]
+    mock_response.json.return_value = [{"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}]
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
@@ -87,9 +85,7 @@ def test_set_ptz_preset_no_slots():
     # Mock the response of requests.post to return no available slots for presets
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = [
-        {"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}
-    ]
+    mock_response.json.return_value = [{"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}]
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
@@ -125,9 +121,7 @@ def test_get_auto_focus_success():
     # Mock the response of requests.post to return a successful response with autofocus data
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = [
-        {"code": 0, "value": {"AutoFocus": [{"channel": 0, "disable": 0}]}}
-    ]
+    mock_response.json.return_value = [{"code": 0, "value": {"AutoFocus": [{"channel": 0, "disable": 0}]}}]
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
