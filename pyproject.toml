@@ -86,6 +86,10 @@ check_untyped_defs = true
 implicit_reexport = false
 
 [[tool.mypy.overrides]]
+module = "pyroengine.version"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "pyroengine.__init__"
 ignore_errors = true
 
@@ -98,6 +102,7 @@ module = [
     "urllib3.*"
 ]
 ignore_missing_imports = true
+
 
 [tool.ruff]
 line-length = 120
