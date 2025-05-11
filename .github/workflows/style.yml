@@ -9,7 +9,7 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   UV_VERSION: "0.5.13"
-  POETRY_VERSION: "1.8.3"
+  POETRY_VERSION: "2.0.0"
 
 jobs:
   ruff:
