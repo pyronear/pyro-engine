@@ -43,7 +43,6 @@ load_dotenv()
 CAM_USER = os.getenv("CAM_USER")
 CAM_PWD = os.getenv("CAM_PWD")
 MEDIAMTX_SERVER_IP = os.getenv("MEDIAMTX_SERVER_IP")
-STREAM_NAME = os.getenv("STREAM_NAME")
 
 # Load camera credentials
 CREDENTIALS_PATH = "/usr/src/app/data/credentials.json"
@@ -53,6 +52,11 @@ if not os.path.exists(CREDENTIALS_PATH):
 
 with open(CREDENTIALS_PATH, "r") as file:
     credentials = json.load(file)
+
+# Extract the first camera name and strip trailing "-01", "-02", etc.
+first_camera = next(iter(credentials.values()))
+camera_name = first_camera["name"]
+STREAM_NAME = camera_name.rsplit("-", 1)[0].lower()  # Removes last hyphen and digits
 
 
 # Build cameras dictionary
