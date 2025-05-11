@@ -19,8 +19,8 @@ single-docs:
 
 # update requirements.txt
 lock:
-	cd src; poetry lock
-	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
+	poetry lock
+	poetry export -f requirements.txt --without-hashes --output requirements.txt
 
 # Build the docker
 build-app:
