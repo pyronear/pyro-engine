@@ -29,9 +29,8 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Stub version.py for tests
+      - name: Stub version.py for docs
         run: |
-          mkdir -p pyroengine
           echo "__version__ = '0.0.0'" > pyroengine/version.py
       
       - name: Install documentation dependencies
