@@ -29,8 +29,6 @@ services:
     volumes:
       - ./live_stream_api:/usr/src/app
       - ./data/credentials.json:/usr/src/app/data/credentials.json:ro
-    ports:
-      - "8081:8081"   
     restart: always
     network_mode: host 
     logging:
