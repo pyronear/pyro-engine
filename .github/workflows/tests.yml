@@ -35,6 +35,11 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Stub version.py for tests
+        run: |
+          mkdir -p pyroengine
+          echo "__version__ = '0.0.0'" > pyroengine/version.py
+        
       - name: Install test dependencies
         run: poetry install --with dev
 
@@ -82,12 +87,16 @@ jobs:
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-docs
-      - name: Install dependencies
+      - name: Install Poetry
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[docs]" --upgrade
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      
+      - name: Install documentation dependencies
+        run: poetry install --with docs
+        
       - name: Build documentation
-        run: sphinx-build docs/source docs/build -a
+        run: poetry run sphinx-build docs/source docs/build -a
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit
 
