@@ -292,7 +292,7 @@ class Engine:
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)
+            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
 
         # Inference with ONNX
         preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
