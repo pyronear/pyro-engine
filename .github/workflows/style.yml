@@ -26,7 +26,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Install dependencies
+      - name: Add poetry export plugin
+        run: poetry self add poetry-plugin-export
+      - name: Install quality dependencies
         run: |
           poetry export -f requirements.txt --without-hashes --only quality --output requirements.txt
           uv pip install --system -r requirements.txt
@@ -50,9 +52,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Install dependencies
+      - name: Add poetry export plugin
+        run: poetry self add poetry-plugin-export
+      - name: Install quality dependencies
         run: |
-          poetry export -f requirements.txt --without-hashes --with quality --output requirements.txt
+          poetry export -f requirements.txt --without-hashes --only quality --output requirements.txt
           uv pip install --system -r requirements.txt
       - name: Run mypy
         run: |
