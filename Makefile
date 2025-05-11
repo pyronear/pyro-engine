@@ -6,8 +6,8 @@ quality:
 
 # This target auto-fixes lint issues where possible
 style:
-	ruff format --check --diff .
-	ruff check --diff .
+	ruff format .
+	ruff check --fix .
 
 # Run tests for the library
 test:

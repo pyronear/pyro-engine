@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 import aiohttp
 import numpy as np
@@ -55,7 +55,11 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-async def capture_camera_image(camera: ReolinkCamera, image_queue: asyncio.Queue, server_ip: str = None) -> bool:
+async def capture_camera_image(
+    camera: ReolinkCamera,
+    image_queue: asyncio.Queue,
+    server_ip: Optional[str] = None
+) -> bool:
     """
     Capture an image from a camera and enqueue it for analysis.
 
@@ -110,7 +114,12 @@ class SystemController:
         mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
     """
 
-    def __init__(self, engine: Engine, cameras: List[ReolinkCamera], mediamtx_server_ip: str = None) -> None:
+    def __init__(
+    self,
+    engine: Engine,
+    cameras: List[ReolinkCamera],
+    mediamtx_server_ip: Optional[str] = None
+) -> None:
         """
         Initialize the system controller.
 
