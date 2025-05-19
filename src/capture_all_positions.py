@@ -1,7 +1,5 @@
 # Copyright (C) 2022-2025, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+# Licensed under the Apache License 2.0.
 
 import argparse
 import os
@@ -11,13 +9,12 @@ import json
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-
 from pyroengine.sensors import ReolinkCamera
 
-# Calibrated pan speed level 5 (from measurements)
+# Camera movement parameters
 PAN_SPEED_LEVEL = 5
-PAN_DEG_PER_SEC = 7.1131  # average from your table
-CAM_STOP_TIME = 0.5  # seconds
+PAN_DEG_PER_SEC = 7.1131
+CAM_STOP_TIME = 0.5
 
 
 def calculate_center_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_time, shift_angle=0, latency=0.3):
@@ -79,11 +76,11 @@ def process_camera(ip, cam_data, args):
         ip_address=ip,
         username=args.username,
         password=args.password,
-        protocol=args.protocol,
         cam_type=cam_type,
-        poses=cam_poses,
-        azimuths=cam_azimuths,
-        focus=focus_position,
+        cam_poses=cam_poses,
+        cam_azimuths=cam_azimuths,
+        protocol=args.protocol,
+        focus_position=focus_position,
     )
 
     if focus_position is not None:
