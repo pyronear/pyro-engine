@@ -97,6 +97,7 @@ def main():
     parser.add_argument("--fov", type=float, default=54.2)
     parser.add_argument("--overlap", type=float, default=6)
     parser.add_argument("--shift_angle", type=float, default=0)
+    parser.add_argument("--draw", type=bool, default=False)
     args = parser.parse_args()
 
     center_shift_time = calculate_center_shift_time(
@@ -115,8 +116,8 @@ def main():
         print("Moving down for 10 seconds at speed 64.")
         camera.move_in_seconds(s=10, operation="Down", speed=64)
 
-        print("Moving down for 2 seconds at speed 2.")
-        camera.move_in_seconds(s=2, operation="Down", speed=2)
+        print("Moving down for 3 seconds at speed 2.")
+        camera.move_in_seconds(s=3, operation="Down", speed=2)
 
         print(f"Shifting to center: {center_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
         camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
@@ -126,10 +127,11 @@ def main():
             image = camera.capture()
             if image:
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-                image_np = draw_axes_on_image(image_np, args.fov)
+                if args.draw:
+                    image_np = draw_axes_on_image(image_np, args.fov)
                 filename = f"im_{args.ip.split('.')[-1]}_{i}.jpg"
                 image_path = os.path.join(args.output_folder, filename)
-                image_np = cv2.resize(image_np, (640, 360))
+                image_np = cv2.resize(image_np, (1280, 720))
                 cv2.imwrite(image_path, image_np)
                 print(f"Image saved at {image_path}")
             else:
