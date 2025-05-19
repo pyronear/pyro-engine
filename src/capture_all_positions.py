@@ -6,6 +6,7 @@
 import argparse
 import os
 import time
+import json
 
 import cv2
 import numpy as np
@@ -20,18 +21,12 @@ CAM_STOP_TIME = 0.5  # seconds
 
 
 def calculate_center_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_time, shift_angle=0, latency=0.3):
-    """
-    Calculates the time needed to center the camera based on FOV layout.
-    """
     effective_angle = fov / 2 - (4 * fov - 3 * overlap - 180 + shift_angle) + overlap / 2
     shift_time = effective_angle / cam_speed_deg_per_sec - cam_stop_time
     return shift_time - latency
 
 
 def calculate_overlap_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_time, latency=0.3):
-    """
-    Calculates the time needed to shift from one view to the next.
-    """
     effective_angle = fov - overlap
     shift_time = effective_angle / cam_speed_deg_per_sec - cam_stop_time
     return shift_time - latency
@@ -60,15 +55,7 @@ def draw_axes_on_image(image, fov):
         cv2.line(image, (x_pos, line_y_top - 20), (x_pos, line_y_top + 20), (255, 255, 255), 2)
         text = f"{angle_right:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-        cv2.putText(
-            image,
-            text,
-            (x_pos - text_width // 2, line_y_top + 40 + text_height),
-            font,
-            font_scale,
-            text_color,
-            font_thickness,
-        )
+        cv2.putText(image, text, (x_pos - text_width // 2, line_y_top + 40 + text_height), font, font_scale, text_color, font_thickness)
 
     for i in range(num_graduations + 1):
         x_pos = int(i * width / num_graduations)
@@ -76,22 +63,89 @@ def draw_axes_on_image(image, fov):
         cv2.line(image, (x_pos, line_y_bottom - 20), (x_pos, line_y_bottom + 20), (255, 255, 255), 2)
         text = f"{angle_left:.1f}"
         (text_width, text_height), _ = cv2.getTextSize(text, font, font_scale, font_thickness)
-        cv2.putText(
-            image, text, (x_pos - text_width // 2, line_y_bottom - 30), font, font_scale, text_color, font_thickness
-        )
+        cv2.putText(image, text, (x_pos - text_width // 2, line_y_bottom - 30), font, font_scale, text_color, font_thickness)
 
     return image
 
 
+def process_camera(ip, cam_data, args):
+    print(f"\n🔧 Processing camera {ip}")
+    focus_position = cam_data.get("focus_position")
+    cam_type = cam_data.get("type", "ptz")
+    cam_poses = cam_data.get("poses", [])
+    cam_azimuths = cam_data.get("azimuths", [cam_data.get("azimuth", 0)])
+
+    camera = ReolinkCamera(
+        ip_address=ip,
+        username=args.username,
+        password=args.password,
+        protocol=args.protocol,
+        cam_type=cam_type,
+        poses=cam_poses,
+        azimuths=cam_azimuths,
+        focus=focus_position,
+    )
+
+    if focus_position is not None:
+        print(f"📌 Setting manual focus to {focus_position}")
+        camera.set_auto_focus(disable=True)
+        time.sleep(1)
+        camera.set_manual_focus(position=focus_position)
+        time.sleep(2)
+
+    center_shift_time = calculate_center_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME, args.shift_angle)
+    overlap_shift_time = calculate_overlap_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME)
+
+    try:
+        print("🧭 Moving to position 10 at speed 64.")
+        camera.move_camera(operation="ToPos", speed=64, idx=10)
+        time.sleep(1)
+
+        print("⬇️ Moving down for 10 seconds at speed 64.")
+        camera.move_in_seconds(s=10, operation="Down", speed=64)
+
+        print("⬇️ Moving down for 3 seconds at speed 2.")
+        camera.move_in_seconds(s=3, operation="Down", speed=2)
+
+        print(f"➡️ Shifting to center: {center_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
+        camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
+
+        for i in range(8):
+            print(f"📸 Capturing image {i + 1}/8")
+            image = camera.capture()
+            if image:
+                image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                if args.draw:
+                    image_np = draw_axes_on_image(image_np, args.fov)
+                filename = f"{ip.replace('.', '_')}_im_{i}.jpg"
+                image_path = os.path.join(args.output_folder, filename)
+                image_np = cv2.resize(image_np, (1280, 720))
+                cv2.imwrite(image_path, image_np)
+                print(f"✅ Saved image at {image_path}")
+            else:
+                print("⚠️ Failed to capture image.")
+
+            ptz_position = 20 + i
+            print(f"💾 Registering PTZ position {ptz_position}.")
+            camera.set_ptz_preset(idx=ptz_position)
+
+            print(f"➡️ Shifting to next field: {overlap_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
+            camera.move_in_seconds(s=overlap_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
+            time.sleep(1)
+
+    except Exception as e:
+        print(f"❌ Error with camera {ip}: {e}")
+
+
 def main():
     load_dotenv()
-    cam_user = os.getenv("CAM_USER")
-    cam_pwd = os.getenv("CAM_PWD")
+    default_user = os.getenv("CAM_USER", "admin")
+    default_pwd = os.getenv("CAM_PWD", "@Pyronear")
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ip", required=True, help="Reolink camera IP address")
-    parser.add_argument("--username", default=cam_user)
-    parser.add_argument("--password", default=cam_pwd)
+    parser.add_argument("--creds", default="data/credentials.json", help="Path to camera credentials JSON file")
+    parser.add_argument("--username", default=default_user)
+    parser.add_argument("--password", default=default_pwd)
     parser.add_argument("--protocol", default="http")
     parser.add_argument("--output_folder", default="captured_images")
     parser.add_argument("--fov", type=float, default=54.2)
@@ -100,53 +154,13 @@ def main():
     parser.add_argument("--draw", type=bool, default=False)
     args = parser.parse_args()
 
-    center_shift_time = calculate_center_shift_time(
-        args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME, args.shift_angle
-    )
-    overlap_shift_time = calculate_overlap_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME)
-
     os.makedirs(args.output_folder, exist_ok=True)
-    camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
 
-    try:
-        print("Moving to position 10 at speed 64.")
-        camera.move_camera(operation="ToPos", speed=64, idx=10)
-        time.sleep(1)
+    with open(args.creds, "r") as f:
+        creds = json.load(f)
 
-        print("Moving down for 10 seconds at speed 64.")
-        camera.move_in_seconds(s=10, operation="Down", speed=64)
-
-        print("Moving down for 3 seconds at speed 2.")
-        camera.move_in_seconds(s=3, operation="Down", speed=2)
-
-        print(f"Shifting to center: {center_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
-        camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
-
-        for i in range(8):
-            print(f"Loop {i + 1}/8: Capturing image.")
-            image = camera.capture()
-            if image:
-                image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-                if args.draw:
-                    image_np = draw_axes_on_image(image_np, args.fov)
-                filename = f"im_{args.ip.split('.')[-1]}_{i}.jpg"
-                image_path = os.path.join(args.output_folder, filename)
-                image_np = cv2.resize(image_np, (1280, 720))
-                cv2.imwrite(image_path, image_np)
-                print(f"Image saved at {image_path}")
-            else:
-                print("Failed to capture image.")
-
-            ptz_position = 20 + i
-            print(f"Registering PTZ position {ptz_position}.")
-            camera.set_ptz_preset(idx=ptz_position)
-
-            print(f"Shifting to next field: {overlap_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
-            camera.move_in_seconds(s=overlap_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
-            time.sleep(1)
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    for ip, cam_data in creds.items():
+        process_camera(ip, cam_data, args)
 
 
 if __name__ == "__main__":
