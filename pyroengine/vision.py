@@ -50,7 +50,7 @@ class Classifier:
     def __init__(
         self,
         model_folder="data",
-        imgsz=1024,
+        imgsz=1280,
         conf=0.15,
         iou=0,
         format="ncnn",
