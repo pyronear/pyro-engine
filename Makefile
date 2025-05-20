@@ -39,6 +39,7 @@ build-optional-lib:
 # Run the engine wrapper
 run:
 	docker build . -t pyronear/pyro-engine:latest
+	docker build live_stream_api -t pyronear/live-stream:latest
 	docker compose up -d
 
 # Get log from engine wrapper
