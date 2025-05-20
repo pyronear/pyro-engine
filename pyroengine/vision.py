@@ -50,7 +50,7 @@ class Classifier:
     def __init__(
         self,
         model_folder="data",
-        imgsz=1024,
+        imgsz=1280,
         conf=0.15,
         iou=0,
         format="ncnn",
@@ -98,6 +98,9 @@ class Classifier:
                 else:
                     logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
                     os.remove(model_path)
+                    extracted_path = os.path.splitext(model_path)[0]
+                    if os.path.isdir(extracted_path):
+                        shutil.rmtree(extracted_path)
                     self.download_model(model_url, model_path, expected_sha256, metadata_path)
             else:
                 self.download_model(model_url, model_path, expected_sha256, metadata_path)
