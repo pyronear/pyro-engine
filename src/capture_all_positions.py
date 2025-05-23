@@ -6,11 +6,11 @@
 import argparse
 import os
 import time
-
+from datetime import datetime
 import cv2
 import numpy as np
 from dotenv import load_dotenv
-
+import shutil
 from pyroengine.sensors import ReolinkCamera
 
 # Calibrated pan speed level 5 (from measurements)
@@ -82,7 +82,6 @@ def draw_axes_on_image(image, fov):
 
     return image
 
-
 def main():
     load_dotenv()
     cam_user = os.getenv("CAM_USER")
@@ -94,54 +93,41 @@ def main():
     parser.add_argument("--password", default=cam_pwd)
     parser.add_argument("--protocol", default="http")
     parser.add_argument("--output_folder", default="captured_images")
-    parser.add_argument("--fov", type=float, default=54.2)
-    parser.add_argument("--overlap", type=float, default=6)
-    parser.add_argument("--shift_angle", type=float, default=0)
     args = parser.parse_args()
 
-    center_shift_time = calculate_center_shift_time(
-        args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME, args.shift_angle
-    )
-    overlap_shift_time = calculate_overlap_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME)
+    # Create a timestamped subfolder for this session
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_folder = os.path.join(args.output_folder, f"session_{timestamp}")
+    os.makedirs(session_folder, exist_ok=True)
 
-    os.makedirs(args.output_folder, exist_ok=True)
     camera = ReolinkCamera(ip_address=args.ip, username=args.username, password=args.password, protocol=args.protocol)
 
     try:
-        print("Moving to position 10 at speed 64.")
-        camera.move_camera(operation="ToPos", speed=64, idx=10)
-        time.sleep(1)
+        num_captures = 36
+        degrees_per_step = 10
+        seconds_per_step = degrees_per_step / PAN_DEG_PER_SEC
 
-        print("Moving down for 10 seconds at speed 64.")
-        camera.move_in_seconds(s=10, operation="Down", speed=64)
+        for i in range(num_captures):
+            print(f"Capturing image {i+1}/{num_captures} at {i*degrees_per_step}°")
 
-        print("Moving down for 2 seconds at speed 2.")
-        camera.move_in_seconds(s=2, operation="Down", speed=2)
-
-        print(f"Shifting to center: {center_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
-        camera.move_in_seconds(s=center_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
-
-        for i in range(8):
-            print(f"Loop {i + 1}/8: Capturing image.")
             image = camera.capture()
             if image:
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-                image_np = draw_axes_on_image(image_np, args.fov)
-                filename = f"im_{args.ip.split('.')[-1]}_{i}.jpg"
-                image_path = os.path.join(args.output_folder, filename)
-                image_np = cv2.resize(image_np, (640, 360))
+                filename = f"im_{args.ip.split('.')[-1]}_{i:02d}.jpg"
+                image_path = os.path.join(session_folder, filename)
                 cv2.imwrite(image_path, image_np)
-                print(f"Image saved at {image_path}")
+                print(f"Saved: {image_path}")
             else:
                 print("Failed to capture image.")
 
-            ptz_position = 20 + i
-            print(f"Registering PTZ position {ptz_position}.")
-            camera.set_ptz_preset(idx=ptz_position)
+            if i < num_captures - 1:
+                print(f"Rotating {degrees_per_step}° right at speed {PAN_SPEED_LEVEL}")
+                camera.move_in_seconds(s=seconds_per_step, operation="Right", speed=PAN_SPEED_LEVEL)
+                time.sleep(CAM_STOP_TIME)
 
-            print(f"Shifting to next field: {overlap_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
-            camera.move_in_seconds(s=overlap_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
-            time.sleep(1)
+        # Zip the session folder
+        zip_path = shutil.make_archive(session_folder, 'zip', session_folder)
+        print(f"Session zipped at: {zip_path}")
 
     except Exception as e:
         print(f"An error occurred: {e}")
