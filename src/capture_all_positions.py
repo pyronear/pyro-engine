@@ -65,6 +65,34 @@ def draw_axes_on_image(image, fov):
     return image
 
 
+def capture_reference_images(ip, camera, args):
+    ref_folder = os.path.join("ref_images", ip.replace(".", "_"))
+    os.makedirs(ref_folder, exist_ok=True)
+
+    step_deg = 10
+    total_degrees = 360
+    duration_per_step = step_deg / PAN_DEG_PER_SEC - CAM_STOP_TIME - 0.3
+
+    print(f"\n🎯 Capturing reference images for {ip} every {step_deg}° over 360°")
+
+    for i in range(0, total_degrees, step_deg):
+        print(f"📸 Reference image {i // step_deg + 1} at {i}°")
+        image = camera.capture()
+        if image:
+            image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+            if args.draw:
+                image_np = draw_axes_on_image(image_np, args.fov)
+            image_np = cv2.resize(image_np, (2560, 1440))
+            filename = f"ref_{i}.jpg"
+            cv2.imwrite(os.path.join(ref_folder, filename), image_np)
+        else:
+            print("⚠️ Failed to capture reference image.")
+
+        print(f"➡️ Rotating {step_deg}° right")
+        camera.move_in_seconds(s=duration_per_step, operation="Right", speed=PAN_SPEED_LEVEL)
+        time.sleep(1)
+
+
 def process_camera(ip, cam_data, args):
     print(f"\n🔧 Processing camera {ip}")
     focus_position = cam_data.get("focus_position")
@@ -94,6 +122,11 @@ def process_camera(ip, cam_data, args):
     overlap_shift_time = calculate_overlap_shift_time(args.fov, args.overlap, PAN_DEG_PER_SEC, CAM_STOP_TIME)
 
     try:
+        # Clear any existing images
+        for file in os.listdir(args.output_folder):
+            if file.startswith(ip.replace(".", "_")):
+                os.remove(os.path.join(args.output_folder, file))
+
         print("🧭 Moving to position 10 at speed 64.")
         camera.move_camera(operation="ToPos", speed=64, idx=10)
         time.sleep(1)
@@ -114,9 +147,9 @@ def process_camera(ip, cam_data, args):
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
                 if args.draw:
                     image_np = draw_axes_on_image(image_np, args.fov)
+                image_np = cv2.resize(image_np, (2560, 1440))
                 filename = f"{ip.replace('.', '_')}_im_{i}.jpg"
                 image_path = os.path.join(args.output_folder, filename)
-                image_np = cv2.resize(image_np, (1280, 720))
                 cv2.imwrite(image_path, image_np)
                 print(f"✅ Saved image at {image_path}")
             else:
@@ -129,6 +162,16 @@ def process_camera(ip, cam_data, args):
             print(f"➡️ Shifting to next field: {overlap_shift_time:.2f}s at speed {PAN_SPEED_LEVEL}.")
             camera.move_in_seconds(s=overlap_shift_time, operation="Right", speed=PAN_SPEED_LEVEL)
             time.sleep(1)
+
+        # Save actual images in separate folder
+        actual_folder = os.path.join("captured_poses", ip.replace(".", "_"))
+        os.makedirs(actual_folder, exist_ok=True)
+        for filename in os.listdir(args.output_folder):
+            if filename.startswith(ip.replace(".", "_")):
+                os.rename(os.path.join(args.output_folder, filename), os.path.join(actual_folder, filename))
+
+        # Perform full 360° reference image capture
+        capture_reference_images(ip, camera, args)
 
     except Exception as e:
         print(f"❌ Error with camera {ip}: {e}")
