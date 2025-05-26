@@ -71,7 +71,7 @@ def capture_reference_images(ip, camera, args):
 
     step_deg = 10
     total_degrees = 360
-    duration_per_step = step_deg / PAN_DEG_PER_SEC - CAM_STOP_TIME - 0.3
+    duration_per_step = step_deg / PAN_DEG_PER_SEC - CAM_STOP_TIME
 
     print(f"\n🎯 Capturing reference images for {ip} every {step_deg}° over 360°")
 
