@@ -19,6 +19,7 @@ services:
         max-file: "5"
 
   live_stream:
+    image: pyronear/live-stream:latest
     build:
       context: ./live_stream_api
     container_name: live_stream
