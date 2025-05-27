@@ -168,13 +168,22 @@ def main():
     parser.add_argument("--overlap", type=float, default=8)
     parser.add_argument("--shift_angle", type=float, default=0)
     parser.add_argument("--draw", type=bool, default=False)
+    parser.add_argument("--ip", type=str, default=None, help="Optional IP address to run on a single camera")
     args = parser.parse_args()
 
-    with open(args.creds, "r") as f:
-        creds = json.load(f)
+    if args.ip:
+        with open(args.creds, "r") as f:
+            creds = json.load(f)
+        if args.ip in creds:
+            process_camera(args.ip, creds[args.ip], args)
+        else:
+            print(f"❌ IP {args.ip} not found in credentials file.")
+    else:
+        with open(args.creds, "r") as f:
+            creds = json.load(f)
+        for ip, cam_data in creds.items():
+            process_camera(ip, cam_data, args)
 
-    for ip, cam_data in creds.items():
-        process_camera(ip, cam_data, args)
 
 
 if __name__ == "__main__":
