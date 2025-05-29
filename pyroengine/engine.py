@@ -148,6 +148,7 @@ class Engine:
         self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
         if isinstance(cam_creds, dict):
             for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
+                azimuth: int = int(azimuth)
                 self.occlusion_masks[cam_id] = (bbox_mask_url, {}, azimuth)
 
         # Restore pending alerts cache
@@ -321,15 +322,15 @@ class Engine:
             self._states[cam_key]["last_bbox_mask_fetch"] is None
             or time.time() - self._states[cam_key]["last_bbox_mask_fetch"] > self.last_bbox_mask_fetch_period
         ):
-            logging.info(f"Update occlusion masks for cam {cam_id}")
+            logging.info(f"Update occlusion masks for cam {cam_key}")
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
-            bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_id]
+            bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_key]
             if bbox_mask_url is not None:
                 full_url = f"{bbox_mask_url}_{azimuth}.json"
                 try:
                     response = requests.get(full_url)
                     bbox_mask_dict = response.json()
-                    self.occlusion_masks[cam_id] = (bbox_mask_url, bbox_mask_dict, azimuth)
+                    self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
                 except requests.exceptions.RequestException as e:
                     logging.error(f"Failed to download the JSON file: {e}")
 
