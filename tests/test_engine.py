@@ -190,7 +190,6 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         assert len(engine._alerts) == 0
 
 
-
 def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
