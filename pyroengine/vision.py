@@ -8,7 +8,7 @@ import logging
 import os
 import platform
 import shutil
-from typing import Optional, Tuple
+from typing import Tuple
 from urllib.request import urlretrieve
 
 import ncnn  # type: ignore
@@ -17,7 +17,7 @@ import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
 
-from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy, box_iou
+from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
