@@ -127,7 +127,7 @@ class Engine:
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
             "-1": {
-                "last_predictions": deque([], self.nb_consecutive_frames),
+                "last_predictions": deque(maxlen=self.nb_consecutive_frames),
                 "ongoing": False,
                 "last_image_sent": None,
             },
