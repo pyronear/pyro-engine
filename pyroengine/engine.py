@@ -145,7 +145,7 @@ class Engine:
                     "last_bbox_mask_fetch": None,
                 }
 
-        self.occlusion_masks = {"-1": (None, {}, 0)}
+        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
         if isinstance(cam_creds, dict):
             for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
                 self.occlusion_masks[cam_id] = (bbox_mask_url, {}, azimuth)
