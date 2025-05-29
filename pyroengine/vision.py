@@ -249,6 +249,8 @@ class Classifier:
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
+        print(pred, occlusion_bboxes)
+
         # Remove prediction in bbox occlusion mask
         if len(occlusion_bboxes):
             all_boxes = np.array([b[:4] for b in occlusion_bboxes.values()], dtype=pred.dtype)
