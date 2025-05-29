@@ -1,15 +1,13 @@
-# this target runs checks on all files
+# This target runs checks on all files
 quality:
-	isort . -c
-	flake8
+	ruff format --check --diff .
+	ruff check --diff .
 	mypy
-	pydocstyle
-	black --check .
 
-# this target runs checks on all files and potentially modifies some of them
+# This target auto-fixes lint issues where possible
 style:
-	isort .
-	black .
+	ruff format .
+	ruff check --fix .
 
 # Run tests for the library
 test:
@@ -22,8 +20,8 @@ single-docs:
 
 # update requirements.txt
 lock:
-	cd src; poetry lock
-	cd src; poetry export -f requirements.txt --without-hashes --output requirements.txt
+	poetry lock
+	poetry export -f requirements.txt --without-hashes --output requirements.txt
 
 # Build the docker
 build-app:
@@ -41,11 +39,16 @@ build-optional-lib:
 # Run the engine wrapper
 run:
 	docker build . -t pyronear/pyro-engine:latest
+	docker build live_stream_api -t pyronear/live-stream:latest
 	docker compose up -d
 
 # Get log from engine wrapper
 log: 
-	docker logs -f --tail 50 pyro-engine-run
+	docker logs -f --tail 50 engine
+
+# Get log from live_stream wrapper
+log-st: 
+	docker logs -f --tail 50 live_stream
 
 # Stop the engine wrapper
 stop:

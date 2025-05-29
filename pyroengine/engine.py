@@ -127,15 +127,20 @@ class Engine:
         # Var initialization
         self._states: Dict[str, Dict[str, Any]] = {
             "-1": {
+<<<<<<< HEAD
                 "last_predictions": deque([], self.nb_consecutive_frames),
                 "ongoing": False,
                 "last_image_sent": None,
+=======
+                "last_predictions": deque(maxlen=self.nb_consecutive_frames),
+                "ongoing": False,
+>>>>>>> develop
             },
         }
         if isinstance(cam_creds, dict):
             for cam_id in cam_creds:
                 self._states[cam_id] = {
-                    "last_predictions": deque([], self.nb_consecutive_frames),
+                    "last_predictions": deque(maxlen=self.nb_consecutive_frames),
                     "ongoing": False,
                     "last_image_sent": None,
                 }
@@ -150,7 +155,7 @@ class Engine:
                     self.occlusion_masks[cam_id] = None
 
         # Restore pending alerts cache
-        self._alerts: deque = deque([], cache_size)
+        self._alerts: deque = deque(maxlen=cache_size)
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
         assert self._cache.is_dir()
         self._load_cache()
@@ -178,14 +183,12 @@ class Engine:
             info["frame"].save(self._cache.joinpath(f"pending_frame{idx}.jpg"))
 
             # Save path in JSON
-            data.append(
-                {
-                    "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
-                    "cam_id": info["cam_id"],
-                    "ts": info["ts"],
-                    "bboxes": info["bboxes"],
-                }
-            )
+            data.append({
+                "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
+                "cam_id": info["cam_id"],
+                "ts": info["ts"],
+                "bboxes": info["bboxes"],
+            })
 
         # JSON dump
         if len(data) > 0:
@@ -211,7 +214,6 @@ class Engine:
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
         """Updates the detection states"""
-
         conf_th = self.conf_thresh * self.nb_consecutive_frames
         # Reduce threshold once we are in alert mode to collect more data
         if self._states[cam_key]["ongoing"]:
@@ -241,7 +243,6 @@ class Engine:
                 combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
                 conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
                 if len(combine_predictions):
-
                     # send only preds boxes that match combine_predictions
                     ious = box_iou(combine_predictions[:, :4], preds[:, :4])
                     iou_match = [np.max(iou) > 0 for iou in ious]
@@ -268,9 +269,13 @@ class Engine:
             output_predictions = np.zeros((1, 5))
             output_predictions[:, 2:4] += 0.0001
 
-        self._states[cam_key]["last_predictions"].append(
-            (frame, preds, output_predictions.tolist(), datetime.now(timezone.utc).isoformat(), False)
-        )
+        self._states[cam_key]["last_predictions"].append((
+            frame,
+            preds,
+            output_predictions.tolist(),
+            datetime.now(timezone.utc).isoformat(),
+            False,
+        ))
 
         # update state
         if conf > self.conf_thresh:
@@ -289,11 +294,14 @@ class Engine:
         Returns:
             the predicted confidence
         """
+        # Heartbeat
+        if len(self.api_client) > 0 and isinstance(cam_id, str):
+            heartbeat_with_timeout(self, cam_id, timeout=1)
 
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], getattr(Image, "BILINEAR"))
+            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -331,7 +339,13 @@ class Engine:
             for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
                     self._stage_alert(frame, cam_id, ts, bboxes)
-                    self._states[cam_key]["last_predictions"][idx] = frame, preds, bboxes, ts, True
+                    self._states[cam_key]["last_predictions"][idx] = (
+                        frame,
+                        preds,
+                        bboxes,
+                        ts,
+                        True,
+                    )
 
         # Check if it's time to backup pending alerts
         ts = datetime.now(timezone.utc)
@@ -343,16 +357,14 @@ class Engine:
 
     def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
         # Store information in the queue
-        self._alerts.append(
-            {
-                "frame": frame,
-                "cam_id": cam_id,
-                "ts": ts,
-                "media_id": None,
-                "alert_id": None,
-                "bboxes": bboxes,
-            }
-        )
+        self._alerts.append({
+            "frame": frame,
+            "cam_id": cam_id,
+            "ts": ts,
+            "media_id": None,
+            "alert_id": None,
+            "bboxes": bboxes,
+        })
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:

@@ -30,6 +30,7 @@ def main(args):
     assert isinstance(API_URL, str)
     CAM_USER = os.environ.get("CAM_USER")
     CAM_PWD = os.environ.get("CAM_PWD")
+    MEDIAMTX_SERVER_IP = os.environ.get("MEDIAMTX_SERVER_IP")
     assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
 
     # Loading camera creds
@@ -39,17 +40,34 @@ def main(args):
     splitted_cam_creds = {}
     cameras = []
     for _ip, cam_data in cameras_credentials.items():
+        focus_position = None
         if cam_data["type"] == "ptz":
+            if "focus_position" in cam_data.keys():
+                focus_position = cam_data["focus_position"]
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
             for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = cam_data["token"], cam_azimuth
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = (
+                    cam_data["token"],
+                    cam_azimuth,
+                )
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
             splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"]
 
-        cameras.append(ReolinkCamera(_ip, CAM_USER, CAM_PWD, cam_data["type"], cam_poses, cam_azimuths, args.protocol))
+        cameras.append(
+            ReolinkCamera(
+                _ip,
+                CAM_USER,
+                CAM_PWD,
+                cam_data["type"],
+                cam_poses,
+                cam_azimuths,
+                args.protocol,
+                focus_position,
+            )
+        )
 
     engine = Engine(
         model_path=args.model_path,
@@ -68,17 +86,15 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
     )
 
-    sys_controller = SystemController(
-        engine,
-        cameras,
-    )
+    sys_controller = SystemController(engine, cameras, MEDIAMTX_SERVER_IP)
 
     asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Raspberry Pi system controller", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="Raspberry Pi system controller",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
@@ -95,7 +111,12 @@ if __name__ == "__main__":
         help="Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)",
     )
     parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
-    parser.add_argument("--cache-size", type=int, default=20, help="Maximum number of alerts to save in cache")
+    parser.add_argument(
+        "--cache-size",
+        type=int,
+        default=20,
+        help="Maximum number of alerts to save in cache",
+    )
     parser.add_argument(
         "--nb-consecutive_frames",
         type=int,
@@ -103,19 +124,47 @@ if __name__ == "__main__":
         help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
-        "--cache_backup_period", type=int, default=60, help="Number of minutes between each cache backup to disk"
+        "--cache_backup_period",
+        type=int,
+        default=60,
+        help="Number of minutes between each cache backup to disk",
     )
-    parser.add_argument("--day_time_strategy", type=str, default="ir", help="strategy to define if it's daytime")
+    parser.add_argument(
+        "--day_time_strategy",
+        type=str,
+        default="ir",
+        help="strategy to define if it's daytime",
+    )
     parser.add_argument("--protocol", type=str, default="https", help="Camera protocol")
     # Backup
-    parser.add_argument("--backup-size", type=int, default=10000, help="Local backup can't be bigger than 10Go")
+    parser.add_argument(
+        "--backup-size",
+        type=int,
+        default=10000,
+        help="Local backup can't be bigger than 10Go",
+    )
 
     # Debug
-    parser.add_argument("--save_captured_frames", type=bool, default=False, help="Save all captured frames locally")
-    parser.add_argument("--send_alerts", type=bool, default=True, help="Save all captured frames locally")
+    parser.add_argument(
+        "--save_captured_frames",
+        type=bool,
+        default=False,
+        help="Save all captured frames locally",
+    )
+    parser.add_argument(
+        "--send_alerts",
+        type=bool,
+        default=True,
+        help="Save all captured frames locally",
+    )
 
     # Time config
-    parser.add_argument("--period", type=int, default=30, help="Number of seconds between each camera stream analysis")
+    parser.add_argument(
+        "--period",
+        type=int,
+        default=30,
+        help="Number of seconds between each camera stream analysis",
+    )
     args = parser.parse_args()
 
     main(args)

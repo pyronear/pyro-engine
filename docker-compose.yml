@@ -1,16 +1,37 @@
 services:
   run:
     image: pyronear/pyro-engine:latest
-    container_name: pyro-engine-run
+    container_name: engine
     environment:
       - API_URL=${API_URL}
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
+      - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
     command: python run.py
     volumes:
       - ./data:/usr/src/app/data
     restart: always
     network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  live_stream:
+    image: pyronear/live-stream:latest
+    build:
+      context: ./live_stream_api
+    container_name: live_stream
+    environment:
+      - CAM_USER=${CAM_USER}
+      - CAM_PWD=${CAM_PWD}
+      - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
+    volumes:
+      - ./live_stream_api:/usr/src/app
+      - ./data/credentials.json:/usr/src/app/data/credentials.json:ro
+    restart: always
+    network_mode: host 
     logging:
       driver: "json-file"
       options:
