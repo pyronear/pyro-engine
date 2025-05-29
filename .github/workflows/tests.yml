@@ -33,13 +33,7 @@ jobs:
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Generate version.py from pyproject.toml
-        run: |
-          version=$(poetry version -s)
-          echo "__version__ = '${version}'" > pyroengine/version.py
-          
+          echo "$HOME/.local/bin" >> $GITHUB_PATH          
         
       - name: Install test dependencies
         run: poetry install --with dev
@@ -98,11 +92,6 @@ jobs:
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Generate version.py from pyproject.toml
-        run: |
-          version=$(poetry version -s)
-          echo "__version__ = '${version}'" > pyroengine/version.py
       
       - name: Install documentation dependencies
         run: poetry install --with docs

@@ -30,10 +30,6 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-build
 
-      - name: Generate version.py (optional, if syncing from pyproject.toml)
-        run: |
-          python scripts/generate_version.py
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
