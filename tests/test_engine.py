@@ -151,7 +151,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0)}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0, None)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
@@ -188,3 +188,46 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         # Check that a media and an alert have been registered
         engine._process_alerts()
         assert len(engine._alerts) == 0
+
+
+def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
+    # Cache
+    folder = str(tmpdir_factory.mktemp("engine_cache"))
+    # With API
+    load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
+    api_url = os.environ.get("API_URL")
+    bbox_mask_url = "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/test_occlusion_bboxes"
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0, bbox_mask_url)}
+    # Skip the API-related tests if the URL is not specified
+
+    if isinstance(api_url, str):
+        engine = Engine(
+            api_url=api_url,
+            conf_thresh=0.01,
+            cam_creds=cam_creds,
+            nb_consecutive_frames=4,
+            frame_saving_period=3,
+            cache_folder=folder,
+        )
+        # Heartbeat
+        start_ts = datetime.now(timezone.utc).isoformat()
+        response = engine.heartbeat("dummy_cam")
+        assert response.status_code // 100 == 2
+        json_respone = response.json()
+        time.sleep(0.1)
+        ts = datetime.now(timezone.utc).isoformat()
+
+        assert start_ts < json_respone["last_active_at"] < ts
+        # Send an alert
+        engine.predict(mock_wildfire_image, "dummy_cam")
+        assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
+        assert len(engine._alerts) == 0
+        assert engine._states["dummy_cam"]["ongoing"] is False
+
+        engine.predict(mock_wildfire_image, "dummy_cam")
+        assert len(engine._states["dummy_cam"]["last_predictions"]) == 2
+
+        engine.predict(mock_wildfire_image, "dummy_cam")
+        assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
+
+        assert engine._states["dummy_cam"]["ongoing"] is False

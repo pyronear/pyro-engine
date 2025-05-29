@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import requests
 from PIL import Image
 from pyroclient import client
 from requests.exceptions import ConnectionError
@@ -92,7 +93,8 @@ class Engine:
         jpeg_quality: int = 80,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
-        send_last_image_period: int = 10800,  # 3H,
+        send_last_image_period: int = 10800,  # 3H
+        last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,
     ) -> None:
         """Init engine"""
@@ -105,7 +107,7 @@ class Engine:
         self.api_client: dict[str, Any] = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, (camera_token, _) in cam_creds.items():
+            for _id, (camera_token, _, _) in cam_creds.items():
                 ip = _id.split("_")[0]
                 if ip not in self.api_client.keys():
                     self.api_client[ip] = client.Client(camera_token, api_url)
@@ -120,6 +122,7 @@ class Engine:
         self.save_captured_frames = save_captured_frames
         self.cam_creds = cam_creds
         self.send_last_image_period = send_last_image_period
+        self.last_bbox_mask_fetch_period = last_bbox_mask_fetch_period
 
         # Local backup
         self._backup_size = backup_size
@@ -130,6 +133,7 @@ class Engine:
                 "last_predictions": deque(maxlen=self.nb_consecutive_frames),
                 "ongoing": False,
                 "last_image_sent": None,
+                "last_bbox_mask_fetch": None,
             },
         }
         if isinstance(cam_creds, dict):
@@ -138,16 +142,13 @@ class Engine:
                     "last_predictions": deque(maxlen=self.nb_consecutive_frames),
                     "ongoing": False,
                     "last_image_sent": None,
+                    "last_bbox_mask_fetch": None,
                 }
 
-        self.occlusion_masks: Dict[str, Optional[np.ndarray]] = {"-1": None}
+        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
         if isinstance(cam_creds, dict):
-            for cam_id in cam_creds:
-                mask_file = cache_folder + "/occlusion_masks/" + cam_id + ".jpg"
-                if os.path.isfile(mask_file):
-                    self.occlusion_masks[cam_id] = np.array(Image.open(mask_file).convert(("L")))
-                else:
-                    self.occlusion_masks[cam_id] = None
+            for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
+                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, int(azimuth))
 
         # Restore pending alerts cache
         self._alerts: deque = deque(maxlen=cache_size)
@@ -315,9 +316,28 @@ class Engine:
                     response = self.api_client[ip].update_last_image(stream.getvalue())
                     logging.info(response.text)
 
+        # Update occlusion masks
+        if (
+            self._states[cam_key]["last_bbox_mask_fetch"] is None
+            or time.time() - self._states[cam_key]["last_bbox_mask_fetch"] > self.last_bbox_mask_fetch_period
+        ):
+            logging.info(f"Update occlusion masks for cam {cam_key}")
+            self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
+            bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_key]
+            if bbox_mask_url is not None:
+                full_url = f"{bbox_mask_url}_{azimuth}.json"
+                try:
+                    response = requests.get(full_url)
+                    bbox_mask_dict = response.json()
+                    self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
+                    logging.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
+                except requests.exceptions.RequestException as e:
+                    logging.error(f"Failed to download the JSON file: {e}")
+
         # Inference with ONNX
-        preds = self.model(frame.convert("RGB"), self.occlusion_masks[cam_key])
-        print(preds)
+        _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
+        preds = self.model(frame.convert("RGB"), bbox_mask_dict)
+        logging.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
@@ -378,7 +398,7 @@ class Engine:
                     frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                     bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    _, cam_azimuth = self.cam_creds[cam_id]
+                    _, cam_azimuth, _ = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
                     # Force a KeyError if the request failed

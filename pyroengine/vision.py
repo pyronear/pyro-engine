@@ -8,7 +8,7 @@ import logging
 import os
 import platform
 import shutil
-from typing import Optional, Tuple
+from typing import Tuple
 from urllib.request import urlretrieve
 
 import ncnn  # type: ignore
@@ -17,7 +17,7 @@ import onnxruntime
 from huggingface_hub import HfApi  # type: ignore[import-untyped]
 from PIL import Image
 
-from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
+from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
@@ -216,7 +216,7 @@ class Classifier:
 
         return pred
 
-    def __call__(self, pil_img: Image.Image, occlusion_mask: Optional[np.ndarray] = None) -> np.ndarray:
+    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict = {}) -> np.ndarray:
         """Run the classifier on an input image.
 
         Args:
@@ -249,21 +249,16 @@ class Classifier:
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
-        # Remove prediction in occlusion mask
-        if occlusion_mask is not None:
-            hm, wm = occlusion_mask.shape
-            keep = []
-            for p in pred.copy():
-                p[:4:2] *= wm
-                p[1:4:2] *= hm
-                p[:4:2] = np.clip(p[:4:2], 0, wm)
-                p[:4:2] = np.clip(p[:4:2], 0, hm)
-                x0, y0, x1, y1 = p.astype("int")[:4]
-                if np.sum(occlusion_mask[y0:y1, x0:x1]) > 0:
-                    keep.append(True)
-                else:
-                    keep.append(False)
+        print(pred, occlusion_bboxes)
 
+        # Remove prediction in bbox occlusion mask
+        if len(occlusion_bboxes):
+            all_boxes = np.array([b[:4] for b in occlusion_bboxes.values()], dtype=pred.dtype)
+
+            pred_boxes = pred[:, :4].astype(pred.dtype)
+            ious = box_iou(pred_boxes, all_boxes)
+            max_ious = ious.max(axis=0)
+            keep = max_ious <= 0.3
             pred = pred[keep]
 
         return pred
