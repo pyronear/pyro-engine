@@ -330,6 +330,7 @@ class Engine:
                     response = requests.get(full_url)
                     bbox_mask_dict = response.json()
                     self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
+                    logging.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
                 except requests.exceptions.RequestException as e:
                     logging.error(f"Failed to download the JSON file: {e}")
 
