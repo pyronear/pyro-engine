@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from pyroengine.sensors import ReolinkCamera
 
+
 def main():
     """
     Script to set up camera positions by moving to specific poses, capturing images,

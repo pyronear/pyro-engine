@@ -185,6 +185,5 @@ def main():
             process_camera(ip, cam_data, args)
 
 
-
 if __name__ == "__main__":
     main()
