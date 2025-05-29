@@ -39,13 +39,16 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     model_path = os.path.join(folder, "yolov11s.onnx")
     assert os.path.isfile(model_path)
 
-    # Test mask
-    mask = np.ones((384, 640))
-    out = model(mock_wildfire_image, mask)
+    # Test occlusion mask
+    out = model(mock_wildfire_image, {})
     assert out.shape == (1, 5)
 
-    mask = np.zeros((384, 640))
-    out = model(mock_wildfire_image, mask)
+    occlusion_bboxes = {"2025-05-28 15:49:17": [0.2, 0.3, 0.4, 0.5]}
+    out = model(mock_wildfire_image, occlusion_bboxes)
+    assert out.shape == (1, 5)
+
+    occlusion_bboxes = {"2025-05-28 15:49:17": [0.00621796, 0.5494792, 0.02899933, 0.6085069]}
+    out = model(mock_wildfire_image, occlusion_bboxes)
     assert out.shape == (0, 5)
 
 
