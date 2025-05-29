@@ -325,7 +325,7 @@ class Engine:
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
             bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_id]
             if bbox_mask_url is not None:
-                full_url = f"{bbox_mask_url}/{azimuth}.json"
+                full_url = f"{bbox_mask_url}_{azimuth}.json"
                 try:
                     response = requests.get(full_url)
                     bbox_mask_dict = response.json()
