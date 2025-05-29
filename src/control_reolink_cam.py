@@ -31,43 +31,43 @@ def main():
 
     Examples:
         - Capture an image:
-            python src/control_reolink_cam.py capture --ip 169.254.40.1
+            python src/control_reolink_cam.py capture --ip 192.168.1.12
 
         - Move the camera to a preset position:
-            python src/control_reolink_cam.py move_camera --ip 169.254.40.1 --operation ToPos --pos_id 10
+            python src/control_reolink_cam.py move_camera --ip 192.168.1.11 --operation ToPos --pos_id 3
 
         - Move the camera to the right for 3 seconds:
-            python src/control_reolink_cam.py move_in_seconds --ip 169.254.40.1 --operation Right --duration 3
+            python src/control_reolink_cam.py move_in_seconds --ip 192.168.1.12 --operation Right --duration 3
 
         - Get the list of PTZ presets:
-            python src/control_reolink_cam.py get_ptz_preset --ip 169.254.40.1
+            python src/control_reolink_cam.py get_ptz_preset --ip 192.168.1.12
 
         - Set a PTZ preset at position 1:
-            python src/control_reolink_cam.py set_ptz_preset --ip 169.254.40.1 --pos_id 1
+            python src/control_reolink_cam.py set_ptz_preset --ip 192.168.1.12 --pos_id 1
 
         - Reboot the camera:
-            python src/control_reolink_cam.py reboot_camera --ip 169.254.40.1
+            python src/control_reolink_cam.py reboot_camera --ip 192.168.1.12
 
         - Get the auto-focus settings:
-            python src/control_reolink_cam.py get_auto_focus --ip 169.254.40.1
+            python src/control_reolink_cam.py get_auto_focus --ip 192.168.1.12
 
         - Disable auto-focus:
-            python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1 --disable_autofocus
+            python src/control_reolink_cam.py set_auto_focus --ip 192.168.1.12 --disable_autofocus
 
         - Enable auto-focus:
-            python src/control_reolink_cam.py set_auto_focus --ip 169.254.40.1
+            python src/control_reolink_cam.py set_auto_focus --ip 192.168.1.12
 
         - Start zooming to zoom position 5:
-            python src/control_reolink_cam.py start_zoom_focus --ip 169.254.40.1 --zoom_position 5
+            python src/control_reolink_cam.py start_zoom_focus --ip 192.168.1.12 --zoom_position 5
 
         - Set manual focus to position 20:
-            python src/control_reolink_cam.py set_manual_focus --ip 169.254.40.1 --zoom_position 20
+            python src/control_reolink_cam.py set_manual_focus --ip 192.168.1.12 --zoom_position 20
 
         - Manually focus and capture an image:
-            python src/control_reolink_cam.py manual_focus_and_capture --ip 169.254.40.1 --zoom_position 20
+            python src/control_reolink_cam.py manual_focus_and_capture --ip 192.168.1.12 --zoom_position 20
 
         - Get current manual focus and zoom levels:
-            python src/control_reolink_cam.py get_focus_level --ip 169.254.40.1
+            python src/control_reolink_cam.py get_focus_level --ip 192.168.1.12
     """
     # Load environment variables
     load_dotenv()
