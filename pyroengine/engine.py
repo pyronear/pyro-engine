@@ -148,8 +148,7 @@ class Engine:
         self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
         if isinstance(cam_creds, dict):
             for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
-                azimuth: int = int(azimuth)
-                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, azimuth)
+                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, int(azimuth))
 
         # Restore pending alerts cache
         self._alerts: deque = deque(maxlen=cache_size)
