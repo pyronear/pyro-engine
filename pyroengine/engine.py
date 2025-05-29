@@ -336,7 +336,7 @@ class Engine:
         # Inference with ONNX
         _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
         preds = self.model(frame.convert("RGB"), bbox_mask_dict)
-        logging.info(f"pred for {cam_key} : {preds}", preds)
+        logging.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
