@@ -281,12 +281,13 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None, fake_pred: Optional[np.array] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
             frame: a PIL image
             cam_id: the name of the camera that sent this image
+            fake_pred: replace model prediction by another one for evaluation purposes
         Returns:
             the predicted confidence
         """
@@ -335,8 +336,12 @@ class Engine:
                     logging.error(f"Failed to download the JSON file: {e}")
 
         # Inference with ONNX
-        _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
-        preds = self.model(frame.convert("RGB"), bbox_mask_dict)
+        if fake_pred is None:
+            _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
+            preds = self.model(frame.convert("RGB"), bbox_mask_dict)
+        else:
+            preds = fake_pred
+
         logging.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
 
