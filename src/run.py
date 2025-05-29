@@ -43,18 +43,14 @@ def main(args):
         bbox_mask_url = None
         if "bbox_mask_url" in cam_data.keys():
             bbox_mask_url = cam_data["bbox_mask_url"]
-        
+
         if cam_data["type"] == "ptz":
             if "focus_position" in cam_data.keys():
                 focus_position = cam_data["focus_position"]
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
             for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = (
-                    cam_data["token"],
-                    cam_azimuth,
-                    bbox_mask_url
-                )
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
