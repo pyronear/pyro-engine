@@ -110,9 +110,6 @@ test/fixtures/videos/
 # Pycharm project settings
 .idea/
 
-#Ignore version file
-pyroengine/version.py
-
 # Ignore config file
 ./data
 # Checkpoints
