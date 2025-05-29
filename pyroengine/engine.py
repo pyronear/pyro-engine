@@ -281,7 +281,7 @@ class Engine:
 
         return conf
 
-    def predict(self, frame: Image.Image, cam_id: Optional[str] = None, fake_pred: Optional[np.array] = None) -> float:
+    def predict(self, frame: Image.Image, cam_id: Optional[str] = None, fake_pred: Optional[np.ndarray] = None) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
