@@ -41,6 +41,7 @@ def main(args):
     cameras = []
     for _ip, cam_data in cameras_credentials.items():
         bbox_mask_url = None
+        focus_position = None
         if "bbox_mask_url" in cam_data.keys():
             bbox_mask_url = cam_data["bbox_mask_url"]
 
