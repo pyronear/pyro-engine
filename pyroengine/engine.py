@@ -230,7 +230,7 @@ class Engine:
             # We keep only detections with at half boxes above conf_th
             detections = boxes[boxes[:, -1] > self.conf_thresh, :]
             ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
-            strong_detection = np.sum(ious_detections > 0, 0) >= len(ious_detections) / 2
+            strong_detection = np.sum(ious_detections > 0, 0) >= int(len(ious_detections) / 2)
             best_boxes = best_boxes[strong_detection, :]
             if best_boxes.shape[0]:
                 ious = box_iou(best_boxes[:, :4], boxes[:, :4])
