@@ -248,22 +248,9 @@ class Engine:
                         missing_bbox = combine_predictions
                         missing_bbox[:, -1] = 0
 
-                    else:
-                        # Add missing bboxes
-                        ious = box_iou(combine_predictions[:, :4], output_predictions[:, :4])
-                        missing_bbox = combine_predictions[ious[0] == 0, :]
-                        if len(missing_bbox):
-                            missing_bbox[:, -1] = 0
-                            output_predictions = np.concatenate([output_predictions, missing_bbox])
-
                     # Limit bbox size for api
                     output_predictions = np.round(output_predictions, 3)  # max 3 digit
                     output_predictions = output_predictions[:5, :]  # max 5 bbox
-
-        # Add default bbox
-        if len(output_predictions) == 0:
-            output_predictions = np.zeros((1, 5))
-            output_predictions[:, 2:4] += 0.0001
 
         self._states[cam_key]["last_predictions"].append((
             frame,
@@ -388,8 +375,25 @@ class Engine:
             "bboxes": bboxes,
         })
 
+    def fill_empty_bboxes(self):
+        # First, extract indices with non-empty bboxes
+        non_empty_indices = [i for i, alert in enumerate(self._alerts) if alert["bboxes"]]
+
+        # Skip if there are no non-empty bboxes
+        if not non_empty_indices:
+            return
+
+        # Loop through all alerts
+        for i, alert in enumerate(self._alerts):
+            if not alert["bboxes"]:
+                # Find the nearest index with a non-empty bbox
+                closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
+                # Copy the bboxes from the closest non-empty alert
+                self._alerts[i]["bboxes"] = self._alerts[closest_index]["bboxes"]
+
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
+            self.fill_empty_bboxes()
             for _ in range(len(self._alerts)):
                 # try to upload the oldest element
                 frame_info = self._alerts[0]
