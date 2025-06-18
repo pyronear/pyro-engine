@@ -101,8 +101,10 @@ def test_move_in_seconds():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response), \
-         patch.object(ReolinkCamera, "move_camera") as mock_move_camera:
+    with (
+        patch("requests.post", return_value=mock_response),
+        patch.object(ReolinkCamera, "move_camera") as mock_move_camera,
+    ):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         camera.move_in_seconds(1, operation="Right", speed=2)
         # Assert that the move_camera method was called with the correct arguments
