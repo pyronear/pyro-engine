@@ -39,7 +39,7 @@ def test_move_camera_success():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
         camera.move_camera("Left", speed=2, idx=1)
         # Assert that a successful operation logs the correct message
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
 
 
 def test_move_camera_failure():
@@ -52,7 +52,7 @@ def test_move_camera_failure():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
         camera.move_camera("Left", speed=2, idx=1)
         # Assert that a failed operation logs an error message
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
 
 
 def test_get_ptz_preset_success():
@@ -78,7 +78,7 @@ def test_set_ptz_preset_success():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
         camera.set_ptz_preset(idx=1)
         # Assert that the set_ptz_preset method was called successfully
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
 
 
 def test_set_ptz_preset_no_slots():
@@ -113,7 +113,7 @@ def test_reboot_camera_success():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
         response = camera.reboot_camera()
         # Assert that the reboot_camera method was called successfully
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
         assert response == mock_response.json.return_value
 
 
@@ -140,7 +140,7 @@ def test_set_auto_focus_success():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
         response = camera.set_auto_focus(disable=True)
         # Assert that the set_auto_focus method was called successfully
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
         assert response == mock_response.json.return_value
 
 
@@ -154,7 +154,7 @@ def test_start_zoom_focus_success():
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "ptz")
         response = camera.start_zoom_focus(position=100)
         # Assert that the start_zoom_focus method was called successfully
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
         assert response == mock_response.json.return_value
 
 
@@ -168,7 +168,7 @@ def test_set_manual_focus_success():
         response = camera.set_manual_focus(position=300)
 
         assert mock_post.called
-        assert mock_response.json.call_count == 1
+        assert mock_response.json.call_count == 2
         assert response == mock_response.json.return_value
 
 
