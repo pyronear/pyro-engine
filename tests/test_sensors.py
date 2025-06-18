@@ -9,7 +9,7 @@ from pyroengine.sensors import ReolinkCamera
 
 def test_reolinkcamera_connect_timeout():
     # Mock the requests.get method to raise a ConnectTimeout exception
-    with patch("requests.get", side_effect=ConnectTimeout):
+    with patch("requests.get", side_effect=ConnectTimeout), patch("requests.post"):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
         result = camera.capture()
         # Assert that the capture method returns None when a ConnectTimeout occurs
@@ -17,15 +17,17 @@ def test_reolinkcamera_connect_timeout():
 
 
 def test_reolinkcamera_success(mock_wildfire_stream):
-    # Mock the response of requests.get to return a successful response with image data
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.content = mock_wildfire_stream
+    mock_get = MagicMock()
+    mock_get.status_code = 200
+    mock_get.content = mock_wildfire_stream
 
-    with patch("requests.get", return_value=mock_response):
+    mock_post = MagicMock()
+    mock_post.status_code = 200
+    mock_post.json.return_value = [{"code": 0}]
+
+    with patch("requests.get", return_value=mock_get), patch("requests.post", return_value=mock_post):
         camera = ReolinkCamera("192.168.1.1", "login", "pwd", "static")
         result = camera.capture()
-        # Assert that the capture method returns an Image object
         assert isinstance(result, Image.Image)
 
 
