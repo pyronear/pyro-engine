@@ -81,9 +81,6 @@ async def capture_camera_image(
                                 logging.info(f"{cam_id} Camera is streaming, skipping capture.")
                                 return True
                 cam_id = f"{camera.ip_address}_{pose_id}"
-                # Autofocus
-                camera.start_zoom_focus(position=0)
-                time.sleep(0.3)
                 frame = camera.capture()
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                 camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
@@ -222,6 +219,12 @@ class SystemController:
                     self.engine._process_alerts()
                 except Exception as e:
                     logging.error(f"Error processing alerts: {e}")
+
+            # for camera in self.cameras:
+            #     if camera.focus_position is None:
+            #         # Autofocus
+            #         camera.start_zoom_focus(position=0)
+
 
             return self.is_day
 
