@@ -66,6 +66,8 @@ class ReolinkCamera:
         if focus_position is not None:
             self.set_auto_focus(disable=True)
             self.set_manual_focus(position=focus_position)
+        else:
+            self.start_zoom_focus(position=0)
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
