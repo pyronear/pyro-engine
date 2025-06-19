@@ -214,16 +214,18 @@ class SystemController:
             await image_queue.put(None)
             await processor_task
 
+            for camera in self.cameras:
+                if camera.focus_position is None:
+                    # Autofocus
+                    camera.start_zoom_focus(position=0)
+                else:
+                    self.set_manual_focus(position=camera.focus_position)
+
             if send_alerts:
                 try:
                     self.engine._process_alerts()
                 except Exception as e:
                     logging.error(f"Error processing alerts: {e}")
-
-            # for camera in self.cameras:
-            #     if camera.focus_position is None:
-            #         # Autofocus
-            #         camera.start_zoom_focus(position=0)
 
             return self.is_day
 
