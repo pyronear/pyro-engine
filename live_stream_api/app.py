@@ -72,6 +72,7 @@ CAMERA_OBJECTS = {
         password=cam_info["password"],
         cam_poses=credentials[ip].get("poses"),
         cam_azimuths=credentials[ip].get("azimuths"),
+        focus_position=credentials[ip].get("focus_position"),
     )
     for ip, cam_info in CAMERAS.items()
 }
@@ -201,6 +202,15 @@ async def start_stream(camera_id: str):
     processes[camera_id] = proc
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_id), daemon=True).start()
 
+    # ✅ Reset zoom after starting the stream
+    cam = CAMERA_OBJECTS.get(camera_id)
+    if cam:
+        try:
+            cam.start_zoom_focus(position=0)
+            logging.info(f"Camera {camera_id}: zoom reset to position 0 after stream start")
+        except Exception as e:
+            logging.error(f"Camera {camera_id}: failed to reset zoom after stream start - {e}")
+
     return {
         "message": f"Stream for {camera_id} started",
         "previous_stream": (stopped_cam or "No previous stream was running"),
@@ -209,13 +219,22 @@ async def start_stream(camera_id: str):
 
 @app.post("/stop_stream")
 async def stop_stream():
-    """Stops any active stream."""
+    """Stops any active stream, resets zoom to position 0"""
     global last_command_time
     last_command_time = time.time()
 
     stopped_cam = stop_any_running_stream()
     if stopped_cam:
-        return {"message": f"Stream for {stopped_cam} stopped"}
+        cam = CAMERA_OBJECTS.get(stopped_cam)
+        if cam:
+            try:
+                cam.start_zoom_focus(position=0)
+                logging.info(f"Camera {stopped_cam}: zoom reset to position 0 after stream stop")
+            except Exception as e:
+                logging.error(f"Camera {stopped_cam}: failed to reset zoom - {e}")
+
+        return {"message": f"Stream for {stopped_cam} stopped, zoom reset, focus restored (if defined)"}
+
     return {"message": "No active stream was running"}
 
 
