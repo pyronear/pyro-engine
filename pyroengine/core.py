@@ -55,6 +55,17 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
+async def is_camera_streaming(cam_id: str) -> bool:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
+                data = await resp.json()
+                return data.get("running", False)
+    except Exception as e:
+        logging.warning(f"Streaming check failed for {cam_id}: {e}")
+        return False
+
+
 async def capture_camera_image(
     camera: ReolinkCamera, image_queue: asyncio.Queue, server_ip: Optional[str] = None
 ) -> bool:
@@ -73,17 +84,10 @@ async def capture_camera_image(
     try:
         if camera.cam_type == "ptz":
             for idx, pose_id in enumerate(camera.cam_poses):
-                if server_ip:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(f"http://127.0.0.1:8081/is_stream_running/{cam_id}") as resp:
-                            data = await resp.json()
-                            if data.get("running"):
-                                logging.info(f"{cam_id} Camera is streaming, skipping capture.")
-                                return True
+                if server_ip and await is_camera_streaming(cam_id):
+                    logging.info(f"{cam_id} Camera is streaming, skipping capture.")
+                    return True
                 cam_id = f"{camera.ip_address}_{pose_id}"
-                # Autofocus
-                camera.start_zoom_focus(position=0)
-                time.sleep(0.3)
                 frame = camera.capture()
                 next_pos_id = camera.cam_poses[(idx + 1) % len(camera.cam_poses)]
                 camera.move_camera("ToPos", idx=int(next_pos_id), speed=50)
@@ -216,6 +220,16 @@ class SystemController:
             await image_queue.join()
             await image_queue.put(None)
             await processor_task
+
+            for camera in self.cameras:
+                if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
+                    logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
+                else:
+                    if camera.focus_position is None:
+                        # Autofocus
+                        camera.start_zoom_focus(position=0)
+                    else:
+                        camera.set_manual_focus(position=camera.focus_position)
 
             if send_alerts:
                 try:
