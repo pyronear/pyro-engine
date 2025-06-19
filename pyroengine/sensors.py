@@ -65,6 +65,7 @@ class ReolinkCamera:
 
         # Fix focus position
         if focus_position is not None:
+            self.set_auto_focus(disable=True)
             self.set_manual_focus(position=focus_position)
 
     def _build_url(self, command: str) -> str:
@@ -211,7 +212,7 @@ class ReolinkCamera:
         data = [{"cmd": "Reboot"}]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Camera reboot initiated successfully.")
-    
+
     def get_auto_focus(self):
         url = self._build_url("GetAutoFocus")
         data = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
