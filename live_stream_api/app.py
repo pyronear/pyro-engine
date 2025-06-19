@@ -219,7 +219,7 @@ async def start_stream(camera_id: str):
 
 @app.post("/stop_stream")
 async def stop_stream():
-    """Stops any active stream, resets zoom to position 0, and restores manual focus if available."""
+    """Stops any active stream, resets zoom to position 0"""
     global last_command_time
     last_command_time = time.time()
 
@@ -232,13 +232,6 @@ async def stop_stream():
                 logging.info(f"Camera {stopped_cam}: zoom reset to position 0 after stream stop")
             except Exception as e:
                 logging.error(f"Camera {stopped_cam}: failed to reset zoom - {e}")
-
-            try:
-                if cam.focus_position is not None:
-                    cam.set_manual_focus(position=cam.focus_position)
-                    logging.info(f"Camera {stopped_cam}: manual focus restored to {cam.focus_position}")
-            except Exception as e:
-                logging.error(f"Camera {stopped_cam}: failed to restore manual focus - {e}")
 
         return {"message": f"Stream for {stopped_cam} stopped, zoom reset, focus restored (if defined)"}
 
