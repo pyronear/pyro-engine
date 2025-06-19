@@ -225,7 +225,6 @@ class SystemController:
             #         # Autofocus
             #         camera.start_zoom_focus(position=0)
 
-
             return self.is_day
 
         except Exception as e:

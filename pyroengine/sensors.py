@@ -66,6 +66,9 @@ class ReolinkCamera:
         if focus_position is not None:
             self.set_auto_focus(disable=True)
             self.set_manual_focus(position=focus_position)
+        else:
+            if self.cam_type == "ptz":
+                self.start_zoom_focus(position=0)
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -211,24 +214,6 @@ class ReolinkCamera:
         data = [{"cmd": "Reboot"}]
         response = requests.post(url, json=data, verify=False)
         return self._handle_response(response, "Camera reboot initiated successfully.")
-
-    def get_auto_focus(self):
-        url = self._build_url("GetAutoFocus")
-        data = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)
-        return self._handle_response(response, "Fetched AutoFocus settings successfully.")
-
-    def set_auto_focus(self, disable: bool):
-        url = self._build_url("SetAutoFocus")
-        data = [
-            {
-                "cmd": "SetAutoFocus",
-                "action": 0,
-                "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}},
-            }
-        ]
-        response = requests.post(url, json=data, verify=False)
-        return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
         url = self._build_url("StartZoomFocus")
