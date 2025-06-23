@@ -330,7 +330,8 @@ class Engine:
 
     def fill_empty_bboxes(self):
         # Group alerts by cam_id
-        cam_id_to_indices = {}
+        cam_id_to_indices: Dict[str, list[int]] = {}
+
         for i, alert in enumerate(self._alerts):
             cam_id = alert["cam_id"]
             if cam_id not in cam_id_to_indices:
