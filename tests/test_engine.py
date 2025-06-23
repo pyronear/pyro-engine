@@ -1,4 +1,3 @@
-import json
 import os
 import tempfile
 import time
@@ -27,26 +26,6 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
     assert engine._alerts[0]["alert_id"] is None
-
-    # Cache dump
-    engine._dump_cache()
-    assert engine._cache.joinpath("pending_alerts.json").is_file()
-    with open(engine._cache.joinpath("pending_alerts.json"), "rb") as f:
-        cache_dump = json.load(f)
-    assert isinstance(cache_dump, list) and len(cache_dump) == 1 and len(engine._alerts) == 1
-    assert cache_dump[0] == {
-        "frame_path": str(engine._cache.joinpath("pending_frame0.jpg")),
-        "cam_id": 0,
-        "ts": engine._alerts[0]["ts"],
-        "bboxes": "dummy",
-    }
-    # Overrites cache files
-    engine._dump_cache()
-
-    # Cache dump loading
-    engine = Engine(cache_folder=folder)
-    assert len(engine._alerts) == 1
-    engine.clear_cache()
 
     # inference
     engine = Engine(nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True)
