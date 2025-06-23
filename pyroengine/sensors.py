@@ -232,16 +232,17 @@ class ReolinkCamera:
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
-        url = self._build_url("StartZoomFocus")
-        data = [
-            {
-                "cmd": "StartZoomFocus",
-                "action": 0,
-                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
-            }
-        ]
-        response = requests.post(url, json=data, verify=False)
-        return self._handle_response(response, "Started ZoomFocus successfully.")
+        if self.cam_type != "static":
+            url = self._build_url("StartZoomFocus")
+            data = [
+                {
+                    "cmd": "StartZoomFocus",
+                    "action": 0,
+                    "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
+                }
+            ]
+            response = requests.post(url, json=data, verify=False)
+            return self._handle_response(response, "Started ZoomFocus successfully.")
 
     def set_manual_focus(self, position: int):
         """
@@ -250,16 +251,17 @@ class ReolinkCamera:
         Args:
             position (int): Focus position (e.g., between 0 and 1000).
         """
-        url = self._build_url("StartZoomFocus")
-        data = [
-            {
-                "cmd": "StartZoomFocus",
-                "action": 0,
-                "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
-            }
-        ]
-        response = requests.post(url, json=data, verify=False)
-        return self._handle_response(response, f"Manual focus set at position {position}")
+        if self.cam_type != "static":
+            url = self._build_url("StartZoomFocus")
+            data = [
+                {
+                    "cmd": "StartZoomFocus",
+                    "action": 0,
+                    "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
+                }
+            ]
+            response = requests.post(url, json=data, verify=False)
+            return self._handle_response(response, f"Manual focus set at position {position}")
 
     def get_focus_level(self):
         """Retrieve the current manual focus and zoom positions."""
