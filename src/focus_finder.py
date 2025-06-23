@@ -1,6 +1,7 @@
 import json
 import time
 import os
+import argparse
 import numpy as np
 from PIL import Image
 import cv2
@@ -100,8 +101,11 @@ def process_all_cameras(credentials_path='/home/engine/data/credentials.json', s
         print(f"Final best focus for {ip}: {best_focus}")
 
 # --------------------------
-# Run
+# Entry point with argparse
 # --------------------------
 if __name__ == '__main__':
-    # Toggle save_images to True if you want to save captured images
-    process_all_cameras(save_images=False)
+    parser = argparse.ArgumentParser(description="Greedy autofocus finder for Reolink cameras")
+    parser.add_argument('--save_images', type=bool, default=False, help='Whether to save captured images')
+    args = parser.parse_args()
+
+    process_all_cameras(save_images=args.save_images)
