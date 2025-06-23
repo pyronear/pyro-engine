@@ -20,7 +20,7 @@ def measure_sharpness(pil_image):
 # --------------------------
 # Greedy focus finder
 # --------------------------
-def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800):
+def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800, camera_ip=None):
     def capture_and_measure(pos):
         camera_controller.set_manual_focus(position=pos)
         t0 = time.time()
@@ -41,7 +41,7 @@ def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800
     elif next_sharp > current_sharp:
         direction = 1
     else:
-        print(f"\nBest focus position: {current_pos} with sharpness: {current_sharp:.2f}")
+        print(f"\nBest focus position for {camera_ip}: {current_pos} with sharpness: {current_sharp:.2f}")
         return current_pos
 
     best_pos = current_pos + direction
@@ -59,7 +59,7 @@ def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800
         else:
             break
 
-    print(f"\nBest focus position for {camera_controller.ip}: {best_pos} with sharpness: {best_sharp:.2f}")
+    print(f"\nBest focus position for {camera_ip}: {best_pos} with sharpness: {best_sharp:.2f}")
     return best_pos
 
 # --------------------------
@@ -74,7 +74,6 @@ def process_all_cameras(credentials_path='/home/engine/data/credentials.json'):
 
         focus_start = config.get("focus_position", 720)
 
-        # Initialize ReolinkCamera
         camera = ReolinkCamera(
             ip_address=ip,
             username="admin",
@@ -82,7 +81,7 @@ def process_all_cameras(credentials_path='/home/engine/data/credentials.json'):
             protocol="http"
         )
 
-        best_focus = find_best_focus(camera, default=focus_start)
+        best_focus = find_best_focus(camera, default=focus_start, camera_ip=ip)
         print(f"Final best focus for {ip}: {best_focus}")
 
 # --------------------------
