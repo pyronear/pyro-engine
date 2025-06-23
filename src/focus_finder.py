@@ -1,5 +1,6 @@
 import json
 import time
+import os
 import numpy as np
 from PIL import Image
 import cv2
@@ -20,13 +21,21 @@ def measure_sharpness(pil_image):
 # --------------------------
 # Greedy focus finder
 # --------------------------
-def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800, camera_ip=None):
+def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800, camera_ip=None, save_images=False):
+    output_dir = f"focus_debug/{camera_ip.replace('.', '_')}"
+    if save_images:
+        os.makedirs(output_dir, exist_ok=True)
+
     def capture_and_measure(pos):
         camera_controller.set_manual_focus(position=pos)
         t0 = time.time()
         img = camera_controller.capture()
         sharpness, _ = measure_sharpness(img)
         total_time = time.time() - t0
+
+        if save_images:
+            img.save(f"{output_dir}/focus_{pos}.jpg")
+
         print(f"Focus {pos}: Sharpness = {sharpness:.2f}, TotalStep = {total_time:.2f}s")
         return sharpness
 
@@ -65,7 +74,7 @@ def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800
 # --------------------------
 # Main loop
 # --------------------------
-def process_all_cameras(credentials_path='/home/engine/data/credentials.json'):
+def process_all_cameras(credentials_path='/home/engine/data/credentials.json', save_images=False):
     with open(credentials_path, 'r') as f:
         data = json.load(f)
 
@@ -81,11 +90,18 @@ def process_all_cameras(credentials_path='/home/engine/data/credentials.json'):
             protocol="http"
         )
 
-        best_focus = find_best_focus(camera, default=focus_start, camera_ip=ip)
+        best_focus = find_best_focus(
+            camera,
+            default=focus_start,
+            camera_ip=ip,
+            save_images=save_images
+        )
+
         print(f"Final best focus for {ip}: {best_focus}")
 
 # --------------------------
 # Run
 # --------------------------
 if __name__ == '__main__':
-    process_all_cameras()
+    # Toggle save_images to True if you want to save captured images
+    process_all_cameras(save_images=False)
