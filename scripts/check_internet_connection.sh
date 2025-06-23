@@ -18,22 +18,19 @@
 # Fix PATH for cron
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-# Load .env if it exists
-ENV_FILE="/home/pi/pyro-engine/.env"
-if [ -f "$ENV_FILE" ]; then
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
-    echo "📄 Loaded config from $ENV_FILE"
-else
-    echo "⚠️ No .env file found at $ENV_FILE, using defaults"
-fi
-
-# Default values if not set
-ENABLE_ROUTER_REBOOT=${ENABLE_ROUTER_REBOOT:-false}
-ROUTER_IP=${ROUTER_IP:-192.168.1.1}
-ROUTER_USER=${ROUTER_USER:-root}
-
 # Log file
 LOG_FILE="/home/pi/check_internet.log"
+
+# Load .env if it exists
+ENV_FILE="/home/engine/.env"
+if [ -f "$ENV_FILE" ]; then
+    set -o allexport
+    source "$ENV_FILE"
+    set +o allexport
+    echo "📄 Loaded config from $ENV_FILE" >> "$LOG_FILE"
+else
+    echo "⚠️ No .env file found at $ENV_FILE, using defaults" >> "$LOG_FILE"
+fi
 
 # Truncate log if it exceeds 10MB 
 MAX_SIZE=$((10 * 1024 * 1024))
@@ -42,6 +39,12 @@ if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE") -ge $MAX_SIZE ]; then
 fi
 
 echo "==== $(date) ====" >> "$LOG_FILE"
+echo "ENV DEBUG: ENABLE_ROUTER_REBOOT=$ENABLE_ROUTER_REBOOT, ROUTER_USER=$ROUTER_USER" >> "$LOG_FILE"
+
+# Default values if not set
+ENABLE_ROUTER_REBOOT=$(echo "$ENABLE_ROUTER_REBOOT" | tr '[:upper:]' '[:lower:]')
+ROUTER_IP=${ROUTER_IP:-192.168.1.1}
+ROUTER_USER=${ROUTER_USER:-root}
 
 # Step 1: Ping Google
 if ping -c 1 -W 10 google.com > /dev/null 2>&1; then
@@ -71,8 +74,12 @@ else
     if [ "$ENABLE_ROUTER_REBOOT" = true ]; then
         echo "🔁 Attempting to reboot router at $ROUTER_IP" >> "$LOG_FILE"
         if ping -c 1 -W 3 "$ROUTER_IP" > /dev/null 2>&1; then
-            ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$ROUTER_USER@$ROUTER_IP" "reboot" >> "$LOG_FILE" 2>&1
-            echo "✅ Router reboot command sent" >> "$LOG_FILE"
+            if sshpass -p "$ROUTER_PASSWORD" ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$ROUTER_USER@$ROUTER_IP" "reboot" >> "$LOG_FILE" 2>&1; then
+                echo "✅ Router reboot command sent" >> "$LOG_FILE"
+            else
+                echo "❌ Failed to send router reboot command (wrong password or SSH error)" >> "$LOG_FILE"
+            fi
+
         else
             echo "⚠️ Router at $ROUTER_IP not reachable, skipping reboot" >> "$LOG_FILE"
         fi
@@ -80,6 +87,8 @@ else
         echo "🔒 Router reboot disabled (ENABLE_ROUTER_REBOOT=$ENABLE_ROUTER_REBOOT)" >> "$LOG_FILE"
     fi
 fi
+
+
 
 # Wait 3 minutes and check again
 sleep 180
