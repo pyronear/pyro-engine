@@ -65,7 +65,7 @@ def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800
 # --------------------------
 # Main loop
 # --------------------------
-def process_all_cameras(credentials_path='credentials.json'):
+def process_all_cameras(credentials_path='/home/engine/data/credentials.json'):
     with open(credentials_path, 'r') as f:
         data = json.load(f)
 
