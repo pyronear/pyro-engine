@@ -5,14 +5,13 @@
 
 import glob
 import io
-import json
 import logging
 import os
 import shutil
 import signal
 import time
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -154,54 +153,6 @@ class Engine:
         self._alerts: deque = deque(maxlen=cache_size)
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
         assert self._cache.is_dir()
-        self._load_cache()
-        self.last_cache_dump = datetime.now(timezone.utc)
-
-    def clear_cache(self) -> None:
-        """Clear local cache"""
-        for file in self._cache.rglob("pending*"):
-            file.unlink()
-
-    def _dump_cache(self) -> None:
-        # Remove previous dump
-        json_path = self._cache.joinpath("pending_alerts.json")
-        if json_path.is_file():
-            with open(json_path, "rb") as f:
-                data = json.load(f)
-
-            for entry in data:
-                os.remove(entry["frame_path"])
-            os.remove(json_path)
-
-        data = []
-        for idx, info in enumerate(self._alerts):
-            # Save frame to disk
-            info["frame"].save(self._cache.joinpath(f"pending_frame{idx}.jpg"))
-
-            # Save path in JSON
-            data.append({
-                "frame_path": str(self._cache.joinpath(f"pending_frame{idx}.jpg")),
-                "cam_id": info["cam_id"],
-                "ts": info["ts"],
-                "bboxes": info["bboxes"],
-            })
-
-        # JSON dump
-        if len(data) > 0:
-            with open(json_path, "w") as f:
-                json.dump(data, f)
-
-    def _load_cache(self) -> None:
-        # Read json
-        json_path = self._cache.joinpath("pending_alerts.json")
-        if json_path.is_file():
-            with open(json_path, "rb") as f:
-                data = json.load(f)
-
-            for entry in data:
-                # Open image
-                frame = Image.open(entry["frame_path"], mode="r")
-                self._alerts.append({"frame": frame, "cam_id": entry["cam_id"], "ts": entry["ts"]})
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
@@ -355,12 +306,6 @@ class Engine:
                         ts,
                         True,
                     )
-
-        # Check if it's time to backup pending alerts
-        ts = datetime.now(timezone.utc)
-        if ts > self.last_cache_dump + timedelta(minutes=self.cache_backup_period):
-            self._dump_cache()
-            self.last_cache_dump = ts
 
         return float(conf)
 
