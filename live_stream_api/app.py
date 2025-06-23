@@ -72,7 +72,6 @@ CAMERA_OBJECTS = {
         password=cam_info["password"],
         cam_poses=credentials[ip].get("poses"),
         cam_azimuths=credentials[ip].get("azimuths"),
-        focus_position=credentials[ip].get("focus_position"),
     )
     for ip, cam_info in CAMERAS.items()
 }
