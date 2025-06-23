@@ -226,14 +226,10 @@ class SystemController:
                     logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
                 else:
                     if camera.focus_position is None:
-                        # Autofocus
-                        logging.info(f"Core : Autofocus")
-                        if camera.cam_type == "ptz":
-                            camera.start_zoom_focus(position=0)
+                        camera.start_zoom_focus(position=0)
+
                     else:
-                        if camera.cam_type == "ptz":
-                            logging.info("Core : Manualfocus")
-                            camera.set_manual_focus(position=camera.focus_position)
+                        camera.set_manual_focus(position=camera.focus_position)
 
             if send_alerts:
                 try:
