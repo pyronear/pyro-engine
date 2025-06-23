@@ -1,111 +1,69 @@
-import json
-import time
-import os
+#!/usr/bin/env python3
+# Copyright (C) 2022-2025, Pyronear.
+# Apache 2.0 licence – see LICENCE file for details.
+
 import argparse
-import numpy as np
-from PIL import Image
-import cv2
+import json
+import sys
+from pathlib import Path
+
 from pyroengine.sensors import ReolinkCamera
 
-# --------------------------
-# Sharpness measurement
-# --------------------------
-def measure_sharpness(pil_image):
-    t0 = time.time()
-    img = pil_image.convert('L')
-    arr = np.array(img)
-    laplacian = cv2.Laplacian(arr, cv2.CV_64F)
-    sharpness = laplacian.var()
-    elapsed = time.time() - t0
-    return sharpness, elapsed
 
-# --------------------------
-# Greedy focus finder
-# --------------------------
-def find_best_focus(camera_controller, default=720, min_focus=600, max_focus=800, camera_ip=None, save_images=False):
-    output_dir = f"focus_debug/{camera_ip.replace('.', '_')}"
-    if save_images:
-        os.makedirs(output_dir, exist_ok=True)
-
-    def capture_and_measure(pos):
-        camera_controller.set_manual_focus(position=pos)
-        t0 = time.time()
-        img = camera_controller.capture()
-        sharpness, _ = measure_sharpness(img)
-        total_time = time.time() - t0
-
-        if save_images:
-            img.save(f"{output_dir}/focus_{pos}.jpg")
-
-        print(f"Focus {pos}: Sharpness = {sharpness:.2f}, TotalStep = {total_time:.2f}s")
-        return sharpness
-
-    current_pos = default
-    current_sharp = capture_and_measure(current_pos)
-
-    prev_sharp = capture_and_measure(current_pos - 1)
-    next_sharp = capture_and_measure(current_pos + 1)
-
-    if prev_sharp > current_sharp and prev_sharp >= next_sharp:
-        direction = -1
-    elif next_sharp > current_sharp:
-        direction = 1
-    else:
-        print(f"\nBest focus position for {camera_ip}: {current_pos} with sharpness: {current_sharp:.2f}")
-        return current_pos
-
-    best_pos = current_pos + direction
-    best_sharp = max(prev_sharp, next_sharp)
-
-    while True:
-        next_pos = best_pos + direction
-        if next_pos < min_focus or next_pos > max_focus:
-            break
-
-        sharp = capture_and_measure(next_pos)
-        if sharp > best_sharp:
-            best_pos = next_pos
-            best_sharp = sharp
-        else:
-            break
-
-    print(f"\nBest focus position for {camera_ip}: {best_pos} with sharpness: {best_sharp:.2f}")
-    return best_pos
-
-# --------------------------
+# ----------------------------------------------------------------------
 # Main loop
-# --------------------------
-def process_all_cameras(credentials_path='/home/engine/data/credentials.json', save_images=False):
-    with open(credentials_path, 'r') as f:
+# ----------------------------------------------------------------------
+def process_all_cameras(
+    credentials_path: str = "/home/engine/data/credentials.json",
+    save_images: bool = False,
+) -> None:
+    if not Path(credentials_path).is_file():
+        sys.exit(f"Credentials file not found: {credentials_path}")
+
+    with open(credentials_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    for ip, config in data.items():
-        print(f"\n===> Processing camera {ip} ({config.get('name', 'Unnamed')})")
-
-        focus_start = config.get("focus_position", 720)
+    for ip, cfg in data.items():
+        print(f"\n===> Processing camera {ip} ({cfg.get('name', 'Unnamed')})")
 
         camera = ReolinkCamera(
             ip_address=ip,
-            username="admin",
-            password="@Pyronear",
-            protocol="http"
+            username="admin",  # change if needed
+            password="@Pyronear",  # change if needed
+            protocol="http",
+            cam_type=cfg.get("type", "ptz"),
+            cam_poses=cfg.get("poses", []),
+            cam_azimuths=cfg.get("azimuths", []),
+            focus_position=cfg.get("focus_position"),
         )
 
-        best_focus = find_best_focus(
-            camera,
-            default=focus_start,
-            camera_ip=ip,
-            save_images=save_images
-        )
-
+        best_focus = camera.focus_finder(save_images=save_images)
         print(f"Final best focus for {ip}: {best_focus}")
 
-# --------------------------
-# Entry point with argparse
-# --------------------------
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Greedy autofocus finder for Reolink cameras")
-    parser.add_argument('--save_images', type=bool, default=False, help='Whether to save captured images')
+        # Optional: write the new value back to the in-memory dict
+        cfg["focus_position"] = best_focus
+
+    # Optional: persist the updated focus values
+    # with open(credentials_path, "w", encoding="utf-8") as f:
+    #     json.dump(data, f, indent=4)
+    #     print(f"\nUpdated credentials saved to {credentials_path}")
+
+
+# ----------------------------------------------------------------------
+# CLI entry point
+# ----------------------------------------------------------------------
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run greedy autofocus on every camera listed in credentials.json")
+    parser.add_argument(
+        "--credentials",
+        default="/home/engine/data/credentials.json",
+        help="Path to credentials JSON file (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--save_images",
+        action="store_true",
+        help="Save each captured frame under focus_debug/<ip_address>",
+    )
     args = parser.parse_args()
 
-    process_all_cameras(save_images=args.save_images)
+    process_all_cameras(args.credentials, save_images=args.save_images)
