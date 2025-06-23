@@ -199,9 +199,17 @@ class Engine:
                         missing_bbox = combine_predictions
                         missing_bbox[:, -1] = 0
 
-                    # Limit bbox size for api
-                    output_predictions = np.round(output_predictions, 3)  # max 3 digit
-                    output_predictions = output_predictions[:5, :]  # max 5 bbox
+        # Fallback: fill from last non-empty if needed
+        if output_predictions.shape[0] == 0:
+            for _, _, previous_bboxes, _, _ in reversed(self._states[cam_key]["last_predictions"]):
+                if previous_bboxes:
+                    output_predictions = np.array(previous_bboxes)
+                    logging.debug(f"Filled missing bbox for {cam_key} from past prediction")
+                    break
+
+        # Clip output
+        output_predictions = np.round(output_predictions, 3)
+        output_predictions = output_predictions[:5, :]
 
         self._states[cam_key]["last_predictions"].append((
             frame,
@@ -321,20 +329,26 @@ class Engine:
         })
 
     def fill_empty_bboxes(self):
-        # First, extract indices with non-empty bboxes
-        non_empty_indices = [i for i, alert in enumerate(self._alerts) if alert["bboxes"]]
-
-        # Skip if there are no non-empty bboxes
-        if not non_empty_indices:
-            return
-
-        # Loop through all alerts
+        # Group alerts by cam_id
+        cam_id_to_indices = {}
         for i, alert in enumerate(self._alerts):
-            if not alert["bboxes"]:
-                # Find the nearest index with a non-empty bbox
-                closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
-                # Copy the bboxes from the closest non-empty alert
-                self._alerts[i]["bboxes"] = self._alerts[closest_index]["bboxes"]
+            cam_id = alert["cam_id"]
+            if cam_id not in cam_id_to_indices:
+                cam_id_to_indices[cam_id] = []
+            cam_id_to_indices[cam_id].append(i)
+
+        # Process each camera separately
+        for cam_id, indices in cam_id_to_indices.items():
+            # Identify indices with non-empty bboxes
+            non_empty_indices = [i for i in indices if self._alerts[i]["bboxes"]]
+            if not non_empty_indices:
+                continue  # Skip this cam_id if no non-empty bboxes
+
+            for i in indices:
+                if not self._alerts[i]["bboxes"]:
+                    # Find the closest non-empty bbox index for this camera
+                    closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
+                    self._alerts[i]["bboxes"] = self._alerts[closest_index]["bboxes"]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
