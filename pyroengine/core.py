@@ -131,6 +131,7 @@ class SystemController:
         self.cameras = cameras
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
+        self.last_focus_run_day = None
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -221,21 +222,38 @@ class SystemController:
             await image_queue.put(None)
             await processor_task
 
-            for camera in self.cameras:
-                if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
-                    logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
-                else:
-                    if camera.focus_position is None:
-                        # Autofocus
-                        camera.start_zoom_focus(position=0)
-                    else:
-                        camera.set_manual_focus(position=camera.focus_position)
-
-            if send_alerts:
+            if len(self.engine._alerts()) and send_alerts:
                 try:
                     self.engine._process_alerts()
                 except Exception as e:
                     logging.error(f"Error processing alerts: {e}")
+
+            else:
+                now = datetime.now()
+                current_day = now.date()
+                current_hour = now.hour
+                # Trigger focus correction at 14h00 once per day
+                if current_hour == 14 and self.last_focus_run_day != current_day:
+                    logging.info("🛠 Running daily focus correction for all cameras")
+                    for camera in self.cameras:
+                        try:
+                            best_focus = camera.focus_finder()
+                            logging.info(
+                                f"[{camera.ip_address}] Daily autofocus completed, best position = {best_focus}"
+                            )
+                        except Exception as e:
+                            logging.error(f"[{camera.ip_address}] Failed to run focus finder: {e}")
+                    self.last_focus_run_day = current_day
+
+                for camera in self.cameras:
+                    if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
+                        logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
+                    else:
+                        if camera.focus_position is None:
+                            # Autofocus
+                            camera.start_zoom_focus(position=0)
+                        else:
+                            camera.set_manual_focus(position=camera.focus_position)
 
             return self.is_day
 

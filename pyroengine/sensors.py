@@ -314,37 +314,38 @@ class ReolinkCamera:
 
             return score
 
-        current = self.focus_position if self.focus_position is not None else 720
-        min_focus = max(650, current - 50)
-        max_focus = min(850, current + 50)
+        if self.cam_type != "static":
+            current = self.focus_position if self.focus_position is not None else 720
+            min_focus = max(650, current - 50)
+            max_focus = min(850, current + 50)
 
-        sharp_current = capture_and_score(current)
-        sharp_prev = capture_and_score(current - 1)
-        sharp_next = capture_and_score(current + 1)
+            sharp_current = capture_and_score(current)
+            sharp_prev = capture_and_score(current - 1)
+            sharp_next = capture_and_score(current + 1)
 
-        if sharp_prev > sharp_current and sharp_prev >= sharp_next:
-            direction = -1
-        elif sharp_next > sharp_current:
-            direction = 1
-        else:
-            logging.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
-            self.focus_position = current
-            return current
-
-        best_pos = current + direction
-        best_score = max(sharp_prev, sharp_next)
-
-        while True:
-            next_pos = best_pos + direction
-            if next_pos < min_focus or next_pos > max_focus:
-                break
-            score = capture_and_score(next_pos)
-            if score > best_score:
-                best_pos = next_pos
-                best_score = score
+            if sharp_prev > sharp_current and sharp_prev >= sharp_next:
+                direction = -1
+            elif sharp_next > sharp_current:
+                direction = 1
             else:
-                break
+                logging.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
+                self.focus_position = current
+                return current
 
-        logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
-        self.focus_position = best_pos
-        return best_pos
+            best_pos = current + direction
+            best_score = max(sharp_prev, sharp_next)
+
+            while True:
+                next_pos = best_pos + direction
+                if next_pos < min_focus or next_pos > max_focus:
+                    break
+                score = capture_and_score(next_pos)
+                if score > best_score:
+                    best_pos = next_pos
+                    best_score = score
+                else:
+                    break
+
+            logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
+            self.focus_position = best_pos
+            return best_pos
