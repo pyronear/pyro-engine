@@ -227,9 +227,11 @@ class SystemController:
                 else:
                     if camera.focus_position is None:
                         # Autofocus
+                        logging.info("Core : Autofocus")
                         camera.start_zoom_focus(position=0)
                     else:
                         if camera.cam_type == "ptz":
+                            logging.info("Core : Manualfocus")
                             camera.set_manual_focus(position=camera.focus_position)
 
             if send_alerts:
