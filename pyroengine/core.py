@@ -131,7 +131,7 @@ class SystemController:
         self.cameras = cameras
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
-        self.last_focus_run_day = None
+        self.last_autofocus = None
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -213,6 +213,18 @@ class SystemController:
             bool: True if it is daytime according to all cameras, False otherwise.
         """
         try:
+            # First autofocus: if never done, run immediately
+            if self.last_autofocus is None and self.is_day:
+                logging.info("🔧 Initial autofocus run for all cameras")
+                for camera in self.cameras:
+                    try:
+                        best_focus = camera.focus_finder()
+                        logging.info(f"[{camera.ip_address}] Initial autofocus completed, best position = {best_focus}")
+                        camera.focus_position = best_focus
+                    except Exception as e:
+                        logging.error(f"[{camera.ip_address}] Failed to run initial focus finder: {e}")
+                self.last_autofocus = datetime.now()
+
             image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
             processor_task = asyncio.create_task(self.analyze_stream(image_queue))
@@ -230,20 +242,22 @@ class SystemController:
 
             else:
                 now = datetime.now()
-                current_day = now.date()
-                current_hour = now.hour
-                # Trigger focus correction at 14h00 once per day
-                if (self.last_focus_run_day is None) or (current_hour == 14 and self.last_focus_run_day != current_day):
-                    logging.info("🛠 Running daily focus correction for all cameras")
+                if (
+                    self.is_day
+                    and self.last_autofocus is not None
+                    and (now - self.last_autofocus).total_seconds() > 3600
+                ):
+                    logging.info("🔄 Hourly autofocus triggered after idle period")
                     for camera in self.cameras:
                         try:
                             best_focus = camera.focus_finder()
-                            logging.info(
-                                f"[{camera.ip_address}] Daily autofocus completed, best position = {best_focus}"
-                            )
+                            logging.info(f"[{camera.ip_address}] Autofocus completed, best position = {best_focus}")
+                            camera.focus_position = best_focus
                         except Exception as e:
-                            logging.error(f"[{camera.ip_address}] Failed to run focus finder: {e}")
-                    self.last_focus_run_day = current_day
+                            logging.error(f"[{camera.ip_address}] Failed to run hourly focus finder: {e}")
+                    self.last_autofocus = now
+                else:
+                    logging.info("✅ Skipping autofocus (recent or not daytime)")
 
                 for camera in self.cameras:
                     if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
