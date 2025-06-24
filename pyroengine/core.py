@@ -131,6 +131,7 @@ class SystemController:
         self.cameras = cameras
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
+        self.last_autofocus: Optional[datetime] = None
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -212,6 +213,26 @@ class SystemController:
             bool: True if it is daytime according to all cameras, False otherwise.
         """
         try:
+            # First autofocus: if never done, run immediately
+            if self.last_autofocus is None and self.is_day:
+                logging.info("🔧 Initial autofocus run for all cameras")
+                for camera in self.cameras:
+                    try:
+                        if not (self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address)):
+                            best_focus = camera.focus_finder()
+                            logging.info(
+                                f"[{camera.ip_address}] Initial autofocus completed, best position = {best_focus}"
+                            )
+                            camera.focus_position = best_focus
+                        else:
+                            logging.info(f"[{camera.ip_address}] Skipping initial autofocus (camera is streaming)")
+
+                        logging.info(f"[{camera.ip_address}] Initial autofocus completed, best position = {best_focus}")
+                        camera.focus_position = best_focus
+                    except Exception as e:
+                        logging.error(f"[{camera.ip_address}] Failed to run initial focus finder: {e}")
+                self.last_autofocus = datetime.now()
+
             image_queue: asyncio.Queue[Any] = asyncio.Queue()
 
             processor_task = asyncio.create_task(self.analyze_stream(image_queue))
@@ -221,21 +242,46 @@ class SystemController:
             await image_queue.put(None)
             await processor_task
 
-            for camera in self.cameras:
-                if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
-                    logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
-                else:
-                    if camera.focus_position is None:
-                        # Autofocus
-                        camera.start_zoom_focus(position=0)
-                    else:
-                        camera.set_manual_focus(position=camera.focus_position)
-
-            if send_alerts:
+            if len(self.engine._alerts) and send_alerts:
                 try:
                     self.engine._process_alerts()
                 except Exception as e:
                     logging.error(f"Error processing alerts: {e}")
+
+            else:
+                now = datetime.now()
+                if (
+                    self.is_day
+                    and self.last_autofocus is not None
+                    and (now - self.last_autofocus).total_seconds() > 3600
+                ):
+                    logging.info("🔄 Hourly autofocus triggered after idle period")
+                    for camera in self.cameras:
+                        try:
+                            if not (self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address)):
+                                best_focus = camera.focus_finder()
+                                logging.info(f"[{camera.ip_address}] Autofocus completed, best position = {best_focus}")
+                                camera.focus_position = best_focus
+                            else:
+                                logging.info(f"[{camera.ip_address}] Skipping hourly autofocus (camera is streaming)")
+
+                            logging.info(f"[{camera.ip_address}] Autofocus completed, best position = {best_focus}")
+                            camera.focus_position = best_focus
+                        except Exception as e:
+                            logging.error(f"[{camera.ip_address}] Failed to run hourly focus finder: {e}")
+                    self.last_autofocus = now
+                else:
+                    logging.info("✅ Skipping autofocus (recent or not daytime)")
+
+                for camera in self.cameras:
+                    if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
+                        logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
+                    else:
+                        if camera.focus_position is None:
+                            # Autofocus
+                            camera.start_zoom_focus(position=0)
+                        else:
+                            camera.set_manual_focus(position=camera.focus_position)
 
             return self.is_day
 
