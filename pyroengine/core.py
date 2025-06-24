@@ -233,7 +233,7 @@ class SystemController:
                 current_day = now.date()
                 current_hour = now.hour
                 # Trigger focus correction at 14h00 once per day
-                if current_hour == 14 and self.last_focus_run_day != current_day:
+                if (self.last_focus_run_day is None) or (current_hour == 14 and self.last_focus_run_day != current_day):
                     logging.info("🛠 Running daily focus correction for all cameras")
                     for camera in self.cameras:
                         try:
