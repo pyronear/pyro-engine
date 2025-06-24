@@ -279,6 +279,12 @@ class ReolinkCamera:
             return {"focus": focus, "zoom": zoom}
         return None
 
+    def _measure_sharpness(self, pil_image):
+        img = pil_image.convert("L")
+        arr = np.array(img)
+        laplacian = cv2.Laplacian(arr, cv2.CV_64F)
+        return laplacian.var()
+
     def focus_finder(self, save_images: bool = False) -> int:
         """
         Perform greedy focus optimization to find the sharpest focus position,
@@ -291,12 +297,6 @@ class ReolinkCamera:
             int: Best focus position found.
         """
 
-        def measure_sharpness(pil_image):
-            img = pil_image.convert("L")
-            arr = np.array(img)
-            laplacian = cv2.Laplacian(arr, cv2.CV_64F)
-            return laplacian.var()
-
         def capture_and_score(pos):
             self.set_manual_focus(pos)
             start = time.time()
@@ -304,7 +304,7 @@ class ReolinkCamera:
             duration = time.time() - start
             if image is None:
                 return 0
-            score = measure_sharpness(image)
+            score = self._measure_sharpness(image)
             logging.info(f"[{self.ip_address}] Focus {pos}: Sharpness = {score:.2f}, Time = {duration:.2f}s")
 
             if save_images:

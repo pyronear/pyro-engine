@@ -198,13 +198,45 @@ def test_get_focus_level_success():
         assert result == {"focus": 150, "zoom": 80}
 
 
-def test_get_focus_level_failure():
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = [{"code": 1}]
+def test_focus_finder_success():
+    from unittest.mock import MagicMock
 
-    with patch("requests.post", return_value=mock_response):
-        camera = ReolinkCamera("192.168.99.99", "user", "pass")
-        result = camera.get_focus_level()
+    import numpy as np
+    from PIL import Image
 
-        assert result is None
+    # Mapping position -> sharpness
+    sharpness_map = {
+        720: 5.0,
+        721: 10.0,
+        722: 15.0,
+        723: 20.0,
+        724: 25.0,  # Peak
+        725: 24.0,
+        726: 22.0,
+    }
+
+    # Keep track of focus positions requested
+    called_positions = []
+
+    def mock_set_manual_focus(pos):
+        called_positions.append(pos)
+
+    def mock_capture():
+        # Dummy image, content doesn't matter because we mock sharpness
+        return Image.fromarray((np.random.rand(100, 100) * 255).astype(np.uint8))
+
+    def mock_sharpness(image):
+        pos = called_positions[-1]
+        return sharpness_map.get(pos, 0.0)
+
+    camera = ReolinkCamera("192.168.1.1", "user", "pass", "ptz")
+    camera.focus_position = 720
+    camera.cam_type = "ptz"
+    camera.capture = MagicMock(side_effect=mock_capture)
+    camera.set_manual_focus = MagicMock(side_effect=mock_set_manual_focus)
+    camera._measure_sharpness = mock_sharpness  # must be a method
+
+    best_focus = camera.focus_finder()
+
+    assert isinstance(best_focus, int)
+    assert best_focus == 724  # Peak sharpness
