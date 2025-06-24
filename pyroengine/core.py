@@ -218,7 +218,15 @@ class SystemController:
                 logging.info("🔧 Initial autofocus run for all cameras")
                 for camera in self.cameras:
                     try:
-                        best_focus = camera.focus_finder()
+                        if not (self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address)):
+                            best_focus = camera.focus_finder()
+                            logging.info(
+                                f"[{camera.ip_address}] Initial autofocus completed, best position = {best_focus}"
+                            )
+                            camera.focus_position = best_focus
+                        else:
+                            logging.info(f"[{camera.ip_address}] Skipping initial autofocus (camera is streaming)")
+
                         logging.info(f"[{camera.ip_address}] Initial autofocus completed, best position = {best_focus}")
                         camera.focus_position = best_focus
                     except Exception as e:
@@ -250,7 +258,13 @@ class SystemController:
                     logging.info("🔄 Hourly autofocus triggered after idle period")
                     for camera in self.cameras:
                         try:
-                            best_focus = camera.focus_finder()
+                            if not (self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address)):
+                                best_focus = camera.focus_finder()
+                                logging.info(f"[{camera.ip_address}] Autofocus completed, best position = {best_focus}")
+                                camera.focus_position = best_focus
+                            else:
+                                logging.info(f"[{camera.ip_address}] Skipping hourly autofocus (camera is streaming)")
+
                             logging.info(f"[{camera.ip_address}] Autofocus completed, best position = {best_focus}")
                             camera.focus_position = best_focus
                         except Exception as e:
