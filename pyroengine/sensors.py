@@ -349,5 +349,5 @@ class ReolinkCamera:
             logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
             self.focus_position = best_pos
             return best_pos
-        
+
         return 720
