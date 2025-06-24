@@ -131,7 +131,7 @@ class SystemController:
         self.cameras = cameras
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
-        self.last_autofocus = None
+        self.last_autofocus: Optional[datetime] = None
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")

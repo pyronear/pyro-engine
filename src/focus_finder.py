@@ -1,6 +1,7 @@
-#!/usr/bin/env python3
 # Copyright (C) 2022-2025, Pyronear.
-# Apache 2.0 licence – see LICENCE file for details.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import argparse
 import json
