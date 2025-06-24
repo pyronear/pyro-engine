@@ -4,10 +4,13 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import os
 import time
 from io import BytesIO
 from typing import List, Optional
 
+import cv2
+import numpy as np
 import requests
 import urllib3
 from PIL import Image
@@ -275,3 +278,76 @@ class ReolinkCamera:
             zoom = zoom_focus.get("zoom", {}).get("pos")
             return {"focus": focus, "zoom": zoom}
         return None
+
+    def _measure_sharpness(self, pil_image):
+        img = pil_image.convert("L")
+        arr = np.array(img)
+        laplacian = cv2.Laplacian(arr, cv2.CV_64F)
+        return laplacian.var()
+
+    def focus_finder(self, save_images: bool = False) -> int:
+        """
+        Perform greedy focus optimization to find the sharpest focus position,
+        starting from self.focus_position or 720 and sweeping ±50.
+
+        Args:
+            save_images (bool): If True, save each captured image to disk.
+
+        Returns:
+            int: Best focus position found.
+        """
+
+        def capture_and_score(pos):
+            self.set_manual_focus(pos)
+            start = time.time()
+            image = self.capture()
+            duration = time.time() - start
+            if image is None:
+                return 0
+            score = self._measure_sharpness(image)
+            logging.info(f"[{self.ip_address}] Focus {pos}: Sharpness = {score:.2f}, Time = {duration:.2f}s")
+
+            if save_images:
+                folder = f"focus_debug/{self.ip_address.replace('.', '_')}"
+                os.makedirs(folder, exist_ok=True)
+                image.save(f"{folder}/focus_{pos}.jpg")
+
+            return score
+
+        if self.cam_type != "static":
+            current = self.focus_position if self.focus_position is not None else 720
+            min_focus = max(650, current - 50)
+            max_focus = min(850, current + 50)
+
+            sharp_current = capture_and_score(current)
+            sharp_prev = capture_and_score(current - 1)
+            sharp_next = capture_and_score(current + 1)
+
+            if sharp_prev > sharp_current and sharp_prev >= sharp_next:
+                direction = -1
+            elif sharp_next > sharp_current:
+                direction = 1
+            else:
+                logging.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
+                self.focus_position = current
+                return current
+
+            best_pos = current + direction
+            best_score = max(sharp_prev, sharp_next)
+
+            while True:
+                next_pos = best_pos + direction
+                if next_pos < min_focus or next_pos > max_focus:
+                    break
+                score = capture_and_score(next_pos)
+                if score > best_score:
+                    best_pos = next_pos
+                    best_score = score
+                else:
+                    break
+
+            logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
+            self.focus_position = best_pos
+            return best_pos
+
+        return 720

@@ -63,10 +63,6 @@ class ReolinkCamera:
         if self.cam_poses:
             self.move_camera("ToPos", idx=int(self.cam_poses[0]), speed=50)
 
-        # Fix focus position
-        if focus_position is not None:
-            self.set_manual_focus(position=focus_position)
-
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
         return (
