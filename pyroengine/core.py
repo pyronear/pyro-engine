@@ -222,7 +222,7 @@ class SystemController:
             await image_queue.put(None)
             await processor_task
 
-            if len(self.engine._alerts()) and send_alerts:
+            if len(self.engine._alerts) and send_alerts:
                 try:
                     self.engine._process_alerts()
                 except Exception as e:
