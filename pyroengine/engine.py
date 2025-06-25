@@ -94,7 +94,7 @@ class Engine:
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         send_last_image_period: int = 10800,  # 3H
-        last_bbox_mask_fetch_period: int = 3600,  # 1H,
+        last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,
     ) -> None:
         """Init engine"""
