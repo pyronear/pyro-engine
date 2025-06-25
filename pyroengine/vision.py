@@ -89,7 +89,7 @@ class Classifier:
             # Extract .tar.gz archive
             if model_path.endswith(".tar.gz"):
                 base_name = os.path.basename(model_path).replace(".tar.gz", "")
-                extract_path = os.path.join(model_folder, base_name, "best_ncnn_mode")  # <- Updated path inside archive
+                extract_path = os.path.join(model_folder, base_name)
                 if not os.path.isdir(extract_path):
                     with tarfile.open(model_path, "r:gz") as tar:
                         tar.extractall(model_folder)
@@ -98,11 +98,14 @@ class Classifier:
 
         if self.format == "ncnn":
             self.model = ncnn.Net()
-            self.model.load_param(os.path.join(model_path, "model.ncnn.param"))
-            self.model.load_model(os.path.join(model_path, "model.ncnn.bin"))
+            self.model.load_param(os.path.join(model_path, "best_ncnn_model", "model.ncnn.param"))
+            self.model.load_model(os.path.join(model_path, "best_ncnn_model", "model.ncnn.bin"))
+
         else:
             try:
-                self.ort_session = onnxruntime.InferenceSession(os.path.join(model_path, "model.onnx"))
+                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "model.onnx")
+                self.ort_session = onnxruntime.InferenceSession(onnx_file)
+
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
 
@@ -145,6 +148,8 @@ class Classifier:
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
         np_img, pad = letterbox(np.array(pil_img), self.imgsz)  # Applies letterbox resize with padding
+
+        print("Before ncnn conversion", np_img.shape, np_img.dtype)
 
         if self.format == "ncnn":
             np_img = ncnn.Mat.from_pixels(np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0])
