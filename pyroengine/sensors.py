@@ -298,7 +298,7 @@ class ReolinkCamera:
         Returns:
             int: Best focus position found.
         """
-        MAX_RETRIES = 2
+        MAX_RETRIES = 10
         ABS_MIN = 600
         ABS_MAX = 900
 
