@@ -273,15 +273,15 @@ class SystemController:
                 else:
                     logging.info("✅ Skipping autofocus (recent or not daytime)")
 
-                for camera in self.cameras:
-                    if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
-                        logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
-                    else:
-                        if camera.focus_position is None:
-                            # Autofocus
-                            camera.start_zoom_focus(position=0)
+                    for camera in self.cameras:
+                        if self.mediamtx_server_ip and await is_camera_streaming(camera.ip_address):
+                            logging.info(f"{camera.ip_address} Camera is streaming, skipping capture.")
                         else:
-                            camera.set_manual_focus(position=camera.focus_position)
+                            if camera.focus_position is None:
+                                # Autofocus
+                                camera.start_zoom_focus(position=0)
+                            else:
+                                camera.set_manual_focus(position=camera.focus_position)
 
             return self.is_day
 
