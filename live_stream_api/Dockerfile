@@ -1,6 +1,6 @@
 # live_stream_api/Dockerfile
 
-FROM python:3.11.16-slim
+FROM python:3.11.13-slim
 
 # Install ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && apt-get clean
