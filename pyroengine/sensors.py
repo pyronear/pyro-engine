@@ -285,19 +285,25 @@ class ReolinkCamera:
         laplacian = cv2.Laplacian(arr, cv2.CV_64F)
         return laplacian.var()
 
-    def focus_finder(self, save_images: bool = False) -> int:
+    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         """
         Perform greedy focus optimization to find the sharpest focus position,
         starting from self.focus_position or 720 and sweeping ±50.
+        Includes recheck at ±15 to avoid local maxima and a max retry depth.
 
         Args:
             save_images (bool): If True, save each captured image to disk.
+            retry_depth (int): Internal counter to prevent infinite recursion.
 
         Returns:
             int: Best focus position found.
         """
+        MAX_RETRIES = 2
+        ABS_MIN = 600
+        ABS_MAX = 900
 
         def capture_and_score(pos):
+            pos = max(ABS_MIN, min(ABS_MAX, pos))  # Clamp to global bounds
             self.set_manual_focus(pos)
             start = time.time()
             image = self.capture()
@@ -316,8 +322,8 @@ class ReolinkCamera:
 
         if self.cam_type != "static":
             current = self.focus_position if self.focus_position is not None else 720
-            min_focus = max(650, current - 50)
-            max_focus = min(850, current + 50)
+            min_focus = max(ABS_MIN, current - 50)
+            max_focus = min(ABS_MAX, current + 50)
 
             sharp_current = capture_and_score(current)
             sharp_prev = capture_and_score(current - 1)
@@ -345,6 +351,19 @@ class ReolinkCamera:
                     best_score = score
                 else:
                     break
+
+            # Check ±15 around the greedy result
+            for offset in [-15, 15]:
+                probe_pos = best_pos + offset
+                if ABS_MIN <= probe_pos <= ABS_MAX:
+                    probe_score = capture_and_score(probe_pos)
+                    if probe_score > best_score:
+                        logging.info(
+                            f"[{self.ip_address}] Found better focus at offset {offset} → retrying from {probe_pos}"
+                        )
+                        if retry_depth < MAX_RETRIES:
+                            self.focus_position = probe_pos
+                            return self.focus_finder(save_images=save_images, retry_depth=retry_depth + 1)
 
             logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
             self.focus_position = best_pos
