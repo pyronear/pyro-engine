@@ -32,7 +32,6 @@ requests = "==2.31.0"
 tqdm = "==4.67.1"
 aiohttp = "==3.11.18"
 onnxruntime = "==1.18.1"
-huggingface_hub = "==0.23.1"
 pillow = "==11.0.0"
 ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
