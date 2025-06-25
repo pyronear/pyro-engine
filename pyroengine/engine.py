@@ -79,6 +79,7 @@ class Engine:
         self,
         model_path: Optional[str] = None,
         conf_thresh: float = 0.15,
+        model_conf_thresh: float = 0.05,
         max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
@@ -93,13 +94,13 @@ class Engine:
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         send_last_image_period: int = 10800,  # 3H
-        last_bbox_mask_fetch_period: int = 3600,  # 1H
+        last_bbox_mask_fetch_period: int = 3600,  # 1H,
         **kwargs: Any,
     ) -> None:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size)
+        self.model = Classifier(model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size)
         self.conf_thresh = conf_thresh
 
         # API Setup
