@@ -336,7 +336,7 @@ class ReolinkCamera:
             else:
                 logging.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
                 self.focus_position = current
-                self.set_manual_focus(position=self.focus_position)
+                self.set_manual_focus(self.focus_position)
                 return current
 
             best_pos = current + direction
@@ -368,7 +368,7 @@ class ReolinkCamera:
 
             logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
             self.focus_position = best_pos
-            self.set_manual_focus(position=self.focus_position)
+            self.set_manual_focus(self.focus_position)
             return best_pos
 
         return 720
