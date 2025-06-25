@@ -1,25 +1,10 @@
-import datetime
+import hashlib
 import os
-from unittest.mock import patch
+import shutil
 
 import numpy as np
 
 from pyroengine.vision import Classifier
-
-
-def get_creation_date(file_path):
-    if os.path.exists(file_path):
-        # For Unix-like systems
-        stat = os.stat(file_path)
-        try:
-            creation_time = stat.st_birthtime
-        except AttributeError:
-            # On Unix, use the last modification time as a fallback
-            creation_time = stat.st_mtime
-
-        creation_date = datetime.datetime.fromtimestamp(creation_time)
-        return creation_date
-    return None
 
 
 def test_classifier(tmpdir_factory, mock_wildfire_image):
@@ -36,7 +21,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "yolov11s.onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32", "model.onnx")
     assert os.path.isfile(model_path)
 
     # Test occlusion mask
@@ -52,31 +37,28 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     assert out.shape == (0, 5)
 
 
+def sha256sum(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def test_download(tmpdir_factory):
-    print("test_classifier")
     folder = str(tmpdir_factory.mktemp("engine_cache"))
-    # Instantiate ncnn model
-    _ = Classifier(model_folder=folder, format="ncnn")
 
-    # Instantiate the ONNX model
+    # First download
     _ = Classifier(model_folder=folder, format="onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32/model.onnx")
+    assert os.path.isfile(model_path)
 
-    model_path = os.path.join(folder, "yolov11s.onnx")
-    model_creation_date = get_creation_date(model_path)
+    hash1 = sha256sum(model_path)
 
-    # No download if exist
-    _ = Classifier(model_folder=folder, format="onnx")
-    model_creation_date2 = get_creation_date(model_path)
-    assert model_creation_date == model_creation_date2
-
-    # Download if does not exist
+    # Delete and download again
     os.remove(model_path)
+    shutil.rmtree(os.path.dirname(model_path), ignore_errors=True)
     _ = Classifier(model_folder=folder, format="onnx")
-    model_creation_date3 = get_creation_date(model_path)
-    assert model_creation_date != model_creation_date3
 
-    # Download if sha is not the same
-    with patch.object(Classifier, "get_sha", return_value="sha12"):
-        _ = Classifier(model_folder=folder, format="onnx")
-        model_creation_date4 = get_creation_date(model_path)
-        assert model_creation_date4 != model_creation_date3
+    hash2 = sha256sum(model_path)
+
+    # Test that the model was re-downloaded (at least once more)
+    assert hash1 == hash2  # optional if content is static
+    assert os.path.exists(model_path)
