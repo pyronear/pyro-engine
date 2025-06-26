@@ -290,7 +290,10 @@ class Engine:
             _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
             preds = self.model(frame.convert("RGB"), bbox_mask_dict)
         else:
-            preds = fake_pred[:, fake_pred[-1, :] > self.model_conf_thresh]  # Drop low-confidence predictions
+            if fake_pred.size == 0:
+                preds = np.empty((0, 5))
+            else:
+                preds = fake_pred[fake_pred[:, -1] > self.model_conf_thresh]
 
         logging.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
