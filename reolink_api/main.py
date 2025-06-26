@@ -1,16 +1,15 @@
-import os
 import json
-import time
-import threading
-from datetime import datetime
-from io import BytesIO
-from typing import Optional, Dict
 import logging
+import os
+import threading
+import time
+from contextlib import asynccontextmanager
+from io import BytesIO
+from typing import Dict, Optional
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
-from contextlib import asynccontextmanager
 from reolink import ReolinkCamera  # your camera controller class
-
 
 logging.basicConfig(level=logging.DEBUG)
 # Load environment variables
@@ -28,7 +27,7 @@ with open(CREDENTIALS_PATH) as f:
 # Define global registries
 CAMERA_REGISTRY: Dict[str, ReolinkCamera] = {}
 PATROL_THREADS = {}  # {camera_ip: threading.Thread}
-PATROL_FLAGS = {}    # {camera_ip: threading.Event}
+PATROL_FLAGS = {}  # {camera_ip: threading.Event}
 
 # Load cameras into registry
 for ip, conf in raw_config.items():
@@ -42,6 +41,7 @@ for ip, conf in raw_config.items():
         focus_position=conf.get("focus_position", 720),
     )
     CAMERA_REGISTRY[ip] = cam
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -68,9 +68,9 @@ async def lifespan(app: FastAPI):
             flag.set()
 
 
-
 # Initialize FastAPI app and camera registry
 app = FastAPI(lifespan=lifespan)
+
 
 # Helper to retrieve camera instance
 def get_camera_by_ip(ip: str) -> ReolinkCamera:
@@ -78,7 +78,9 @@ def get_camera_by_ip(ip: str) -> ReolinkCamera:
         raise HTTPException(status_code=404, detail=f"Camera with IP '{ip}' not found")
     return CAMERA_REGISTRY[ip]
 
+
 # Routes
+
 
 @app.get("/cameras")
 def list_cameras():
@@ -159,7 +161,6 @@ def get_latest_image(camera_ip: str, pose: int):
     return Response(buffer.getvalue(), media_type="image/jpeg")
 
 
-
 @app.post("/focus/focus_finder")
 def run_focus_optimization(camera_ip: str, save_images: bool = False):
     cam = get_camera_by_ip(camera_ip)
@@ -176,12 +177,7 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     # Run autofocus
     best_position = cam.focus_finder(save_images=save_images)
 
-    return {
-        "camera_ip": camera_ip,
-        "best_focus_position": best_position,
-        "status": "focus_updated"
-    }
-
+    return {"camera_ip": camera_ip, "best_focus_position": best_position, "status": "focus_updated"}
 
 
 @app.post("/start_patrol")
@@ -200,6 +196,7 @@ def start_patrol(camera_ip: str):
     thread.start()
     return {"status": "started", "camera_ip": camera_ip}
 
+
 @app.post("/stop_patrol")
 def stop_patrol(camera_ip: str):
     if camera_ip not in PATROL_FLAGS:
@@ -207,7 +204,6 @@ def stop_patrol(camera_ip: str):
 
     PATROL_FLAGS[camera_ip].set()
     return {"status": "stopping", "camera_ip": camera_ip}
-
 
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event):
@@ -244,8 +240,3 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
             time.sleep(5)
 
     print(f"[{camera_ip}] Patrol loop exited cleanly")
-
-
-
-
-

@@ -4,12 +4,13 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import os
 import time
 from io import BytesIO
 from typing import List, Optional
-import numpy as np
+
 import cv2
-import os
+import numpy as np
 import requests
 import urllib3
 from PIL import Image
@@ -60,7 +61,7 @@ class ReolinkCamera:
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
         self.focus_position = focus_position
-        self.last_images = {} 
+        self.last_images = {}
 
         # Initialisation de position de caméra (si définie)
         if self.cam_poses:
@@ -261,7 +262,7 @@ class ReolinkCamera:
             zoom = zoom_focus.get("zoom", {}).get("pos")
             return {"focus": focus, "zoom": zoom}
         return None
-    
+
     def _measure_sharpness(self, pil_image):
         img = pil_image.convert("L")
         arr = np.array(img)
@@ -355,4 +356,3 @@ class ReolinkCamera:
             return best_pos
 
         return 720
-
