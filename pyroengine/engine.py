@@ -79,6 +79,7 @@ class Engine:
         self,
         model_path: Optional[str] = None,
         conf_thresh: float = 0.15,
+        model_conf_thresh: float = 0.05,
         max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
@@ -99,8 +100,9 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path, conf=0.05, max_bbox_size=max_bbox_size)
+        self.model = Classifier(model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size)
         self.conf_thresh = conf_thresh
+        self.model_conf_thresh = model_conf_thresh
 
         # API Setup
         self.api_client: dict[str, Any] = {}
@@ -288,7 +290,10 @@ class Engine:
             _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
             preds = self.model(frame.convert("RGB"), bbox_mask_dict)
         else:
-            preds = fake_pred
+            if fake_pred.size == 0:
+                preds = np.empty((0, 5))
+            else:
+                preds = fake_pred[fake_pred[:, -1] > self.model_conf_thresh]
 
         logging.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
