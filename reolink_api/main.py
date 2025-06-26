@@ -135,55 +135,27 @@ def get_latest_image(camera_ip: str, pose: int):
 
 
 
-@app.post("/focus/auto_optimize")
+@app.post("/focus/focus_finder")
 def run_focus_optimization(camera_ip: str, save_images: bool = False):
     cam = get_camera_by_ip(camera_ip)
 
     if cam.cam_type == "static":
         raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
 
-    # 1. Stop patrol if active
-    was_running = False
-    if camera_ip in PATROL_FLAGS:
-        stop_flag = PATROL_FLAGS[camera_ip]
-        stop_flag.set()
-        was_running = True
-
-        patrol_thread = PATROL_THREADS.get(camera_ip)
-        if patrol_thread and patrol_thread.is_alive():
-            print(f"[{camera_ip}] Waiting for patrol thread to terminate...")
-            patrol_thread.join(timeout=15)
-            print(f"[{camera_ip}] Patrol thread terminated")
-
-    # 2. Move to pose 1 if available
+    # Optional move to pose 1
     if cam.cam_poses and len(cam.cam_poses) > 1:
         pose1 = cam.cam_poses[1]
         cam.move_camera("ToPos", idx=pose1, speed=50)
         time.sleep(1)
 
-    # 3. Run autofocus
+    # Run autofocus
     best_position = cam.focus_finder(save_images=save_images)
-
-    # 4. Restart patrol
-    if was_running:
-        new_flag = threading.Event()
-        new_thread = threading.Thread(
-            target=patrol_loop,
-            args=(camera_ip, new_flag),
-            daemon=True,
-        )
-        PATROL_FLAGS[camera_ip] = new_flag
-        PATROL_THREADS[camera_ip] = new_thread
-        new_thread.start()
-        print(f"[{camera_ip}] Patrol restarted")
 
     return {
         "camera_ip": camera_ip,
         "best_focus_position": best_position,
-        "patrol_restarted": was_running,
         "status": "focus_updated"
     }
-
 
 
 
