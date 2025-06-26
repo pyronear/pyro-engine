@@ -8,7 +8,7 @@ from typing import Optional, Dict
 import logging
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
-
+from contextlib import asynccontextmanager
 from reolink import ReolinkCamera  # your camera controller class
 
 
@@ -25,11 +25,12 @@ CREDENTIALS_PATH = "/Users/mateo/pyronear/deploy/pyro-engine/data/credentials.js
 with open(CREDENTIALS_PATH) as f:
     raw_config = json.load(f)
 
-# Initialize FastAPI app and camera registry
-app = FastAPI()
+# Define global registries
 CAMERA_REGISTRY: Dict[str, ReolinkCamera] = {}
+PATROL_THREADS = {}  # {camera_ip: threading.Thread}
+PATROL_FLAGS = {}    # {camera_ip: threading.Event}
 
-# Populate camera registry by IP
+# Load cameras into registry
 for ip, conf in raw_config.items():
     cam = ReolinkCamera(
         ip_address=ip,
@@ -40,18 +41,42 @@ for ip, conf in raw_config.items():
         cam_azimuths=conf.get("azimuths"),
         focus_position=conf.get("focus_position", 720),
     )
-    print(cam.focus_position)
     CAMERA_REGISTRY[ip] = cam
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    monitored_ips = list(CAMERA_REGISTRY.keys())
+
+    for ip in monitored_ips:
+        if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
+            continue
+
+        stop_flag = threading.Event()
+        thread = threading.Thread(
+            target=patrol_loop,
+            args=(ip, stop_flag),
+            daemon=True,
+        )
+        PATROL_THREADS[ip] = thread
+        PATROL_FLAGS[ip] = stop_flag
+        thread.start()
+
+    try:
+        yield  # Startup done
+    finally:
+        for ip, flag in PATROL_FLAGS.items():
+            flag.set()
+
+
+
+# Initialize FastAPI app and camera registry
+app = FastAPI(lifespan=lifespan)
 
 # Helper to retrieve camera instance
 def get_camera_by_ip(ip: str) -> ReolinkCamera:
     if ip not in CAMERA_REGISTRY:
         raise HTTPException(status_code=404, detail=f"Camera with IP '{ip}' not found")
     return CAMERA_REGISTRY[ip]
-
-PATROL_THREADS = {}  # {camera_ip: threading.Thread}
-PATROL_FLAGS = {}    # {camera_ip: threading.Event}
 
 # Routes
 
@@ -223,21 +248,4 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
 
 
 
-@app.on_event("startup")
-def start_surveillance_threads():
-    # Extract camera IPs directly from the loaded config file
-    monitored_ips = list(CAMERA_REGISTRY.keys())
 
-    for ip in monitored_ips:
-        if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
-            continue  # Already running
-
-        stop_flag = threading.Event()
-        thread = threading.Thread(
-            target=patrol_loop,
-            args=(ip, stop_flag),
-            daemon=True,
-        )
-        PATROL_THREADS[ip] = thread
-        PATROL_FLAGS[ip] = stop_flag
-        thread.start()
