@@ -1,3 +1,3 @@
 from .core import *
-from . import engine, sensors, utils
+from . import engine, utils
 from .version import __version__
