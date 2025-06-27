@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import Response
-from reolink import ReolinkCamera  # your camera controller class
+from reolink import ReolinkCamera
 
 logging.basicConfig(level=logging.DEBUG)
 # Load environment variables
@@ -80,8 +80,6 @@ def get_camera_by_ip(ip: str) -> ReolinkCamera:
 
 
 # Routes
-
-
 @app.get("/cameras")
 def list_cameras():
     return {"camera_ips": list(CAMERA_REGISTRY.keys())}
@@ -214,7 +212,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
         logging.warning(f"[{camera_ip}] No poses defined, exiting patrol loop")
         return
 
-    print(f"[{camera_ip}] Starting patrol cycle with {len(poses)} poses")
+    logging.info(f"[{camera_ip}] Starting patrol cycle with {len(poses)} poses")
 
     while not stop_flag.is_set():
         start_time = time.time()
@@ -225,19 +223,17 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
 
             try:
                 cam.move_camera("ToPos", idx=pose, speed=50)
-                logging.debug(f"[{camera_ip}] Moving to pose {pose}")
+                logging.info(f"[{camera_ip}] Moving to pose {pose}")
                 time.sleep(1.5)  # Adjust based on real movement time
 
                 image = cam.capture()
                 if image:
                     cam.last_images[pose] = image
-                    logging.debug(f"[{camera_ip}] Stored image for pose {pose}")
+                    logging.info(f"[{camera_ip}] Stored image for pose {pose}")
 
             except Exception as e:
                 logging.error(f"[{camera_ip}] Error at pose {pose}: {e}")
                 continue
-
-        
 
         # To prevent big move get back to pose 0
         cam.move_camera("ToPos", idx=poses[0], speed=50)
@@ -249,5 +245,4 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
             cam.move_camera("ToPos", idx=poses[0], speed=50)
             break
 
-    print(f"[{camera_ip}] Patrol loop exited cleanly")
-
+    logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
