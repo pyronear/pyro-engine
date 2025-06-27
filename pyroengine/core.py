@@ -117,10 +117,8 @@ class SystemController:
                             try:
                                 cam_id = f"{ip}_{pose}"
 
-                                stt = time.time()
-
                                 frame = self.reolink_client.get_latest_image(ip, pose)
-                                print("capture", time.time() - stt)
+
                                 logging.info(f"Captured image for {ip}, pose {pose}")
 
                                 self.is_day = is_day_time(None, frame, "ir")
@@ -133,7 +131,20 @@ class SystemController:
                                 logging.error(f"❌ Error for {camera_name}, pose {pose}: {e}")
 
                     else:
-                        print("static cam todo")
+                        try:
+                            cam_id = f"{ip}"
+
+                            frame = self.reolink_client.get_latest_image(ip, -1)
+                            logging.info(f"Captured image for {ip}")
+
+                            self.is_day = is_day_time(None, frame, "ir")
+
+                            self.engine.predict(frame, cam_id)
+
+                        except requests.HTTPError as e:
+                            logging.error(f"❌ HTTP error for {camera_name}: {e.response.text}")
+                        except Exception as e:
+                            logging.error(f"❌ Error for {camera_name}: {e}")
 
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)

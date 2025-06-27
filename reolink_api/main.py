@@ -45,26 +45,36 @@ for ip, conf in raw_config.items():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    monitored_ips = list(CAMERA_REGISTRY.keys())
-
-    for ip in monitored_ips:
+    for ip, cam in CAMERA_REGISTRY.items():
         if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
             continue
 
         stop_flag = threading.Event()
-        thread = threading.Thread(
-            target=patrol_loop,
-            args=(ip, stop_flag),
-            daemon=True,
-        )
+
+        if cam.cam_type == "ptz":
+            thread = threading.Thread(
+                target=patrol_loop,
+                args=(ip, stop_flag),
+                daemon=True,
+            )
+            logging.info(f"Starting patrol loop for PTZ camera {ip}")
+        else:
+            thread = threading.Thread(
+                target=static_loop,
+                args=(ip, stop_flag),
+                daemon=True,
+            )
+            logging.info(f"Starting static loop for camera {ip}")
+
         PATROL_THREADS[ip] = thread
         PATROL_FLAGS[ip] = stop_flag
         thread.start()
 
     try:
-        yield  # Startup done
+        yield  # Startup complete
     finally:
         for ip, flag in PATROL_FLAGS.items():
+            logging.info(f"Stopping loop for camera {ip}")
             flag.set()
 
 
@@ -246,3 +256,23 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
             break
 
     logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
+
+
+def static_loop(camera_ip: str, stop_flag: threading.Event):
+    cam = get_camera_by_ip(camera_ip)
+
+    logging.info(f"[{camera_ip}] Starting static camera loop")
+
+    while not stop_flag.is_set():
+        try:
+            image = cam.capture()
+            if image:
+                cam.last_images[-1] = image  # Store with fake pose -1
+                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
+        except Exception as e:
+            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
+
+        if stop_flag.wait(30):  # every 30 seconds
+            break
+
+    logging.info(f"[{camera_ip}] Static camera loop exited cleanly")
