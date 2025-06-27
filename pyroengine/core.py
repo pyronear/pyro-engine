@@ -5,15 +5,20 @@
 
 
 import logging
+import sys
 import time
 from datetime import datetime
-from io import BytesIO
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
 import requests
 import urllib3
-from PIL import Image
+
+# Add the parent folder of reolink_api to the import path
+sys.path.append(str(Path(__file__).resolve().parent.parent / "reolink_api"))
+
+from client import ReolinkAPIClient
 
 from .engine import Engine
 
@@ -80,9 +85,9 @@ class SystemController:
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
-        self.reolink_api_url = reolink_api_url
         self.mediamtx_server_ip = mediamtx_server_ip
         self.last_autofocus: Optional[datetime] = None
+        self.reolink_client = ReolinkAPIClient(reolink_api_url)
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -105,23 +110,17 @@ class SystemController:
                 time.sleep(3600)
             else:
                 for ip, cam in self.camera_data.items():
-                    token = cam.get("token")
-                    headers = {"Authorization": f"Bearer {token}"} if token else {}
                     camera_name = cam["name"]
 
                     if cam.get("type") == "ptz":
                         for pose in cam.get("poses", []):
                             try:
                                 cam_id = f"{ip}_{pose}"
-                                response = requests.get(
-                                    f"{self.reolink_api_url}/latest_image",
-                                    params={"camera_ip": ip, "pose": pose},
-                                    headers=headers,
-                                    timeout=3,
-                                )
-                                response.raise_for_status()
 
-                                frame = Image.open(BytesIO(response.content)).convert("RGB")
+                                stt = time.time()
+
+                                frame = self.reolink_client.get_latest_image(ip, pose)
+                                print("capture", time.time() - stt)
                                 logging.info(f"Captured image for {ip}, pose {pose}")
 
                                 self.is_day = is_day_time(None, frame, "ir")
