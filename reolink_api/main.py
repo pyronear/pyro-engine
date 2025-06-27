@@ -208,35 +208,46 @@ def stop_patrol(camera_ip: str):
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event):
     cam = get_camera_by_ip(camera_ip)
-    pose_idx = 0
+    poses = cam.cam_poses or []
 
-    print(f"[{camera_ip}] Starting patrol cycle")
+    if not poses:
+        logging.warning(f"[{camera_ip}] No poses defined, exiting patrol loop")
+        return
+
+    print(f"[{camera_ip}] Starting patrol cycle with {len(poses)} poses")
 
     while not stop_flag.is_set():
-        try:
-            if pose_idx >= len(cam.cam_poses):
-                pose_idx = 0
+        start_time = time.time()
 
-            if stop_flag.is_set():  # Check again before moving
-                break
-
-            cam.move_camera("ToPos", idx=cam.cam_poses[pose_idx], speed=40)
-            logging.debug(f"[{camera_ip}] Moving to pose {pose_idx}")
-            time.sleep(2)
-
+        for pose in poses:
             if stop_flag.is_set():
                 break
 
-            image = cam.capture()
-            if image:
-                cam.last_images[pose_idx] = image
-                logging.debug(f"[{camera_ip}] Stored image in memory for pose {pose_idx}")
+            try:
+                cam.move_camera("ToPos", idx=pose, speed=50)
+                logging.debug(f"[{camera_ip}] Moving to pose {pose}")
+                time.sleep(1.5)  # Adjust based on real movement time
 
-            pose_idx += 1
-            time.sleep(2)
+                image = cam.capture()
+                if image:
+                    cam.last_images[pose] = image
+                    logging.debug(f"[{camera_ip}] Stored image for pose {pose}")
 
-        except Exception as e:
-            logging.error(f"[{camera_ip}] Error during patrol: {e}")
-            time.sleep(5)
+            except Exception as e:
+                logging.error(f"[{camera_ip}] Error at pose {pose}: {e}")
+                continue
+
+        
+
+        # To prevent big move get back to pose 0
+        cam.move_camera("ToPos", idx=poses[0], speed=50)
+        # Sleep to ensure the total loop is ~30s
+        elapsed = time.time() - start_time
+        sleep_time = max(0, 30 - elapsed)
+        if stop_flag.wait(sleep_time):
+            # To prevent big move get back to pose 0
+            cam.move_camera("ToPos", idx=poses[0], speed=50)
+            break
 
     print(f"[{camera_ip}] Patrol loop exited cleanly")
+
