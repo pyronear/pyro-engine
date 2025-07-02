@@ -18,22 +18,25 @@ services:
         max-size: "100m"
         max-file: "5"
 
-  live_stream:
-    image: pyronear/live-stream:latest
+  reolink_api:
+    image: pyronear/reolink_api:latest
     build:
-      context: ./live_stream_api
-    container_name: live_stream
+      context: ./reolink_api
+    container_name: reolink_api
     environment:
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
       - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
     volumes:
-      - ./live_stream_api:/usr/src/app
-      - ./data/credentials.json:/usr/src/app/data/credentials.json:ro
+    - ./data/credentials.json:/app/src/credentials.json:ro
+
+    command: "uvicorn src.main:app --reload --host 0.0.0.0 --port 8081"
     restart: always
-    network_mode: host 
+    ports:
+      - "8081:8081"
     logging:
       driver: "json-file"
       options:
         max-size: "100m"
         max-file: "5"
+
