@@ -76,7 +76,7 @@ source = ["pyroengine"]
 
 [tool.mypy]
 python_version = "3.11"
-files = "pyroengine/"
+files = "pyroengine/,reolink_api/"
 show_error_codes = true
 pretty = true
 warn_unused_ignores = true
@@ -126,7 +126,7 @@ exclude = [".git"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine"]
+known-first-party = ["pyroengine", "reolink_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -134,6 +134,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "src/**.py" = ["D", "T201", "S101", "ANN"]
 ".github/**.py" = ["D", "T201", "ANN"]
 "tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001"]
+"reolink_api/**.py" = ["D", "T201", "S101", "ANN"]
 
 [tool.ruff.format]
 quote-style = "double"
