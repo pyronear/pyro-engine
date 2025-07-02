@@ -1,0 +1,16 @@
+[project]
+name = "reolink_api_client"
+version = "0.1.0"
+description = "Python client to interact with the Reolink API server"
+authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
+requires-python = ">=3.9"
+dependencies = [
+    "requests"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx", "ruff", "mypy"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
