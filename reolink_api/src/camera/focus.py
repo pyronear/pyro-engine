@@ -1,3 +1,9 @@
+# Copyright (C) 2025-2025, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
+
 import time
 
 from fastapi import APIRouter, HTTPException
