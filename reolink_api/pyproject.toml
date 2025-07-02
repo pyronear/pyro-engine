@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "reolink_api"
+version = "0.1.0"
+description = "FastAPI service to control Reolink cameras"
+authors = ["Pyronear <contact@pyronear.org>"]
+packages = [{ include = "src" }]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.110.0"
+uvicorn = { extras = ["standard"], version = "^0.30.0" }
+python-dotenv = "^1.0.1"
+opencv-python-headless = "^4.9.0"
+pillow = "^10.2.0"
+requests = "^2.31.0"
+numpy = "^1.26.4"
+urllib3 = "^2.2.1"
+
+[tool.poetry.group.quality.dependencies]
+ruff = "==0.11.9"
+mypy = "==1.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
