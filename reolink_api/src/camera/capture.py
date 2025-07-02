@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
-import time
 from io import BytesIO
 from typing import Optional
 
@@ -12,14 +11,14 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from camera.registry import CAMERA_REGISTRY
+from camera.time_utils import update_command_time
 
 router = APIRouter()
 
 
 @router.get("/capture")
 def capture(camera_ip: str, pos_id: Optional[int] = Query(default=None)):
-    global last_command_time
-    last_command_time = time.time()
+    update_command_time()
     cam = CAMERA_REGISTRY[camera_ip]
     img = cam.capture(pos_id=pos_id)
     if img is None:

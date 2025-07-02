@@ -14,10 +14,6 @@ from camera.config import RAW_CONFIG
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import update_command_time
 
-PATROL_THREADS = {}  # {camera_ip: threading.Thread}
-PATROL_FLAGS = {}  # {camera_ip: threading.Event}
-
-
 router = APIRouter()
 
 
@@ -117,8 +113,7 @@ def move_camera(
 @router.post("/stop/{camera_ip}")
 def stop_camera(camera_ip: str):
     """Stops the camera movement."""
-    global last_command_time
-    last_command_time = time.time()
+    update_command_time()
     if camera_ip not in CAMERA_REGISTRY:
         raise HTTPException(status_code=404, detail=f"Camera with IP '{camera_ip}' not found")
 

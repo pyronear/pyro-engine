@@ -61,7 +61,7 @@ class ReolinkCamera:
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
         self.focus_position = focus_position
-        self.last_images = {}
+        self.last_images: dict[int, Image.Image] = {}
 
         # Initialisation de position de caméra (si définie)
         if self.cam_poses:

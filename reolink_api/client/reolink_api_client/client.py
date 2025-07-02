@@ -29,7 +29,7 @@ class ReolinkAPIClient:
         """Triggers a live capture from the camera."""
         params = {"camera_ip": camera_ip}
         if pos_id is not None:
-            params["pos_id"] = pos_id
+            params["pos_id"] = str(pos_id)
         resp = requests.get(f"{self.base_url}/capture/capture", params=params)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
@@ -74,7 +74,7 @@ class ReolinkAPIClient:
     def set_preset(self, camera_ip: str, idx: Optional[int] = None):
         params = {"camera_ip": camera_ip}
         if idx is not None:
-            params["idx"] = idx
+            params["idx"] = str(idx)
         resp = requests.post(f"{self.base_url}/control/preset/set", params=params)
         resp.raise_for_status()
         return resp.json()

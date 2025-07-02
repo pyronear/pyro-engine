@@ -10,12 +10,9 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
-from camera.registry import CAMERA_REGISTRY
+from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
 router = APIRouter()
-
-PATROL_THREADS = {}  # {camera_ip: threading.Thread}
-PATROL_FLAGS = {}  # {camera_ip: threading.Event}
 
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event):

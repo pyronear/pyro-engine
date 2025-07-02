@@ -16,7 +16,7 @@ from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
 router = APIRouter()
-processes = {}
+processes: dict[str, subprocess.Popen] = {}
 
 
 def is_process_running(proc):

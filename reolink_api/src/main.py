@@ -12,9 +12,9 @@ from camera.capture import router as camera_capture_router
 from camera.control import router as camera_control_router
 from camera.focus import router as camera_focus_router
 from camera.info import router as camera_info_router
-from camera.patrol import PATROL_FLAGS, PATROL_THREADS, patrol_loop, static_loop
+from camera.patrol import patrol_loop, static_loop
 from camera.patrol import router as camera_patrol_router
-from camera.registry import CAMERA_REGISTRY
+from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from camera.stream import router as camera_stream_router
 from camera.stream import stop_stream_if_idle
 from fastapi import FastAPI
