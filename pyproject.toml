@@ -84,6 +84,7 @@ warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
 implicit_reexport = false
+allow_untyped_imports = true
 
 [[tool.mypy.overrides]]
 module = "pyroengine.version"
@@ -99,7 +100,10 @@ module = [
     "requests.*",
     "PIL.*",
     "pyroclient.*",
-    "urllib3.*"
+    "urllib3.*",
+    "setuptools",
+    "yaml",
+    "ncnn",
 ]
 ignore_missing_imports = true
 
