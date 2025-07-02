@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=67.0.0", "wheel>=0.40.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.poetry]
@@ -27,10 +27,9 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
+python = ">=3.11,<4.0"
 requests = "==2.31.0"
 tqdm = "==4.67.1"
-aiohttp = "==3.11.18"
 onnxruntime = "==1.18.1"
 huggingface_hub = "==0.23.1"
 pillow = "==11.0.0"
@@ -112,7 +111,7 @@ module = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 preview = true
 
 [tool.ruff.lint]
@@ -156,4 +155,4 @@ match = ".*\\.py"
 
 [tool.black]
 line-length = 120
-target-version = ['py39']
+target-version = ['py311']
