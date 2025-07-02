@@ -1,22 +1,4 @@
 services:
-  run:
-    image: pyronear/pyro-engine:latest
-    container_name: engine
-    environment:
-      - API_URL=${API_URL}
-      - CAM_USER=${CAM_USER}
-      - CAM_PWD=${CAM_PWD}
-      - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
-    command: python run.py
-    volumes:
-      - ./data:/usr/src/app/data
-    restart: always
-    network_mode: host
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
 
   reolink_api:
     image: pyronear/reolink_api:latest
@@ -39,4 +21,25 @@ services:
       options:
         max-size: "100m"
         max-file: "5"
+
+  engine:
+    image: pyronear/pyro-engine:latest
+    container_name: engine
+    environment:
+      - API_URL=${API_URL}
+      - CAM_USER=${CAM_USER}
+      - CAM_PWD=${CAM_PWD}
+      - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
+    command: python run.py
+    volumes:
+      - ./data:/usr/src/app/data
+    restart: always
+    network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+
 
