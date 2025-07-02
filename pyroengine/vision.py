@@ -14,7 +14,7 @@ from urllib.request import urlretrieve
 import ncnn
 import numpy as np
 import onnxruntime
-from huggingface_hub import HfApi  # type: ignore[import-untyped]
+from huggingface_hub import HfApi
 from PIL import Image
 
 from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy

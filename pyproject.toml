@@ -84,6 +84,8 @@ warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
 implicit_reexport = false
+
+ignore_missing_imports = true
 disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
@@ -105,7 +107,6 @@ module = [
     "yaml",
     "ncnn",
 ]
-ignore_missing_imports = true
 
 
 [tool.ruff]
