@@ -52,8 +52,8 @@ log:
 	docker logs -f --tail 50 engine
 
 # Get log from live_stream wrapper
-log-st: 
-	docker logs -f --tail 50 live_stream
+log-api: 
+	docker logs -f --tail 50 reolink_api
 
 # Stop the engine wrapper
 stop:
