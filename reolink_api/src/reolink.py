@@ -105,6 +105,7 @@ class ReolinkCamera:
         logging.debug("Start capture")
 
         try:
+            print(url)
             response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
