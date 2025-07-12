@@ -43,7 +43,6 @@ def is_day_time(cache, frame, strategy, delta=0):
     Returns:
         bool: True if it is considered daytime, False otherwise.
     """
-    return True
     is_day = True
     if cache and strategy in ["both", "time"]:
         with open(cache.joinpath("sunset_sunrise.txt")) as f:
