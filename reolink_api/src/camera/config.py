@@ -7,9 +7,13 @@
 import json
 import os
 from pathlib import Path
-
+import re
 import yaml
 from dotenv import load_dotenv
+
+def normalize_stream_name(name: str) -> str:
+    name = name.lower().replace("_", "-")
+    return re.sub(r"-\d{1,2}$", "", name)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -58,8 +62,8 @@ STREAMS = {
             f"pkt_size={SRT_SETTINGS['pkt_size']}&"
             f"mode={SRT_SETTINGS['mode']}&"
             f"latency={SRT_SETTINGS['latency']}&"
-            f"streamid={SRT_SETTINGS['streamid_prefix']}:{STREAM_NAME}"
+            f"streamid={SRT_SETTINGS['streamid_prefix']}:{normalize_stream_name(config.get('name', 'stream'))}"
         ),
     }
-    for ip in RAW_CONFIG
+    for ip, config in RAW_CONFIG.items()
 }
