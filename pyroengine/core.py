@@ -100,7 +100,8 @@ class SystemController:
         self,
     ):
         now = datetime.now()
-        if self.is_day and self.last_autofocus is not None and (now - self.last_autofocus).total_seconds() > 3600:
+        print("focus_finder", self.is_day , self.last_autofocus)
+        if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
             logging.info("🔄 Hourly autofocus triggered after idle period")
             for ip in self.camera_data.keys():
                 try:
@@ -176,6 +177,7 @@ class SystemController:
                         logging.error(f"Error processing alerts: {e}")
                 else:
                     # Run Autofocus
+                    logging.info("Run focus finder")
                     self.focus_finder()
 
                 # Inference
