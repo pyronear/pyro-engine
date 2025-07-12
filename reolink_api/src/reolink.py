@@ -19,7 +19,7 @@ __all__ = ["ReolinkCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 class ReolinkCamera:
@@ -105,7 +105,6 @@ class ReolinkCamera:
         logging.debug("Start capture")
 
         try:
-            print(url)
             response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
@@ -273,82 +272,99 @@ class ReolinkCamera:
 
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         """
-        Perform adaptive multi-step focus search starting from current or default focus.
-        Steps: ±15 → ±3 → ±1. Recurses if a better focus is found at any stage.
+        Perform adaptive exponential hill climb to find best manual focus.
+        Starts from current focus or camera default, climbs with increasing step size,
+        then refines with decreasing steps until peak is found.
 
         Args:
-            save_images (bool): If True, save each captured image to disk.
-            retry_depth (int): Used to limit recursion.
+            save_images (bool): If True, saves each captured image.
+            retry_depth (int): Reserved for recursion, unused in this implementation.
 
         Returns:
             int: Best focus position found.
         """
-        MAX_RETRIES = 10
         ABS_MIN = 600
         ABS_MAX = 900
-        logging.info(f"[{self.ip_address}] 🔍 Starting adaptive autofocus")
+
+        def clamp_focus(pos):
+            return max(ABS_MIN, min(ABS_MAX, pos))
 
         def capture_and_score(pos):
-            pos = max(ABS_MIN, min(ABS_MAX, pos))
+            pos = clamp_focus(pos)
             self.set_manual_focus(pos)
-            logging.debug(f"[{self.ip_address}] Set manual focus to {pos}")
-            start = time.time()
+            time.sleep(2)
             image = self.capture()
-            duration = time.time() - start
             if image is None:
-                logging.warning(f"[{self.ip_address}] No image at focus {pos}")
+                logging.warning(f"[{self.ip_address}] ❌ No image at focus {pos}")
                 return 0
             score = self._measure_sharpness(image)
-            logging.info(f"[{self.ip_address}] Focus {pos}: Sharpness = {score:.2f}, Time = {duration:.2f}s")
-
+            logging.info(f"[{self.ip_address}] 🔍 Focus {pos}: Sharpness = {score:.2f}")
             if save_images:
                 folder = f"focus_debug/{self.ip_address.replace('.', '_')}"
                 os.makedirs(folder, exist_ok=True)
                 image.save(f"{folder}/focus_{pos}.jpg")
-
             return score
 
-        if self.cam_type != "static":
-            current = self.focus_position if self.focus_position is not None else 720
-            best_pos = current
-            best_score = capture_and_score(current)
+        if self.cam_type == "static":
+            return 720
 
-            def test_offsets(base, steps):
-                nonlocal best_pos, best_score
-                for offset in steps:
-                    probe_pos = base + offset
-                    if ABS_MIN <= probe_pos <= ABS_MAX:
-                        score = capture_and_score(probe_pos)
-                        if score > best_score:
-                            logging.info(
-                                f"[{self.ip_address}] ➕ Step {offset}: new best at {probe_pos} (sharpness={score:.2f})"
-                            )
-                            best_pos = probe_pos
-                            best_score = score
-                            return True
-                return False
+        if self.focus_position is None:
+            self.start_zoom_focus(0)
+            time.sleep(0.5)
+            current_focus = self.get_focus_level()['focus']
+            logging.info(f"[{self.ip_address}] 📍 Initial focus obtained from camera: {current_focus}")
+        else:
+            current_focus = self.focus_position
+            logging.info(f"[{self.ip_address}] 📍 Using existing focus position: {current_focus}")
 
-            # Stage 1: ±15
-            if test_offsets(current, [-15, +15]):
-                if retry_depth < MAX_RETRIES:
-                    self.focus_position = best_pos
-                    return self.focus_finder(save_images=save_images, retry_depth=retry_depth + 1)
+        best_focus = clamp_focus(current_focus)
+        best_score = capture_and_score(best_focus)
 
-            # Stage 2: ±3
-            if test_offsets(best_pos, [-3, +3]):
-                if retry_depth < MAX_RETRIES:
-                    self.focus_position = best_pos
-                    return self.focus_finder(save_images=save_images, retry_depth=retry_depth + 1)
+        # Determine climb direction
+        forward_score = capture_and_score(best_focus + 1)
+        backward_score = capture_and_score(best_focus - 1)
 
-            # Stage 3: ±1
-            if test_offsets(best_pos, [-1, +1]):
-                if retry_depth < MAX_RETRIES:
-                    self.focus_position = best_pos
-                    return self.focus_finder(save_images=save_images, retry_depth=retry_depth + 1)
+        if forward_score > backward_score:
+            direction = 1
+            next_focus = best_focus + 1
+            next_score = forward_score
+        else:
+            direction = -1
+            next_focus = best_focus - 1
+            next_score = backward_score
 
-            logging.info(f"[{self.ip_address}] ✅ Final best focus at {best_pos} with sharpness {best_score:.2f}")
-            self.focus_position = best_pos
-            self.set_manual_focus(best_pos)
-            return best_pos
+        # Exponential climb
+        step = 2
+        history = [(best_focus, best_score), (next_focus, next_score)]
 
-        return 720
+        while True:
+            test_focus = clamp_focus(next_focus + direction * step)
+            score = capture_and_score(test_focus)
+            history.append((test_focus, score))
+            if score > next_score:
+                next_focus = test_focus
+                next_score = score
+                step *= 2
+            else:
+                break
+
+        # Fine refinement
+        best_focus, best_score = max(history, key=lambda x: x[1])
+        for fine_step in [3, 1]:
+            improved = True
+            while improved:
+                improved = False
+                for offset in [-fine_step, fine_step]:
+                    candidate = clamp_focus(best_focus + offset)
+                    score = capture_and_score(candidate)
+                    if score > best_score:
+                        best_score = score
+                        best_focus = candidate
+                        improved = True
+                        break
+
+        self.focus_position = best_focus
+        self.set_manual_focus(best_focus)
+        logging.info(f"[{self.ip_address}] ✅ Final best focus at {best_focus} with sharpness {best_score:.2f}")
+        return best_focus
+
