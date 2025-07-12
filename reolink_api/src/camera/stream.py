@@ -44,7 +44,7 @@ def stop_any_running_stream():
 def stop_stream_if_idle():
     """Background task that stops the stream if no command is received for 120 seconds."""
     while True:
-        time.sleep(120)
+        time.sleep(10)
         if seconds_since_last_command() > 120:
             stopped_cam = stop_any_running_stream()
             if stopped_cam:
