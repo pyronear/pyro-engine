@@ -44,7 +44,7 @@ def main(args):
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
-            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
+            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths, strict=False):
                 splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
         else:
             cam_poses = []

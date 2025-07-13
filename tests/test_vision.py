@@ -1,5 +1,6 @@
 import datetime
 import os
+import pathlib
 from unittest.mock import patch
 
 import numpy as np
@@ -8,7 +9,7 @@ from pyroengine.vision import Classifier
 
 
 def get_creation_date(file_path):
-    if os.path.exists(file_path):
+    if pathlib.Path(file_path).exists():
         # For Unix-like systems
         stat = os.stat(file_path)
         try:
@@ -37,7 +38,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
     model_path = os.path.join(folder, "yolov11s.onnx")
-    assert os.path.isfile(model_path)
+    assert pathlib.Path(model_path).is_file()
 
     # Test occlusion mask
     out = model(mock_wildfire_image, {})
@@ -70,7 +71,7 @@ def test_download(tmpdir_factory):
     assert model_creation_date == model_creation_date2
 
     # Download if does not exist
-    os.remove(model_path)
+    pathlib.Path(model_path).unlink()
     _ = Classifier(model_folder=folder, format="onnx")
     model_creation_date3 = get_creation_date(model_path)
     assert model_creation_date != model_creation_date3
