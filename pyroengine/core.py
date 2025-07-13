@@ -124,15 +124,16 @@ class SystemController:
             if cam.get("type") == "ptz":
                 for pose in cam.get("poses", []):
                     try:
-                        cam_id = f"{ip}_{pose}"
+                        if not self.reolink_client.is_stream_running(ip).get("running"):  # no prediction during stream
+                            cam_id = f"{ip}_{pose}"
 
-                        frame = self.reolink_client.get_latest_image(ip, pose)
+                            frame = self.reolink_client.get_latest_image(ip, pose)
 
-                        logging.info(f"Captured image for {ip}, pose {pose}")
+                            logging.info(f"Captured image for {ip}, pose {pose}")
 
-                        self.is_day = is_day_time(None, frame, "ir")
+                            self.is_day = is_day_time(None, frame, "ir")
 
-                        self.engine.predict(frame, cam_id)
+                            self.engine.predict(frame, cam_id)
 
                     except requests.HTTPError as e:
                         logging.error(f"❌ HTTP error for {camera_name}, pose {pose}: {e.response.text}")
