@@ -107,15 +107,6 @@ def start_stream(camera_ip: str):
     processes[camera_ip] = proc
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
 
-    # Optional: reset zoom
-    cam = CAMERA_REGISTRY.get(camera_ip)
-    if cam:
-        try:
-            cam.start_zoom_focus(position=0)
-            logging.info(f"[{camera_ip}] Zoom reset to 0")
-        except Exception as e:
-            logging.warning(f"[{camera_ip}] Failed to reset zoom: {e}")
-
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 
 
