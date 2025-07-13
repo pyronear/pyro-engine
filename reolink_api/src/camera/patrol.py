@@ -81,19 +81,37 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 
 @router.post("/start_patrol")
 def start_patrol(camera_ip: str):
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
     if camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive():
-        return {"status": "already_running", "camera_ip": camera_ip}
+        return {
+            "status": "already_running",
+            "camera_ip": camera_ip,
+            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,  # Use internal ref
+        }
 
     stop_flag = threading.Event()
+
+    if cam.cam_type == "ptz":
+        target_fn = patrol_loop
+        loop_type = "patrol"
+    else:
+        target_fn = static_loop
+        loop_type = "static"
+
     thread = threading.Thread(
-        target=patrol_loop,
+        target=target_fn,
         args=(camera_ip, stop_flag),
         daemon=True,
     )
     PATROL_THREADS[camera_ip] = thread
     PATROL_FLAGS[camera_ip] = stop_flag
     thread.start()
-    return {"status": "started", "camera_ip": camera_ip}
+
+    logging.info(f"[{camera_ip}] 🚀 Started {loop_type} loop")
+    return {"status": "started", "camera_ip": camera_ip, "loop_type": loop_type}
 
 
 @router.post("/stop_patrol")
@@ -107,7 +125,20 @@ def stop_patrol(camera_ip: str):
 
 @router.get("/patrol_status")
 def patrol_status(camera_ip: str):
-    is_running = (
-        camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive() and not PATROL_FLAGS[camera_ip].is_set()
-    )
-    return {"camera_ip": camera_ip, "patrol_running": is_running}
+    thread = PATROL_THREADS.get(camera_ip)
+    flag = PATROL_FLAGS.get(camera_ip)
+    is_running = thread and thread.is_alive() and flag and not flag.is_set()
+
+    loop_type = None
+    if thread is not None and hasattr(thread, "_target"):
+        target_fn = thread._target.__name__
+        if target_fn == "patrol_loop":
+            loop_type = "patrol"
+        elif target_fn == "static_loop":
+            loop_type = "static"
+
+    return {
+        "camera_ip": camera_ip,
+        "patrol_running": is_running,
+        "loop_type": loop_type,
+    }
