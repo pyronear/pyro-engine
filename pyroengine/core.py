@@ -157,16 +157,23 @@ class SystemController:
 
     def check_and_restart_patrol(self):
         """
-        Check if patrol is running on all cameras, and restart it if it's not.
+        Check if the stream is inactive, and if so, ensure patrol is running on all cameras.
         """
-        for ip in self.camera_data.keys():
-            try:
-                status = self.reolink_client.get_patrol_status(ip)
-                if not status.get("patrol_running", False):
-                    self.reolink_client.start_patrol(ip)
-                    logging.info(f"Patrol restarted on camera {ip}")
-            except Exception as e:
-                logging.error(f"❌ Could not check or restart patrol on camera {ip}: {e}")
+        try:
+            stream_status = self.reolink_client.get_stream_status()
+        except Exception as e:
+            logging.error(f"❌ Could not check if stream is running: {e}")
+            return  # prevent further execution if status can't be retrieved
+
+        if not stream_status.get("active_streams"):  # no stream running
+            for ip in self.camera_data.keys():
+                try:
+                    patrol_status = self.reolink_client.get_patrol_status(ip)
+                    if not patrol_status.get("patrol_running", False):
+                        self.reolink_client.start_patrol(ip)
+                        logging.info(f"🔁 Patrol restarted on camera {ip}")
+                except Exception as e:
+                    logging.error(f"❌ Could not check or restart patrol on camera {ip}: {e}")
 
     def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
