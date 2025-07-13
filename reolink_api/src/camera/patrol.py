@@ -56,7 +56,8 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
         # Set focus if defined
         if getattr(cam, "focus_position", None) is not None:
             try:
-                cam.set_manual_focus(cam.focus_position)
+                if cam.focus_position is not None:
+                    cam.set_manual_focus(cam.focus_position)
                 logging.info(f"[{camera_ip}] Restored manual focus to {cam.focus_position}")
             except Exception as e:
                 logging.warning(f"[{camera_ip}] Failed to restore focus: {e}")
@@ -99,7 +100,7 @@ def start_patrol(camera_ip: str):
         return {
             "status": "already_running",
             "camera_ip": camera_ip,
-            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,  # Use internal ref
+            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,  # type: ignore[attr-defined]
         }
 
     stop_flag = threading.Event()
