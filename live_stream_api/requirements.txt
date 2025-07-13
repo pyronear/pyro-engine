@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-aiohttp
-PyYAML
-python-dotenv
-requests
-pillow

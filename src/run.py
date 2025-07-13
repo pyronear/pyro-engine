@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import argparse
-import asyncio
 import json
 import logging
 import os
@@ -14,7 +13,6 @@ from dotenv import load_dotenv
 
 from pyroengine import SystemController
 from pyroengine.engine import Engine
-from pyroengine.sensors import ReolinkCamera
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -35,40 +33,23 @@ def main(args):
 
     # Loading camera creds
     with open(args.creds, "rb") as json_file:
-        cameras_credentials = json.load(json_file)
+        camera_data = json.load(json_file)
 
     splitted_cam_creds = {}
-    cameras = []
-    for _ip, cam_data in cameras_credentials.items():
+    for _ip, cam_data in camera_data.items():
         bbox_mask_url = None
-        focus_position = None
         if "bbox_mask_url" in cam_data.keys():
             bbox_mask_url = cam_data["bbox_mask_url"]
 
         if cam_data["type"] == "ptz":
-            if "focus_position" in cam_data.keys():
-                focus_position = cam_data["focus_position"]
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
-            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths):
+            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths, strict=False):
                 splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
             splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"], bbox_mask_url
-
-        cameras.append(
-            ReolinkCamera(
-                _ip,
-                CAM_USER,
-                CAM_PWD,
-                cam_data["type"],
-                cam_poses,
-                cam_azimuths,
-                args.protocol,
-                focus_position,
-            )
-        )
 
     engine = Engine(
         model_path=args.model_path,
@@ -87,9 +68,9 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
     )
 
-    sys_controller = SystemController(engine, cameras, MEDIAMTX_SERVER_IP)
+    sys_controller = SystemController(engine, camera_data, args.reolink_api_url, MEDIAMTX_SERVER_IP)
 
-    asyncio.run(sys_controller.main_loop(args.period, args.send_alerts))
+    sys_controller.main_loop(args.period, args.send_alerts)
 
 
 if __name__ == "__main__":
@@ -103,6 +84,8 @@ if __name__ == "__main__":
     parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
 
     # Camera & cache
+
+    parser.add_argument("--reolink_api_url", type=str, default="http://0.0.0.0:8081", help="Camera api url")
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
     parser.add_argument(

@@ -44,7 +44,7 @@ def stop_any_running_stream():
 def stop_stream_if_idle():
     """Background task that stops the stream if no command is received for 120 seconds."""
     while True:
-        time.sleep(120)
+        time.sleep(10)
         if seconds_since_last_command() > 120:
             stopped_cam = stop_any_running_stream()
             if stopped_cam:
@@ -106,15 +106,6 @@ def start_stream(camera_ip: str):
     proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     processes[camera_ip] = proc
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
-
-    # Optional: reset zoom
-    cam = CAMERA_REGISTRY.get(camera_ip)
-    if cam:
-        try:
-            cam.start_zoom_focus(position=0)
-            logging.info(f"[{camera_ip}] Zoom reset to 0")
-        except Exception as e:
-            logging.warning(f"[{camera_ip}] Failed to reset zoom: {e}")
 
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 

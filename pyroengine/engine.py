@@ -6,7 +6,6 @@
 import glob
 import io
 import logging
-import os
 import shutil
 import signal
 import time
@@ -16,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import numpy.typing as npt
 import requests
 from PIL import Image
 from pyroclient import client
@@ -162,57 +162,59 @@ class Engine:
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> int:
+    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float:
         """Updates the detection states"""
         conf_th = self.conf_thresh * self.nb_consecutive_frames
-        # Reduce threshold once we are in alert mode to collect more data
         if self._states[cam_key]["ongoing"]:
             conf_th *= 0.8
 
-        # Get last predictions
-        boxes = np.zeros((0, 5))
+        boxes = np.zeros((0, 5), dtype=np.float64)
         boxes = np.concatenate([boxes, preds])
         for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
 
-        conf = 0
-        output_predictions = np.zeros((0, 5))
-        # Get the best ones
+        conf = 0.0
+        output_predictions: npt.NDArray[np.float64] = np.zeros((0, 5), dtype=np.float64)
+
         if boxes.shape[0]:
             best_boxes = nms(boxes)
-            # We keep only detections with at half boxes above conf_th
             detections = boxes[boxes[:, -1] > self.conf_thresh, :]
             ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
-            strong_detection = np.sum(ious_detections > 0, 0) >= int(self.nb_consecutive_frames / 2)
+            strong_detection = np.sum(ious_detections > 0, axis=0) >= int(self.nb_consecutive_frames / 2)
             best_boxes = best_boxes[strong_detection, :]
+
             if best_boxes.shape[0]:
                 ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-
                 best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
                 combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-                conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)  # memory + preds
-                if len(combine_predictions):
-                    # send only preds boxes that match combine_predictions
+                if len(best_boxes_scores) > 0:
+                    conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)
+
+                if combine_predictions.shape[0] > 0:
                     ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                    iou_match = [np.max(iou) > 0 for iou in ious]
-                    output_predictions = preds[iou_match, :]
+                    iou_match = np.array([np.max(iou) > 0 for iou in ious])
+                    matched_preds = preds[iou_match, :]
+                    if matched_preds.ndim == 1:
+                        matched_preds = matched_preds[np.newaxis, :]
+                    output_predictions = matched_preds.astype(np.float64)
 
-                    if len(output_predictions) == 0:
-                        missing_bbox = combine_predictions
+                    if output_predictions.shape[0] == 0:
+                        missing_bbox = combine_predictions.copy()
                         missing_bbox[:, -1] = 0
+                        output_predictions = missing_bbox
 
-        # Fallback: fill from last non-empty if needed
+        # Fallback if still empty
         if output_predictions.shape[0] == 0:
             for _, _, previous_bboxes, _, _ in reversed(self._states[cam_key]["last_predictions"]):
                 if previous_bboxes:
-                    output_predictions = np.array(previous_bboxes)
+                    output_predictions = np.array(previous_bboxes, dtype=np.float64)
                     logging.debug(f"Filled missing bbox for {cam_key} from past prediction")
                     break
 
-        # Clip output
         output_predictions = np.round(output_predictions, 3)
         output_predictions = output_predictions[:5, :]
+        output_predictions = np.atleast_2d(output_predictions)
 
         self._states[cam_key]["last_predictions"].append((
             frame,
@@ -222,11 +224,7 @@ class Engine:
             False,
         ))
 
-        # update state
-        if conf > self.conf_thresh:
-            self._states[cam_key]["ongoing"] = True
-        else:
-            self._states[cam_key]["ongoing"] = False
+        self._states[cam_key]["ongoing"] = conf > self.conf_thresh
 
         return conf
 
@@ -425,9 +423,9 @@ class Engine:
         for folder in backup_by_days:
             s = (
                 sum(
-                    os.path.getsize(f)
+                    Path(f).stat().st_size
                     for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
-                    if os.path.isfile(f)
+                    if Path(f).is_file()
                 )
                 // 1024**2
             )

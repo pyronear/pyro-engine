@@ -6,6 +6,7 @@
 import json
 import logging
 import os
+import pathlib
 import platform
 import shutil
 from typing import Tuple
@@ -59,7 +60,7 @@ class Classifier:
     ) -> None:
         if model_path:
             # Checks that the file exists
-            if not os.path.isfile(model_path):
+            if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
             # Checks that file format is .onnx
             if os.path.splitext(model_path)[-1].lower() != ".onnx":
@@ -90,16 +91,16 @@ class Classifier:
                 raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
 
             # Check if the model file exists
-            if os.path.isfile(model_path):
+            if pathlib.Path(model_path).is_file():
                 # Load existing metadata
                 metadata = self.load_metadata(metadata_path)
                 if metadata and metadata.get("sha256") == expected_sha256:
                     logging.info("Model already exists and the SHA256 hash matches. No download needed.")
                 else:
                     logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
-                    os.remove(model_path)
+                    pathlib.Path(model_path).unlink()
                     extracted_path = os.path.splitext(model_path)[0]
-                    if os.path.isdir(extracted_path):
+                    if pathlib.Path(extracted_path).is_dir():
                         shutil.rmtree(extracted_path)
                     self.download_model(model_url, model_path, expected_sha256, metadata_path)
             else:
@@ -107,7 +108,7 @@ class Classifier:
 
             file_name, ext = os.path.splitext(model_path)
             if ext == ".zip":
-                if not os.path.isdir(file_name):
+                if not pathlib.Path(file_name).is_dir():
                     shutil.unpack_archive(model_path, model_folder)
                 model_path = file_name
 
@@ -136,7 +137,7 @@ class Classifier:
     def get_sha(self, siblings):
         # Extract the SHA256 hash from the model files metadata
         for file in siblings:
-            if file.rfilename == os.path.basename(MODEL_NAME):
+            if file.rfilename == pathlib.Path(MODEL_NAME).name:
                 return file.lfs["sha256"]
         return None
 
@@ -157,7 +158,7 @@ class Classifier:
 
     # Utility function to load metadata
     def load_metadata(self, metadata_path):
-        if os.path.exists(metadata_path):
+        if pathlib.Path(metadata_path).exists():
             with open(metadata_path, "r") as f:
                 return json.load(f)
         return None

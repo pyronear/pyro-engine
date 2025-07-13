@@ -52,7 +52,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     out = engine.predict(mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
-    assert engine._states["-1"]["ongoing"] is True
+    assert engine._states["-1"]["ongoing"] == True
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
@@ -69,7 +69,8 @@ def create_dummy_onnx_model(model_path):
     node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
 
-    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 11)])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 10)])
+    model.ir_version = 10
 
     onnx.save(model, model_path)
 
@@ -113,7 +114,7 @@ def test_nonexistent_model(mock_isfile):
         Engine(model_path="nonexistent.onnx")
 
 
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file", return_value=True)
 def test_invalid_extension(mock_isfile):
     """Tests Engine instanciation with a file format different than .onnx"""
     mock_isfile.return_value = True  # Simulates file existence
@@ -163,7 +164,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
 
-        assert engine._states["dummy_cam"]["ongoing"] is True
+        assert engine._states["dummy_cam"]["ongoing"] == True
         # Check that a media and an alert have been registered
         engine._process_alerts()
         assert len(engine._alerts) == 0
