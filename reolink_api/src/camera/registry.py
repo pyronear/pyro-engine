@@ -19,7 +19,7 @@ for ip, conf in RAW_CONFIG.items():
         ip_address=ip,
         username=CAM_USER or "",
         password=CAM_PWD or "",
-        cam_type=conf.get("type", "ptz"),
+        cam_type=conf.get("type", "static"),
         cam_poses=conf.get("poses"),
         cam_azimuths=conf.get("azimuths"),
         focus_position=conf.get("focus_position", 720),

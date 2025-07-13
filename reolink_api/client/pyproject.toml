@@ -5,7 +5,8 @@ description = "Python client to interact with the Reolink API server"
 authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
 requires-python = ">=3.9"
 dependencies = [
-    "requests"
+    "requests",
+    "pillow"
 ]
 
 [project.optional-dependencies]

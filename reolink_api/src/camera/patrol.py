@@ -46,15 +46,26 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
                 logging.error(f"[{camera_ip}] Error at pose {pose}: {e}")
                 continue
 
-        # To prevent big move get back to pose 0
-        cam.move_camera("ToPos", idx=poses[0], speed=50)
+        # Return to pose 0 before sleep
+        try:
+            cam.move_camera("ToPos", idx=poses[0], speed=50)
+            logging.info(f"[{camera_ip}] Returned to pose 0")
+        except Exception as e:
+            logging.warning(f"[{camera_ip}] Failed to return to pose 0: {e}")
+
+        # Set focus if defined
+        if getattr(cam, "focus_position", None) is not None:
+            try:
+                if cam.focus_position is not None:
+                    cam.set_manual_focus(cam.focus_position)
+                logging.info(f"[{camera_ip}] Restored manual focus to {cam.focus_position}")
+            except Exception as e:
+                logging.warning(f"[{camera_ip}] Failed to restore focus: {e}")
+
         # Sleep to ensure the total loop is ~30s
         elapsed = time.time() - start_time
         sleep_time = max(0, 30 - elapsed)
-        if stop_flag.wait(sleep_time):
-            # To prevent big move get back to pose 0
-            cam.move_camera("ToPos", idx=poses[0], speed=50)
-            break
+        stop_flag.wait(sleep_time)
 
     logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
 
@@ -81,19 +92,37 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 
 @router.post("/start_patrol")
 def start_patrol(camera_ip: str):
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if not cam:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
     if camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive():
-        return {"status": "already_running", "camera_ip": camera_ip}
+        return {
+            "status": "already_running",
+            "camera_ip": camera_ip,
+            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,  # type: ignore[attr-defined]
+        }
 
     stop_flag = threading.Event()
+
+    if cam.cam_type == "ptz":
+        target_fn = patrol_loop
+        loop_type = "patrol"
+    else:
+        target_fn = static_loop
+        loop_type = "static"
+
     thread = threading.Thread(
-        target=patrol_loop,
+        target=target_fn,
         args=(camera_ip, stop_flag),
         daemon=True,
     )
     PATROL_THREADS[camera_ip] = thread
     PATROL_FLAGS[camera_ip] = stop_flag
     thread.start()
-    return {"status": "started", "camera_ip": camera_ip}
+
+    logging.info(f"[{camera_ip}] 🚀 Started {loop_type} loop")
+    return {"status": "started", "camera_ip": camera_ip, "loop_type": loop_type}
 
 
 @router.post("/stop_patrol")
@@ -107,7 +136,20 @@ def stop_patrol(camera_ip: str):
 
 @router.get("/patrol_status")
 def patrol_status(camera_ip: str):
-    is_running = (
-        camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive() and not PATROL_FLAGS[camera_ip].is_set()
-    )
-    return {"camera_ip": camera_ip, "patrol_running": is_running}
+    thread = PATROL_THREADS.get(camera_ip)
+    flag = PATROL_FLAGS.get(camera_ip)
+    is_running = thread and thread.is_alive() and flag and not flag.is_set()
+
+    loop_type = None
+    if thread is not None and hasattr(thread, "_target"):
+        target_fn = thread._target.__name__
+        if target_fn == "patrol_loop":
+            loop_type = "patrol"
+        elif target_fn == "static_loop":
+            loop_type = "static"
+
+    return {
+        "camera_ip": camera_ip,
+        "patrol_running": is_running,
+        "loop_type": loop_type,
+    }

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=67.0.0", "wheel>=0.40.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.poetry]
@@ -27,15 +27,15 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
+python = ">=3.11,<4.0"
 requests = "==2.31.0"
 tqdm = "==4.67.1"
-aiohttp = "==3.11.18"
-onnxruntime = "==1.18.1"
+onnxruntime = "==1.22.1"
 huggingface_hub = "==0.23.1"
 pillow = "==11.0.0"
 ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
+reolink_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "develop", subdirectory = "reolink_api/client" }
 python-dotenv = "==1.1.0"
 
 
@@ -111,7 +111,7 @@ module = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 preview = true
 
 [tool.ruff.lint]
@@ -155,4 +155,4 @@ match = ".*\\.py"
 
 [tool.black]
 line-length = 120
-target-version = ['py39']
+target-version = ['py311']

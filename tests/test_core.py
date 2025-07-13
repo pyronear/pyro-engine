@@ -1,8 +1,8 @@
-import asyncio
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from PIL import Image
 
 from pyroengine.core import SystemController, is_day_time
@@ -11,71 +11,21 @@ from pyroengine.core import SystemController, is_day_time
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
-    engine.predict.return_value = None  # Mock predict method
+    engine.predict.return_value = None
     return engine
 
 
 @pytest.fixture
-def mock_cameras(mock_wildfire_image):
-    camera = MagicMock()
-    camera.capture.return_value = mock_wildfire_image  # Mock captured image
-    camera.cam_type = "static"
-    camera.ip_address = "192.168.1.1"
-    return [camera]
+def mock_camera_data():
+    return {"192.168.1.1": {"name": "cam1", "type": "ptz", "poses": [1, 2]}}
 
 
-@pytest.fixture
-def mock_cameras_ptz(mock_wildfire_image):
-    camera = MagicMock()
-    camera.capture.return_value = mock_wildfire_image  # Mock captured image
-    camera.cam_type = "ptz"
-    camera.cam_poses = [1, 2]
-    camera.ip_address = "192.168.1.1"
-    return [camera]
+def test_is_day_time_ir_strategy():
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    assert is_day_time(None, day_img, "ir")
 
-
-@pytest.fixture
-def mock_cameras_ptz_night():
-    camera = MagicMock()
-    camera.capture.return_value = Image.new("RGB", (100, 100), (255, 255, 255))  # Mock captured image
-    camera.cam_type = "ptz"
-    camera.cam_poses = [1, 2]
-    camera.ip_address = "192.168.1.1"
-    return [camera]
-
-
-@pytest.fixture
-def system_controller(mock_engine, mock_cameras):
-    return SystemController(engine=mock_engine, cameras=mock_cameras)
-
-
-@pytest.fixture
-def system_controller_ptz(mock_engine, mock_cameras_ptz):
-    return SystemController(engine=mock_engine, cameras=mock_cameras_ptz)
-
-
-@pytest.fixture
-def system_controller_ptz_night(mock_engine, mock_cameras_ptz_night):
-    return SystemController(engine=mock_engine, cameras=mock_cameras_ptz_night)
-
-
-@pytest.mark.asyncio
-async def test_night_mode(system_controller):
-    assert await system_controller.night_mode()
-
-
-@pytest.mark.asyncio
-async def test_night_mode_ptz(system_controller_ptz_night):
-    assert not await system_controller_ptz_night.night_mode()
-
-
-def test_is_day_time_ir_strategy(mock_wildfire_image):
-    # Use day image
-    assert is_day_time(None, mock_wildfire_image, "ir")
-
-    # Create a grayscale image to simulate night image
-    frame = Image.new("RGB", (100, 100), (255, 255, 255))
-    assert not is_day_time(None, frame, "ir")
+    night_img = Image.new("RGB", (100, 100), (255, 255, 255))
+    assert not is_day_time(None, night_img, "ir")
 
 
 def test_is_day_time_time_strategy(tmp_path):
@@ -83,85 +33,80 @@ def test_is_day_time_time_strategy(tmp_path):
     with open(cache / "sunset_sunrise.txt", "w") as f:
         f.write("06:00\n18:00\n")
 
-    # Mock datetime to return a specific time within day hours
     with patch("pyroengine.core.datetime") as mock_datetime:
-        mock_datetime.now.return_value = datetime(2024, 6, 17, 10, 0, 0)
-        mock_datetime.strptime = datetime.strptime  # Ensure strptime works as expected
+        mock_datetime.now.return_value = datetime(2024, 6, 17, 10, 0)
+        mock_datetime.strptime = datetime.strptime
         assert is_day_time(cache, None, "time")
 
-    # Mock datetime to return a specific time outside day hours
-    with patch("pyroengine.core.datetime") as mock_datetime:
-        mock_datetime.now.return_value = datetime(2024, 6, 17, 20, 0, 0)
-        mock_datetime.strptime = datetime.strptime  # Ensure strptime works as expected
+        mock_datetime.now.return_value = datetime(2024, 6, 17, 20, 0)
         assert not is_day_time(cache, None, "time")
 
 
-@pytest.mark.asyncio
-async def test_capture_images(system_controller):
-    queue = asyncio.Queue(maxsize=10)
-    await system_controller.capture_images(queue)
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_focus_finder_runs_hourly(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = True
+    controller.last_autofocus = datetime.now().replace(hour=0)
 
-    assert queue.qsize() == 1
-    cam_id, frame = await queue.get()  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1"
-    assert isinstance(frame, Image.Image)
+    controller.focus_finder()
 
-
-@pytest.mark.asyncio
-async def test_capture_images_ptz(system_controller_ptz):
-    queue = asyncio.Queue(maxsize=10)
-    await system_controller_ptz.capture_images(queue)
-
-    assert queue.qsize() == 2
-    cam_id, frame = await queue.get()  # Use timeout to wait for the item
-    assert cam_id == "192.168.1.1_1"
-    assert isinstance(frame, Image.Image)
+    assert mock_client.run_focus_optimization.called
+    assert mock_client.stop_patrol.called
+    assert mock_client.start_patrol.called
 
 
-@pytest.mark.asyncio
-async def test_analyze_stream(system_controller, mock_wildfire_image):
-    queue = asyncio.Queue()
-    mock_frame = mock_wildfire_image
-    await queue.put(("192.168.1.1", mock_frame))
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    dummy_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client.get_latest_image.return_value = dummy_img
+    mock_client.is_stream_running.return_value = {"running": False}  # 👈 important
 
-    analyze_task = asyncio.create_task(system_controller.analyze_stream(queue))
-    await queue.put(None)  # Signal the end of the stream
-    await analyze_task
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = True
 
-    system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
+    controller.inference_loop()
 
-
-@pytest.mark.asyncio
-async def test_capture_images_method(system_controller):
-    with patch("pyroengine.core.capture_camera_image", new_callable=AsyncMock) as mock_capture:
-        queue = asyncio.Queue()
-        await system_controller.capture_images(queue)
-
-        for camera in system_controller.cameras:
-            mock_capture.assert_any_call(camera, queue, server_ip=None)
-        assert mock_capture.call_count == len(system_controller.cameras)
+    assert mock_engine.predict.called
+    mock_client.get_latest_image.assert_called()
 
 
-@pytest.mark.asyncio
-async def test_analyze_stream_method(system_controller, mock_wildfire_image):
-    queue = asyncio.Queue()
-    mock_frame = mock_wildfire_image
-    await queue.put(("192.168.1.1", mock_frame))
-    await queue.put(None)  # Signal the end of the stream
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
+    mock_client.get_latest_image.side_effect = mock_error
+    mock_client.is_stream_running.return_value = {"running": False}
 
-    await system_controller.analyze_stream(queue)
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
 
-    system_controller.engine.predict.assert_called_once_with(mock_frame, "192.168.1.1")
+    controller.inference_loop()
 
-
-def test_repr_method(system_controller):
-    repr_str = repr(system_controller)
-    # Check if the representation is a string
-    assert isinstance(repr_str, str)
+    assert mock_client.get_latest_image.called
+    assert not mock_engine.predict.called
 
 
-def test_repr_method_no_cameras(mock_engine):
-    system_controller = SystemController(engine=mock_engine, cameras=[])
-    repr_str = repr(system_controller)
-    # Check if the representation is a string
-    assert isinstance(repr_str, str)
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.side_effect = Exception("Something went wrong")
+    mock_client.is_stream_running.return_value = {"running": False}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    controller.inference_loop()
+
+    assert mock_client.get_latest_image.called
+    assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_focus_finder_skips_at_night(mock_client_class, mock_engine, mock_camera_data):
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = False
+    controller.last_autofocus = None
+
+    controller.focus_finder()
+
+    mock_client_class.return_value.run_focus_optimization.assert_not_called()

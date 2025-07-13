@@ -1,15 +1,17 @@
 services:
-  run:
-    image: pyronear/pyro-engine:latest
-    container_name: engine
+
+  reolink_api:
+    image: pyronear/reolink_api:latest
+    build:
+      context: ./reolink_api
+    container_name: reolink_api
     environment:
-      - API_URL=${API_URL}
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
       - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
-    command: python run.py
     volumes:
-      - ./data:/usr/src/app/data
+      - ./data/credentials.json:/app/src/credentials.json:ro
+    command: "uvicorn src.main:app --reload --host 0.0.0.0 --port 8081"
     restart: always
     network_mode: host
     logging:
@@ -18,20 +20,24 @@ services:
         max-size: "100m"
         max-file: "5"
 
-  live_stream:
-    image: pyronear/live-stream:latest
-    build:
-      context: ./live_stream_api
-    container_name: live_stream
+  engine:
+    image: pyronear/pyro-engine:latest
+    container_name: engine
     environment:
+      - API_URL=${API_URL}
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
       - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
+    command: >
+      sh -c '
+        echo "Sleeping 15 seconds to wait for reolink_api to capture one image per pose...";
+        sleep 15;
+        python run.py
+      '
     volumes:
-      - ./live_stream_api:/usr/src/app
-      - ./data/credentials.json:/usr/src/app/data/credentials.json:ro
+      - ./data:/usr/src/app/data
     restart: always
-    network_mode: host 
+    network_mode: host
     logging:
       driver: "json-file"
       options:
