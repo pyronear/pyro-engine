@@ -70,7 +70,7 @@ def create_dummy_onnx_model(model_path):
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
 
     model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 10)])
-    model.ir_version = 10 
+    model.ir_version = 10
 
     onnx.save(model, model_path)
 

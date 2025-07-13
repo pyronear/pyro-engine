@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import MagicMock, patch
-from PIL import Image
 from datetime import datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
+from PIL import Image
 
 from pyroengine.core import SystemController, is_day_time
 
@@ -15,13 +16,7 @@ def mock_engine():
 
 @pytest.fixture
 def mock_camera_data():
-    return {
-        "192.168.1.1": {
-            "name": "cam1",
-            "type": "ptz",
-            "poses": [1, 2]
-        }
-    }
+    return {"192.168.1.1": {"name": "cam1", "type": "ptz", "poses": [1, 2]}}
 
 
 def test_is_day_time_ir_strategy():
