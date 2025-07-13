@@ -46,15 +46,25 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
                 logging.error(f"[{camera_ip}] Error at pose {pose}: {e}")
                 continue
 
-        # To prevent big move get back to pose 0
-        cam.move_camera("ToPos", idx=poses[0], speed=50)
+        # Return to pose 0 before sleep
+        try:
+            cam.move_camera("ToPos", idx=poses[0], speed=50)
+            logging.info(f"[{camera_ip}] Returned to pose 0")
+        except Exception as e:
+            logging.warning(f"[{camera_ip}] Failed to return to pose 0: {e}")
+
+        # Set focus if defined
+        if getattr(cam, "focus_position", None) is not None:
+            try:
+                cam.set_manual_focus(cam.focus_position)
+                logging.info(f"[{camera_ip}] Restored manual focus to {cam.focus_position}")
+            except Exception as e:
+                logging.warning(f"[{camera_ip}] Failed to restore focus: {e}")
+
         # Sleep to ensure the total loop is ~30s
         elapsed = time.time() - start_time
         sleep_time = max(0, 30 - elapsed)
-        if stop_flag.wait(sleep_time):
-            # To prevent big move get back to pose 0
-            cam.move_camera("ToPos", idx=poses[0], speed=50)
-            break
+        stop_flag.wait(sleep_time)
 
     logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
 
