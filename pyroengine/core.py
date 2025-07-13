@@ -155,6 +155,19 @@ class SystemController:
                 except Exception as e:
                     logging.error(f"❌ Error for {camera_name}: {e}")
 
+    def check_and_restart_patrol(self):
+        """
+        Check if patrol is running on all cameras, and restart it if it's not.
+        """
+        for ip in self.camera_data.keys():
+            try:
+                status = self.reolink_client.get_patrol_status(ip)
+                if not status.get("running", False):
+                    self.reolink_client.start_patrol(ip)
+                    logging.info(f"Patrol restarted on camera {ip}")
+            except Exception as e:
+                logging.error(f"❌ Could not check or restart patrol on camera {ip}: {e}")
+
     def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
         Run the main loop that regularly captures and analyzes camera feeds.
@@ -167,8 +180,31 @@ class SystemController:
             start_ts = time.time()
 
             if not self.is_day:
+                # 1. Stop patrol for all cameras
+                for ip in self.camera_data.keys():
+                    try:
+                        self.reolink_client.stop_patrol(ip)
+                        logging.info(f"Stopped patrol for camera {ip} due to night.")
+                    except Exception as e:
+                        logging.error(f"❌ Failed to stop patrol on camera {ip}: {e}")
+
+                # 2. Sleep for 1 hour
                 logging.info("Nighttime detected by at least one camera, sleeping for 1 hour.")
                 time.sleep(3600)
+
+                # 3. After sleep, capture one image and re-check day/night
+                try:
+                    ip = next(iter(self.camera_data.keys()))
+
+                    # Call camera.capture() → we assume it maps to get_latest_image()
+                    frame = self.reolink_client.capture(ip)
+
+                    self.is_day = is_day_time(None, frame, "ir")
+                    logging.info(f"After sleep, checked is_day using camera {ip}: {self.is_day}")
+                except Exception as e:
+                    logging.error(f"❌ Failed to check day/night after sleep: {e}")
+                    self.is_day = False
+
             else:
                 if len(self.engine._alerts) and send_alerts:
                     try:
@@ -179,6 +215,9 @@ class SystemController:
                     # Run Autofocus
                     logging.info("Run focus finder")
                     self.focus_finder()
+
+                # Ensure patrol is running
+                self.check_and_restart_patrol()
 
                 # Inference
                 self.inference_loop()
