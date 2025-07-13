@@ -197,7 +197,7 @@ class SystemController:
                     ip = next(iter(self.camera_data.keys()))
 
                     # Call camera.capture() → we assume it maps to get_latest_image()
-                    frame = self.reolink_client.capture(ip)
+                    frame = self.reolink_client.capture_image(ip)
 
                     self.is_day = is_day_time(None, frame, "ir")
                     logging.info(f"After sleep, checked is_day using camera {ip}: {self.is_day}")
