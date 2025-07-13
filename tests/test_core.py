@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from PIL import Image
 
 from pyroengine.core import SystemController, is_day_time
@@ -68,3 +69,41 @@ def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_ca
 
     assert mock_engine.predict.called
     mock_client.get_latest_image.assert_called()
+
+
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
+    mock_client.get_latest_image.side_effect = mock_error
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    controller.inference_loop()
+
+    assert mock_client.get_latest_image.called
+    assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.side_effect = Exception("Something went wrong")
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    controller.inference_loop()
+
+    assert mock_client.get_latest_image.called
+    assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.ReolinkAPIClient")
+def test_focus_finder_skips_at_night(mock_client_class, mock_engine, mock_camera_data):
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = False
+    controller.last_autofocus = None
+
+    controller.focus_finder()
+
+    mock_client_class.return_value.run_focus_optimization.assert_not_called()
