@@ -224,7 +224,7 @@ class Classifier:
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
-        logging.info(pred, occlusion_bboxes)
+        logging.info(f"Model original pred : {pred}")
 
         # Remove prediction in bbox occlusion mask
         if len(occlusion_bboxes):
