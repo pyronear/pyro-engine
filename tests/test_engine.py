@@ -114,13 +114,13 @@ def test_nonexistent_model(mock_isfile):
         Engine(model_path="nonexistent.onnx")
 
 
+@patch("os.path.isfile", return_value=True)
 @patch("pathlib.Path.is_file", return_value=True)
-def test_invalid_extension(mock_isfile):
+def test_invalid_extension(mock_path_is_file, mock_os_isfile):
     """Tests Engine instanciation with a file format different than .onnx"""
-    mock_isfile.return_value = True  # Simulates file existence
     with pytest.raises(
         ValueError,
-        match=r"Input model_path should point to an ONNX export but currently is *",
+        match=r"Input model_path should point to an ONNX export but currently is",
     ):
         Engine(model_path="model.ncnn")
 
