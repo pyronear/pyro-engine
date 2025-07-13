@@ -162,7 +162,7 @@ class SystemController:
         for ip in self.camera_data.keys():
             try:
                 status = self.reolink_client.get_patrol_status(ip)
-                if not status.get("running", False):
+                if not status.get("patrol_running", False):
                     self.reolink_client.start_patrol(ip)
                     logging.info(f"Patrol restarted on camera {ip}")
             except Exception as e:
