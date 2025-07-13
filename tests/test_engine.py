@@ -52,7 +52,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     out = engine.predict(mock_wildfire_image)
     assert isinstance(out, float) and 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
-    assert engine._states["-1"]["ongoing"] is True
+    assert engine._states["-1"]["ongoing"] == True
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
@@ -164,7 +164,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
 
-        assert engine._states["dummy_cam"]["ongoing"] is True
+        assert engine._states["dummy_cam"]["ongoing"] == True
         # Check that a media and an alert have been registered
         engine._process_alerts()
         assert len(engine._alerts) == 0
