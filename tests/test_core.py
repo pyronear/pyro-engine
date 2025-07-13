@@ -61,6 +61,7 @@ def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_ca
     mock_client = mock_client_class.return_value
     dummy_img = Image.new("RGB", (100, 100), (255, 200, 200))
     mock_client.get_latest_image.return_value = dummy_img
+    mock_client.is_stream_running.return_value = {"running": False}  # 👈 important
 
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
     controller.is_day = True
@@ -76,6 +77,7 @@ def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_
     mock_client = mock_client_class.return_value
     mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
     mock_client.get_latest_image.side_effect = mock_error
+    mock_client.is_stream_running.return_value = {"running": False}
 
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
 
@@ -89,6 +91,7 @@ def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_
 def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_client.get_latest_image.side_effect = Exception("Something went wrong")
+    mock_client.is_stream_running.return_value = {"running": False}
 
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
 
