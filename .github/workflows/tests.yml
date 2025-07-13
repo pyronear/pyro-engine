@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python: ['3.9']
+        python: ['3.11']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,7 +79,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python: ['3.9']
+        python: ['3.11']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,5 +127,5 @@ jobs:
           license: 'Apache-2.0'
           owner: 'Pyronear'
           starting-year: 2020
-          folders: 'pyroengine,docs,scripts,.github,src'
+          folders: 'pyroengine,docs,scripts,.github,src,reolink_api'
           ignores: 'version.py,__init__.py'

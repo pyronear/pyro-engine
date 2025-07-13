@@ -1,6 +1,7 @@
 import hashlib
 import os
-import shutil
+import pathlib
+from unittest.mock import patch
 
 import numpy as np
 
@@ -52,9 +53,13 @@ def test_download(tmpdir_factory):
 
     hash1 = sha256sum(model_path)
 
-    # Delete and download again
-    os.remove(model_path)
-    shutil.rmtree(os.path.dirname(model_path), ignore_errors=True)
+    # No download if exist
+    _ = Classifier(model_folder=folder, format="onnx")
+    model_creation_date2 = get_creation_date(model_path)
+    assert model_creation_date == model_creation_date2
+
+    # Download if does not exist
+    pathlib.Path(model_path).unlink()
     _ = Classifier(model_folder=folder, format="onnx")
 
     hash2 = sha256sum(model_path)

@@ -6,14 +6,16 @@
 import json
 import logging
 import os
+import pathlib
 import platform
 import tarfile
 from typing import Tuple
 from urllib.request import urlretrieve
 
-import ncnn  # type: ignore
+import ncnn
 import numpy as np
 import onnxruntime
+from huggingface_hub import HfApi
 from PIL import Image
 
 from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
@@ -56,7 +58,8 @@ class Classifier:
         max_bbox_size=0.4,
     ) -> None:
         if model_path:
-            if not os.path.isfile(model_path):
+            # Checks that the file exists
+            if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
             if os.path.splitext(model_path)[-1].lower() != ".onnx":
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
@@ -86,15 +89,30 @@ class Classifier:
                 save_metadata(metadata_path, {"source": model_url})
                 logging.info("Metadata saved!")
 
-            # Extract .tar.gz archive
-            if model_path.endswith(".tar.gz"):
-                base_name = os.path.basename(model_path).replace(".tar.gz", "")
-                extract_path = os.path.join(model_folder, base_name)
-                if not os.path.isdir(extract_path):
-                    with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(model_folder)
-                    logging.info(f"Extracted model to: {extract_path}")
-                model_path = extract_path
+            if not expected_sha256:
+                raise ValueError("SHA256 hash for the model file not found in the Hugging Face model metadata.")
+
+            # Check if the model file exists
+            if pathlib.Path(model_path).is_file():
+                # Load existing metadata
+                metadata = self.load_metadata(metadata_path)
+                if metadata and metadata.get("sha256") == expected_sha256:
+                    logging.info("Model already exists and the SHA256 hash matches. No download needed.")
+                else:
+                    logging.info("Model exists but the SHA256 hash does not match or the file doesn't exist.")
+                    pathlib.Path(model_path).unlink()
+                    extracted_path = os.path.splitext(model_path)[0]
+                    if pathlib.Path(extracted_path).is_dir():
+                        shutil.rmtree(extracted_path)
+                    self.download_model(model_url, model_path, expected_sha256, metadata_path)
+            else:
+                self.download_model(model_url, model_path, expected_sha256, metadata_path)
+
+            file_name, ext = os.path.splitext(model_path)
+            if ext == ".zip":
+                if not pathlib.Path(file_name).is_dir():
+                    shutil.unpack_archive(model_path, model_folder)
+                model_path = file_name
 
         if self.format == "ncnn":
             self.model = ncnn.Net()
@@ -120,6 +138,13 @@ class Classifier:
         # Check for ARM architecture
         return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
 
+    def get_sha(self, siblings):
+        # Extract the SHA256 hash from the model files metadata
+        for file in siblings:
+            if file.rfilename == pathlib.Path(MODEL_NAME).name:
+                return file.lfs["sha256"]
+        return None
+
     def download_model(self, model_url, model_path, expected_sha256, metadata_path):
         os.makedirs(os.path.split(model_path)[0], exist_ok=True)
         logging.info(f"Downloading model from {model_url} ...")
@@ -131,7 +156,7 @@ class Classifier:
         logging.info("Metadata saved!")
 
     def load_metadata(self, metadata_path):
-        if os.path.exists(metadata_path):
+        if pathlib.Path(metadata_path).exists():
             with open(metadata_path, "r") as f:
                 return json.load(f)
         return None

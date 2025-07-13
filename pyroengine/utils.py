@@ -6,7 +6,7 @@
 
 import cv2
 import numpy as np
-from tqdm import tqdm  # type: ignore[import-untyped]
+from tqdm import tqdm
 
 __all__ = ["DownloadProgressBar", "letterbox", "nms", "xywh2xyxy"]
 

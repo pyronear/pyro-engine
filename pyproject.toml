@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=67.0.0", "wheel>=0.40.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.poetry]
@@ -27,14 +27,14 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4.0"
+python = ">=3.11,<4.0"
 requests = "==2.31.0"
 tqdm = "==4.67.1"
-aiohttp = "==3.11.18"
-onnxruntime = "==1.18.1"
+onnxruntime = "==1.22.1"
 pillow = "==11.0.0"
 ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
+reolink_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "develop", subdirectory = "reolink_api/client" }
 python-dotenv = "==1.1.0"
 
 
@@ -75,7 +75,7 @@ source = ["pyroengine"]
 
 [tool.mypy]
 python_version = "3.11"
-files = "pyroengine/"
+files = "pyroengine/,reolink_api/"
 show_error_codes = true
 pretty = true
 warn_unused_ignores = true
@@ -83,6 +83,9 @@ warn_redundant_casts = true
 no_implicit_optional = true
 check_untyped_defs = true
 implicit_reexport = false
+
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
 module = "pyroengine.version"
@@ -98,14 +101,16 @@ module = [
     "requests.*",
     "PIL.*",
     "pyroclient.*",
-    "urllib3.*"
+    "urllib3.*",
+    "setuptools",
+    "yaml",
+    "ncnn",
 ]
-ignore_missing_imports = true
 
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py311"
 preview = true
 
 [tool.ruff.lint]
@@ -125,7 +130,7 @@ exclude = [".git"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine"]
+known-first-party = ["pyroengine", "reolink_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -133,6 +138,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "src/**.py" = ["D", "T201", "S101", "ANN"]
 ".github/**.py" = ["D", "T201", "ANN"]
 "tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001"]
+"reolink_api/**.py" = ["D", "T201", "S101", "ANN"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -148,4 +154,4 @@ match = ".*\\.py"
 
 [tool.black]
 line-length = 120
-target-version = ['py39']
+target-version = ['py311']
