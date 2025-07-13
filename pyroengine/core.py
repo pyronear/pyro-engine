@@ -100,20 +100,20 @@ class SystemController:
         self,
     ):
         now = datetime.now()
-        print("focus_finder", self.is_day, self.last_autofocus)
         if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
             logging.info("🔄 Hourly autofocus triggered after idle period")
-            for ip in self.camera_data.keys():
-                try:
-                    self.reolink_client.stop_patrol(ip)
-                    time.sleep(0.5)
-                    self.reolink_client.run_focus_optimization(ip)
-                    logging.info(f"Autofocus completed for {ip}")
-                    self.last_autofocus = now
-                    self.reolink_client.start_patrol(ip)
+            for ip, cam in self.camera_data.items():
+                if cam.get("type") != "static":
+                    try:
+                        self.reolink_client.stop_patrol(ip)
+                        time.sleep(0.5)
+                        self.reolink_client.run_focus_optimization(ip)
+                        logging.info(f"Autofocus completed for {ip}")
+                        self.last_autofocus = now
+                        self.reolink_client.start_patrol(ip)
 
-                except Exception as e:
-                    logging.error(f"[Failed to run hourly focus finder on camera {ip} : {e}")
+                    except Exception as e:
+                        logging.error(f"[Failed to run hourly focus finder on camera {ip} : {e}")
 
     def inference_loop(
         self,
