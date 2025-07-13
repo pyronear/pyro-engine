@@ -69,7 +69,8 @@ def create_dummy_onnx_model(model_path):
     node = onnx.helper.make_node("Identity", inputs=["input"], outputs=["output"])
     graph = onnx.helper.make_graph([node], "dummy_model", [x], [y])
 
-    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 11)])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 10)])
+    model.ir_version = 10 
 
     onnx.save(model, model_path)
 
@@ -113,7 +114,7 @@ def test_nonexistent_model(mock_isfile):
         Engine(model_path="nonexistent.onnx")
 
 
-@patch("os.path.isfile")
+@patch("pathlib.Path.is_file", return_value=True)
 def test_invalid_extension(mock_isfile):
     """Tests Engine instanciation with a file format different than .onnx"""
     mock_isfile.return_value = True  # Simulates file existence
