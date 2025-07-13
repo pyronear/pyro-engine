@@ -6,14 +6,17 @@
 
 import json
 import os
-from pathlib import Path
 import re
+from pathlib import Path
+
 import yaml
 from dotenv import load_dotenv
+
 
 def normalize_stream_name(name: str) -> str:
     name = name.lower().replace("_", "-")
     return re.sub(r"-\d{1,2}$", "", name)
+
 
 # Load environment variables from .env file
 load_dotenv()

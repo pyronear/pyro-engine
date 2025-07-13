@@ -1,8 +1,8 @@
 import json
 import os
 
-from reolink import ReolinkCamera
 from dotenv import load_dotenv
+from reolink import ReolinkCamera
 
 # Load environment variables from .env file
 load_dotenv()

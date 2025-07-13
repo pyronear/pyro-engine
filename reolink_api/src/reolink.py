@@ -311,7 +311,7 @@ class ReolinkCamera:
         if self.focus_position is None:
             self.start_zoom_focus(0)
             time.sleep(0.5)
-            current_focus = self.get_focus_level()['focus']
+            current_focus = self.get_focus_level()["focus"]
             logging.info(f"[{self.ip_address}] 📍 Initial focus obtained from camera: {current_focus}")
         else:
             current_focus = self.focus_position
@@ -367,4 +367,3 @@ class ReolinkCamera:
         self.set_manual_focus(best_focus)
         logging.info(f"[{self.ip_address}] ✅ Final best focus at {best_focus} with sharpness {best_score:.2f}")
         return best_focus
-

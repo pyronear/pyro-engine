@@ -100,7 +100,7 @@ class SystemController:
         self,
     ):
         now = datetime.now()
-        print("focus_finder", self.is_day , self.last_autofocus)
+        print("focus_finder", self.is_day, self.last_autofocus)
         if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
             logging.info("🔄 Hourly autofocus triggered after idle period")
             for ip in self.camera_data.keys():

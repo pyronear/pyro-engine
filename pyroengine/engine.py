@@ -6,7 +6,6 @@
 import glob
 import io
 import logging
-import os
 import shutil
 import signal
 import time
@@ -410,9 +409,9 @@ class Engine:
         for folder in backup_by_days:
             s = (
                 sum(
-                    os.path.getsize(f)
+                    Path(f).stat().st_size
                     for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
-                    if os.path.isfile(f)
+                    if Path(f).is_file()
                 )
                 // 1024**2
             )
