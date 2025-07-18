@@ -193,7 +193,7 @@ class Engine:
 
                 if combine_predictions.shape[0] > 0:
                     ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                    iou_match = np.array([np.max(iou) > 0 for iou in ious])
+                    iou_match = np.array([np.max(iou) > 0 for iou in ious], dtype=bool)
                     matched_preds = preds[iou_match, :]
                     if matched_preds.ndim == 1:
                         matched_preds = matched_preds[np.newaxis, :]
