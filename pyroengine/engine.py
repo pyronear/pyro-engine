@@ -81,6 +81,7 @@ class Engine:
         conf_thresh: float = 0.15,
         model_conf_thresh: float = 0.05,
         max_bbox_size: float = 0.4,
+        min_bbox_size: float = 0.01,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
         nb_consecutive_frames: int = 8,
@@ -100,10 +101,16 @@ class Engine:
         """Init engine"""
         # Engine Setup
 
-        self.model = Classifier(model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size)
+        self.model = Classifier(
+            model_path=model_path,
+            conf=model_conf_thresh,
+            max_bbox_size=max_bbox_size,
+            min_bbox_size=min_bbox_size
+        )
         self.conf_thresh = conf_thresh
         self.model_conf_thresh = model_conf_thresh
         self.max_bbox_size = max_bbox_size
+        self.min_bbox_size = min_bbox_size
 
         # API Setup
         self.api_client: dict[str, Any] = {}
@@ -301,6 +308,7 @@ class Engine:
                 preds = self.model.post_process(fake_pred, pad=(0, 0))
                 # Filter predictions larger than max_bbox_size
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
+                preds = preds[(preds[:, 2] - preds[:, 0]) > self.min_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
 
         logging.info(f"pred for {cam_key} : {preds}")
