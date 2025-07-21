@@ -55,6 +55,7 @@ class Classifier:
         format="ncnn",
         model_path=None,
         max_bbox_size=0.4,
+        min_bbox_size=0.01,
     ) -> None:
         if model_path:
             if not os.path.isfile(model_path):
@@ -116,6 +117,7 @@ class Classifier:
         self.conf = conf
         self.iou = iou
         self.max_bbox_size = max_bbox_size
+        self.min_bbox_size = min_bbox_size
 
     def is_arm_architecture(self):
         # Check for ARM architecture
@@ -222,6 +224,8 @@ class Classifier:
         # drop big detections
         pred = np.clip(pred, 0, 1)
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
+        # Filter small boxes
+        pred = pred[(pred[:, 2] - pred[:, 0]) > self.min_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
         logging.info(f"Model original pred : {pred}")
