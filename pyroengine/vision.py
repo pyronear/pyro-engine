@@ -10,7 +10,7 @@ import tarfile
 from typing import Tuple
 from urllib.request import urlretrieve
 
-import ncnn  # type: ignore
+import ncnn
 import numpy as np
 import onnxruntime
 from PIL import Image
