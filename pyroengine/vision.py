@@ -204,7 +204,7 @@ class Classifier:
             pred_boxes = pred[:, :4].astype(pred.dtype)
             ious = box_iou(pred_boxes, all_boxes)
             max_ious = ious.max(axis=0)
-            keep = max_ious <= 0.3
+            keep = max_ious <= 0.1
             pred = pred[keep]
 
         return pred
