@@ -8,7 +8,6 @@ from pyroengine.vision import Classifier
 
 
 def test_classifier(tmpdir_factory, mock_wildfire_image):
-    print("test_classifier")
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
     # Instantiate the ONNX model
@@ -21,7 +20,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32", "model.onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s", "model.onnx")
     assert os.path.isfile(model_path)
 
     # Test occlusion mask
@@ -47,7 +46,7 @@ def test_download(tmpdir_factory):
 
     # First download
     _ = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32/model.onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s/model.onnx")
     assert os.path.isfile(model_path)
 
     hash1 = sha256sum(model_path)
