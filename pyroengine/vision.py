@@ -3,10 +3,8 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-import json
 import logging
 import os
-import pathlib
 import platform
 import tarfile
 from typing import Tuple
@@ -21,18 +19,10 @@ from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_colorful-chameleon_v3.0.0/resolve/main/"
-MODEL_ID = "pyronear/yolo11s_colorful-chameleon_v3.0.0"
-MODEL_NAME = "ncnn_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32.tar.gz"
-METADATA_NAME = "model_metadata.json"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov11s/resolve/main/"
+MODEL_NAME = "ncnn_cpu_yolo11s.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
-
-
-# Utility function to save metadata
-def save_metadata(metadata_path, metadata):
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f)
 
 
 class Classifier:
@@ -66,16 +56,15 @@ class Classifier:
             if format == "ncnn":
                 if not self.is_arm_architecture():
                     logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
-                model = "ncnn_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32.tar.gz"
+                model = MODEL_NAME
                 self.format = "ncnn"
             elif format == "onnx":
-                model = "onnx_cpu_yolo11s_colorful-chameleon_v3.0.0_7bd9f32.tar.gz"
+                model = MODEL_NAME.replace("ncnn", "onnx")
                 self.format = "onnx"
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
             model_path = os.path.join(model_folder, model)
-            metadata_path = os.path.join(model_folder, METADATA_NAME)
             model_url = MODEL_URL_FOLDER + model
 
             if not os.path.isfile(model_path):
@@ -84,8 +73,6 @@ class Classifier:
                 with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
                     urlretrieve(model_url, model_path, reporthook=t.update_to)
                 logging.info("Model downloaded!")
-                save_metadata(metadata_path, {"source": model_url})
-                logging.info("Metadata saved!")
 
             # Extract .tar.gz archive
             if model_path.endswith(".tar.gz"):
@@ -120,22 +107,6 @@ class Classifier:
     def is_arm_architecture(self):
         # Check for ARM architecture
         return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
-
-    def download_model(self, model_url, model_path, expected_sha256, metadata_path):
-        os.makedirs(os.path.split(model_path)[0], exist_ok=True)
-        logging.info(f"Downloading model from {model_url} ...")
-        with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-            urlretrieve(model_url, model_path, reporthook=t.update_to)
-        logging.info("Model downloaded!")
-        metadata = {"sha256": expected_sha256} if expected_sha256 else {"source": model_url}
-        save_metadata(metadata_path, metadata)
-        logging.info("Metadata saved!")
-
-    def load_metadata(self, metadata_path):
-        if pathlib.Path(metadata_path).exists():
-            with open(metadata_path, "r") as f:
-                return json.load(f)
-        return None
 
     def prep_process(self, pil_img: Image.Image) -> Tuple[np.ndarray, Tuple[int, int]]:
         """Preprocess an image for inference
@@ -233,7 +204,7 @@ class Classifier:
             pred_boxes = pred[:, :4].astype(pred.dtype)
             ious = box_iou(pred_boxes, all_boxes)
             max_ious = ious.max(axis=0)
-            keep = max_ious <= 0.3
+            keep = max_ious <= 0.1
             pred = pred[keep]
 
         return pred
