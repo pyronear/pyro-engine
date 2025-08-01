@@ -19,8 +19,8 @@ from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov11s/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11s.tar.gz"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_glorious-gazelle_v5.0.0/resolve/main/"
+MODEL_NAME = "ncnn_cpu_yolo11s_glorious-gazelle_v5.0.0_29d1340d.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
