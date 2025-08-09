@@ -136,6 +136,9 @@ class Engine:
                 "ongoing": False,
                 "last_image_sent": None,
                 "last_bbox_mask_fetch": None,
+                "anchor_bbox": None,
+                "anchor_ts": None,
+                "miss_count": 0,
             },
         }
         if isinstance(cam_creds, dict):
@@ -145,6 +148,9 @@ class Engine:
                     "ongoing": False,
                     "last_image_sent": None,
                     "last_bbox_mask_fetch": None,
+                    "anchor_bbox": None,
+                    "anchor_ts": None,
+                    "miss_count": 0,
                 }
 
         self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
@@ -163,9 +169,10 @@ class Engine:
         return self.api_client[ip].heartbeat()
 
     def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float:
-        """Updates the detection states"""
+        prev_ongoing = self._states[cam_key]["ongoing"]
+
         conf_th = self.conf_thresh * self.nb_consecutive_frames
-        if self._states[cam_key]["ongoing"]:
+        if prev_ongoing:
             conf_th *= 0.8
 
         boxes = np.zeros((0, 5), dtype=np.float64)
@@ -199,33 +206,52 @@ class Engine:
                         matched_preds = matched_preds[np.newaxis, :]
                     output_predictions = matched_preds.astype(np.float64)
 
-                    if output_predictions.shape[0] == 0:
-                        missing_bbox = combine_predictions.copy()
-                        missing_bbox[:, -1] = 0
-                        output_predictions = missing_bbox
-
-        # Fallback if still empty
+        # no zero confidence fabrication before ongoing
+        # if empty and we were already ongoing, reuse anchor but set conf to 0
         if output_predictions.shape[0] == 0:
-            for _, _, previous_bboxes, _, _ in reversed(self._states[cam_key]["last_predictions"]):
-                if previous_bboxes:
-                    output_predictions = np.array(previous_bboxes, dtype=np.float64)
-                    logging.debug(f"Filled missing bbox for {cam_key} from past prediction")
-                    break
+            anchor = self._states[cam_key]["anchor_bbox"]
+            if prev_ongoing and anchor is not None:
+                output_predictions = anchor.copy()
+                output_predictions[:, -1] = 0.0  # filled during ongoing, confidence forced to 0
+            else:
+                output_predictions = np.empty((0, 5), dtype=np.float64)  # stays empty for backfill later
+        else:
+            # refresh anchor during ongoing with light smoothing
+            if prev_ongoing:
+                best_idx = int(np.argmax(output_predictions[:, 4]))
+                best = output_predictions[best_idx : best_idx + 1]
+                anchor = self._states[cam_key]["anchor_bbox"]
+                if anchor is None:
+                    self._states[cam_key]["anchor_bbox"] = best.copy()
+                else:
+                    alpha = 0.3
+                    self._states[cam_key]["anchor_bbox"] = alpha * best + (1.0 - alpha) * anchor
+                self._states[cam_key]["miss_count"] = 0
 
         output_predictions = np.round(output_predictions, 3)
         output_predictions = output_predictions[:5, :]
-        output_predictions = np.atleast_2d(output_predictions)
+        if output_predictions.size > 0:
+            output_predictions = np.atleast_2d(output_predictions)
 
         self._states[cam_key]["last_predictions"].append((
             frame,
             preds,
-            output_predictions.tolist(),
+            output_predictions.tolist(),  # [] if empty
             datetime.now(timezone.utc).isoformat(),
             False,
         ))
 
-        self._states[cam_key]["ongoing"] = conf > self.conf_thresh
+        new_ongoing = conf > self.conf_thresh
+        if prev_ongoing and not new_ongoing:
+            self._states[cam_key]["anchor_bbox"] = None
+            self._states[cam_key]["anchor_ts"] = None
+            self._states[cam_key]["miss_count"] = 0
+        elif not prev_ongoing and new_ongoing:
+            if output_predictions.size > 0:
+                self._states[cam_key]["anchor_bbox"] = output_predictions.copy()
+                self._states[cam_key]["miss_count"] = 0
 
+        self._states[cam_key]["ongoing"] = new_ongoing
         return conf
 
     def predict(
@@ -342,27 +368,23 @@ class Engine:
         })
 
     def fill_empty_bboxes(self):
-        # Group alerts by cam_id
         cam_id_to_indices: Dict[str, list[int]] = {}
-
         for i, alert in enumerate(self._alerts):
-            cam_id = alert["cam_id"]
-            if cam_id not in cam_id_to_indices:
-                cam_id_to_indices[cam_id] = []
-            cam_id_to_indices[cam_id].append(i)
+            cam_id_to_indices.setdefault(alert["cam_id"], []).append(i)
 
-        # Process each camera separately
         for cam_id, indices in cam_id_to_indices.items():
-            # Identify indices with non-empty bboxes
             non_empty_indices = [i for i in indices if self._alerts[i]["bboxes"]]
             if not non_empty_indices:
-                continue  # Skip this cam_id if no non-empty bboxes
-
+                continue
             for i in indices:
                 if not self._alerts[i]["bboxes"]:
-                    # Find the closest non-empty bbox index for this camera
                     closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
-                    self._alerts[i]["bboxes"] = self._alerts[closest_index]["bboxes"]
+                    src = np.array(self._alerts[closest_index]["bboxes"], dtype=float)
+                    if src.size == 0:
+                        continue
+                    filled = src.copy()
+                    filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
+                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
