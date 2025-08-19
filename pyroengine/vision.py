@@ -91,7 +91,7 @@ class Classifier:
 
         else:
             try:
-                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "model.onnx")
+                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "best.onnx")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file)
 
             except Exception as e:
