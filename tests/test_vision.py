@@ -20,7 +20,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_glorious-gazelle_v5.0.0_29d1340d", "model.onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0", "model.onnx")
     assert os.path.isfile(model_path)
 
     # Test occlusion mask
@@ -46,7 +46,7 @@ def test_download(tmpdir_factory):
 
     # First download
     _ = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_glorious-gazelle_v5.0.0_29d1340d/model.onnx")
+    model_path = os.path.join(folder, "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0/model.onnx")
     assert os.path.isfile(model_path)
 
     hash1 = sha256sum(model_path)
