@@ -63,10 +63,6 @@ class ReolinkCamera:
         self.focus_position = focus_position
         self.last_images: dict[int, Image.Image] = {}
 
-        # Initialisation de position de caméra (si définie)
-        if self.cam_poses:
-            self.move_camera("ToPos", idx=int(self.cam_poses[0]), speed=50)
-
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
         return (
