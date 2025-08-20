@@ -19,8 +19,8 @@ from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_glorious-gazelle_v5.0.0/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11s_glorious-gazelle_v5.0.0_29d1340d.tar.gz"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_mighty-mongoose_v5.1.0/resolve/main/"
+MODEL_NAME = "ncnn_cpu_yolo11s_mighty-mongoose_v5.1.0.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
@@ -91,7 +91,7 @@ class Classifier:
 
         else:
             try:
-                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "model.onnx")
+                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "best.onnx")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file)
 
             except Exception as e:
