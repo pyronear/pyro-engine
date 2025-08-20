@@ -18,6 +18,7 @@ from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from camera.stream import router as camera_stream_router
 from camera.stream import stop_stream_if_idle
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
@@ -59,6 +60,15 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app and camera registry
 app = FastAPI(lifespan=lifespan)
+
+# CORS: allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # must be False with "*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(camera_info_router, prefix="/info", tags=["Info"])
 app.include_router(camera_capture_router, prefix="/capture", tags=["Capture"])
