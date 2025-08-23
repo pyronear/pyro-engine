@@ -249,4 +249,4 @@ class Anonymizer:
 
         pred = np.reshape(pred, (-1, 5))
 
-        return pred
+        return pred.tolist()
