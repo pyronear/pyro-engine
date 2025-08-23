@@ -17,7 +17,7 @@ requests = "^2.31.0"
 numpy = "^1.26.4"
 urllib3 = "^2.2.1"
 ncnn = "==1.0.20240410"
-onnxruntime = "==1.20.1"
+onnxruntime = "==1.19.2"
 
 [tool.poetry.group.quality.dependencies]
 ruff = "==0.11.9"
