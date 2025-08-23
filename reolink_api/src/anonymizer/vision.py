@@ -135,7 +135,6 @@ class Anonymizer:
         self.conf = conf
         self.iou = iou
 
-
     def is_arm_architecture(self):
         # Check for ARM architecture
         return platform.machine().startswith("arm") or platform.machine().startswith("aarch")
@@ -166,33 +165,55 @@ class Anonymizer:
         return np_img, pad
 
     def post_process(self, pred: np.ndarray, pad: Tuple[int, int]) -> np.ndarray:
-        """Post-process model predictions.
+        # pred can be shape (C, N) or (N, C)
+        if pred.ndim != 2 or pred.size == 0:
+            return np.zeros((0, 5), dtype=np.float32)
 
-        Args:
-            pred: Raw predictions from the model.
-            pad: Padding information as (left_pad, top_pad).
-
-        Returns:
-            Processed predictions as a numpy array.
-        """
-        pred = pred[:, pred[-1, :] > self.conf]  # Drop low-confidence predictions
-        pred = np.transpose(pred)
-        pred = xywh2xyxy(pred)
-        pred = pred[pred[:, 4].argsort()]  # Sort by confidence
-        pred = nms(pred)
-        pred = pred[::-1]  # Reverse for highest confidence first
-
-        if len(pred) > 0:
-            left_pad, top_pad = pad  # Unpack the tuple
-            pred[:, :4:2] -= left_pad
-            pred[:, 1:4:2] -= top_pad
-            pred[:, :4:2] /= self.imgsz - 2 * left_pad
-            pred[:, 1:4:2] /= self.imgsz - 2 * top_pad
-            pred = np.clip(pred, 0, 1)
+        C, N = pred.shape
+        transposed = False
+        if C < N and C >= 5:
+            # expect C rows as 4 plus classes
+            pass
         else:
-            pred = np.zeros((0, 5))  # Return empty prediction array
+            pred = pred.T
+            C, N = pred.shape
+            transposed = True
+            if C < 5:
+                return np.zeros((0, 5), dtype=np.float32)
 
-        return pred
+        xywh = pred[:4, :]  # 4 by N
+        cls_scores = pred[4:, :]  # nc by N, can be empty for one class
+
+        if cls_scores.size == 0:
+            conf = pred[-1, :]  # one class export
+        else:
+            conf = np.max(cls_scores, axis=0)  # best class score per anchor
+
+        keep = conf > self.conf
+        if not np.any(keep):
+            return np.zeros((0, 5), dtype=np.float32)
+
+        xywh = xywh[:, keep]
+        conf = conf[keep]
+
+        det = np.concatenate([xywh.T, conf[:, None]], axis=1)  # M by 5
+        det[:, :4] = xywh2xyxy(det[:, :4])
+
+        det = det[det[:, 4].argsort()]
+        det = nms(det)
+        det = det[::-1]
+
+        if det.shape[0] == 0:
+            return np.zeros((0, 5), dtype=np.float32)
+
+        left_pad, top_pad = pad
+        det[:, 0:4:2] -= left_pad
+        det[:, 1:4:2] -= top_pad
+        det[:, 0:4:2] /= float(self.imgsz - 2 * left_pad)
+        det[:, 1:4:2] /= float(self.imgsz - 2 * top_pad)
+        det[:, :4] = np.clip(det[:, :4], 0.0, 1.0)
+
+        return det.astype(np.float32)
 
     def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict = {}) -> np.ndarray:
         """Run the classifier on an input image.
