@@ -8,6 +8,8 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
+# add import and mount router
+from anonymizer.anonymizer import router as camera_anonymizer_router
 from camera.capture import router as camera_capture_router
 from camera.control import router as camera_control_router
 from camera.focus import router as camera_focus_router
@@ -66,3 +68,4 @@ app.include_router(camera_control_router, prefix="/control", tags=["Control"])
 app.include_router(camera_focus_router, prefix="/focus", tags=["Focus"])
 app.include_router(camera_patrol_router, prefix="/patrol", tags=["Patrol"])
 app.include_router(camera_stream_router, prefix="/stream", tags=["Stream"])
+app.include_router(camera_anonymizer_router, prefix="/anonymizer", tags=["Anonymizer"])

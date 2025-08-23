@@ -9,6 +9,8 @@ import subprocess
 import threading
 import time
 
+from anonymizer.anonymizer_loop import anonymizer_loop
+from anonymizer.anonymizer_registry import ANON_FLAGS, ANON_THREADS
 from fastapi import APIRouter, HTTPException
 
 from camera.config import FFMPEG_PARAMS, STREAMS
@@ -31,12 +33,13 @@ def log_ffmpeg_output(proc, camera_id):
 
 
 def stop_any_running_stream():
-    """Stops any currently running stream."""
+    """Stops any running stream, also stops its anonymizer."""
     for cam_id, proc in list(processes.items()):
         if is_process_running(proc):
             proc.terminate()
             proc.wait()
             del processes[cam_id]
+            stop_anonymizer(cam_id)
             return cam_id
     return None
 
@@ -53,13 +56,20 @@ def stop_stream_if_idle():
 
 @router.post("/start_stream/{camera_ip}")
 def start_stream(camera_ip: str):
-    """Start an FFmpeg stream for a given camera, unless it's already running."""
+    """Start an FFmpeg stream for a camera and start anonymizer loop."""
     update_command_time()
     if camera_ip not in STREAMS:
         raise HTTPException(status_code=404, detail=f"No stream config for camera {camera_ip}")
 
     if camera_ip in processes and is_process_running(processes[camera_ip]):
         logging.info(f"Stream for {camera_ip} already running")
+        # Ensure anonymizer is running as well
+        if camera_ip not in ANON_THREADS or not ANON_THREADS[camera_ip].is_alive():
+            stop_flag = threading.Event()
+            thr = threading.Thread(target=anonymizer_loop, args=(camera_ip, stop_flag), daemon=True)
+            ANON_FLAGS[camera_ip] = stop_flag
+            ANON_THREADS[camera_ip] = thr
+            thr.start()
         return {"message": f"Stream for {camera_ip} already running"}
 
     stopped_cam = stop_any_running_stream()
@@ -107,12 +117,19 @@ def start_stream(camera_ip: str):
     processes[camera_ip] = proc
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
 
+    # Start anonymizer loop now that stream is up
+    stop_flag = threading.Event()
+    thr = threading.Thread(target=anonymizer_loop, args=(camera_ip, stop_flag), daemon=True)
+    ANON_FLAGS[camera_ip] = stop_flag
+    ANON_THREADS[camera_ip] = thr
+    thr.start()
+
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 
 
 @router.post("/stop_stream")
 def stop_stream():
-    """Stops any active stream and resets zoom to position 0 if camera exists."""
+    """Stops any active stream and resets zoom, also stops anonymizer."""
     update_command_time()
     stopped_cam = stop_any_running_stream()
     if stopped_cam:
@@ -145,3 +162,15 @@ def is_stream_running(camera_ip: str):
     if proc and is_process_running(proc):
         return {"camera_ip": camera_ip, "running": True}
     return {"camera_ip": camera_ip, "running": False}
+
+
+def stop_anonymizer(camera_ip: str):
+    """Stop anonymizer thread for a camera if running."""
+    flag = ANON_FLAGS.get(camera_ip)
+    thr = ANON_THREADS.get(camera_ip)
+    if flag:
+        flag.set()
+    if thr:
+        thr.join(timeout=2.0)
+    ANON_FLAGS.pop(camera_ip, None)
+    ANON_THREADS.pop(camera_ip, None)

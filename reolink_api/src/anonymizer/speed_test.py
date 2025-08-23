@@ -1,8 +1,8 @@
 import time
 from statistics import mean, stdev
 
-from reolink import ReolinkCamera
 from anonymizer.vision import Anonymizer
+from reolink import ReolinkCamera
 
 # Initialize model and camera
 ncnn_model = Anonymizer()
@@ -24,8 +24,10 @@ infer_times = []
 total_times = []
 num_dets = []  # number of detections per frame
 
+
 def now():
     return time.perf_counter()
+
 
 # Warmup runs
 for _ in range(WARMUP):
@@ -62,7 +64,10 @@ for i in range(1, NUM_ITERS + 1):
     num_dets.append(0 if pred is None else int(getattr(pred, "shape", [0])[0]))
 
     fps = 1.0 / tot_t if tot_t > 0 else float("inf")
-    print(f"[{i:02d}] capture {cap_t*1000:.1f} ms, infer {inf_t*1000:.1f} ms, total {tot_t*1000:.1f} ms, fps {fps:.2f}, dets {num_dets[-1]}")
+    print(
+        f"[{i:02d}] capture {cap_t * 1000:.1f} ms, infer {inf_t * 1000:.1f} ms, total {tot_t * 1000:.1f} ms, fps {fps:.2f}, dets {num_dets[-1]}"
+    )
+
 
 # Summary
 def fmt_stats(vals, label):
@@ -71,7 +76,10 @@ def fmt_stats(vals, label):
         return
     avg = mean(vals)
     sd = stdev(vals) if len(vals) > 1 else 0.0
-    print(f"{label}: avg {avg*1000:.1f} ms, std {sd*1000:.1f} ms, min {min(vals)*1000:.1f} ms, max {max(vals)*1000:.1f} ms")
+    print(
+        f"{label}: avg {avg * 1000:.1f} ms, std {sd * 1000:.1f} ms, min {min(vals) * 1000:.1f} ms, max {max(vals) * 1000:.1f} ms"
+    )
+
 
 print("\nSummary over successful iterations:")
 fmt_stats(capture_times, "Capture")
