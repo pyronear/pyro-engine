@@ -8,7 +8,7 @@
 from typing import List, Tuple
 
 from anonymizer.anonymizer_registry import get_result
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -27,10 +27,13 @@ class LastPrediction(BaseModel):
 def get_last_prediction(camera_ip: str):
     res = get_result(camera_ip)
     if not res:
-        raise HTTPException(status_code=404, detail="No predictions yet for this camera")
+        return {
+            "camera_ip": camera_ip,
+            "timestamp": 0.0,
+            "bboxes": [],
+        }
     return {
         "camera_ip": camera_ip,
         "timestamp": res["timestamp"],
-        # ensure a concrete fixed length sequence for validation
         "bboxes": [tuple(bb) for bb in res["bboxes"]],
     }
