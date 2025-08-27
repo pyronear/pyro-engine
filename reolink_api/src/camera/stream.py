@@ -138,10 +138,11 @@ def _redact_boxes_px(img_bgr, boxes_px):
     return img_bgr
 
 
-def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.Popen:
+def _build_sink_cmd(codec: str, width: int, height: int, output_url: str) -> list[str]:
     """
-    Spawn FFmpeg that reads raw BGR frames on stdin and pushes to output_url.
-    Uses params from FFMPEG_PARAMS. Adds format conversion so the encoder never renegotiates.
+    Build an ffmpeg command for the given codec.
+    For hardware v4l2m2m, avoid preset, tune, threads options.
+    For software libx264, include preset, tune, threads from config.
     """
     # even dimensions and explicit yuv420p for encoder friendliness
     scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
@@ -159,18 +160,23 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
 
         "-vf", scale_filter,
 
-        "-c:v", FFMPEG_PARAMS["video_codec"],     # set to h264_v4l2m2m in config for Pi 5 HW encode
-        "-preset", FFMPEG_PARAMS.get("preset", "veryfast"),
-        "-tune", FFMPEG_PARAMS.get("tune", "zerolatency"),
+        "-c:v", codec,
         "-b:v", FFMPEG_PARAMS["bitrate"],
         "-g", str(FFMPEG_PARAMS["gop_size"]),
         "-bf", str(FFMPEG_PARAMS["b_frames"]),
-        "-threads", str(FFMPEG_PARAMS.get("threads", 1)),
-
         "-muxpreload", "0",
         "-muxdelay", "0",
         "-flush_packets", "1",
     ]
+
+    # Codec specific extras
+    if codec == "libx264":
+        cmd += [
+            "-preset", FFMPEG_PARAMS.get("preset", "veryfast"),
+            "-tune", FFMPEG_PARAMS.get("tune", "zerolatency"),
+            "-threads", str(FFMPEG_PARAMS.get("threads", 1)),
+        ]
+    # v4l2m2m does not accept preset or tune, threads is managed by driver
 
     if FFMPEG_PARAMS.get("audio_disabled", True):
         cmd.append("-an")
@@ -179,17 +185,58 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
         cmd += ["-rtsp_transport", FFMPEG_PARAMS["rtsp_transport"]]
 
     cmd += ["-f", FFMPEG_PARAMS["output_format"], output_url]
+    return cmd
 
+
+def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.Popen:
+    """
+    Try hardware encoder first if requested, fall back to libx264 automatically
+    when the device is missing or the encoder fails early.
+    """
+    prefer_codec = FFMPEG_PARAMS.get("video_codec", "libx264")
+    tried_hw = False
+
+    # first attempt
+    codec = prefer_codec
+    cmd = _build_sink_cmd(codec, width, height, output_url)
     logging.info(f"[sink] {' '.join(cmd)}")
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     threading.Thread(target=log_ffmpeg_output, args=(proc, "blurred"), daemon=True).start()
+
+    # give ffmpeg a moment to initialize
+    time.sleep(0.2)
+    if proc.poll() is None:
+        return proc
+
+    # if it died fast and we were on v4l2m2m, fall back
+    if codec == "h264_v4l2m2m":
+        tried_hw = True
+        logging.warning("[sink] h264_v4l2m2m failed to start, falling back to libx264")
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+        codec = "libx264"
+        cmd = _build_sink_cmd(codec, width, height, output_url)
+        logging.info(f"[sink] {' '.join(cmd)}")
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        threading.Thread(target=log_ffmpeg_output, args=(proc, "blurred"), daemon=True).start()
+        time.sleep(0.15)
+
+    if proc.poll() is not None:
+        # still dead, bubble up early so the worker can report and exit
+        raise RuntimeError("FFmpeg sink failed to start")
+
+    if tried_hw:
+        logging.info("[sink] using libx264 fallback")
     return proc
 
 
 def _blur_worker(camera_ip: str, stop_flag: threading.Event):
     """
     Decode RTSP on the Pi, run anonymizer in a side thread, paint boxes black on every frame,
-    and re stream to output. The stream never waits for the model.
+    and restream to output. The stream never waits for the model.
     """
     stream_info = STREAMS[camera_ip]
     input_url = stream_info["input_url"]
