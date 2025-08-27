@@ -7,27 +7,17 @@ import logging
 import subprocess
 import threading
 import time
-from urllib.parse import quote
 
-import av
-import cv2
-import numpy as np
 from fastapi import APIRouter, HTTPException
-
-from anonymizer.anonymizer_loop import anonymizer_loop
+import numpy as np
 from anonymizer.anonymizer_registry import ANON_FLAGS, ANON_THREADS, set_result
 from anonymizer.vision import Anonymizer
-from camera.config import CAM_USER, CAM_PWD, FFMPEG_PARAMS, STREAMS
+from camera.config import FFMPEG_PARAMS, STREAMS
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
 router = APIRouter()
 processes: dict[str, subprocess.Popen] = {}
-
-# Blur pipeline state
-BLUR_THREADS: dict[str, threading.Thread] = {}
-BLUR_FLAGS: dict[str, threading.Event] = {}
-BLUR_PROCS: dict[str, subprocess.Popen] = {}
 
 ANON_MODEL = Anonymizer()
 
@@ -43,15 +33,38 @@ def log_ffmpeg_output(proc, camera_id):
         logging.error(f"[FFMPEG {camera_id}] {line.decode('utf-8').strip()}")
 
 
-def _rtsp_input_url(camera_ip: str) -> str:
-    """Build RTSP substream URL from config credentials."""
-    u = quote(str(CAM_USER), safe="")
-    p = quote(str(CAM_PWD), safe="")
-    return f"rtsp://{u}:{p}@{camera_ip}:554/h264Preview_01_sub"
+def stop_any_running_stream():
+    """Stops any running stream, also stops its worker thread."""
+    for cam_id, proc in list(processes.items()):
+        if is_process_running(proc):
+            logging.info(f"[{cam_id}] stopping existing stream")
+            try:
+                proc.terminate()
+                proc.wait(timeout=2.0)
+            except Exception:
+                pass
+            finally:
+                del processes[cam_id]
+                stop_anonymizer(cam_id)
+                return cam_id
+    return None
 
 
-def _open_pyav(rtsp_url: str):
-    """Open PyAV container with low buffering."""
+def stop_stream_if_idle():
+    """Background task that stops the stream if no command is received for 120 seconds."""
+    while True:
+        time.sleep(10)
+        if seconds_since_last_command() > 120:
+            stopped_cam = stop_any_running_stream()
+            if stopped_cam:
+                logging.info(f"Stream for {stopped_cam} stopped due to inactivity")
+
+
+# --------- blur pipeline helpers ---------
+
+def _open_pyav(input_url: str):
+    """Open PyAV container with low buffering for low latency decode."""
+    import av  # local import
     opts = {
         "rtsp_transport": "tcp",
         "fflags": "nobuffer",
@@ -59,43 +72,72 @@ def _open_pyav(rtsp_url: str):
         "analyzeduration": "0",
         "probesize": "32",
     }
-    container = av.open(rtsp_url, options=opts)
+    logging.info(f"[worker] opening RTSP {input_url}")
+    container = av.open(input_url, options=opts)
     stream = next(s for s in container.streams if s.type == "video")
     frames = container.decode(video=stream.index)
     return container, frames
 
 
-def _blur_boxes_bgr(img_bgr: np.ndarray, preds) -> np.ndarray:
-    """Apply gaussian blur to predicted boxes."""
+def _blur_boxes_bgr(img_bgr, preds):
+    """Blur predicted boxes in place, works with ndarray, list, or dict outputs."""
+    
+
+    if img_bgr is None or preds is None:
+        return img_bgr
+
     h, w = img_bgr.shape[:2]
-    for p in preds or []:
-        box = p.get("box") if isinstance(p, dict) else None
-        if not box or len(box) != 4:
-            continue
-        x1, y1, x2, y2 = box
+    boxes_px = []
 
-        # allow normalized boxes
-        if x2 <= 1.0 and y2 <= 1.0:
-            x1 = int(max(0, min(w - 1, x1 * w)))
-            x2 = int(max(0, min(w,     x2 * w)))
-            y1 = int(max(0, min(h - 1, y1 * h)))
-            y2 = int(max(0, min(h,     y2 * h)))
+    def to_pixels(x1, y1, x2, y2):
+        # treat as normalized if all coords are within about one
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
+            x1 = int(round(x1 * w))
+            x2 = int(round(x2 * w))
+            y1 = int(round(y1 * h))
+            y2 = int(round(y2 * h))
         else:
-            x1 = int(max(0, min(w - 1, x1)))
-            x2 = int(max(0, min(w,     x2)))
-            y1 = int(max(0, min(h - 1, y1)))
-            y2 = int(max(0, min(h,     y2)))
+            x1 = int(round(x1))
+            x2 = int(round(x2))
+            y1 = int(round(y1))
+            y2 = int(round(y2))
+        # clip to image
+        x1 = max(0, min(w - 1, x1))
+        x2 = max(0, min(w,     x2))
+        y1 = max(0, min(h - 1, y1))
+        y2 = max(0, min(h,     y2))
+        return x1, y1, x2, y2
 
+    # normalize preds to a list of boxes
+    if isinstance(preds, np.ndarray):
+        arr = preds
+        if arr.ndim == 1:
+            arr = arr.reshape(1, -1)
+        for row in arr:
+            if len(row) >= 4:
+                x1, y1, x2, y2 = map(float, row[:4])
+                boxes_px.append(to_pixels(x1, y1, x2, y2))
+    elif isinstance(preds, (list, tuple)):
+        for p in preds:
+            if isinstance(p, dict):
+                box = p.get("box") or p.get("bbox")
+                if box and len(box) >= 4:
+                    x1, y1, x2, y2 = map(float, box[:4])
+                    boxes_px.append(to_pixels(x1, y1, x2, y2))
+            elif isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 4:
+                x1, y1, x2, y2 = map(float, p[:4])
+                boxes_px.append(to_pixels(x1, y1, x2, y2))
+
+    for x1, y1, x2, y2 in boxes_px:
         if x2 <= x1 or y2 <= y1:
             continue
-
         roi = img_bgr[y1:y2, x1:x2]
         if roi.size == 0:
             continue
-
+        # kernel size proportional to box, ensure odd and at least 9
         kx = max(9, int((x2 - x1) * 0.1) | 1)
         ky = max(9, int((y2 - y1) * 0.1) | 1)
-        img_bgr[y1:y2, x1:x2] = cv2.GaussianBlur(roi, (kx, ky), 0)
+        img_bgr[y1:y2, x1:x2] = 0
 
     return img_bgr
 
@@ -103,8 +145,10 @@ def _blur_boxes_bgr(img_bgr: np.ndarray, preds) -> np.ndarray:
 def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.Popen:
     """
     Spawn FFmpeg that reads raw BGR frames on stdin and pushes to output_url.
-    Uses params from FFMPEG_PARAMS.
+    Uses params from FFMPEG_PARAMS. Adds scale to even dimensions for x264 safety.
     """
+    scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
     cmd = [
         "ffmpeg",
         "-hide_banner",
@@ -115,6 +159,8 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
         "-s", f"{width}x{height}",
         "-r", str(FFMPEG_PARAMS["framerate"]),
         "-i", "pipe:0",
+
+        "-vf", scale_filter,
 
         "-c:v", FFMPEG_PARAMS["video_codec"],
         "-preset", FFMPEG_PARAMS.get("preset", "veryfast"),
@@ -142,58 +188,139 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
     threading.Thread(target=log_ffmpeg_output, args=(proc, "blurred"), daemon=True).start()
     return proc
 
+def _parse_boxes_to_px(preds, w, h, score_thresh: float = 0.12, pad_ratio: float = 0.04):
+    """Return pixel boxes [(x1,y1,x2,y2), ...] from preds. Supports ndarray, list, dict."""
+    import numpy as np
+
+    boxes = []
+
+    def to_pixels(x1, y1, x2, y2):
+        # normalized if coordinates are within about one
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
+            x1 *= w;  x2 *= w;  y1 *= h;  y2 *= h
+        x1 = int(round(x1)); x2 = int(round(x2))
+        y1 = int(round(y1)); y2 = int(round(y2))
+        # pad a little to hide jitter
+        padx = int(round((x2 - x1) * pad_ratio))
+        pady = int(round((y2 - y1) * pad_ratio))
+        x1 -= padx; x2 += padx; y1 -= pady; y2 += pady
+        # clip
+        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
+        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
+        return x1, y1, x2, y2
+
+    if preds is None:
+        return boxes
+
+    if isinstance(preds, np.ndarray):
+        arr = preds.reshape(-1, preds.shape[-1]) if preds.ndim > 1 else preds.reshape(1, -1)
+        for row in arr:
+            if row.shape[0] >= 4:
+                score = float(row[4]) if row.shape[0] >= 5 else 1.0
+                if score < score_thresh:
+                    continue
+                x1, y1, x2, y2 = map(float, row[:4])
+                boxes.append(to_pixels(x1, y1, x2, y2))
+
+    elif isinstance(preds, (list, tuple)):
+        for p in preds:
+            if isinstance(p, dict):
+                box = p.get("box") or p.get("bbox")
+                score = float(p.get("score", 1.0))
+                if not box or len(box) < 4 or score < score_thresh:
+                    continue
+                x1, y1, x2, y2 = map(float, box[:4])
+                boxes.append(to_pixels(x1, y1, x2, y2))
+            elif isinstance(p, (list, tuple)) and len(p) >= 4:
+                score = float(p[4]) if len(p) >= 5 else 1.0
+                if score < score_thresh:
+                    continue
+                x1, y1, x2, y2 = map(float, p[:4])
+                boxes.append(to_pixels(x1, y1, x2, y2))
+
+    return boxes
+
+
+def _blur_boxes_px(img_bgr, boxes_px):
+    """Blur a list of pixel boxes."""
+    import cv2
+    if img_bgr is None or not boxes_px:
+        return img_bgr
+    h, w = img_bgr.shape[:2]
+    for x1, y1, x2, y2 in boxes_px:
+        if x2 <= x1 or y2 <= y1:
+            continue
+        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
+        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
+        roi = img_bgr[y1:y2, x1:x2]
+        if roi.size == 0:
+            continue
+        kx = max(9, int((x2 - x1) * 0.12) | 1)
+        ky = max(9, int((y2 - y1) * 0.12) | 1)
+        img_bgr[y1:y2, x1:x2] = 0
+    return img_bgr
+
 
 def _blur_worker(camera_ip: str, stop_flag: threading.Event):
-    """Read RTSP, run anonymizer, blur, write to FFmpeg stdin."""
-    rtsp_url = _rtsp_input_url(camera_ip)
-    output_url = STREAMS[camera_ip]["output_url"]
+    stream_info = STREAMS[camera_ip]
+    input_url = stream_info["input_url"]
+    output_url = stream_info["output_url"]
 
     container = None
     frames = None
     sink = None
-    backoff = 0.5
+
+    # hold blur for this many milliseconds after the last detection
+    STICKY_MS = 500
+    last_boxes = []
+    last_seen_ms = 0.0
 
     try:
-        container, frames = _open_pyav(rtsp_url)
+        container, frames = _open_pyav(input_url)
+
         first = next(frames, None)
         if first is None:
-            raise RuntimeError("No frame from RTSP")
+            raise RuntimeError("No frame from RTSP input")
         img = first.to_ndarray(format="bgr24")
         h, w = img.shape[:2]
 
         sink = _start_ffmpeg_sink(w, h, output_url)
-        BLUR_PROCS[camera_ip] = sink
-        backoff = 0.5
-
-        preds = ANON_MODEL(img)
-        set_result(camera_ip, preds)
-        img = _blur_boxes_bgr(img, preds)
-        sink.stdin.write(img.tobytes())
+        processes[camera_ip] = sink
+        logging.info(f"[{camera_ip}] blur worker started")
 
         while not stop_flag.is_set() and sink.poll() is None:
-            frame = next(frames, None)
+            frame = first if first is not None else next(frames, None)
+            first = None
             if frame is None:
                 raise RuntimeError("Decoder returned no frame")
+
             img = frame.to_ndarray(format="bgr24")
+
             preds = ANON_MODEL(img)
             set_result(camera_ip, preds)
-            img = _blur_boxes_bgr(img, preds)
+
+            now_ms = time.perf_counter() * 1000.0
+            boxes = _parse_boxes_to_px(preds, w, h)
+
+            if boxes:
+                last_boxes = boxes
+                last_seen_ms = now_ms
+            elif now_ms - last_seen_ms < STICKY_MS:
+                boxes = last_boxes
+
+            img = _blur_boxes_px(img, boxes)
+
             try:
                 sink.stdin.write(img.tobytes())
             except BrokenPipeError:
                 raise RuntimeError("FFmpeg sink closed")
 
-        logging.info(f"[{camera_ip}] Blur worker stopping")
+        logging.info(f"[{camera_ip}] blur worker stopping")
 
     except Exception as e:
-        logging.error(f"[{camera_ip}] Blur worker error: {e}")
+        logging.error(f"[{camera_ip}] blur worker error: {e}")
 
     finally:
-        try:
-            if container is not None:
-                container.close()
-        except Exception:
-            pass
         try:
             if sink is not None:
                 try:
@@ -203,133 +330,30 @@ def _blur_worker(camera_ip: str, stop_flag: threading.Event):
                 sink.terminate()
         except Exception:
             pass
-        BLUR_PROCS.pop(camera_ip, None)
-
-
-def stop_blur_for(camera_ip: str):
-    """Stop blur pipeline for a camera if running."""
-    flag = BLUR_FLAGS.get(camera_ip)
-    thr = BLUR_THREADS.get(camera_ip)
-    if flag:
-        flag.set()
-    if thr:
-        thr.join(timeout=2.0)
-    proc = BLUR_PROCS.get(camera_ip)
-    if proc and is_process_running(proc):
+        processes.pop(camera_ip, None)
         try:
-            proc.terminate()
+            if container is not None:
+                container.close()
         except Exception:
             pass
-    BLUR_FLAGS.pop(camera_ip, None)
-    BLUR_THREADS.pop(camera_ip, None)
-    BLUR_PROCS.pop(camera_ip, None)
 
 
-def stop_any_running_stream():
-    """Stops any running pass through or blur stream, also stops anonymizer."""
-    # stop plain ffmpeg pass through first
-    for cam_id, proc in list(processes.items()):
-        if is_process_running(proc):
-            proc.terminate()
-            proc.wait()
-            del processes[cam_id]
-            stop_anonymizer(cam_id)
-            return cam_id
-
-    # stop a blur stream if present
-    for cam_id in list(BLUR_THREADS.keys()):
-        stop_blur_for(cam_id)
-        stop_anonymizer(cam_id)
-        return cam_id
-
-    return None
-
-
-def stop_stream_if_idle():
-    """Background task that stops the stream if no command is received for 120 seconds."""
-    while True:
-        time.sleep(10)
-        if seconds_since_last_command() > 120:
-            stopped_cam = stop_any_running_stream()
-            if stopped_cam:
-                logging.info(f"Stream for {stopped_cam} stopped due to inactivity")
-
+# --------- routes ---------
 
 @router.post("/start_stream/{camera_ip}")
 def start_stream(camera_ip: str):
-    """Start a pass through FFmpeg stream and start anonymizer loop."""
+    """Start blurred stream for a camera by launching the blur worker thread."""
     update_command_time()
     if camera_ip not in STREAMS:
         raise HTTPException(status_code=404, detail=f"No stream config for camera {camera_ip}")
 
-    # if a blur stream is running for this camera, stop it
-    if camera_ip in BLUR_THREADS and BLUR_THREADS[camera_ip].is_alive():
-        stop_blur_for(camera_ip)
-
-    if camera_ip in processes and is_process_running(processes[camera_ip]):
-        logging.info(f"Stream for {camera_ip} already running")
-        if camera_ip not in ANON_THREADS or not ANON_THREADS[camera_ip].is_alive():
-            stop_flag = threading.Event()
-            thr = threading.Thread(target=anonymizer_loop, args=(camera_ip, stop_flag), daemon=True)
-            ANON_FLAGS[camera_ip] = stop_flag
-            ANON_THREADS[camera_ip] = thr
-            thr.start()
-        return {"message": f"Stream for {camera_ip} already running"}
-
+    # always stop any existing process so the blur path is used
     stopped_cam = stop_any_running_stream()
+    if stopped_cam:
+        logging.info(f"[{camera_ip}] previous stream {stopped_cam} stopped")
 
-    stream_info = STREAMS[camera_ip]
-    input_url = stream_info["input_url"]
-    output_url = stream_info["output_url"]
-
-    command = ["ffmpeg", "-hide_banner", "-loglevel", "warning"]
-    if FFMPEG_PARAMS.get("discardcorrupt"):
-        command += ["-fflags", "discardcorrupt+nobuffer"]
-    if FFMPEG_PARAMS.get("low_delay"):
-        command += ["-flags", "low_delay"]
-
-    command += [
-        "-rtsp_transport",
-        FFMPEG_PARAMS["rtsp_transport"],
-        "-i",
-        input_url,
-        "-c:v",
-        FFMPEG_PARAMS["video_codec"],
-        "-bf",
-        str(FFMPEG_PARAMS["b_frames"]),
-        "-g",
-        str(FFMPEG_PARAMS["gop_size"]),
-        "-b:v",
-        FFMPEG_PARAMS["bitrate"],
-        "-r",
-        str(FFMPEG_PARAMS["framerate"]),
-        "-preset",
-        FFMPEG_PARAMS["preset"],
-        "-tune",
-        FFMPEG_PARAMS["tune"],
-        "-threads",
-        str(FFMPEG_PARAMS.get("threads", 1)),
-        "-muxpreload",
-        "0",
-        "-muxdelay",
-        "0",
-        "-flush_packets",
-        "1",
-    ]
-
-    if FFMPEG_PARAMS.get("audio_disabled", False):
-        command.append("-an")
-
-    command += ["-f", FFMPEG_PARAMS["output_format"], output_url]
-
-    logging.info(f"[{camera_ip}] Running ffmpeg command: {' '.join(command)}")
-    proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    processes[camera_ip] = proc
-    threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
-
-    # Start anonymizer loop for metadata only
     stop_flag = threading.Event()
-    thr = threading.Thread(target=anonymizer_loop, args=(camera_ip, stop_flag), daemon=True)
+    thr = threading.Thread(target=_blur_worker, args=(camera_ip, stop_flag), daemon=True)
     ANON_FLAGS[camera_ip] = stop_flag
     ANON_THREADS[camera_ip] = thr
     thr.start()
@@ -337,49 +361,9 @@ def start_stream(camera_ip: str):
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 
 
-@router.post("/start_blur_stream/{camera_ip}")
-def start_blur_stream(camera_ip: str):
-    """Start RTSP read, run anonymizer, blur, and restream to configured output."""
-    update_command_time()
-    if camera_ip not in STREAMS:
-        raise HTTPException(status_code=404, detail=f"No stream config for camera {camera_ip}"})
-
-    # stop any running pass through for this camera
-    if camera_ip in processes and is_process_running(processes[camera_ip]):
-        try:
-            processes[camera_ip].terminate()
-            processes[camera_ip].wait()
-        except Exception:
-            pass
-        processes.pop(camera_ip, None)
-        stop_anonymizer(camera_ip)
-
-    if camera_ip in BLUR_THREADS and BLUR_THREADS[camera_ip].is_alive():
-        return {"message": f"Blur stream for {camera_ip} already running"}
-
-    # optional: stop any other camera to keep one active
-    stopped_cam = stop_any_running_stream()
-
-    stop_flag = threading.Event()
-    thr = threading.Thread(target=_blur_worker, args=(camera_ip, stop_flag), daemon=True)
-    BLUR_FLAGS[camera_ip] = stop_flag
-    BLUR_THREADS[camera_ip] = thr
-    thr.start()
-
-    return {"message": f"Blurred stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
-
-
-@router.post("/stop_blur_stream/{camera_ip}")
-def stop_blur_stream(camera_ip: str):
-    """Stop the blurred stream for a given camera."""
-    update_command_time()
-    stop_blur_for(camera_ip)
-    return {"message": f"Blurred stream stopped for {camera_ip}"}
-
-
 @router.post("/stop_stream")
 def stop_stream():
-    """Stop any active stream and reset zoom, also stop anonymizer."""
+    """Stops any active stream and resets zoom, also stops worker thread."""
     update_command_time()
     stopped_cam = stop_any_running_stream()
     if stopped_cam:
@@ -398,25 +382,24 @@ def stop_stream():
 
 @router.get("/status")
 def stream_status():
-    """Return which camera streams are currently running."""
-    active_plain = [cam_ip for cam_ip, proc in processes.items() if is_process_running(proc)]
-    active_blur = [cam_ip for cam_ip, thr in BLUR_THREADS.items() if thr.is_alive()]
-    if active_plain or active_blur:
-        return {"active_streams": active_plain, "active_blur_streams": active_blur}
+    """Returns which camera streams are currently running."""
+    active_streams = [cam_ip for cam_ip, proc in processes.items() if is_process_running(proc)]
+    if active_streams:
+        return {"active_streams": active_streams}
     return {"message": "No stream is running"}
 
 
 @router.get("/is_stream_running/{camera_ip}")
 def is_stream_running(camera_ip: str):
     """Check if a specific camera is currently streaming."""
-    plain = processes.get(camera_ip)
-    blur_thr = BLUR_THREADS.get(camera_ip)
-    running = (plain and is_process_running(plain)) or (blur_thr and blur_thr.is_alive())
-    return {"camera_ip": camera_ip, "running": bool(running)}
+    proc = processes.get(camera_ip)
+    if proc and is_process_running(proc):
+        return {"camera_ip": camera_ip, "running": True}
+    return {"camera_ip": camera_ip, "running": False}
 
 
 def stop_anonymizer(camera_ip: str):
-    """Stop anonymizer thread for a camera if running."""
+    """Stop blur worker thread for a camera if running."""
     flag = ANON_FLAGS.get(camera_ip)
     thr = ANON_THREADS.get(camera_ip)
     if flag:
