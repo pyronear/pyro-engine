@@ -78,11 +78,8 @@ def _open_pyav(input_url: str):
     frames = container.decode(video=stream.index)
     return container, frames
 
-
 def _blur_boxes_bgr(img_bgr, preds):
-    """Blur predicted boxes in place, works with ndarray, list, or dict outputs."""
-    
-
+    """Redact boxes from raw preds by painting them black. Accepts ndarray, list, or dict."""
     if img_bgr is None or preds is None:
         return img_bgr
 
@@ -90,31 +87,20 @@ def _blur_boxes_bgr(img_bgr, preds):
     boxes_px = []
 
     def to_pixels(x1, y1, x2, y2):
-        # treat as normalized if all coords are within about one
+        # treat as normalized if values look like ratios
         if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
-            x1 = int(round(x1 * w))
-            x2 = int(round(x2 * w))
-            y1 = int(round(y1 * h))
-            y2 = int(round(y2 * h))
-        else:
-            x1 = int(round(x1))
-            x2 = int(round(x2))
-            y1 = int(round(y1))
-            y2 = int(round(y2))
+            x1 *= w; x2 *= w; y1 *= h; y2 *= h
+        x1 = int(round(x1)); x2 = int(round(x2))
+        y1 = int(round(y1)); y2 = int(round(y2))
         # clip to image
-        x1 = max(0, min(w - 1, x1))
-        x2 = max(0, min(w,     x2))
-        y1 = max(0, min(h - 1, y1))
-        y2 = max(0, min(h,     y2))
+        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
+        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
         return x1, y1, x2, y2
 
-    # normalize preds to a list of boxes
     if isinstance(preds, np.ndarray):
-        arr = preds
-        if arr.ndim == 1:
-            arr = arr.reshape(1, -1)
+        arr = preds.reshape(-1, preds.shape[-1]) if preds.ndim > 1 else preds.reshape(1, -1)
         for row in arr:
-            if len(row) >= 4:
+            if row.shape[0] >= 4:
                 x1, y1, x2, y2 = map(float, row[:4])
                 boxes_px.append(to_pixels(x1, y1, x2, y2))
     elif isinstance(preds, (list, tuple)):
@@ -129,17 +115,25 @@ def _blur_boxes_bgr(img_bgr, preds):
                 boxes_px.append(to_pixels(x1, y1, x2, y2))
 
     for x1, y1, x2, y2 in boxes_px:
-        if x2 <= x1 or y2 <= y1:
-            continue
-        roi = img_bgr[y1:y2, x1:x2]
-        if roi.size == 0:
-            continue
-        # kernel size proportional to box, ensure odd and at least 9
-        kx = max(9, int((x2 - x1) * 0.1) | 1)
-        ky = max(9, int((y2 - y1) * 0.1) | 1)
-        img_bgr[y1:y2, x1:x2] = 0
+        if x2 > x1 and y2 > y1:
+            img_bgr[y1:y2, x1:x2] = 0
 
     return img_bgr
+
+
+def _blur_boxes_px(img_bgr, boxes_px):
+    """Redact a list of pixel boxes by painting them black."""
+    if img_bgr is None or not boxes_px:
+        return img_bgr
+    h, w = img_bgr.shape[:2]
+    for x1, y1, x2, y2 in boxes_px:
+        if x2 <= x1 or y2 <= y1:
+            continue
+        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
+        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
+        img_bgr[y1:y2, x1:x2] = 0
+    return img_bgr
+
 
 
 def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.Popen:
@@ -147,7 +141,7 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
     Spawn FFmpeg that reads raw BGR frames on stdin and pushes to output_url.
     Uses params from FFMPEG_PARAMS. Adds scale to even dimensions for x264 safety.
     """
-    scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+    scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
 
     cmd = [
         "ffmpeg",
@@ -187,78 +181,49 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     threading.Thread(target=log_ffmpeg_output, args=(proc, "blurred"), daemon=True).start()
     return proc
-
 def _parse_boxes_to_px(preds, w, h, score_thresh: float = 0.12, pad_ratio: float = 0.04):
-    """Return pixel boxes [(x1,y1,x2,y2), ...] from preds. Supports ndarray, list, dict."""
+    """Return pixel boxes from preds. Works with ndarray, list, or dict."""
     import numpy as np
-
     boxes = []
+    if preds is None:
+        return boxes
 
-    def to_pixels(x1, y1, x2, y2):
-        # normalized if coordinates are within about one
+    def to_px(x1, y1, x2, y2):
         if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
-            x1 *= w;  x2 *= w;  y1 *= h;  y2 *= h
+            x1 *= w; x2 *= w; y1 *= h; y2 *= h
         x1 = int(round(x1)); x2 = int(round(x2))
         y1 = int(round(y1)); y2 = int(round(y2))
-        # pad a little to hide jitter
-        padx = int(round((x2 - x1) * pad_ratio))
-        pady = int(round((y2 - y1) * pad_ratio))
-        x1 -= padx; x2 += padx; y1 -= pady; y2 += pady
-        # clip
+        pad_x = int(round((x2 - x1) * pad_ratio))
+        pad_y = int(round((y2 - y1) * pad_ratio))
+        x1 -= pad_x; x2 += pad_x; y1 -= pad_y; y2 += pad_y
         x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
         y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
         return x1, y1, x2, y2
-
-    if preds is None:
-        return boxes
 
     if isinstance(preds, np.ndarray):
         arr = preds.reshape(-1, preds.shape[-1]) if preds.ndim > 1 else preds.reshape(1, -1)
         for row in arr:
             if row.shape[0] >= 4:
                 score = float(row[4]) if row.shape[0] >= 5 else 1.0
-                if score < score_thresh:
-                    continue
-                x1, y1, x2, y2 = map(float, row[:4])
-                boxes.append(to_pixels(x1, y1, x2, y2))
-
+                if score >= score_thresh:
+                    x1, y1, x2, y2 = map(float, row[:4])
+                    boxes.append(to_px(x1, y1, x2, y2))
     elif isinstance(preds, (list, tuple)):
         for p in preds:
             if isinstance(p, dict):
                 box = p.get("box") or p.get("bbox")
                 score = float(p.get("score", 1.0))
-                if not box or len(box) < 4 or score < score_thresh:
-                    continue
-                x1, y1, x2, y2 = map(float, box[:4])
-                boxes.append(to_pixels(x1, y1, x2, y2))
+                if box and len(box) >= 4 and score >= score_thresh:
+                    x1, y1, x2, y2 = map(float, box[:4])
+                    boxes.append(to_px(x1, y1, x2, y2))
             elif isinstance(p, (list, tuple)) and len(p) >= 4:
                 score = float(p[4]) if len(p) >= 5 else 1.0
-                if score < score_thresh:
-                    continue
-                x1, y1, x2, y2 = map(float, p[:4])
-                boxes.append(to_pixels(x1, y1, x2, y2))
-
+                if score >= score_thresh:
+                    x1, y1, x2, y2 = map(float, p[:4])
+                    boxes.append(to_px(x1, y1, x2, y2))
     return boxes
 
 
-def _blur_boxes_px(img_bgr, boxes_px):
-    """Blur a list of pixel boxes."""
-    import cv2
-    if img_bgr is None or not boxes_px:
-        return img_bgr
-    h, w = img_bgr.shape[:2]
-    for x1, y1, x2, y2 in boxes_px:
-        if x2 <= x1 or y2 <= y1:
-            continue
-        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
-        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
-        roi = img_bgr[y1:y2, x1:x2]
-        if roi.size == 0:
-            continue
-        kx = max(9, int((x2 - x1) * 0.12) | 1)
-        ky = max(9, int((y2 - y1) * 0.12) | 1)
-        img_bgr[y1:y2, x1:x2] = 0
-    return img_bgr
 
 
 def _blur_worker(camera_ip: str, stop_flag: threading.Event):
