@@ -10,6 +10,7 @@ import time
 
 from fastapi import APIRouter, HTTPException
 import numpy as np
+
 from anonymizer.anonymizer_registry import ANON_FLAGS, ANON_THREADS, set_result
 from anonymizer.vision import Anonymizer
 from camera.config import FFMPEG_PARAMS, STREAMS
@@ -60,7 +61,7 @@ def stop_stream_if_idle():
                 logging.info(f"Stream for {stopped_cam} stopped due to inactivity")
 
 
-# --------- blur pipeline helpers ---------
+# --------- streaming helpers ---------
 
 def _open_pyav(input_url: str):
     """Open PyAV container with low buffering for low latency decode."""
@@ -78,21 +79,23 @@ def _open_pyav(input_url: str):
     frames = container.decode(video=stream.index)
     return container, frames
 
-def _blur_boxes_bgr(img_bgr, preds):
-    """Redact boxes from raw preds by painting them black. Accepts ndarray, list, or dict."""
-    if img_bgr is None or preds is None:
-        return img_bgr
 
-    h, w = img_bgr.shape[:2]
-    boxes_px = []
+def _parse_boxes_to_px(preds, w, h, score_thresh: float = 0.12, pad_ratio: float = 0.04):
+    """Return pixel boxes from preds. Works with ndarray, list, or dict."""
+    boxes: list[tuple[int, int, int, int]] = []
+    if preds is None:
+        return boxes
 
-    def to_pixels(x1, y1, x2, y2):
-        # treat as normalized if values look like ratios
+    def to_px(x1, y1, x2, y2):
         if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
             x1 *= w; x2 *= w; y1 *= h; y2 *= h
         x1 = int(round(x1)); x2 = int(round(x2))
         y1 = int(round(y1)); y2 = int(round(y2))
-        # clip to image
+        # small padding for stability
+        pad_x = int(round((x2 - x1) * pad_ratio))
+        pad_y = int(round((y2 - y1) * pad_ratio))
+        x1 -= pad_x; x2 += pad_x; y1 -= pad_y; y2 += pad_y
+        # clip
         x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
         y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
         return x1, y1, x2, y2
@@ -101,27 +104,27 @@ def _blur_boxes_bgr(img_bgr, preds):
         arr = preds.reshape(-1, preds.shape[-1]) if preds.ndim > 1 else preds.reshape(1, -1)
         for row in arr:
             if row.shape[0] >= 4:
-                x1, y1, x2, y2 = map(float, row[:4])
-                boxes_px.append(to_pixels(x1, y1, x2, y2))
+                score = float(row[4]) if row.shape[0] >= 5 else 1.0
+                if score >= score_thresh:
+                    x1, y1, x2, y2 = map(float, row[:4])
+                    boxes.append(to_px(x1, y1, x2, y2))
     elif isinstance(preds, (list, tuple)):
         for p in preds:
             if isinstance(p, dict):
                 box = p.get("box") or p.get("bbox")
-                if box and len(box) >= 4:
+                score = float(p.get("score", 1.0))
+                if box and len(box) >= 4 and score >= score_thresh:
                     x1, y1, x2, y2 = map(float, box[:4])
-                    boxes_px.append(to_pixels(x1, y1, x2, y2))
+                    boxes.append(to_px(x1, y1, x2, y2))
             elif isinstance(p, (list, tuple, np.ndarray)) and len(p) >= 4:
-                x1, y1, x2, y2 = map(float, p[:4])
-                boxes_px.append(to_pixels(x1, y1, x2, y2))
-
-    for x1, y1, x2, y2 in boxes_px:
-        if x2 > x1 and y2 > y1:
-            img_bgr[y1:y2, x1:x2] = 0
-
-    return img_bgr
+                score = float(p[4]) if len(p) >= 5 else 1.0
+                if score >= score_thresh:
+                    x1, y1, x2, y2 = map(float, p[:4])
+                    boxes.append(to_px(x1, y1, x2, y2))
+    return boxes
 
 
-def _blur_boxes_px(img_bgr, boxes_px):
+def _redact_boxes_px(img_bgr, boxes_px):
     """Redact a list of pixel boxes by painting them black."""
     if img_bgr is None or not boxes_px:
         return img_bgr
@@ -135,12 +138,12 @@ def _blur_boxes_px(img_bgr, boxes_px):
     return img_bgr
 
 
-
 def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.Popen:
     """
     Spawn FFmpeg that reads raw BGR frames on stdin and pushes to output_url.
-    Uses params from FFMPEG_PARAMS. Adds scale to even dimensions for x264 safety.
+    Uses params from FFMPEG_PARAMS. Adds format conversion so the encoder never renegotiates.
     """
+    # even dimensions and explicit yuv420p for encoder friendliness
     scale_filter = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
 
     cmd = [
@@ -156,7 +159,7 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
 
         "-vf", scale_filter,
 
-        "-c:v", FFMPEG_PARAMS["video_codec"],
+        "-c:v", FFMPEG_PARAMS["video_codec"],     # set to h264_v4l2m2m in config for Pi 5 HW encode
         "-preset", FFMPEG_PARAMS.get("preset", "veryfast"),
         "-tune", FFMPEG_PARAMS.get("tune", "zerolatency"),
         "-b:v", FFMPEG_PARAMS["bitrate"],
@@ -181,52 +184,13 @@ def _start_ffmpeg_sink(width: int, height: int, output_url: str) -> subprocess.P
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     threading.Thread(target=log_ffmpeg_output, args=(proc, "blurred"), daemon=True).start()
     return proc
-def _parse_boxes_to_px(preds, w, h, score_thresh: float = 0.12, pad_ratio: float = 0.04):
-    """Return pixel boxes from preds. Works with ndarray, list, or dict."""
-    import numpy as np
-    boxes = []
-    if preds is None:
-        return boxes
-
-    def to_px(x1, y1, x2, y2):
-        if max(abs(x1), abs(y1), abs(x2), abs(y2)) <= 1.05:
-            x1 *= w; x2 *= w; y1 *= h; y2 *= h
-        x1 = int(round(x1)); x2 = int(round(x2))
-        y1 = int(round(y1)); y2 = int(round(y2))
-        pad_x = int(round((x2 - x1) * pad_ratio))
-        pad_y = int(round((y2 - y1) * pad_ratio))
-        x1 -= pad_x; x2 += pad_x; y1 -= pad_y; y2 += pad_y
-        x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
-        y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
-        return x1, y1, x2, y2
-
-    if isinstance(preds, np.ndarray):
-        arr = preds.reshape(-1, preds.shape[-1]) if preds.ndim > 1 else preds.reshape(1, -1)
-        for row in arr:
-            if row.shape[0] >= 4:
-                score = float(row[4]) if row.shape[0] >= 5 else 1.0
-                if score >= score_thresh:
-                    x1, y1, x2, y2 = map(float, row[:4])
-                    boxes.append(to_px(x1, y1, x2, y2))
-    elif isinstance(preds, (list, tuple)):
-        for p in preds:
-            if isinstance(p, dict):
-                box = p.get("box") or p.get("bbox")
-                score = float(p.get("score", 1.0))
-                if box and len(box) >= 4 and score >= score_thresh:
-                    x1, y1, x2, y2 = map(float, box[:4])
-                    boxes.append(to_px(x1, y1, x2, y2))
-            elif isinstance(p, (list, tuple)) and len(p) >= 4:
-                score = float(p[4]) if len(p) >= 5 else 1.0
-                if score >= score_thresh:
-                    x1, y1, x2, y2 = map(float, p[:4])
-                    boxes.append(to_px(x1, y1, x2, y2))
-    return boxes
-
-
 
 
 def _blur_worker(camera_ip: str, stop_flag: threading.Event):
+    """
+    Decode RTSP on the Pi, run anonymizer in a side thread, paint boxes black on every frame,
+    and re stream to output. The stream never waits for the model.
+    """
     stream_info = STREAMS[camera_ip]
     input_url = stream_info["input_url"]
     output_url = stream_info["output_url"]
@@ -235,10 +199,57 @@ def _blur_worker(camera_ip: str, stop_flag: threading.Event):
     frames = None
     sink = None
 
-    # hold blur for this many milliseconds after the last detection
-    STICKY_MS = 500
-    last_boxes = []
-    last_seen_ms = 0.0
+    # shared state between stream loop and inference loop
+    latest_frame = {"img": None, "w": 0, "h": 0, "ver": 0}
+    latest_boxes = {"boxes": [], "ts_ms": 0.0}
+    state_lock = threading.Lock()
+
+    # knobs
+    INFER_EVERY_MS = 180        # model cadence
+    STICKY_MS = 900             # keep last boxes for short gaps
+    DOWNSCALE_FOR_INFER = 0.75  # downscale factor for faster inference, set 1.0 to disable
+
+    def infer_loop():
+        last_infer_ms = 0.0
+        last_seen_ver = -1
+        while not stop_flag.is_set():
+            now_ms = time.perf_counter() * 1000.0
+            if now_ms - last_infer_ms < INFER_EVERY_MS:
+                time.sleep(0.005)
+                continue
+            with state_lock:
+                img = latest_frame["img"]
+                ver = latest_frame["ver"]
+                w = latest_frame["w"]; h = latest_frame["h"]
+            if img is None or ver == last_seen_ver:
+                time.sleep(0.002)
+                continue
+
+            work = img
+            ww, hh = w, h
+            if 0.2 <= DOWNSCALE_FOR_INFER < 1.0:
+                import cv2  # local import
+                ww = int(w * DOWNSCALE_FOR_INFER)
+                hh = int(h * DOWNSCALE_FOR_INFER)
+                work = cv2.resize(img, (ww, hh), interpolation=cv2.INTER_AREA)
+
+            preds = ANON_MODEL(work)
+            boxes = _parse_boxes_to_px(preds, ww, hh)
+
+            if DOWNSCALE_FOR_INFER != 1.0:
+                inv = 1.0 / DOWNSCALE_FOR_INFER
+                boxes = [(int(x1 * inv), int(y1 * inv), int(x2 * inv), int(y2 * inv)) for x1, y1, x2, y2 in boxes]
+
+            with state_lock:
+                latest_boxes["boxes"] = boxes
+                latest_boxes["ts_ms"] = now_ms
+            try:
+                set_result(camera_ip, preds)
+            except Exception:
+                pass
+
+            last_infer_ms = now_ms
+            last_seen_ver = ver
 
     try:
         container, frames = _open_pyav(input_url)
@@ -246,13 +257,24 @@ def _blur_worker(camera_ip: str, stop_flag: threading.Event):
         first = next(frames, None)
         if first is None:
             raise RuntimeError("No frame from RTSP input")
+
         img = first.to_ndarray(format="bgr24")
         h, w = img.shape[:2]
 
         sink = _start_ffmpeg_sink(w, h, output_url)
         processes[camera_ip] = sink
-        logging.info(f"[{camera_ip}] blur worker started")
+        logging.info(f"[{camera_ip}] blur worker started with parallel inference")
 
+        # seed and start inference thread
+        with state_lock:
+            latest_frame["img"] = img
+            latest_frame["w"] = w
+            latest_frame["h"] = h
+            latest_frame["ver"] += 1
+        t_infer = threading.Thread(target=infer_loop, daemon=True)
+        t_infer.start()
+
+        # stream loop, never waits for the model
         while not stop_flag.is_set() and sink.poll() is None:
             frame = first if first is not None else next(frames, None)
             first = None
@@ -261,19 +283,18 @@ def _blur_worker(camera_ip: str, stop_flag: threading.Event):
 
             img = frame.to_ndarray(format="bgr24")
 
-            preds = ANON_MODEL(img)
-            set_result(camera_ip, preds)
+            with state_lock:
+                latest_frame["img"] = img
+                latest_frame["ver"] += 1
+                boxes = latest_boxes["boxes"]
+                ts_ms = latest_boxes["ts_ms"]
 
-            now_ms = time.perf_counter() * 1000.0
-            boxes = _parse_boxes_to_px(preds, w, h)
+            # keep boxes sticky for short gaps
+            if not boxes and (time.perf_counter() * 1000.0 - ts_ms) < STICKY_MS:
+                with state_lock:
+                    boxes = latest_boxes["boxes"]
 
-            if boxes:
-                last_boxes = boxes
-                last_seen_ms = now_ms
-            elif now_ms - last_seen_ms < STICKY_MS:
-                boxes = last_boxes
-
-            img = _blur_boxes_px(img, boxes)
+            img = _redact_boxes_px(img, boxes)
 
             try:
                 sink.stdin.write(img.tobytes())
