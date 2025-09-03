@@ -67,6 +67,8 @@ STREAMS = {
             f"latency={SRT_SETTINGS['latency']}&"
             f"streamid={SRT_SETTINGS['streamid_prefix']}:{normalize_stream_name(config.get('name', 'stream'))}"
         ),
+        "width": 640,
+        "height": 360,
     }
     for ip, config in RAW_CONFIG.items()
 }
