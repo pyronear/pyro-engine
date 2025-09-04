@@ -23,7 +23,7 @@ load_dotenv()
 
 # Paths
 FFMPEG_CONFIG_PATH = Path(__file__).resolve().parent.parent / "ffmpeg_config.yaml"
-CREDENTIALS_PATH = Path(__file__).resolve().parent.parent / "credentials.json"
+CREDENTIALS_PATH = Path(__file__).resolve().parent.parent / "data/credentials.json"
 
 # Env vars
 CAM_USER = os.getenv("CAM_USER")
