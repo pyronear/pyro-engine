@@ -9,8 +9,6 @@ import threading
 import time
 from typing import Optional
 
-# anonymizer streamer
-# adjust the import path if you placed the file elsewhere
 from anonymizer.anonymize_stream import (
     AnonymizingStreamer,
     DetectionSettings,
@@ -84,24 +82,26 @@ if not _idle_guard.is_set():
     _idle_guard.set()
 
 
-def _build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
+def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
+    """
+    Create an AnonymizingStreamer using STREAMS and FFMPEG_PARAMS.
+    Raises KeyError if camera_ip is not in STREAMS.
+    """
     stream_info = STREAMS[camera_ip]
     input_url = stream_info["input_url"]
     output_url = stream_info["output_url"]
 
-    w = stream_info.get("width", DEFAULT_W)
-    h = stream_info.get("height", DEFAULT_H)
+    # sizes with per camera override
+    w = int(stream_info.get("width", 640))
+    h = int(stream_info.get("height", 360))
 
+    # decoder side options
     transport = str(FFMPEG_PARAMS.get("rtsp_transport", "tcp"))
     low_delay = bool(FFMPEG_PARAMS.get("low_delay", True))
     discardcorrupt = bool(FFMPEG_PARAMS.get("discardcorrupt", True))
     analyzeduration = FFMPEG_PARAMS.get("analyzeduration", "1M")
     probesize = FFMPEG_PARAMS.get("probesize", "2M")
-
-    # FFmpeg 4.3 uses stimeout
     stimeout_us = int(FFMPEG_PARAMS.get("stimeout_us", 5_000_000))
-
-    # Use your configured encoder framerate as decoder CFR
     fps = int(FFMPEG_PARAMS.get("framerate", 10))
 
     stream_cfg = StreamConfig(
@@ -118,6 +118,7 @@ def _build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
         fps=fps,
     )
 
+    # encoder side options
     keyint = int(FFMPEG_PARAMS.get("gop_size", 5))
     bitrate = str(FFMPEG_PARAMS.get("bitrate", "500k"))
     bufsize = str(FFMPEG_PARAMS.get("bufsize", "100k"))
@@ -125,6 +126,7 @@ def _build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
     tune = str(FFMPEG_PARAMS.get("tune", "zerolatency"))
     use_crf = bool(FFMPEG_PARAMS.get("use_crf", False))
     crf = int(FFMPEG_PARAMS.get("crf", 28))
+    threads = int(FFMPEG_PARAMS.get("threads", 1))
 
     enc_cfg = EncoderSettings(
         keyint=keyint,
@@ -132,14 +134,18 @@ def _build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
         crf=crf,
         bitrate=bitrate,
         bufsize=bufsize,
+        threads=threads,
         preset=preset,
         tune=tune,
-        threads=int(FFMPEG_PARAMS.get("threads", 1)),
     )
 
+    # detection options with per camera override
+    conf_thres = float(stream_info.get("conf_thres", 0.30))
+    model_scale_div = int(stream_info.get("model_scale_div", 1))
+
     det_cfg = DetectionSettings(
-        conf_thres=float(stream_info.get("conf_thres", DEFAULT_CONF)),
-        model_scale_div=int(stream_info.get("model_scale_div", DEFAULT_SCALE_DIV)),
+        conf_thres=conf_thres,
+        model_scale_div=model_scale_div,
     )
 
     return AnonymizingStreamer(stream_cfg, enc_cfg, det_cfg)
@@ -177,7 +183,7 @@ def start_stream(camera_ip: str):
 
     stopped_cam = stop_any_running_stream()
 
-    streamer = _build_streamer_for(camera_ip)
+    streamer = build_streamer_for(camera_ip)
     _streamers[camera_ip] = streamer
     _start_streamer_in_background(camera_ip, streamer)
 

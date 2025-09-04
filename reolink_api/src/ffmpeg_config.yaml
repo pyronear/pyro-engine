@@ -1,21 +1,28 @@
 srt_settings:
-  pkt_size: 1316         # Packet size in bytes (recommended for MPEG-TS)
-  mode: caller           # SRT mode: 'caller' means you initiate connection
-  latency: 50            # Latency in milliseconds (buffer for network stability)
-  port_start: 8890       # First SRT port number for streaming
-  streamid_prefix: publish  # Stream ID prefix to distinguish streams
+  pkt_size: 1316              # Packet size in bytes, ideal for MPEG TS
+  mode: caller                # Sender initiates the connection
+  latency: 50                 # Buffer in milliseconds for stability
+  port_start: 8890            # First SRT port used for streams
+  streamid_prefix: publish    # Prefix to build the stream ID
 
 ffmpeg_params:
-  discardcorrupt: true   # Discard corrupt frames (important for stability)
-  low_delay: true        # Force low latency mode
-  rtsp_transport: tcp    # Use TCP for RTSP (because UDP doesn't work reliably)
-  video_codec: libx264   # H.264 video encoding
-  b_frames: 0            # Set B-frames to 0 (only I and P frames, reduces latency)
-  gop_size: 10           # one second at 10 fps
-  bitrate: 500k          # Realistic bitrate (observed ~492k)
-  framerate: 10          # Frames per second
-  preset: veryfast       # x264 encoding speed preset
-  tune: zerolatency      # x264 optimization for zero latency
-  threads: 1             # Force single-thread encoding (better scheduling)
-  audio_disabled: true   # Disable audio stream
-  output_format: mpegts  # Output format (needed for SRT)
+  discardcorrupt: true        # Drop damaged packets, keep buffers small
+  low_delay: true             # Prefer minimal latency behavior
+  rtsp_transport: tcp         # RTSP over TCP for reliability
+  video_codec: libx264        # H.264 video encoding via x264
+  b_frames: 0                 # Use only I and P frames for low latency
+  gop_size: 10                # One second GOP at ten fps
+  bitrate: 500k               # Target video bitrate
+  framerate: 10               # Frames per second
+  preset: veryfast            # Encoder speed preset
+  tune: zerolatency           # Encoder tuning for low latency
+  threads: 1                  # Single thread for stable timing
+  audio_disabled: true        # Disable audio track
+  output_format: mpegts       # Container suited for SRT
+
+  analyzeduration: "1M"       # Probe time budget, about one second
+  probesize: "2M"             # Probe size budget in bytes
+  stimeout_us: 5000000        # RTSP socket timeout in microseconds
+
+  use_crf: false              # Use constant bitrate mode
+  bufsize: "100k"             # VBV buffer size for rate control
