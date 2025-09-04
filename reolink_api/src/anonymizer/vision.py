@@ -242,7 +242,6 @@ class Anonymizer:
             pad = tuple(pad)
 
         pred = self.post_process(pred, pad)  # Ensure pad is passed as a tuple
-        print("pred", pred)
 
         # drop big detections
         pred = np.clip(pred, 0, 1)
