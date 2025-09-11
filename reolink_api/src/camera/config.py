@@ -16,7 +16,7 @@ def normalize_stream_name(name: str) -> str:
 load_dotenv()
 
 FFMPEG_CONFIG_PATH = Path(__file__).resolve().parent.parent / "ffmpeg_config.yaml"
-CREDENTIALS_PATH = Path(__file__).resolve().parent.parent / "credentials.json"
+CREDENTIALS_PATH = Path(__file__).resolve().parent.parent / "data/credentials.json"
 
 CAM_USER = os.getenv("CAM_USER")
 CAM_PWD = os.getenv("CAM_PWD")

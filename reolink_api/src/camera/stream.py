@@ -11,7 +11,7 @@ from camera.config import FFMPEG_PARAMS, STREAMS, SRT_SETTINGS
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
-from rtsp_anonymize_srt import RTSPAnonymizeSRTWorker
+from anonymizer.rtsp_anonymize_srt import RTSPAnonymizeSRTWorker
 
 router = APIRouter()
 workers: dict[str, RTSPAnonymizeSRTWorker] = {}
