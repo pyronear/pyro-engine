@@ -5,6 +5,7 @@ srt_settings:
   rcvlatency: 30
   peerlatency: 30
   tlpktdrop: 1
+  port_start: 8890 
 
 ffmpeg_params:
   # input and general behavior
