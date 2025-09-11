@@ -113,11 +113,9 @@ class Anonymizer:
                 if not os.path.isdir(extract_path):
                     os.makedirs(extract_path, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(extract_path)   # 👈 extract *inside* the versioned folder
+                        tar.extractall(extract_path)  # 👈 extract *inside* the versioned folder
                     logging.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
-
-
 
         if self.format == "ncnn":
             self.model = ncnn.Net()

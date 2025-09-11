@@ -10,12 +10,11 @@ from io import BytesIO
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
-from PIL import Image
-
+from anonymizer.vision import Anonymizer
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
+from PIL import Image
 
-from anonymizer.vision import Anonymizer
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import update_command_time
 
@@ -23,6 +22,7 @@ router = APIRouter()
 
 _model: Optional[Anonymizer] = None
 _model_lock = threading.Lock()
+
 
 def _get_model() -> Anonymizer:
     global _model
@@ -33,6 +33,7 @@ def _get_model() -> Anonymizer:
                 _model = Anonymizer()
                 logging.info("Anonymizer model ready for capture endpoint")
     return _model
+
 
 def _boxes_px_from_norm(
     boxes_norm: Iterable[Sequence[float]],
@@ -56,6 +57,7 @@ def _boxes_px_from_norm(
             out_px.append((x1p, y1p, x2p, y2p))
     return out_px
 
+
 def _paint_boxes_black(img: Image.Image, boxes_px: List[Tuple[int, int, int, int]]) -> Image.Image:
     if not boxes_px:
         return img
@@ -63,6 +65,7 @@ def _paint_boxes_black(img: Image.Image, boxes_px: List[Tuple[int, int, int, int
     for x1, y1, x2, y2 in boxes_px:
         arr[y1:y2, x1:x2, :] = 0
     return Image.fromarray(arr)
+
 
 @router.get("/capture")
 def capture(
@@ -106,7 +109,6 @@ def capture(
     buffer = BytesIO()
     img.save(buffer, format="JPEG")
     return Response(buffer.getvalue(), media_type="image/jpeg")
-
 
 
 @router.get("/latest_image")

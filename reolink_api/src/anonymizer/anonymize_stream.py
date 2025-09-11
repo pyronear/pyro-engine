@@ -18,10 +18,10 @@ import numpy as np
 from anonymizer.vision import Anonymizer
 from PIL import Image
 
-
 # ---------------------------------------------------------------------
 # Data classes for configuration
 # ---------------------------------------------------------------------
+
 
 @dataclass
 class StreamConfig:
@@ -59,6 +59,7 @@ class DetectionSettings:
 # ---------------------------------------------------------------------
 # Main streamer
 # ---------------------------------------------------------------------
+
 
 class AnonymizingStreamer:
     def __init__(
@@ -244,7 +245,7 @@ class AnonymizingStreamer:
                     self._dec_proc = None
                     time.sleep(0.25)
                     break
-                view[n:n + len(chunk)] = chunk
+                view[n : n + len(chunk)] = chunk
                 n += len(chunk)
 
             if n < frame_bytes:
@@ -307,9 +308,12 @@ class AnonymizingStreamer:
 
         cmd += [
             "-an",
-            "-pix_fmt", "bgr24",
-            "-f", "rawvideo",
-            "-s", f"{W}x{H}",
+            "-pix_fmt",
+            "bgr24",
+            "-f",
+            "rawvideo",
+            "-s",
+            f"{W}x{H}",
             "pipe:1",
         ]
 
@@ -320,16 +324,43 @@ class AnonymizingStreamer:
         W, H = self.stream_cfg.width, self.stream_cfg.height
         enc = self.enc_cfg
         cmd = [
-            "ffmpeg", "-loglevel", "warning", "-nostats",
-            "-fflags", "nobuffer", "-flags", "low_delay",
-            "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}", "-i", "pipe:0",
-            "-an", "-c:v", "libx264",
-            "-preset", enc.preset, "-tune", enc.tune,
-            "-x264-params", f"keyint={enc.keyint}:min-keyint={enc.keyint}:scenecut=0:rc-lookahead=0",
-            "-bf", "0", "-g", str(enc.keyint),
-            "-threads", str(enc.threads),
-            "-mpegts_flags", "resend_headers",
-            "-muxdelay", "0", "-muxpreload", "0",
+            "ffmpeg",
+            "-loglevel",
+            "warning",
+            "-nostats",
+            "-fflags",
+            "nobuffer",
+            "-flags",
+            "low_delay",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr24",
+            "-s",
+            f"{W}x{H}",
+            "-i",
+            "pipe:0",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            enc.preset,
+            "-tune",
+            enc.tune,
+            "-x264-params",
+            f"keyint={enc.keyint}:min-keyint={enc.keyint}:scenecut=0:rc-lookahead=0",
+            "-bf",
+            "0",
+            "-g",
+            str(enc.keyint),
+            "-threads",
+            str(enc.threads),
+            "-mpegts_flags",
+            "resend_headers",
+            "-muxdelay",
+            "0",
+            "-muxpreload",
+            "0",
         ]
         if enc.use_crf:
             cmd += ["-crf", str(enc.crf), "-bufsize", enc.bufsize]
