@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from anonymizer.anonymize_stream import (
     AnonymizingStreamer,
@@ -17,7 +18,7 @@ from anonymizer.anonymize_stream import (
 )
 from fastapi import APIRouter, HTTPException
 
-from camera.config import FFMPEG_PARAMS, STREAMS
+from camera.config import FFMPEG_PARAMS, SRT_SETTINGS, STREAMS
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
@@ -41,6 +42,23 @@ def _is_thread_alive(th: Optional[threading.Thread]) -> bool:
 def is_stream_running_for(camera_ip: str) -> bool:
     th = _threads.get(camera_ip)
     return _is_thread_alive(th)
+
+
+def _apply_srt_settings(base_url: str) -> str:
+    u = urlparse(base_url)
+    q = dict(parse_qsl(u.query))
+
+    # apply or override from YAML
+    q.update({
+        "pkt_size": str(SRT_SETTINGS.get("pkt_size", 1316)),
+        "mode": SRT_SETTINGS.get("mode", "caller"),
+        "latency": str(SRT_SETTINGS.get("latency", 30)),
+        "rcvlatency": str(SRT_SETTINGS.get("rcvlatency", 30)),
+        "peerlatency": str(SRT_SETTINGS.get("peerlatency", 30)),
+        "tlpktdrop": str(SRT_SETTINGS.get("tlpktdrop", 1)),
+    })
+
+    return urlunparse((u.scheme, u.netloc, u.path, u.params, urlencode(q), u.fragment))
 
 
 def stop_any_running_stream() -> Optional[str]:
@@ -81,23 +99,32 @@ if not _idle_guard.is_set():
     threading.Thread(target=stop_stream_if_idle, daemon=True, name="idle-stopper").start()
     _idle_guard.set()
 
+
 def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
+    """
+    Create an AnonymizingStreamer using STREAMS and FFMPEG_PARAMS.
+    Raises KeyError if camera_ip is not in STREAMS.
+    """
     stream_info = STREAMS[camera_ip]
     input_url = stream_info["input_url"]
-    output_url = stream_info["output_url"]
+    output_url = _apply_srt_settings(stream_info["output_url"])
 
     # sizes with per camera override
     w = int(stream_info.get("width", 640))
     h = int(stream_info.get("height", 360))
 
-    # decoder side options
+    # decoder side options from YAML
     transport = str(FFMPEG_PARAMS.get("rtsp_transport", "tcp"))
     low_delay = bool(FFMPEG_PARAMS.get("low_delay", True))
     discardcorrupt = bool(FFMPEG_PARAMS.get("discardcorrupt", True))
-    analyzeduration = FFMPEG_PARAMS.get("analyzeduration", "1M")
-    probesize = FFMPEG_PARAMS.get("probesize", "2M")
-    stimeout_us = int(FFMPEG_PARAMS.get("stimeout_us", 5_000_000))
-    fps = int(FFMPEG_PARAMS.get("framerate", 7))  # match camera fps
+    analyzeduration = FFMPEG_PARAMS.get("analyzeduration", "0")
+    probesize = FFMPEG_PARAMS.get("probesize", "32k")
+    # keep stimeout_us present in YAML, but some builds ignore it
+    stimeout_us = FFMPEG_PARAMS.get("stimeout_us", None)
+    fps = int(FFMPEG_PARAMS.get("framerate", 10))
+    genpts = bool(FFMPEG_PARAMS.get("genpts", True))
+    wallclock_ts = bool(FFMPEG_PARAMS.get("wallclock_ts", True))
+    nobuffer = bool(FFMPEG_PARAMS.get("nobuffer", True))
 
     stream_cfg = StreamConfig(
         rtsp_url=input_url,
@@ -109,27 +136,29 @@ def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
         probesize=probesize,
         low_delay=low_delay,
         discardcorrupt=discardcorrupt,
-        stimeout_us=stimeout_us,
+        stimeout_us=int(stimeout_us) if isinstance(stimeout_us, int) else None,
         fps=fps,
+        genpts=genpts,
+        wallclock_ts=wallclock_ts,
+        nobuffer=nobuffer,
     )
 
-    # encoder side options
-    keyint = int(FFMPEG_PARAMS.get("gop_size", 14))  # match in frames
+    # encoder side options from YAML
+    keyint = int(FFMPEG_PARAMS.get("gop_size", 10))
     bitrate = str(FFMPEG_PARAMS.get("bitrate", "700k"))
-    bufsize = str(FFMPEG_PARAMS.get("bufsize", "800k"))
-    maxrate = str(FFMPEG_PARAMS.get("maxrate", "900k"))
+    bufsize = str(FFMPEG_PARAMS.get("bufsize", "150k"))
+    maxrate = str(FFMPEG_PARAMS.get("maxrate", "750k"))
     preset = str(FFMPEG_PARAMS.get("preset", "veryfast"))
     tune = str(FFMPEG_PARAMS.get("tune", "zerolatency"))
     use_crf = bool(FFMPEG_PARAMS.get("use_crf", False))
-    crf = int(FFMPEG_PARAMS.get("crf", 28))
-    threads = int(FFMPEG_PARAMS.get("threads", 1))
+    crf = int(FFMPEG_PARAMS.get("crf", 22))
+    threads = int(FFMPEG_PARAMS.get("threads", 8))
     pix_fmt = str(FFMPEG_PARAMS.get("pix_fmt", "yuv420p"))
-    x264_params = str(
-        FFMPEG_PARAMS.get(
-            "x264_params",
-            f"keyint={keyint}:min-keyint={max(1, keyint//2)}:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2",
-        )
-    )
+    x264_params = str(FFMPEG_PARAMS.get("x264_params", ""))
+
+    mpegts_flags = str(FFMPEG_PARAMS.get("mpegts_flags", "resend_headers"))
+    muxdelay = str(FFMPEG_PARAMS.get("muxdelay", "0"))
+    muxpreload = str(FFMPEG_PARAMS.get("muxpreload", "0"))
 
     enc_cfg = EncoderSettings(
         keyint=keyint,
@@ -137,17 +166,20 @@ def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
         crf=crf,
         bitrate=bitrate,
         bufsize=bufsize,
+        maxrate=maxrate,
         threads=threads,
         preset=preset,
         tune=tune,
         pix_fmt=pix_fmt,
-        maxrate=maxrate,
         x264_params=x264_params,
+        mpegts_flags=mpegts_flags,
+        muxdelay=muxdelay,
+        muxpreload=muxpreload,
     )
 
     # detection options with per camera override
-    conf_thres = float(stream_info.get("conf_thres", 0.30))
-    model_scale_div = int(stream_info.get("model_scale_div", 1))
+    conf_thres = float(stream_info.get("conf_thres", DEFAULT_CONF))
+    model_scale_div = int(stream_info.get("model_scale_div", DEFAULT_SCALE_DIV))
 
     det_cfg = DetectionSettings(
         conf_thres=conf_thres,
@@ -155,7 +187,6 @@ def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
     )
 
     return AnonymizingStreamer(stream_cfg, enc_cfg, det_cfg)
-
 
 
 def _start_streamer_in_background(camera_ip: str, streamer: AnonymizingStreamer) -> None:

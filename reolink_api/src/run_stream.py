@@ -16,11 +16,11 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
-from PIL import Image
 from anonymizer.vision import Anonymizer
-
+from PIL import Image
 
 # ----------------------------- SRT helpers -----------------------------
+
 
 def build_srt_url(
     srt: Optional[str],
@@ -57,6 +57,7 @@ def build_srt_url(
 
 # ----------------------------- FFmpeg cmds -----------------------------
 
+
 def build_decoder_cmd(
     rtsp_url: str,
     width: int,
@@ -90,9 +91,12 @@ def build_decoder_cmd(
 
     cmd += [
         "-an",
-        "-pix_fmt", "bgr24",
-        "-f", "rawvideo",
-        "-s", f"{width}x{height}",
+        "-pix_fmt",
+        "bgr24",
+        "-f",
+        "rawvideo",
+        "-s",
+        f"{width}x{height}",
         "pipe:1",
     ]
     return cmd
@@ -137,28 +141,48 @@ def build_encoder_cmd(
 
     cmd: List[str] = [
         "ffmpeg",
-        "-loglevel", "warning",
+        "-loglevel",
+        "warning",
         "-nostats",
-        "-fflags", "nobuffer",
-        "-flags", "low_delay",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-s", f"{width}x{height}",
-        "-framerate", str(max(1, enc_input_fps)),   # timestamps for rawvideo
-        "-fflags", "+genpts",
-        "-i", "pipe:0",
+        "-fflags",
+        "nobuffer",
+        "-flags",
+        "low_delay",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{width}x{height}",
+        "-framerate",
+        str(max(1, enc_input_fps)),  # timestamps for rawvideo
+        "-fflags",
+        "+genpts",
+        "-i",
+        "pipe:0",
         "-an",
-        "-pix_fmt", pix_fmt,
-        "-c:v", "libx264",
-        "-preset", preset,
-        "-tune", tune,
-        "-x264-params", x264_merged,
-        "-bf", "0",
-        "-g", str(keyint),                          # keep in sync with keyint
-        "-threads", str(threads),
-        "-mpegts_flags", "resend_headers",
-        "-muxdelay", "0",
-        "-muxpreload", "0",
+        "-pix_fmt",
+        pix_fmt,
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        "-tune",
+        tune,
+        "-x264-params",
+        x264_merged,
+        "-bf",
+        "0",
+        "-g",
+        str(keyint),  # keep in sync with keyint
+        "-threads",
+        str(threads),
+        "-mpegts_flags",
+        "resend_headers",
+        "-muxdelay",
+        "0",
+        "-muxpreload",
+        "0",
     ]
     if use_crf:
         cmd += ["-crf", str(crf), "-maxrate", maxrate, "-bufsize", bufsize]
@@ -167,7 +191,6 @@ def build_encoder_cmd(
 
     cmd += ["-f", "mpegts", srt_out]
     return cmd
-
 
 
 def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
@@ -184,17 +207,20 @@ def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
 
 # ----------------------------- Shared states -----------------------------
 
+
 class LatestFrame:
     def __init__(self) -> None:
         self._im: Optional[Image.Image] = None
         self._ts: float = 0.0
         self._lock = threading.Lock()
         self._event = threading.Event()
+
     def update(self, im: Image.Image) -> None:
         with self._lock:
             self._im = im
             self._ts = time.perf_counter()
         self._event.set()
+
     def wait_and_get(self, timeout: float = 0.1) -> Tuple[Optional[Image.Image], float]:
         if not self._event.wait(timeout=timeout):
             return None, 0.0
@@ -207,9 +233,11 @@ class BoxState:
     def __init__(self) -> None:
         self._boxes: List[Tuple[int, int, int, int]] = []
         self._lock = threading.Lock()
+
     def set(self, boxes: List[Tuple[int, int, int, int]]) -> None:
         with self._lock:
             self._boxes = list(boxes)
+
     def get(self) -> List[Tuple[int, int, int, int]]:
         with self._lock:
             return list(self._boxes)
@@ -221,17 +249,20 @@ class ModelStatsState:
         self._last_stale_ms: float = 0.0
         self._last_boxes: int = 0
         self._lock = threading.Lock()
+
     def set(self, infer_ms: float, stale_ms: float, boxes: int) -> None:
         with self._lock:
             self._last_infer_ms = infer_ms
             self._last_stale_ms = stale_ms
             self._last_boxes = boxes
+
     def get(self) -> Tuple[float, float, int]:
         with self._lock:
             return self._last_infer_ms, self._last_stale_ms, self._last_boxes
 
 
 # ----------------------------- Vision helpers -----------------------------
+
 
 def boxes_px_from_norm(
     boxes_norm: Iterable[Sequence[float]],
@@ -265,6 +296,7 @@ def paint_black(arr: np.ndarray, boxes_px: List[Tuple[int, int, int, int]]) -> f
 
 # ----------------------------- Model thread -----------------------------
 
+
 def anonymizer_thread_fn(
     latest: LatestFrame,
     boxes_state: BoxState,
@@ -288,9 +320,13 @@ def anonymizer_thread_fn(
 
             stale_ms = (time.perf_counter() - stamp) * 1000.0
 
-            small = im if model_scale_div <= 1 else im.resize(
-                (max(1, im.width // model_scale_div), max(1, im.height // model_scale_div)),
-                Image.BILINEAR,
+            small = (
+                im
+                if model_scale_div <= 1
+                else im.resize(
+                    (max(1, im.width // model_scale_div), max(1, im.height // model_scale_div)),
+                    Image.BILINEAR,
+                )
             )
 
             t0 = time.perf_counter()
@@ -309,6 +345,7 @@ def anonymizer_thread_fn(
 
 
 # ----------------------------- Main -----------------------------
+
 
 def main() -> int:
     p = argparse.ArgumentParser(description="RTSP to SRT with background anonymization and timing")
@@ -401,7 +438,7 @@ def main() -> int:
         srt_out=srt_out,
         width=W,
         height=H,
-        keyint=args.keyint if args.keyint else 40,
+        keyint=args.keyint or 40,
         use_crf=args.use_crf,
         crf=args.crf,
         bitrate=args.bitrate,
@@ -414,7 +451,7 @@ def main() -> int:
         x264_params=x264_params,
         frame_threads=args.frame_threads,
         sliced_threads=args.slice_threads,
-        enc_input_fps=args.fps or 10,   # important for monotonic PTS
+        enc_input_fps=args.fps or 10,  # important for monotonic PTS
     )
 
     logging.info("Starting decoder: %s", " ".join(dec_cmd))
@@ -476,7 +513,7 @@ def main() -> int:
                     logging.warning("Decoder ended")
                     stop_event.set()
                     break
-                view[n:n + len(chunk)] = chunk
+                view[n : n + len(chunk)] = chunk
                 n += len(chunk)
             if n < frame_bytes:
                 break
@@ -533,8 +570,8 @@ def main() -> int:
                 )
                 if csv_fp:
                     csv_fp.write(
-                        f"{time.time():.3f},{acc_read_ms/max(1,acc_frames):.3f},{acc_paint_ms/max(1,acc_frames):.3f},"
-                        f"{acc_write_ms/max(1,acc_frames):.3f},{acc_frame_ms/max(1,acc_frames):.3f},{fps:.3f},"
+                        f"{time.time():.3f},{acc_read_ms / max(1, acc_frames):.3f},{acc_paint_ms / max(1, acc_frames):.3f},"
+                        f"{acc_write_ms / max(1, acc_frames):.3f},{acc_frame_ms / max(1, acc_frames):.3f},{fps:.3f},"
                         f"{model_ms:.3f},{stale_ms:.3f},{box_count}\n"
                     )
                 # reset window

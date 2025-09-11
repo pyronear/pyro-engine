@@ -36,6 +36,9 @@ class StreamConfig:
     discardcorrupt: bool = True
     stimeout_us: Optional[int] = None
     fps: Optional[int] = None
+    genpts: bool = True
+    wallclock_ts: bool = True
+    nobuffer: bool = True
 
 
 @dataclass
@@ -51,7 +54,9 @@ class EncoderSettings:
     tune: str = "zerolatency"
     pix_fmt: str = "yuv420p"
     x264_params: str = "keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2"
-
+    mpegts_flags: str = "resend_headers"
+    muxdelay: str = "0"
+    muxpreload: str = "0"
 
 
 @dataclass
@@ -299,16 +304,22 @@ class AnonymizingStreamer:
         if sc.low_delay:
             cmd += ["-flags", "low_delay"]
 
+        # timestamps on decode side
+        if sc.wallclock_ts:
+            cmd += ["-use_wallclock_as_timestamps", "1"]
+        if sc.genpts:
+            cmd += ["-fflags", "+genpts"]
+
+        # stimeout_us is not supported on some builds, keep optional
         if sc.stimeout_us:
             cmd += ["-stimeout", str(sc.stimeout_us)]
 
-        cmd += ["-use_wallclock_as_timestamps", "1", "-fflags", "+genpts"]
         cmd += ["-rtsp_transport", sc.rtsp_transport, "-i", sc.rtsp_url]
 
-        if sc.fps:
+        if sc.fps and sc.fps > 0:
             cmd += ["-r", str(sc.fps), "-vsync", "1"]
         else:
-            cmd += ["-vsync", "2"]
+            cmd += ["-fps_mode", "passthrough"]
 
         cmd += [
             "-an",
@@ -327,13 +338,17 @@ class AnonymizingStreamer:
     def _start_encoder(self) -> subprocess.Popen:
         W, H = self.stream_cfg.width, self.stream_cfg.height
         enc = self.enc_cfg
+
+        # give timestamps to rawvideo pipe based on requested fps
+        enc_input_fps = str(self.stream_cfg.fps if self.stream_cfg.fps and self.stream_cfg.fps > 0 else 10)
+
         cmd = [
             "ffmpeg",
             "-loglevel",
             "warning",
             "-nostats",
             "-fflags",
-            "nobuffer",
+            "nobuffer" if self.stream_cfg.nobuffer else " ",
             "-flags",
             "low_delay",
             "-f",
@@ -342,9 +357,15 @@ class AnonymizingStreamer:
             "bgr24",
             "-s",
             f"{W}x{H}",
+            "-framerate",
+            enc_input_fps,  # important for monotonic PTS
+            "-fflags",
+            "+genpts",
             "-i",
             "pipe:0",
             "-an",
+            "-pix_fmt",
+            enc.pix_fmt,
             "-c:v",
             "libx264",
             "-preset",
@@ -352,7 +373,7 @@ class AnonymizingStreamer:
             "-tune",
             enc.tune,
             "-x264-params",
-            f"keyint={enc.keyint}:min-keyint={enc.keyint}:scenecut=0:rc-lookahead=0",
+            enc.x264_params,
             "-bf",
             "0",
             "-g",
@@ -360,16 +381,16 @@ class AnonymizingStreamer:
             "-threads",
             str(enc.threads),
             "-mpegts_flags",
-            "resend_headers",
+            enc.mpegts_flags,
             "-muxdelay",
-            "0",
+            enc.muxdelay,
             "-muxpreload",
-            "0",
+            enc.muxpreload,
         ]
         if enc.use_crf:
-            cmd += ["-crf", str(enc.crf), "-bufsize", enc.bufsize]
+            cmd += ["-crf", str(enc.crf), "-maxrate", enc.maxrate, "-bufsize", enc.bufsize]
         else:
-            cmd += ["-b:v", enc.bitrate, "-maxrate", enc.bitrate, "-bufsize", enc.bufsize]
+            cmd += ["-b:v", enc.bitrate, "-maxrate", enc.maxrate, "-bufsize", enc.bufsize]
 
         cmd += ["-f", "mpegts", self.stream_cfg.srt_out]
         logging.info("Starting encoder: %s", " ".join(cmd))

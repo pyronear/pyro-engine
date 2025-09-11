@@ -1,45 +1,46 @@
 srt_settings:
   pkt_size: 1316
   mode: caller
-  latency: 30          # try 30 first, then 20 if the link is clean
+  latency: 30
   rcvlatency: 30
   peerlatency: 30
-  tlpktdrop: 1         # drop late packets to protect latency
+  tlpktdrop: 1
 
 ffmpeg_params:
+  # input and general behavior
   discardcorrupt: true
   low_delay: true
   rtsp_transport: tcp
+  analyzeduration: "0"
+  probesize: "32k"
+  stimeout_us: 5000000        # keep for reference, your ffmpeg build ignores it
 
-  framerate: 10        # or 12, this reduces the latency floor
-  gop_size: 10         # keep about one second GOP
+  # timing and cadence
+  framerate: 10               # also used to timestamp the raw pipe on the encoder side
+  gop_size: 40                # match x264 keyint for 10 fps
+
+  # encoder
   video_codec: libx264
   preset: veryfast
   tune: zerolatency
+  threads: 8                  # set near core count
+  x264_params: "keyint=40:min-keyint=20:scenecut=40:rc-lookahead=0:ref=3:aq-mode=2:frame-threads=1:sliced-threads=1"
 
-  # allow intra frame parallelism, but keep one frame in flight
-  threads: 8           # set to your core count
-  x264_params: "keyint=10:min-keyint=10:scenecut=0:rc-lookahead=0:ref=1:aq-mode=2:frame-threads=1:sliced-threads=1"
+  # rate control
+  use_crf: true
+  crf: 22
+  bitrate: "700k"             # kept for completeness, ignored when use_crf is true
+  maxrate: "900k"
+  bufsize: "450k"
 
-  # rate control, small VBV to avoid extra buffering
-  use_crf: false
-  bitrate: 700k
-  maxrate: "750k"
-  bufsize: "150k"
-
-  # make the muxer strict
+  # muxer
   output_format: mpegts
   mpegts_flags: "resend_headers"
   muxdelay: "0"
   muxpreload: "0"
 
-  # startup and read behavior
-  analyzeduration: "0"
-  probesize: "32k"
-  stimeout_us: 5000000
-
-  # timestamps and pixel format
+  # pixel format and timestamps
   pix_fmt: "yuv420p"
-  genpts: true
-  wallclock_ts: true     # same as -use_wallclock_as_timestamps 1
-  nobuffer: true         # same as -fflags nobuffer
+  genpts: true                # apply +genpts on both decode and encode sides
+  wallclock_ts: true          # same as -use_wallclock_as_timestamps 1
+  nobuffer: true              # same as -fflags nobuffer
