@@ -21,7 +21,6 @@ def main() -> int:
     p.add_argument("--streamid", default=None)
 
     p.add_argument("--conf", type=float, default=0.30)
-    p.add_argument("--scale-div", type=int, default=1)
 
     # encoder params
     p.add_argument("--use-crf", action="store_true", default=False)
@@ -56,7 +55,6 @@ def main() -> int:
         srt_port=args.srt_port,
         streamid=args.streamid,
         conf_thres=args.conf,
-        model_scale_div=args.scale_div,
         x264_preset=args.preset,
         x264_tune=args.tune,
         bitrate=args.bitrate,

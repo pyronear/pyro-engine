@@ -449,36 +449,41 @@ class RTSPAnonymizeSRTWorker:
             self._spawn_model_thread()
 
             while not self._stop.is_set():
-                # read exactly one frame worth of bytes
+                # read exactly one frame into buffer
                 n = 0
                 while n < self.frame_bytes and not self._stop.is_set():
-                    chunk = self._dec.stdout.read(self.frame_bytes - n)
-                    if not chunk:
+                    m = self._dec.stdout.readinto(view[n:])
+                    if not m:
                         logging.warning("Decoder ended")
                         self._stop.set()
                         break
-                    view[n : n + len(chunk)] = chunk
-                    n += len(chunk)
+                    n += m
                 if n < self.frame_bytes:
                     break
 
                 frame = np.frombuffer(buffer, dtype=np.uint8).reshape((self.height, self.width, 3))
 
-                # push a small RGB copy to the model thread
+                # push to model thread
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self.latest.update(Image.fromarray(rgb))
 
-                # paint boxes from the last model result
+                # paint boxes
                 boxes = self.boxes_state.get()
                 if boxes:
                     paint_black(frame, boxes)
 
-                try:
-                    self._enc.stdin.write(buffer)
-                except BrokenPipeError:
-                    logging.warning("Encoder pipe closed")
-                    self._stop.set()
-                    break
+                # write, handling short writes
+                w = 0
+                while w < self.frame_bytes and not self._stop.is_set():
+                    try:
+                        wrote = self._enc.stdin.write(view[w:])
+                        if wrote is None or wrote == 0:
+                            raise BrokenPipeError("encoder write returned zero")
+                        w += wrote
+                    except BrokenPipeError:
+                        logging.warning("Encoder pipe closed")
+                        self._stop.set()
+                        break
 
         except BaseException as e:
             logging.error("Worker error: %s", e)
