@@ -1,237 +1,135 @@
-# Copyright (C) 2020-2025, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
+# router.py
 
 import logging
 import threading
 import time
 from typing import Optional
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from anonymizer.anonymize_stream import (
-    AnonymizingStreamer,
-    DetectionSettings,
-    EncoderSettings,
-    StreamConfig,
-)
 from fastapi import APIRouter, HTTPException
 
-from camera.config import FFMPEG_PARAMS, SRT_SETTINGS, STREAMS
+from camera.config import FFMPEG_PARAMS, STREAMS, SRT_SETTINGS
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
+from rtsp_anonymize_srt import RTSPAnonymizeSRTWorker
+
 router = APIRouter()
-
-# We keep at most one active stream at a time
-_streamers: dict[str, AnonymizingStreamer] = {}
-_threads: dict[str, threading.Thread] = {}
-
-# Optional defaults for output size and detection
-DEFAULT_W = 640
-DEFAULT_H = 360
-DEFAULT_CONF = 0.30
-DEFAULT_SCALE_DIV = 1
+workers: dict[str, RTSPAnonymizeSRTWorker] = {}
 
 
-def _is_thread_alive(th: Optional[threading.Thread]) -> bool:
-    return th is not None and th.is_alive()
-
-
-def is_stream_running_for(camera_ip: str) -> bool:
-    th = _threads.get(camera_ip)
-    return _is_thread_alive(th)
-
-
-def _apply_srt_settings(base_url: str) -> str:
-    u = urlparse(base_url)
-    q = dict(parse_qsl(u.query))
-
-    # apply or override from YAML
-    q.update({
-        "pkt_size": str(SRT_SETTINGS.get("pkt_size", 1316)),
-        "mode": SRT_SETTINGS.get("mode", "caller"),
-        "latency": str(SRT_SETTINGS.get("latency", 30)),
-        "rcvlatency": str(SRT_SETTINGS.get("rcvlatency", 30)),
-        "peerlatency": str(SRT_SETTINGS.get("peerlatency", 30)),
-        "tlpktdrop": str(SRT_SETTINGS.get("tlpktdrop", 1)),
-    })
-
-    return urlunparse((u.scheme, u.netloc, u.path, u.params, urlencode(q), u.fragment))
+def is_worker_running(w: Optional[RTSPAnonymizeSRTWorker]) -> bool:
+    return bool(w and getattr(w, "_thread", None) and w._thread.is_alive())
 
 
 def stop_any_running_stream() -> Optional[str]:
-    """Stop whichever camera is currently streaming, return its id if any."""
-    for cam_id, streamer in list(_streamers.items()):
-        try:
-            streamer.stop()
-        except Exception as e:
-            logging.warning("Error while stopping stream for %s: %s", cam_id, e)
-        th = _threads.get(cam_id)
-        try:
-            if th and th.is_alive():
-                th.join(timeout=2)
-        except Exception:
-            pass
-        _streamers.pop(cam_id, None)
-        _threads.pop(cam_id, None)
-        return cam_id
+    for cam_id, w in list(workers.items()):
+        if is_worker_running(w):
+            try:
+                w.stop()
+            except Exception as e:
+                logging.warning(f"Failed to stop worker for {cam_id}: {e}")
+            del workers[cam_id]
+            return cam_id
     return None
 
 
 def stop_stream_if_idle():
-    """Background task that stops the stream if no command has arrived for 120 seconds."""
     while True:
         time.sleep(10)
-        try:
-            if seconds_since_last_command() > 120:
-                stopped_cam = stop_any_running_stream()
-                if stopped_cam:
-                    logging.info("Stream for %s stopped due to inactivity", stopped_cam)
-        except Exception as e:
-            logging.warning("Idle stopper error: %s", e)
-
-
-# Start the idle stopper once
-_idle_guard = threading.Event()
-if not _idle_guard.is_set():
-    threading.Thread(target=stop_stream_if_idle, daemon=True, name="idle-stopper").start()
-    _idle_guard.set()
-
-
-def build_streamer_for(camera_ip: str) -> AnonymizingStreamer:
-    """
-    Create an AnonymizingStreamer using STREAMS and FFMPEG_PARAMS.
-    Raises KeyError if camera_ip is not in STREAMS.
-    """
-    stream_info = STREAMS[camera_ip]
-    input_url = stream_info["input_url"]
-    output_url = _apply_srt_settings(stream_info["output_url"])
-
-    # sizes with per camera override
-    w = int(stream_info.get("width", 640))
-    h = int(stream_info.get("height", 360))
-
-    # decoder side options from YAML
-    transport = str(FFMPEG_PARAMS.get("rtsp_transport", "tcp"))
-    low_delay = bool(FFMPEG_PARAMS.get("low_delay", True))
-    discardcorrupt = bool(FFMPEG_PARAMS.get("discardcorrupt", True))
-    analyzeduration = FFMPEG_PARAMS.get("analyzeduration", "0")
-    probesize = FFMPEG_PARAMS.get("probesize", "32k")
-    # keep stimeout_us present in YAML, but some builds ignore it
-    stimeout_us = FFMPEG_PARAMS.get("stimeout_us", None)
-    fps = int(FFMPEG_PARAMS.get("framerate", 10))
-    genpts = bool(FFMPEG_PARAMS.get("genpts", True))
-    wallclock_ts = bool(FFMPEG_PARAMS.get("wallclock_ts", True))
-    nobuffer = bool(FFMPEG_PARAMS.get("nobuffer", True))
-
-    stream_cfg = StreamConfig(
-        rtsp_url=input_url,
-        srt_out=output_url,
-        width=w,
-        height=h,
-        rtsp_transport=transport,
-        analyzeduration=analyzeduration,
-        probesize=probesize,
-        low_delay=low_delay,
-        discardcorrupt=discardcorrupt,
-        stimeout_us=int(stimeout_us) if isinstance(stimeout_us, int) else None,
-        fps=fps,
-        genpts=genpts,
-        wallclock_ts=wallclock_ts,
-        nobuffer=nobuffer,
-    )
-
-    # encoder side options from YAML
-    keyint = int(FFMPEG_PARAMS.get("gop_size", 10))
-    bitrate = str(FFMPEG_PARAMS.get("bitrate", "700k"))
-    bufsize = str(FFMPEG_PARAMS.get("bufsize", "150k"))
-    maxrate = str(FFMPEG_PARAMS.get("maxrate", "750k"))
-    preset = str(FFMPEG_PARAMS.get("preset", "veryfast"))
-    tune = str(FFMPEG_PARAMS.get("tune", "zerolatency"))
-    use_crf = bool(FFMPEG_PARAMS.get("use_crf", False))
-    crf = int(FFMPEG_PARAMS.get("crf", 22))
-    threads = int(FFMPEG_PARAMS.get("threads", 8))
-    pix_fmt = str(FFMPEG_PARAMS.get("pix_fmt", "yuv420p"))
-    x264_params = str(FFMPEG_PARAMS.get("x264_params", ""))
-
-    mpegts_flags = str(FFMPEG_PARAMS.get("mpegts_flags", "resend_headers"))
-    muxdelay = str(FFMPEG_PARAMS.get("muxdelay", "0"))
-    muxpreload = str(FFMPEG_PARAMS.get("muxpreload", "0"))
-
-    enc_cfg = EncoderSettings(
-        keyint=keyint,
-        use_crf=use_crf,
-        crf=crf,
-        bitrate=bitrate,
-        bufsize=bufsize,
-        maxrate=maxrate,
-        threads=threads,
-        preset=preset,
-        tune=tune,
-        pix_fmt=pix_fmt,
-        x264_params=x264_params,
-        mpegts_flags=mpegts_flags,
-        muxdelay=muxdelay,
-        muxpreload=muxpreload,
-    )
-
-    # detection options with per camera override
-    conf_thres = float(stream_info.get("conf_thres", DEFAULT_CONF))
-    model_scale_div = int(stream_info.get("model_scale_div", DEFAULT_SCALE_DIV))
-
-    det_cfg = DetectionSettings(
-        conf_thres=conf_thres,
-        model_scale_div=model_scale_div,
-    )
-
-    return AnonymizingStreamer(stream_cfg, enc_cfg, det_cfg)
-
-
-def _start_streamer_in_background(camera_ip: str, streamer: AnonymizingStreamer) -> None:
-    """Run the streamer.start loop in a daemon thread."""
-
-    def _runner():
-        try:
-            streamer.start()
-        except Exception as e:
-            logging.exception("Streamer for %s crashed: %s", camera_ip, e)
-        finally:
-            # clean up maps if the loop exits
-            _streamers.pop(camera_ip, None)
-            _threads.pop(camera_ip, None)
-
-    th = threading.Thread(target=_runner, name=f"anonymizer-{camera_ip}", daemon=True)
-    th.start()
-    _threads[camera_ip] = th
+        if seconds_since_last_command() > 120:
+            stopped = stop_any_running_stream()
+            if stopped:
+                logging.info(f"Stream for {stopped} stopped due to inactivity")
 
 
 @router.post("/start_stream/{camera_ip}")
 def start_stream(camera_ip: str):
-    """Start anonymized streaming for a given camera, unless it is already running."""
     update_command_time()
 
     if camera_ip not in STREAMS:
         raise HTTPException(status_code=404, detail=f"No stream config for camera {camera_ip}")
 
-    if is_stream_running_for(camera_ip):
-        logging.info("Stream for %s already running", camera_ip)
+    if camera_ip in workers and is_worker_running(workers[camera_ip]):
+        logging.info(f"Stream for {camera_ip} already running")
         return {"message": f"Stream for {camera_ip} already running"}
 
     stopped_cam = stop_any_running_stream()
 
-    streamer = build_streamer_for(camera_ip)
-    _streamers[camera_ip] = streamer
-    _start_streamer_in_background(camera_ip, streamer)
+    stream_info = STREAMS[camera_ip]
+    input_url = stream_info["input_url"]
 
-    logging.info("[%s] Anonymized stream started RTSP to SRT", camera_ip)
+    # SRT build from settings
+    srt_host = stream_info.get("srt_host") or SRT_SETTINGS["host"]
+    srt_port = int(stream_info.get("srt_port") or SRT_SETTINGS.get("port_start", 8890))
+    streamid = f"{SRT_SETTINGS.get('streamid_prefix','publish')}:{camera_ip}"
+
+    # Geometry and cadence
+    width = int(FFMPEG_PARAMS.get("width", 640))
+    height = int(FFMPEG_PARAMS.get("height", 360))
+    fps = int(FFMPEG_PARAMS.get("framerate", 7))
+    rtsp_transport = FFMPEG_PARAMS.get("rtsp_transport", "tcp")
+
+    # Encoding knobs
+    keyint = int(FFMPEG_PARAMS.get("gop_size", 14))
+    threads = int(FFMPEG_PARAMS.get("threads", 1))
+    preset = FFMPEG_PARAMS.get("preset", "veryfast")
+    tune = FFMPEG_PARAMS.get("tune", "zerolatency")
+    pix_fmt = FFMPEG_PARAMS.get("pix_fmt", "yuv420p")
+    x264_params = FFMPEG_PARAMS.get("x264_params", "scenecut=40:rc-lookahead=0:ref=3")
+
+    # Rate control
+    use_crf = bool(FFMPEG_PARAMS.get("use_crf", True))
+    crf = int(FFMPEG_PARAMS.get("crf", 22))
+    bitrate = FFMPEG_PARAMS.get("bitrate", "500k")
+    bufsize = FFMPEG_PARAMS.get("bufsize", "800k")
+    maxrate = FFMPEG_PARAMS.get("maxrate", bitrate)
+
+    # Anonymizer
+    conf_thres = float(FFMPEG_PARAMS.get("anon_conf", 0.30))
+
+    # SRT transport knobs
+    pkt_size = int(SRT_SETTINGS.get("pkt_size", 1316))
+    mode = SRT_SETTINGS.get("mode", "caller")
+    latency = int(SRT_SETTINGS.get("latency", 50))
+
+    worker = RTSPAnonymizeSRTWorker(
+        rtsp_url=input_url,
+        # geometry
+        width=width,
+        height=height,
+        fps=fps,
+        rtsp_transport=rtsp_transport,
+        # anonymizer
+        conf_thres=conf_thres,
+        # encoder
+        x264_preset=preset,
+        x264_tune=tune,
+        bitrate=bitrate,
+        bufsize=bufsize,
+        maxrate=maxrate,
+        use_crf=use_crf,
+        crf=crf,
+        keyint=keyint,
+        pix_fmt=pix_fmt,
+        enc_threads=threads,
+        # SRT
+        srt_host=srt_host,
+        srt_port=srt_port,
+        streamid=streamid,
+        srt_pkt_size=pkt_size,
+        srt_latency=latency,
+        # keep tlpktdrop at one for low delay
+        srt_tlpktdrop=1,
+    )
+
+    workers[camera_ip] = worker
+    logging.info(f"[{camera_ip}] Start worker, input {input_url}, srt {srt_host}:{srt_port} streamid {streamid}")
+    worker.start()
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 
 
 @router.post("/stop_stream")
 def stop_stream():
-    """Stop the active stream and reset zoom to position 0 if the camera supports it."""
     update_command_time()
     stopped_cam = stop_any_running_stream()
     if stopped_cam:
@@ -239,28 +137,22 @@ def stop_stream():
         if cam:
             try:
                 cam.start_zoom_focus(position=0)
-                logging.info("[%s] Zoom reset to position 0 after stream stop", stopped_cam)
+                logging.info(f"[{stopped_cam}] Zoom reset to position 0 after stream stop")
             except Exception as e:
-                logging.warning("[%s] Failed to reset zoom: %s", stopped_cam, e)
-
-        return {
-            "message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.",
-            "camera_ip": stopped_cam,
-        }
-
+                logging.warning(f"[{stopped_cam}] Failed to reset zoom: {e}")
+        return {"message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.", "camera_ip": stopped_cam}
     return {"message": "No active stream was running"}
 
 
 @router.get("/status")
 def stream_status():
-    """Return the list of camera ids that are currently streaming."""
-    active_streams = [cam_ip for cam_ip, th in _threads.items() if _is_thread_alive(th)]
-    if active_streams:
-        return {"active_streams": active_streams}
+    active = [cam_ip for cam_ip, w in workers.items() if is_worker_running(w)]
+    if active:
+        return {"active_streams": active}
     return {"message": "No stream is running"}
 
 
 @router.get("/is_stream_running/{camera_ip}")
 def is_stream_running(camera_ip: str):
-    """Check if a specific camera is currently streaming."""
-    return {"camera_ip": camera_ip, "running": is_stream_running_for(camera_ip)}
+    w = workers.get(camera_ip)
+    return {"camera_ip": camera_ip, "running": bool(w and is_worker_running(w))}

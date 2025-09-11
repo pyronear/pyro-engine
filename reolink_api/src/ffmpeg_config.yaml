@@ -1,48 +1,24 @@
 srt_settings:
+  host: 91.134.47.14     # SRT receiver public IP or DNS
   pkt_size: 1316
   mode: caller
-  latency: 30
-  rcvlatency: 30
-  peerlatency: 30
-  tlpktdrop: 1
-  port_start: 8890 
+  latency: 50
+  port_start: 8890
   streamid_prefix: publish
 
 ffmpeg_params:
-  # input and general behavior
   discardcorrupt: true
   low_delay: true
   rtsp_transport: tcp
-  analyzeduration: "0"
-  probesize: "32k"
-  stimeout_us: 5000000        # keep for reference, your ffmpeg build ignores it
-
-  # timing and cadence
-  framerate: 10               # also used to timestamp the raw pipe on the encoder side
-  gop_size: 40                # match x264 keyint for 10 fps
-
-  # encoder
   video_codec: libx264
+  b_frames: 0
+  gop_size: 5
+  bitrate: 500k
+  framerate: 10
   preset: veryfast
   tune: zerolatency
-  threads: 8                  # set near core count
-  x264_params: "keyint=40:min-keyint=20:scenecut=40:rc-lookahead=0:ref=3:aq-mode=2:frame-threads=1:sliced-threads=1"
-
-  # rate control
-  use_crf: true
-  crf: 22
-  bitrate: "700k"             # kept for completeness, ignored when use_crf is true
-  maxrate: "900k"
-  bufsize: "450k"
-
-  # muxer
+  threads: 1
+  audio_disabled: true
   output_format: mpegts
-  mpegts_flags: "resend_headers"
-  muxdelay: "0"
-  muxpreload: "0"
-
-  # pixel format and timestamps
-  pix_fmt: "yuv420p"
-  genpts: true                # apply +genpts on both decode and encode sides
-  wallclock_ts: true          # same as -use_wallclock_as_timestamps 1
-  nobuffer: true              # same as -fflags nobuffer
+  x264_params: "scenecut=40:rc-lookahead=0:ref=3"
+  pix_fmt: yuv420p

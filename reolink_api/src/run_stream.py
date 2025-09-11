@@ -32,7 +32,7 @@ def main() -> int:
     p.add_argument("--preset", default="veryfast")
     p.add_argument("--tune", default="zerolatency")
     p.add_argument("--pix-fmt", default="yuv420p")
-    p.add_argument("--x264-params", default="keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2")
+    p.add_argument("--x264-params", default="scenecut=40:rc-lookahead=0:ref=3")
     p.add_argument("--keyint", type=int, default=14)
 
     p.add_argument("--log-level", default="INFO")
