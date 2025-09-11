@@ -6,23 +6,26 @@ srt_settings:
   streamid_prefix: publish    # Prefix to build the stream ID
 
 ffmpeg_params:
-  discardcorrupt: true        # Drop damaged packets, keep buffers small
-  low_delay: true             # Prefer minimal latency behavior
-  rtsp_transport: tcp         # RTSP over TCP for reliability
-  video_codec: libx264        # H.264 video encoding via x264
-  b_frames: 0                 # Use only I and P frames for low latency
-  gop_size: 10                # One second GOP at ten fps
-  bitrate: 500k               # Target video bitrate
-  framerate: 10               # Frames per second
-  preset: veryfast            # Encoder speed preset
-  tune: zerolatency           # Encoder tuning for low latency
-  threads: 1                  # Single thread for stable timing
-  audio_disabled: true        # Disable audio track
-  output_format: mpegts       # Container suited for SRT
+  discardcorrupt: true
+  low_delay: true
+  rtsp_transport: tcp
+  video_codec: libx264
+  b_frames: 0
+  framerate: 7
+  gop_size: 14                  # encoder keyint in frames, about two seconds
+  bitrate: 700k                 # encoder target after anonymization
+  preset: veryfast
+  tune: zerolatency
+  threads: 1
+  audio_disabled: true
+  output_format: mpegts
 
-  analyzeduration: "1M"       # Probe time budget, about one second
-  probesize: "2M"             # Probe size budget in bytes
-  stimeout_us: 5000000        # RTSP socket timeout in microseconds
+  analyzeduration: "1M"
+  probesize: "2M"
+  stimeout_us: 5000000
 
-  use_crf: false              # Use constant bitrate mode
-  bufsize: "100k"             # VBV buffer size for rate control
+  use_crf: false
+  bufsize: "800k"
+  maxrate: "900k"
+  pix_fmt: "yuv420p"
+  x264_params: "keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2"

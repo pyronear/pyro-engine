@@ -40,14 +40,18 @@ class StreamConfig:
 
 @dataclass
 class EncoderSettings:
-    keyint: int = 5
-    use_crf: bool = True
+    keyint: int = 14
+    use_crf: bool = False
     crf: int = 28
-    bitrate: str = "500k"
-    bufsize: str = "100k"
+    bitrate: str = "700k"
+    bufsize: str = "800k"
+    maxrate: str = "900k"
     threads: int = 1
-    preset: str = "ultrafast"
+    preset: str = "veryfast"
     tune: str = "zerolatency"
+    pix_fmt: str = "yuv420p"
+    x264_params: str = "keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2"
+
 
 
 @dataclass
