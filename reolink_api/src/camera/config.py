@@ -24,7 +24,7 @@ load_dotenv()
 # paths, allow override via env
 ROOT = Path(__file__).resolve().parent.parent
 FFMPEG_CONFIG_PATH = Path(os.getenv("FFMPEG_CONFIG_PATH") or (ROOT / "ffmpeg_config.yaml"))
-CREDENTIALS_PATH = Path(os.getenv("CREDENTIALS_PATH") or (ROOT / "credentials.json"))
+CREDENTIALS_PATH = Path(os.getenv("CREDENTIALS_PATH") or (ROOT / "data/credentials.json"))
 
 # required env vars
 CAM_USER = os.getenv("CAM_USER")
