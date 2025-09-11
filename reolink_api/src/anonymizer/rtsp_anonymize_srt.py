@@ -77,8 +77,9 @@ def build_decoder_cmd(
     if dec_threads and dec_threads > 1:
         cmd += ["-threads", str(dec_threads), "-thread_type", "slice"]
 
+    # Keep -vsync 1 for FFmpeg 4.x compatibility (Debian 11 on Pi).
     if fps and fps > 0:
-        cmd += ["-r", str(fps), "-vsync", "1"] 
+        cmd += ["-r", str(fps), "-vsync", "1"]
     else:
         cmd += ["-fps_mode", "passthrough"]
 
@@ -106,12 +107,12 @@ def build_encoder_cmd(
     preset: str = "veryfast",
     tune: str = "zerolatency",
     pix_fmt: str = "yuv420p",
-    x264_params: str = "keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2",
-    frame_threads: int = 1,           # kept for signature compatibility, not injected anymore
+    x264_params: str = "scenecut=40:rc-lookahead=0:ref=3",
+    frame_threads: int = 1,      # kept for signature compatibility (not injected)
     sliced_threads: bool = True,
     enc_input_fps: int = 10,
 ) -> List[str]:
-    # merge low latency params without frame-threads to avoid parser error
+    # Merge low-latency params. We *do not* force frame-threads to avoid parse errors.
     params = x264_params.split(":") if x264_params else []
     have = {p.split("=")[0] for p in params if "=" in p}
     need = {
@@ -127,7 +128,7 @@ def build_encoder_cmd(
         if k not in have:
             params.insert(0, f"{k}={v}")
 
-    # if user provided keyint in x264-params, sync -g to it
+    # Sync -g with keyint if present in x264-params
     g_val = keyint
     for p in params:
         if p.startswith("keyint="):
@@ -148,7 +149,7 @@ def build_encoder_cmd(
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
         "-s", f"{width}x{height}",
-        "-framerate", str(max(1, enc_input_fps)),
+        "-framerate", str(max(1, enc_input_fps)),  # timestamps for rawvideo
         "-fflags", "+genpts",
         "-i", "pipe:0",
         "-an",
@@ -158,7 +159,7 @@ def build_encoder_cmd(
         "-tune", tune,
         "-x264-params", x264_merged,
         "-bf", "0",
-        "-g", str(g_val),              # synced with x264 keyint if present
+        "-g", str(g_val),
         "-threads", str(threads),
         "-mpegts_flags", "resend_headers",
         "-muxdelay", "0",
@@ -170,7 +171,6 @@ def build_encoder_cmd(
         cmd += ["-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize]
     cmd += ["-f", "mpegts", srt_out]
     return cmd
-
 
 
 def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
@@ -294,12 +294,16 @@ class RTSPAnonymizeSRTWorker:
         height: int = 360,
         fps: int = 7,
         rtsp_transport: str = "tcp",
+        # If srt_out is not provided, we can still build it (kept for compatibility)
         srt_host: Optional[str] = None,
         srt_port: int = 8890,
         streamid: Optional[str] = None,
+        # anonymizer
         conf_thres: float = 0.30,
+        # encoder
         x264_preset: str = "veryfast",
         x264_tune: str = "zerolatency",
+        x264_params: Optional[str] = "scenecut=40:rc-lookahead=0:ref=3",
         bitrate: str = "700k",
         bufsize: str = "800k",
         maxrate: str = "900k",
@@ -309,7 +313,7 @@ class RTSPAnonymizeSRTWorker:
         pix_fmt: str = "yuv420p",
         enc_threads: int = 1,
         dec_threads: int = 2,
-        # new SRT knobs
+        # SRT knobs (used only if srt_out is None)
         srt_latency: int = 50,
         srt_pkt_size: int = 1316,
         srt_rcvlatency: Optional[int] = None,
@@ -358,6 +362,7 @@ class RTSPAnonymizeSRTWorker:
             preset=x264_preset,
             tune=x264_tune,
             pix_fmt=pix_fmt,
+            x264_params=x264_params or "scenecut=40:rc-lookahead=0:ref=3",
             frame_threads=1,
             sliced_threads=True,
             enc_input_fps=fps or 10,
@@ -449,7 +454,7 @@ class RTSPAnonymizeSRTWorker:
             self._spawn_model_thread()
 
             while not self._stop.is_set():
-                # read exactly one frame into buffer
+                # read exactly one frame into buffer (minimize copies)
                 n = 0
                 while n < self.frame_bytes and not self._stop.is_set():
                     m = self._dec.stdout.readinto(view[n:])

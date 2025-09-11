@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
-from camera.config import FFMPEG_PARAMS, STREAMS, SRT_SETTINGS
+from camera.config import FFMPEG_PARAMS, STREAMS  # SRT_SETTINGS no longer needed here
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
 
@@ -57,43 +57,36 @@ def start_stream(camera_ip: str):
 
     stream_info = STREAMS[camera_ip]
     input_url = stream_info["input_url"]
+    srt_out = stream_info["output_url"]  # use the prebuilt SRT URL including streamid
 
-    # SRT build from settings
-    srt_host = stream_info.get("srt_host") or SRT_SETTINGS["host"]
-    srt_port = int(stream_info.get("srt_port") or SRT_SETTINGS.get("port_start", 8890))
-    streamid = f"{SRT_SETTINGS.get('streamid_prefix','publish')}:{camera_ip}"
-
-    # Geometry and cadence
+    # geometry and cadence
     width = int(FFMPEG_PARAMS.get("width", 640))
     height = int(FFMPEG_PARAMS.get("height", 360))
-    fps = int(FFMPEG_PARAMS.get("framerate", 7))
+    fps = int(FFMPEG_PARAMS.get("framerate", 10))
     rtsp_transport = FFMPEG_PARAMS.get("rtsp_transport", "tcp")
 
-    # Encoding knobs
-    keyint = int(FFMPEG_PARAMS.get("gop_size", 14))
+    # encoding knobs
+    keyint = int(FFMPEG_PARAMS.get("gop_size", 10))
     threads = int(FFMPEG_PARAMS.get("threads", 1))
     preset = FFMPEG_PARAMS.get("preset", "veryfast")
     tune = FFMPEG_PARAMS.get("tune", "zerolatency")
     pix_fmt = FFMPEG_PARAMS.get("pix_fmt", "yuv420p")
     x264_params = FFMPEG_PARAMS.get("x264_params", "scenecut=40:rc-lookahead=0:ref=3")
 
-    # Rate control
+    # rate control
     use_crf = bool(FFMPEG_PARAMS.get("use_crf", True))
     crf = int(FFMPEG_PARAMS.get("crf", 22))
     bitrate = FFMPEG_PARAMS.get("bitrate", "500k")
     bufsize = FFMPEG_PARAMS.get("bufsize", "800k")
     maxrate = FFMPEG_PARAMS.get("maxrate", bitrate)
 
-    # Anonymizer
+    # anonymizer
     conf_thres = float(FFMPEG_PARAMS.get("anon_conf", 0.30))
 
-    # SRT transport knobs
-    pkt_size = int(SRT_SETTINGS.get("pkt_size", 1316))
-    mode = SRT_SETTINGS.get("mode", "caller")
-    latency = int(SRT_SETTINGS.get("latency", 50))
-
+    # start worker
     worker = RTSPAnonymizeSRTWorker(
         rtsp_url=input_url,
+        srt_out=srt_out,                 # pass the full SRT URL
         # geometry
         width=width,
         height=height,
@@ -112,18 +105,13 @@ def start_stream(camera_ip: str):
         keyint=keyint,
         pix_fmt=pix_fmt,
         enc_threads=threads,
-        # SRT
-        srt_host=srt_host,
-        srt_port=srt_port,
-        streamid=streamid,
-        srt_pkt_size=pkt_size,
-        srt_latency=latency,
-        # keep tlpktdrop at one for low delay
-        srt_tlpktdrop=1,
+        # if your worker constructor supports x264_params, keep the next line,
+        # otherwise remove it and the worker will use its internal default
+        x264_params=x264_params,  # comment out if not supported
     )
 
     workers[camera_ip] = worker
-    logging.info(f"[{camera_ip}] Start worker, input {input_url}, srt {srt_host}:{srt_port} streamid {streamid}")
+    logging.info(f"[{camera_ip}] start worker, rtsp {input_url}, srt {srt_out}")
     worker.start()
     return {"message": f"Stream started for {camera_ip}", "previous_stream": stopped_cam or "None"}
 
