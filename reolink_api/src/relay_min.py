@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+# Copyright (C) 2020-2025, Pyronear.
+# Licensed under the Apache License 2.0.
+
+from __future__ import annotations
+import argparse, logging, os, signal, subprocess, sys, threading, time
+from queue import Queue, Full, Empty
+
+# ---------- SRT helpers ----------
+def build_srt_url(
+    srt: str | None,
+    host: str | None,
+    port: int,
+    streamid: str | None,
+    pkt_size: int,
+    latency: int,
+    mode: str,
+    rcvlatency: int | None = None,
+    peerlatency: int | None = None,
+    tlpktdrop: int | None = 1,
+) -> str:
+    if srt:
+        return srt
+    if not host:
+        raise ValueError("SRT host is required when --srt is not provided")
+    params = {
+        "pkt_size": str(pkt_size),
+        "mode": mode,
+        "latency": str(latency),
+    }
+    if rcvlatency is not None:  params["rcvlatency"] = str(rcvlatency)
+    if peerlatency is not None: params["peerlatency"] = str(peerlatency)
+    if tlpktdrop is not None:   params["tlpktdrop"]  = str(tlpktdrop)
+    if streamid:                params["streamid"]   = streamid
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    return f"srt://{host}:{port}?{query}"
+
+# ---------- FFmpeg commands ----------
+def build_decoder_cmd(
+    rtsp_url: str,
+    width: int,
+    height: int,
+    rtsp_transport: str,
+    fps: int | None,
+    analyzeduration: str,
+    probesize: str,
+    low_delay: bool,
+    discardcorrupt: bool,
+) -> list[str]:
+    cmd = ["ffmpeg"]
+    if analyzeduration is not None:
+        cmd += ["-analyzeduration", str(analyzeduration)]
+    if probesize is not None:
+        cmd += ["-probesize", str(probesize)]
+    # keep flags separate to avoid parsing issues
+    if discardcorrupt:
+        cmd += ["-fflags", "discardcorrupt"]
+    cmd += ["-fflags", "nobuffer"]
+    cmd += ["-fflags", "+genpts"]
+    if low_delay:
+        cmd += ["-flags", "low_delay"]
+    cmd += ["-use_wallclock_as_timestamps", "1"]
+    cmd += ["-rtsp_transport", rtsp_transport, "-i", rtsp_url]
+
+    if fps and fps > 0:
+        cmd += ["-r", str(fps), "-vsync", "1"]
+    else:
+        cmd += ["-fps_mode", "passthrough"]
+
+    cmd += ["-an", "-pix_fmt", "bgr24", "-f", "rawvideo", "-s", f"{width}x{height}", "pipe:1"]
+    return cmd
+
+def build_encoder_cmd(
+    srt_out: str,
+    width: int,
+    height: int,
+    keyint: int,
+    use_crf: bool,
+    crf: int,
+    bitrate: str,
+    bufsize: str,
+    maxrate: str,
+    threads: int,
+    preset: str,
+    tune: str,
+    pix_fmt: str,
+    x264_params: str,
+    enc_input_fps: int,
+) -> list[str]:
+    cmd = [
+        "ffmpeg",
+        "-loglevel", "warning",
+        "-nostats",
+        "-fflags", "nobuffer",
+        "-fflags", "+genpts",
+        "-flags", "low_delay",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-s", f"{width}x{height}",
+        "-framerate", str(max(1, enc_input_fps)),  # provide timestamps for raw pipe
+        "-i", "pipe:0",
+        "-an",
+        "-pix_fmt", pix_fmt,
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-tune", tune,
+        "-g", str(keyint),                # single source of truth for GOP
+        "-x264-params", x264_params,      # do NOT repeat keyint here
+        "-bf", "0",
+        "-threads", str(threads),
+        "-mpegts_flags", "resend_headers",
+        "-muxdelay", "0",
+        "-muxpreload", "0",
+        "-flush_packets", "1",
+    ]
+    if use_crf:
+        cmd += ["-crf", str(crf), "-maxrate", maxrate, "-bufsize", bufsize]
+    else:
+        cmd += ["-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize]
+    cmd += ["-f", "mpegts", srt_out]
+    return cmd
+
+def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
+    if not proc.stderr:
+        return
+    for line in iter(proc.stderr.readline, b""):
+        if not line:
+            break
+        try:
+            logging.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
+        except Exception:
+            pass
+
+# ---------- Threads ----------
+def decoder_loop(dec: subprocess.Popen, frame_bytes: int, q: Queue[bytes], stop: threading.Event) -> None:
+    assert dec.stdout is not None
+    view = memoryview(bytearray(frame_bytes))
+    while not stop.is_set():
+        n = 0
+        while n < frame_bytes and not stop.is_set():
+            chunk = dec.stdout.read(frame_bytes - n)
+            if not chunk:
+                logging.warning("Decoder ended")
+                stop.set()
+                return
+            view[n:n+len(chunk)] = chunk
+            n += len(chunk)
+        if n < frame_bytes:
+            break
+        # Non-blocking replace (queue size = 1)
+        try:
+            q.put_nowait(bytes(view))
+        except Full:
+            try:
+                _ = q.get_nowait()
+            except Empty:
+                pass
+            q.put_nowait(bytes(view))
+
+def encoder_loop(enc: subprocess.Popen, q: Queue[bytes], stop: threading.Event, target_fps: int) -> None:
+    assert enc.stdin is not None
+    total = 0
+    t0 = time.perf_counter()
+    while not stop.is_set():
+        try:
+            frame = q.get(timeout=0.5)
+        except Empty:
+            continue
+        try:
+            enc.stdin.write(frame)
+        except BrokenPipeError:
+            logging.warning("Encoder pipe closed")
+            stop.set()
+            return
+
+        if target_fps > 0:
+            if total == 0:
+                t0 = time.perf_counter()
+            total += 1
+            next_deadline = t0 + total / float(target_fps)
+            delay = next_deadline - time.perf_counter()
+            if delay > 0:
+                time.sleep(delay)
+        else:
+            total += 1
+
+        if total % 50 == 0:
+            dt = max(1e-3, time.perf_counter() - t0)
+            logging.info("Relayed frames: %d (%.2f fps)", total, total / dt)
+
+# ---------- Main ----------
+def main() -> int:
+    p = argparse.ArgumentParser("RTSP → rawpipe → SRT (minimal, 1 decoder thread, 1 encoder thread)")
+    # input
+    p.add_argument("--rtsp", required=True)
+    p.add_argument("--rtsp-transport", default="tcp", choices=["tcp", "udp"])
+    p.add_argument("--width", type=int, default=640)
+    p.add_argument("--height", type=int, default=360)
+    p.add_argument("--fps", type=int, default=10, help="forced cadence; 0 to passthrough")
+    p.add_argument("--analyzeduration", default="0")
+    p.add_argument("--probesize", default="32k")
+    # output (SRT)
+    p.add_argument("--srt", default=None)
+    p.add_argument("--srt-host", default=None)
+    p.add_argument("--srt-port", type=int, default=8890)
+    p.add_argument("--streamid", default=None)
+    p.add_argument("--srt-mode", default="caller", choices=["caller", "listener", "rendezvous"])
+    p.add_argument("--srt-latency", type=int, default=30)
+    p.add_argument("--srt-pkt-size", type=int, default=1316)
+    p.add_argument("--srt-rcvlatency", type=int, default=30)
+    p.add_argument("--srt-peerlatency", type=int, default=30)
+    p.add_argument("--srt-tlpktdrop", type=int, default=1)
+    # encoder
+    p.add_argument("--use-crf", action="store_true", default=True)
+    p.add_argument("--crf", type=int, default=22)
+    p.add_argument("--bitrate", default="700k")
+    p.add_argument("--bufsize", default="450k")
+    p.add_argument("--maxrate", default="900k")
+    p.add_argument("--threads", type=int, default=max(1, min(2, os.cpu_count() or 1)))
+    p.add_argument("--preset", default="veryfast")
+    p.add_argument("--tune", default="zerolatency")
+    p.add_argument("--pix-fmt", default="yuv420p")
+    p.add_argument("--keyint", type=int, default=10, help="GOP length (frames)")
+    # IMPORTANT: no keyint here, let -g be the source of truth
+    p.add_argument("--x264-params", default="min-keyint=10:scenecut=0:rc-lookahead=0:ref=1:frame-threads=1:sliced-threads=1")
+    # misc
+    p.add_argument("--log-level", default="INFO")
+    args = p.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), logging.INFO),
+                        format="%(asctime)s | %(levelname)s: %(message)s")
+
+    W, H = args.width, args.height
+    frame_bytes = W * H * 3
+    target_fps = args.fps if args.fps > 0 else 10
+
+    srt_out = build_srt_url(
+        srt=args.srt,
+        host=args.srt_host,
+        port=args.srt_port,
+        streamid=args.streamid,
+        pkt_size=args.srt_pkt_size,
+        latency=args.srt_latency,
+        mode=args.srt_mode,
+        rcvlatency=args.srt_rcvlatency,
+        peerlatency=args.srt_peerlatency,
+        tlpktdrop=args.srt_tlpktdrop,
+    )
+
+    dec_cmd = build_decoder_cmd(
+        rtsp_url=args.rtsp,
+        width=W,
+        height=H,
+        rtsp_transport=args.rtsp_transport,
+        fps=args.fps if args.fps > 0 else None,
+        analyzeduration=args.analyzeduration,
+        probesize=args.probesize,
+        low_delay=True,
+        discardcorrupt=True,
+    )
+    enc_cmd = build_encoder_cmd(
+        srt_out=srt_out,
+        width=W,
+        height=H,
+        keyint=args.keyint,
+        use_crf=args.use_crf,
+        crf=args.crf,
+        bitrate=args.bitrate,
+        bufsize=args.bufsize,
+        maxrate=args.maxrate,
+        threads=args.threads,
+        preset=args.preset,
+        tune=args.tune,
+        pix_fmt=args.pix_fmt,
+        x264_params=args.x264_params,
+        enc_input_fps=target_fps,
+    )
+
+    logging.info("Starting decoder: %s", " ".join(dec_cmd))
+    dec = subprocess.Popen(dec_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+    logging.info("Starting encoder: %s", " ".join(enc_cmd))
+    enc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+
+    threading.Thread(target=log_ffmpeg_stderr, args=(dec, "decoder"), daemon=True).start()
+    threading.Thread(target=log_ffmpeg_stderr, args=(enc, "encoder"), daemon=True).start()
+
+    stop = threading.Event()
+    def on_sig(signum, frame): stop.set()
+    signal.signal(signal.SIGINT, on_sig)
+    signal.signal(signal.SIGTERM, on_sig)
+
+    # single-slot buffer to avoid latency buildup
+    q: Queue[bytes] = Queue(maxsize=1)
+
+    td = threading.Thread(target=decoder_loop, args=(dec, frame_bytes, q, stop), daemon=True)
+    te = threading.Thread(target=encoder_loop, args=(enc, q, stop, target_fps), daemon=True)
+    td.start(); te.start()
+
+    try:
+        while td.is_alive() and te.is_alive():
+            time.sleep(0.2)
+    finally:
+        stop.set()
+        try:
+            if enc.stdin: enc.stdin.close()
+        except Exception: pass
+        for proc in (enc, dec):
+            try: proc.terminate()
+            except Exception: pass
+            try: proc.wait(timeout=2)
+            except Exception:
+                try: proc.kill()
+                except Exception: pass
+        logging.info("Stopped")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+
