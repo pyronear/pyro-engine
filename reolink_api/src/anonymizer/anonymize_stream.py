@@ -39,6 +39,8 @@ class StreamConfig:
     genpts: bool = True
     wallclock_ts: bool = True
     nobuffer: bool = True
+    dec_threads: int = 0  # new
+    slice_threads: bool = True  # new
 
 
 @dataclass
@@ -304,17 +306,18 @@ class AnonymizingStreamer:
         if sc.low_delay:
             cmd += ["-flags", "low_delay"]
 
-        # timestamps on decode side
         if sc.wallclock_ts:
             cmd += ["-use_wallclock_as_timestamps", "1"]
         if sc.genpts:
             cmd += ["-fflags", "+genpts"]
-
-        # stimeout_us is not supported on some builds, keep optional
         if sc.stimeout_us:
             cmd += ["-stimeout", str(sc.stimeout_us)]
 
         cmd += ["-rtsp_transport", sc.rtsp_transport, "-i", sc.rtsp_url]
+
+        # decoder threading like the script
+        if sc.dec_threads and sc.dec_threads > 1:
+            cmd += ["-threads", str(sc.dec_threads), "-thread_type", "slice" if sc.slice_threads else "frame"]
 
         if sc.fps and sc.fps > 0:
             cmd += ["-r", str(sc.fps), "-vsync", "1"]
@@ -339,16 +342,15 @@ class AnonymizingStreamer:
         W, H = self.stream_cfg.width, self.stream_cfg.height
         enc = self.enc_cfg
 
-        # give timestamps to rawvideo pipe based on requested fps
-        enc_input_fps = str(self.stream_cfg.fps if self.stream_cfg.fps and self.stream_cfg.fps > 0 else 10)
-
         cmd = [
             "ffmpeg",
             "-loglevel",
             "warning",
             "-nostats",
-            "-fflags",
-            "nobuffer" if self.stream_cfg.nobuffer else " ",
+        ]
+        if self.stream_cfg.nobuffer:
+            cmd += ["-fflags", "nobuffer"]
+        cmd += [
             "-flags",
             "low_delay",
             "-f",
@@ -358,7 +360,7 @@ class AnonymizingStreamer:
             "-s",
             f"{W}x{H}",
             "-framerate",
-            enc_input_fps,  # important for monotonic PTS
+            str(self.stream_cfg.fps or 10),  # timestamps for raw pipe
             "-fflags",
             "+genpts",
             "-i",

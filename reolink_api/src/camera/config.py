@@ -62,17 +62,15 @@ from urllib.parse import urlencode
 
 
 def build_srt_output_url(mediatx_ip: str, cam_name: str) -> str:
-    # tolerate both port_start and port
     srt_port = int(SRT_SETTINGS.get("port_start", SRT_SETTINGS.get("port", 8890)))
     streamid_prefix = SRT_SETTINGS.get("streamid_prefix", "publish")
+    clean = normalize_stream_name(cam_name)
 
     params = {
         "pkt_size": str(SRT_SETTINGS.get("pkt_size", 1316)),
         "mode": SRT_SETTINGS.get("mode", "caller"),
         "latency": str(SRT_SETTINGS.get("latency", 30)),
-        "streamid": f"{streamid_prefix}:{normalize_stream_name(cam_name)}",
     }
-    # optional latency knobs
     if SRT_SETTINGS.get("rcvlatency") is not None:
         params["rcvlatency"] = str(SRT_SETTINGS["rcvlatency"])
     if SRT_SETTINGS.get("peerlatency") is not None:
@@ -80,7 +78,9 @@ def build_srt_output_url(mediatx_ip: str, cam_name: str) -> str:
     if SRT_SETTINGS.get("tlpktdrop") is not None:
         params["tlpktdrop"] = str(SRT_SETTINGS["tlpktdrop"])
 
-    return f"srt://{mediatx_ip}:{srt_port}?{urlencode(params)}"
+    q = urlencode(params)
+    streamid = f"{streamid_prefix}:{clean}"  # keep the colon
+    return f"srt://{mediatx_ip}:{srt_port}?{q}&streamid={streamid}"
 
 
 # Build STREAMS from credentials.json
