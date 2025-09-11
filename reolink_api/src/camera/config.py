@@ -49,24 +49,45 @@ with open(FFMPEG_CONFIG_PATH, "r") as f:
     FFMPEG_CONFIG = yaml.safe_load(f)
 
 # Extract sections
-SRT_SETTINGS = FFMPEG_CONFIG["srt_settings"]
-FFMPEG_PARAMS = FFMPEG_CONFIG["ffmpeg_params"]
+# Extract sections
+SRT_SETTINGS = FFMPEG_CONFIG.get("srt_settings", {}) or {}
+FFMPEG_PARAMS = FFMPEG_CONFIG.get("ffmpeg_params", {}) or {}
 
-# Choose a stream name (remove suffix if needed)
+# Choose a stream name; remove numeric suffix if present; normalize
 first_cam = next(iter(RAW_CONFIG.values()))
-STREAM_NAME = first_cam.get("name", "stream").rsplit("-", 1)[0].lower()
+STREAM_NAME = normalize_stream_name(first_cam.get("name", "stream"))
 
-# Build STREAMS
+# Helper to build the SRT output URL for one camera name
+from urllib.parse import urlencode
+
+
+def build_srt_output_url(mediatx_ip: str, cam_name: str) -> str:
+    # tolerate both port_start and port
+    srt_port = int(SRT_SETTINGS.get("port_start", SRT_SETTINGS.get("port", 8890)))
+    streamid_prefix = SRT_SETTINGS.get("streamid_prefix", "publish")
+
+    params = {
+        "pkt_size": str(SRT_SETTINGS.get("pkt_size", 1316)),
+        "mode": SRT_SETTINGS.get("mode", "caller"),
+        "latency": str(SRT_SETTINGS.get("latency", 30)),
+        "streamid": f"{streamid_prefix}:{normalize_stream_name(cam_name)}",
+    }
+    # optional latency knobs
+    if SRT_SETTINGS.get("rcvlatency") is not None:
+        params["rcvlatency"] = str(SRT_SETTINGS["rcvlatency"])
+    if SRT_SETTINGS.get("peerlatency") is not None:
+        params["peerlatency"] = str(SRT_SETTINGS["peerlatency"])
+    if SRT_SETTINGS.get("tlpktdrop") is not None:
+        params["tlpktdrop"] = str(SRT_SETTINGS["tlpktdrop"])
+
+    return f"srt://{mediatx_ip}:{srt_port}?{urlencode(params)}"
+
+
+# Build STREAMS from credentials.json
 STREAMS = {
     ip: {
         "input_url": f"rtsp://{CAM_USER}:{CAM_PWD}@{ip}:554/h264Preview_01_sub",
-        "output_url": (
-            f"srt://{MEDIAMTX_SERVER_IP}:{SRT_SETTINGS['port_start']}?"
-            f"pkt_size={SRT_SETTINGS['pkt_size']}&"
-            f"mode={SRT_SETTINGS['mode']}&"
-            f"latency={SRT_SETTINGS['latency']}&"
-            f"streamid={SRT_SETTINGS['streamid_prefix']}:{normalize_stream_name(config.get('name', 'stream'))}"
-        ),
+        "output_url": build_srt_output_url(MEDIAMTX_SERVER_IP, config.get("name", "stream")),
         "width": 640,
         "height": 360,
     }

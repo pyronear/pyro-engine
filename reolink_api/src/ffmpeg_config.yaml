@@ -6,6 +6,7 @@ srt_settings:
   peerlatency: 30
   tlpktdrop: 1
   port_start: 8890 
+  streamid_prefix: publish
 
 ffmpeg_params:
   # input and general behavior
