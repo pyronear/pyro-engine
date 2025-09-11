@@ -1,31 +1,45 @@
 srt_settings:
-  pkt_size: 1316              # Packet size in bytes, ideal for MPEG TS
-  mode: caller                # Sender initiates the connection
-  latency: 50                 # Buffer in milliseconds for stability
-  port_start: 8890            # First SRT port used for streams
-  streamid_prefix: publish    # Prefix to build the stream ID
+  pkt_size: 1316
+  mode: caller
+  latency: 30          # try 30 first, then 20 if the link is clean
+  rcvlatency: 30
+  peerlatency: 30
+  tlpktdrop: 1         # drop late packets to protect latency
 
 ffmpeg_params:
   discardcorrupt: true
   low_delay: true
   rtsp_transport: tcp
+
+  framerate: 10        # or 12, this reduces the latency floor
+  gop_size: 10         # keep about one second GOP
   video_codec: libx264
-  b_frames: 0
-  framerate: 7
-  gop_size: 14                  # encoder keyint in frames, about two seconds
-  bitrate: 700k                 # encoder target after anonymization
   preset: veryfast
   tune: zerolatency
-  threads: 1
-  audio_disabled: true
-  output_format: mpegts
 
-  analyzeduration: "1M"
-  probesize: "2M"
+  # allow intra frame parallelism, but keep one frame in flight
+  threads: 8           # set to your core count
+  x264_params: "keyint=10:min-keyint=10:scenecut=0:rc-lookahead=0:ref=1:aq-mode=2:frame-threads=1:sliced-threads=1"
+
+  # rate control, small VBV to avoid extra buffering
+  use_crf: false
+  bitrate: 700k
+  maxrate: "750k"
+  bufsize: "150k"
+
+  # make the muxer strict
+  output_format: mpegts
+  mpegts_flags: "resend_headers"
+  muxdelay: "0"
+  muxpreload: "0"
+
+  # startup and read behavior
+  analyzeduration: "0"
+  probesize: "32k"
   stimeout_us: 5000000
 
-  use_crf: false
-  bufsize: "800k"
-  maxrate: "900k"
+  # timestamps and pixel format
   pix_fmt: "yuv420p"
-  x264_params: "keyint=14:min-keyint=7:scenecut=40:rc-lookahead=0:ref=2:aq-mode=2"
+  genpts: true
+  wallclock_ts: true     # same as -use_wallclock_as_timestamps 1
+  nobuffer: true         # same as -fflags nobuffer
