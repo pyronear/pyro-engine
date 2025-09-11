@@ -256,7 +256,6 @@ def anonymizer_thread_fn(
     latest: LatestFrame,
     boxes_state: BoxState,
     conf_thres: float,
-    model_scale_div: int,
     stop_event: threading.Event,
 ) -> None:
     model: Optional[Anonymizer] = None
@@ -272,16 +271,7 @@ def anonymizer_thread_fn(
             if im is None:
                 continue
 
-            small = (
-                im
-                if model_scale_div <= 1
-                else im.resize(
-                    (max(1, im.width // model_scale_div), max(1, im.height // model_scale_div)),
-                    Image.BILINEAR,
-                )
-            )
-
-            preds = model(small)
+            preds = model(im)
             boxes_px = boxes_px_from_norm(preds, im.width, im.height, conf_thres)
             boxes_state.set(boxes_px)
 
@@ -308,7 +298,6 @@ class RTSPAnonymizeSRTWorker:
         srt_port: int = 8890,
         streamid: Optional[str] = None,
         conf_thres: float = 0.30,
-        model_scale_div: int = 1,
         x264_preset: str = "veryfast",
         x264_tune: str = "zerolatency",
         bitrate: str = "700k",
@@ -331,7 +320,6 @@ class RTSPAnonymizeSRTWorker:
         self.height = height
         self.frame_bytes = width * height * 3
         self.conf_thres = conf_thres
-        self.model_scale_div = max(1, int(model_scale_div))
 
         self.srt_out = srt_out or build_srt_url(
             host=srt_host,
@@ -443,7 +431,7 @@ class RTSPAnonymizeSRTWorker:
             return
         self._model_thread = threading.Thread(
             target=anonymizer_thread_fn,
-            args=(self.latest, self.boxes_state, self.conf_thres, self.model_scale_div, self._stop),
+            args=(self.latest, self.boxes_state, self.conf_thres, self._stop),
             daemon=True,
             name="model-thread",
         )
@@ -478,12 +466,6 @@ class RTSPAnonymizeSRTWorker:
 
                 # push a small RGB copy to the model thread
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                if self.model_scale_div > 1:
-                    rgb = cv2.resize(
-                        rgb,
-                        (self.width // self.model_scale_div, self.height // self.model_scale_div),
-                        interpolation=cv2.INTER_AREA,
-                    )
                 self.latest.update(Image.fromarray(rgb))
 
                 # paint boxes from the last model result
