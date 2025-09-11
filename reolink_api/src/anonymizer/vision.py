@@ -19,8 +19,8 @@ from .utils import DownloadProgressBar, letterbox, nms, xywh2xyxy
 
 __all__ = ["Anonymizer"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov11n_anonymizer_V0.0.1/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11n_anonymizer_v1.0.0.tar.gz"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolov11n_anonymizer_V0.0.2/resolve/main/"
+MODEL_NAME = "ncnn_cpu_yolo11n_anonymizer_v0.0.2.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 
