@@ -115,15 +115,17 @@ def build_encoder_cmd(
     x264_params: str,
     frame_threads: int = 1,
     sliced_threads: bool = True,
+    enc_input_fps: int = 10,
 ) -> List[str]:
+    # merge safe low latency params
     params = x264_params.split(":") if x264_params else []
     need = {
         "keyint": str(keyint),
         "min-keyint": str(max(1, keyint // 2)),
-        "scenecut": "0",
+        "scenecut": "40",
         "rc-lookahead": "0",
         "frame-threads": str(frame_threads),
-        "ref": "1",
+        "ref": "3",
     }
     if sliced_threads:
         need["sliced-threads"] = "1"
@@ -142,6 +144,7 @@ def build_encoder_cmd(
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
         "-s", f"{width}x{height}",
+        "-framerate", str(max(1, enc_input_fps)),   # timestamps for rawvideo
         "-fflags", "+genpts",
         "-i", "pipe:0",
         "-an",
@@ -151,7 +154,7 @@ def build_encoder_cmd(
         "-tune", tune,
         "-x264-params", x264_merged,
         "-bf", "0",
-        "-g", str(keyint),
+        "-g", str(keyint),                          # keep in sync with keyint
         "-threads", str(threads),
         "-mpegts_flags", "resend_headers",
         "-muxdelay", "0",
@@ -161,8 +164,10 @@ def build_encoder_cmd(
         cmd += ["-crf", str(crf), "-maxrate", maxrate, "-bufsize", bufsize]
     else:
         cmd += ["-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize]
+
     cmd += ["-f", "mpegts", srt_out]
     return cmd
+
 
 
 def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
@@ -396,7 +401,7 @@ def main() -> int:
         srt_out=srt_out,
         width=W,
         height=H,
-        keyint=args.keyint,
+        keyint=args.keyint if args.keyint else 40,
         use_crf=args.use_crf,
         crf=args.crf,
         bitrate=args.bitrate,
@@ -409,6 +414,7 @@ def main() -> int:
         x264_params=x264_params,
         frame_threads=args.frame_threads,
         sliced_threads=args.slice_threads,
+        enc_input_fps=args.fps or 10,   # important for monotonic PTS
     )
 
     logging.info("Starting decoder: %s", " ".join(dec_cmd))
