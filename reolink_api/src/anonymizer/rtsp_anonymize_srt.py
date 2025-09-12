@@ -12,8 +12,9 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
-from anonymizer.vision import Anonymizer
 from PIL import Image
+
+from anonymizer.vision import Anonymizer
 
 # ----------------------------- FFmpeg cmds -----------------------------
 
