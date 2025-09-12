@@ -271,10 +271,6 @@ class Engine:
         Returns:
             the predicted confidence
         """
-        # Heartbeat
-        if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
-
         cam_key = cam_id or "-1"
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
