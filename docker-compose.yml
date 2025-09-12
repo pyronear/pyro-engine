@@ -3,7 +3,7 @@ services:
   reolink-api:
     image: pyronear/reolink-api:latest
     build:
-      context: ./reolink-api
+      context: ./reolink_api
     container_name: reolink-api
     environment:
       - CAM_USER=${CAM_USER}
