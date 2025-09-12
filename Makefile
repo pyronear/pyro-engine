@@ -26,7 +26,7 @@ lock:
 # Generate requirements and build Docker image
 build-api:
 	poetry export -C reolink-api -f requirements.txt --without-hashes --output requirements.txt
-	docker build -f reolink-api/Dockerfile reolink-api -t pyronear/reolink-api:latest
+	docker build -f reolink_api/Dockerfile reolink_api -t pyronear/reolink-api:latest
 
 # Build the docker
 build-app:
@@ -44,7 +44,7 @@ build-optional-lib:
 # Run the engine wrapper
 run:
 	docker build . -t pyronear/pyro-engine:latest
-	docker build -f reolink-api/Dockerfile reolink-api -t pyronear/reolink-api:latest
+	docker build -f reolink_api/Dockerfile reolink_api -t pyronear/reolink-api:latest
 	docker compose up -d
 
 # Get log from engine wrapper
