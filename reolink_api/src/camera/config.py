@@ -8,8 +8,14 @@ import re
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
-import yaml
 from dotenv import load_dotenv
+
+# SRT params now hardcoded here
+SRT_PKT_SIZE = 1316
+SRT_MODE = "caller"
+SRT_LATENCY = 50
+SRT_PORT_START = 8890
+SRT_STREAMID_PREFIX = "publish"
 
 
 def normalize_stream_name(name: str) -> str:
@@ -23,7 +29,6 @@ load_dotenv()
 
 # paths, allow override via env
 ROOT = Path(__file__).resolve().parent.parent
-FFMPEG_CONFIG_PATH = Path(os.getenv("FFMPEG_CONFIG_PATH") or (ROOT / "ffmpeg_config.yaml"))
 CREDENTIALS_PATH = Path(os.getenv("CREDENTIALS_PATH") or (ROOT / "data/credentials.json"))
 
 # required env vars
@@ -42,48 +47,38 @@ if not CREDENTIALS_PATH.exists():
 with open(CREDENTIALS_PATH, "r") as f:
     RAW_CONFIG: dict[str, dict] = json.load(f)
 
-# load ffmpeg settings
-if not FFMPEG_CONFIG_PATH.exists():
-    raise FileNotFoundError(f"Missing ffmpeg_config.yaml at {FFMPEG_CONFIG_PATH}")
-with open(FFMPEG_CONFIG_PATH, "r") as f:
-    FFMPEG_CONFIG = yaml.safe_load(f)
-
-# sections that other modules import
-SRT_SETTINGS = FFMPEG_CONFIG["srt_settings"]
-FFMPEG_PARAMS = FFMPEG_CONFIG["ffmpeg_params"]
-
 # encode credentials for RTSP URL
 USER_ENC = quote(CAM_USER, safe="")
 PWD_ENC = quote(CAM_PWD, safe="")
+
 
 def build_srt_output_url(name_or_id: str) -> str:
     """
     If value looks like a full SRT streamid already, pass as is.
     Otherwise prefix with publish and normalize.
     """
-    # full streamid override
     if name_or_id.startswith("#!::") or name_or_id.startswith("publish:") or ":" in name_or_id:
         streamid = name_or_id
-        safe_chars = ":,=/!"  # keep separators as is in query
+        safe_chars = ":,=/!"
     else:
-        streamid = f"{SRT_SETTINGS['streamid_prefix']}:{normalize_stream_name(name_or_id)}"
-        safe_chars = ":"  # keep colon
+        streamid = f"{SRT_STREAMID_PREFIX}:{normalize_stream_name(name_or_id)}"
+        safe_chars = ":"
 
     query = urlencode(
         {
-            "pkt_size": SRT_SETTINGS["pkt_size"],
-            "mode": SRT_SETTINGS["mode"],
-            "latency": SRT_SETTINGS["latency"],
+            "pkt_size": SRT_PKT_SIZE,
+            "mode": SRT_MODE,
+            "latency": SRT_LATENCY,
             "streamid": streamid,
         },
         safe=safe_chars,
     )
-    return f"srt://{MEDIAMTX_SERVER_IP}:{SRT_SETTINGS['port_start']}?{query}"
+    return f"srt://{MEDIAMTX_SERVER_IP}:{SRT_PORT_START}?{query}"
+
 
 # final mapping used by the API layer
 STREAMS: dict[str, dict] = {}
 for ip, cfg in RAW_CONFIG.items():
-    # pick id or name for the streamid
     id_or_name = cfg.get("streamid") or cfg.get("stream_name") or cfg.get("name", "stream")
     input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554/h264Preview_01_sub"
     output_url = build_srt_output_url(id_or_name)
@@ -91,6 +86,4 @@ for ip, cfg in RAW_CONFIG.items():
     STREAMS[ip] = {
         "input_url": input_url,
         "output_url": output_url,
-        # expose a normalized base name for logs or UI
-        "stream_name": normalize_stream_name(cfg.get("stream_name") or cfg.get("name", "stream")),
     }

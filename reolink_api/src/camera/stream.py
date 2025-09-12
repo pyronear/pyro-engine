@@ -1,17 +1,15 @@
 # router.py
 
 import logging
-import threading
 import time
 from typing import Optional
 
+from anonymizer.rtsp_anonymize_srt import RTSPAnonymizeSRTWorker
 from fastapi import APIRouter, HTTPException
 
-from camera.config import FFMPEG_PARAMS, STREAMS  # SRT_SETTINGS no longer needed here
+from camera.config import STREAMS
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import seconds_since_last_command, update_command_time
-
-from anonymizer.rtsp_anonymize_srt import RTSPAnonymizeSRTWorker
 
 router = APIRouter()
 workers: dict[str, RTSPAnonymizeSRTWorker] = {}
@@ -59,55 +57,10 @@ def start_stream(camera_ip: str):
     input_url = stream_info["input_url"]
     srt_out = stream_info["output_url"]  # use the prebuilt SRT URL including streamid
 
-    # geometry and cadence
-    width = int(FFMPEG_PARAMS.get("width", 640))
-    height = int(FFMPEG_PARAMS.get("height", 360))
-    fps = int(FFMPEG_PARAMS.get("framerate", 10))
-    rtsp_transport = FFMPEG_PARAMS.get("rtsp_transport", "tcp")
-
-    # encoding knobs
-    keyint = int(FFMPEG_PARAMS.get("gop_size", 10))
-    threads = int(FFMPEG_PARAMS.get("threads", 1))
-    preset = FFMPEG_PARAMS.get("preset", "veryfast")
-    tune = FFMPEG_PARAMS.get("tune", "zerolatency")
-    pix_fmt = FFMPEG_PARAMS.get("pix_fmt", "yuv420p")
-    x264_params = FFMPEG_PARAMS.get("x264_params", "scenecut=40:rc-lookahead=0:ref=3")
-
-    # rate control
-    use_crf = bool(FFMPEG_PARAMS.get("use_crf", True))
-    crf = int(FFMPEG_PARAMS.get("crf", 22))
-    bitrate = FFMPEG_PARAMS.get("bitrate", "500k")
-    bufsize = FFMPEG_PARAMS.get("bufsize", "800k")
-    maxrate = FFMPEG_PARAMS.get("maxrate", bitrate)
-
-    # anonymizer
-    conf_thres = float(FFMPEG_PARAMS.get("anon_conf", 0.30))
-
     # start worker
     worker = RTSPAnonymizeSRTWorker(
         rtsp_url=input_url,
-        srt_out=srt_out,                 # pass the full SRT URL
-        # geometry
-        width=width,
-        height=height,
-        fps=fps,
-        rtsp_transport=rtsp_transport,
-        # anonymizer
-        conf_thres=conf_thres,
-        # encoder
-        x264_preset=preset,
-        x264_tune=tune,
-        bitrate=bitrate,
-        bufsize=bufsize,
-        maxrate=maxrate,
-        use_crf=use_crf,
-        crf=crf,
-        keyint=keyint,
-        pix_fmt=pix_fmt,
-        enc_threads=threads,
-        # if your worker constructor supports x264_params, keep the next line,
-        # otherwise remove it and the worker will use its internal default
-        x264_params=x264_params,  # comment out if not supported
+        srt_out=srt_out,
     )
 
     workers[camera_ip] = worker

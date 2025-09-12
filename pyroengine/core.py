@@ -171,7 +171,6 @@ class SystemController:
                 except Exception as e:
                     logging.error(f"Error for {camera_name}: {e}")
 
-
     def check_and_restart_patrol(self):
         """
         Check if the stream is inactive, and if so, ensure patrol is running on all cameras.

@@ -7,56 +7,22 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
-from typing import List, Optional, Tuple, Iterable, Sequence
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
-from PIL import Image
 from anonymizer.vision import Anonymizer
-
-
-# ----------------------------- SRT helpers -----------------------------
-
-def build_srt_url(
-    srt: Optional[str] = None,
-    host: Optional[str] = None,
-    port: int = 8890,
-    streamid: Optional[str] = None,
-    pkt_size: int = 1316,
-    latency: int = 50,
-    mode: str = "caller",
-    rcvlatency: Optional[int] = None,
-    peerlatency: Optional[int] = None,
-    tlpktdrop: int = 1,
-) -> str:
-    if srt:
-        return srt
-    if not host:
-        raise ValueError("SRT host required when srt is not provided")
-    params = {
-        "pkt_size": str(pkt_size),
-        "mode": mode,
-        "latency": str(latency),
-        "tlpktdrop": str(tlpktdrop),
-    }
-    if rcvlatency is not None:
-        params["rcvlatency"] = str(rcvlatency)
-    if peerlatency is not None:
-        params["peerlatency"] = str(peerlatency)
-    if streamid:
-        params["streamid"] = streamid
-    query = "&".join(f"{k}={v}" for k, v in params.items())
-    return f"srt://{host}:{port}?{query}"
-
+from PIL import Image
 
 # ----------------------------- FFmpeg cmds -----------------------------
+
 
 def build_decoder_cmd(
     rtsp_url: str,
     width: int,
     height: int,
     rtsp_transport: str = "tcp",
-    fps: Optional[int] = 7,
+    fps: Optional[int] = 10,
     analyzeduration: str = "0",
     probesize: str = "32k",
     low_delay: bool = True,
@@ -85,9 +51,12 @@ def build_decoder_cmd(
 
     cmd += [
         "-an",
-        "-pix_fmt", "bgr24",
-        "-f", "rawvideo",
-        "-s", f"{width}x{height}",
+        "-pix_fmt",
+        "bgr24",
+        "-f",
+        "rawvideo",
+        "-s",
+        f"{width}x{height}",
         "pipe:1",
     ]
     return cmd
@@ -108,7 +77,6 @@ def build_encoder_cmd(
     tune: str = "zerolatency",
     pix_fmt: str = "yuv420p",
     x264_params: str = "scenecut=40:rc-lookahead=0:ref=3",
-    frame_threads: int = 1,      # kept for signature compatibility (not injected)
     sliced_threads: bool = True,
     enc_input_fps: int = 10,
 ) -> List[str]:
@@ -142,28 +110,48 @@ def build_encoder_cmd(
 
     cmd: List[str] = [
         "ffmpeg",
-        "-loglevel", "warning",
+        "-loglevel",
+        "warning",
         "-nostats",
-        "-fflags", "nobuffer",
-        "-flags", "low_delay",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-s", f"{width}x{height}",
-        "-framerate", str(max(1, enc_input_fps)),  # timestamps for rawvideo
-        "-fflags", "+genpts",
-        "-i", "pipe:0",
+        "-fflags",
+        "nobuffer",
+        "-flags",
+        "low_delay",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{width}x{height}",
+        "-framerate",
+        str(max(1, enc_input_fps)),  # timestamps for rawvideo
+        "-fflags",
+        "+genpts",
+        "-i",
+        "pipe:0",
         "-an",
-        "-pix_fmt", pix_fmt,
-        "-c:v", "libx264",
-        "-preset", preset,
-        "-tune", tune,
-        "-x264-params", x264_merged,
-        "-bf", "0",
-        "-g", str(g_val),
-        "-threads", str(threads),
-        "-mpegts_flags", "resend_headers",
-        "-muxdelay", "0",
-        "-muxpreload", "0",
+        "-pix_fmt",
+        pix_fmt,
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        "-tune",
+        tune,
+        "-x264-params",
+        x264_merged,
+        "-bf",
+        "0",
+        "-g",
+        str(g_val),
+        "-threads",
+        str(threads),
+        "-mpegts_flags",
+        "resend_headers",
+        "-muxdelay",
+        "0",
+        "-muxpreload",
+        "0",
     ]
     if use_crf:
         cmd += ["-crf", str(crf), "-maxrate", maxrate, "-bufsize", bufsize]
@@ -186,6 +174,7 @@ def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
 
 
 # ----------------------------- Shared state -----------------------------
+
 
 class LatestFrame:
     def __init__(self) -> None:
@@ -222,6 +211,7 @@ class BoxState:
 
 # ----------------------------- Vision helpers -----------------------------
 
+
 def boxes_px_from_norm(
     boxes_norm: Iterable[Sequence[float]],
     W: int,
@@ -251,6 +241,7 @@ def paint_black(arr: np.ndarray, boxes_px: List[Tuple[int, int, int, int]]) -> N
 
 
 # ----------------------------- Model thread -----------------------------
+
 
 def anonymizer_thread_fn(
     latest: LatestFrame,
@@ -284,22 +275,18 @@ def anonymizer_thread_fn(
 
 # ----------------------------- Worker -----------------------------
 
+
 class RTSPAnonymizeSRTWorker:
     def __init__(
         self,
         rtsp_url: str,
-        srt_out: Optional[str] = None,
-        *,
+        srt_out: str,
         width: int = 640,
         height: int = 360,
-        fps: int = 7,
+        fps: int = 10,
         rtsp_transport: str = "tcp",
-        # If srt_out is not provided, we can still build it (kept for compatibility)
-        srt_host: Optional[str] = None,
-        srt_port: int = 8890,
-        streamid: Optional[str] = None,
         # anonymizer
-        conf_thres: float = 0.30,
+        conf_thres: float = 0.35,
         # encoder
         x264_preset: str = "veryfast",
         x264_tune: str = "zerolatency",
@@ -313,29 +300,13 @@ class RTSPAnonymizeSRTWorker:
         pix_fmt: str = "yuv420p",
         enc_threads: int = 1,
         dec_threads: int = 2,
-        # SRT knobs (used only if srt_out is None)
-        srt_latency: int = 50,
-        srt_pkt_size: int = 1316,
-        srt_rcvlatency: Optional[int] = None,
-        srt_peerlatency: Optional[int] = None,
-        srt_tlpktdrop: int = 1,
     ) -> None:
         self.width = width
         self.height = height
         self.frame_bytes = width * height * 3
         self.conf_thres = conf_thres
 
-        self.srt_out = srt_out or build_srt_url(
-            host=srt_host,
-            port=srt_port,
-            streamid=streamid,
-            pkt_size=srt_pkt_size,
-            latency=srt_latency,
-            mode="caller",
-            rcvlatency=srt_rcvlatency,
-            peerlatency=srt_peerlatency,
-            tlpktdrop=srt_tlpktdrop,
-        )
+        self.srt_out = srt_out
         self.dec_cmd = build_decoder_cmd(
             rtsp_url=rtsp_url,
             width=width,
