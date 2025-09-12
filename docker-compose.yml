@@ -10,8 +10,8 @@ services:
       - CAM_PWD=${CAM_PWD}
       - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
     volumes:
-      - ./data/credentials.json:/app/src/credentials.json:ro
-    command: "uvicorn src.main:app --reload --host 0.0.0.0 --port 8081"
+      - ./data:/usr/src/app/data
+    command: "uvicorn main:app --reload --host 0.0.0.0 --port 8081"
     restart: always
     network_mode: host
     logging:
