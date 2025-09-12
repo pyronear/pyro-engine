@@ -1,11 +1,11 @@
 FROM python:3.9.16-slim
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH="/app/src"
+ENV PYTHONPATH="/usr/src/app"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -28,4 +28,4 @@ COPY requirements.txt /tmp/requirements.txt
 RUN uv pip install --no-cache --system -r /tmp/requirements.txt
 
 # copy the source code
-COPY src /app/src
+COPY src /usr/src/app

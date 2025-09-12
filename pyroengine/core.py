@@ -115,46 +115,61 @@ class SystemController:
                     except Exception as e:
                         logging.error(f"[Failed to run hourly focus finder on camera {ip} : {e}")
 
-    def inference_loop(
-        self,
-    ):
+    def _any_stream_active(self) -> bool:
+        try:
+            status = self.reolink_client.get_stream_status()
+            return bool(status.get("active_streams"))
+        except Exception as e:
+            logging.error(f"Could not fetch stream status: {e}")
+            return False
+
+    def inference_loop(self):
+        # Early exit if a stream is already running
+        if self._any_stream_active():
+            logging.info("Stream detected, skipping inference on all cameras")
+            return
+
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
 
             if cam.get("type") == "ptz":
                 for pose in cam.get("poses", []):
+                    # Check before each pose to stop as soon as possible
+                    if self._any_stream_active():
+                        logging.info("Stream turned on during loop, stopping inference immediately")
+                        return
                     try:
-                        if not self.reolink_client.is_stream_running(ip).get("running"):  # no prediction during stream
-                            cam_id = f"{ip}_{pose}"
+                        cam_id = f"{ip}_{pose}"
+                        frame = self.reolink_client.get_latest_image(ip, pose)
 
-                            frame = self.reolink_client.get_latest_image(ip, pose)
+                        logging.info(f"Captured image for {ip}, pose {pose}")
 
-                            logging.info(f"Captured image for {ip}, pose {pose}")
-
-                            self.is_day = is_day_time(None, frame, "ir")
-
-                            self.engine.predict(frame, cam_id)
+                        self.is_day = is_day_time(None, frame, "ir")
+                        self.engine.predict(frame, cam_id)
 
                     except requests.HTTPError as e:
-                        logging.error(f"❌ HTTP error for {camera_name}, pose {pose}: {e.response.text}")
+                        logging.error(f"HTTP error for {camera_name}, pose {pose}: {e.response.text}")
                     except Exception as e:
-                        logging.error(f"❌ Error for {camera_name}, pose {pose}: {e}")
+                        logging.error(f"Error for {camera_name}, pose {pose}: {e}")
 
             else:
+                # Check before each static capture as well
+                if self._any_stream_active():
+                    logging.info("Stream turned on during loop, stopping inference immediately")
+                    return
                 try:
                     cam_id = f"{ip}"
-
                     frame = self.reolink_client.get_latest_image(ip, -1)
+
                     logging.info(f"Captured image for {ip}")
 
                     self.is_day = is_day_time(None, frame, "ir")
-
                     self.engine.predict(frame, cam_id)
 
                 except requests.HTTPError as e:
-                    logging.error(f"❌ HTTP error for {camera_name}: {e.response.text}")
+                    logging.error(f"HTTP error for {camera_name}: {e.response.text}")
                 except Exception as e:
-                    logging.error(f"❌ Error for {camera_name}: {e}")
+                    logging.error(f"Error for {camera_name}: {e}")
 
     def check_and_restart_patrol(self):
         """
