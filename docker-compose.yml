@@ -1,10 +1,10 @@
 services:
 
-  reolink_api:
-    image: pyronear/reolink_api:latest
+  reolink-api:
+    image: pyronear/reolink-api:latest
     build:
-      context: ./reolink_api
-    container_name: reolink_api
+      context: ./reolink-api
+    container_name: reolink-api
     environment:
       - CAM_USER=${CAM_USER}
       - CAM_PWD=${CAM_PWD}
@@ -30,7 +30,7 @@ services:
       - MEDIAMTX_SERVER_IP=${MEDIAMTX_SERVER_IP}
     command: >
       sh -c '
-        echo "Sleeping 15 seconds to wait for reolink_api to capture one image per pose...";
+        echo "Sleeping 15 seconds to wait for reolink-api to capture one image per pose...";
         sleep 15;
         python run.py
       '
