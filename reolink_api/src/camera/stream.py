@@ -5,6 +5,7 @@
 
 
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -20,7 +21,10 @@ workers: dict[str, RTSPAnonymizeSRTWorker] = {}
 
 
 def is_worker_running(w: Optional[RTSPAnonymizeSRTWorker]) -> bool:
-    return bool(w and getattr(w, "_thread", None) and w._thread.is_alive())
+    if w is None:
+        return False
+    t = getattr(w, "_thread", None)
+    return isinstance(t, threading.Thread) and t.is_alive()
 
 
 def stop_any_running_stream() -> Optional[str]:

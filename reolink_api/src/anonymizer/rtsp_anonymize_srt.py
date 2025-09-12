@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import subprocess
 import threading
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple, cast
 
 import cv2
 import numpy as np
@@ -163,7 +164,7 @@ def build_encoder_cmd(
     return cmd
 
 
-def log_ffmpeg_stderr(proc: subprocess.Popen, name: str) -> None:
+def log_ffmpeg_stderr(proc: subprocess.Popen[bytes], name: str) -> None:
     if not proc.stderr:
         return
     for line in iter(proc.stderr.readline, b""):
@@ -336,15 +337,14 @@ class RTSPAnonymizeSRTWorker:
             tune=x264_tune,
             pix_fmt=pix_fmt,
             x264_params=x264_params or "scenecut=40:rc-lookahead=0:ref=3",
-            frame_threads=1,
             sliced_threads=True,
             enc_input_fps=fps or 10,
         )
 
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._dec: Optional[subprocess.Popen] = None
-        self._enc: Optional[subprocess.Popen] = None
+        self._dec: Optional[subprocess.Popen[bytes]] = None
+        self._enc: Optional[subprocess.Popen[bytes]] = None
 
         self.latest = LatestFrame()
         self.boxes_state = BoxState()
@@ -352,7 +352,7 @@ class RTSPAnonymizeSRTWorker:
         self._model_thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
+        if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="rtsp-anon-srt", daemon=True)
@@ -423,6 +423,8 @@ class RTSPAnonymizeSRTWorker:
             self._open_procs()
             assert self._dec and self._dec.stdout
             assert self._enc and self._enc.stdin
+            dec_out: io.BufferedReader = cast(io.BufferedReader, self._dec.stdout)
+            enc_in: io.BufferedWriter = self._enc.stdin  # type: ignore[assignment]
 
             self._spawn_model_thread()
 
@@ -430,7 +432,7 @@ class RTSPAnonymizeSRTWorker:
                 # read exactly one frame into buffer (minimize copies)
                 n = 0
                 while n < self.frame_bytes and not self._stop.is_set():
-                    m = self._dec.stdout.readinto(view[n:])
+                    m = dec_out.readinto(view[n:])
                     if not m:
                         logging.warning("Decoder ended")
                         self._stop.set()
@@ -454,7 +456,7 @@ class RTSPAnonymizeSRTWorker:
                 w = 0
                 while w < self.frame_bytes and not self._stop.is_set():
                     try:
-                        wrote = self._enc.stdin.write(view[w:])
+                        wrote = enc_in.write(view[w:])
                         if wrote is None or wrote == 0:
                             raise BrokenPipeError("encoder write returned zero")
                         w += wrote

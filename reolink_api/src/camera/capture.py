@@ -73,7 +73,6 @@ def capture(
     pos_id: Optional[int] = Query(default=None),
     anonymize: bool = Query(default=True, description="Apply anonymization"),
     conf_thres: float = Query(default=0.30, ge=0.0, le=1.0, description="Confidence threshold"),
-    model_scale_div: int = Query(default=1, ge=1, description="Downscale factor for model input"),
     strict: bool = Query(default=False, description="Fail if anonymization is unavailable"),
 ):
     update_command_time()
@@ -91,13 +90,7 @@ def capture(
             model = _get_model()
             W, H = img.width, img.height
 
-            # run model on an optional downscaled copy for speed, boxes remain normalized so mapping stays correct
-            if model_scale_div > 1:
-                small = img.resize((max(1, W // model_scale_div), max(1, H // model_scale_div)), Image.BILINEAR)
-            else:
-                small = img
-
-            preds = model(small)  # expected format: [[x1, y1, x2, y2, conf], ...] with coords in [0, 1]
+            preds = model(img)  # expected format: [[x1, y1, x2, y2, conf], ...] with coords in [0, 1]
             boxes_px = _boxes_px_from_norm(preds, W, H, conf_thres)
             img = _paint_boxes_black(img, boxes_px)
 
