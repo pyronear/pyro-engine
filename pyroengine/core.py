@@ -5,12 +5,14 @@
 
 
 import logging
+import socket
 import sys
 import time
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urljoin, urlparse
 
 import numpy as np
 import requests
@@ -63,6 +65,46 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
+def _normalize_url(u: str) -> str:
+    if not u:
+        return "http://127.0.0.1:8081"
+    if u.startswith("http://0.0.0.0") or u.startswith("https://0.0.0.0"):
+        u = u.replace("0.0.0.0", "127.0.0.1", 1)
+    return u.rstrip("/")
+
+
+def _wait_for_api(base_url: str, path: str = "/docs", deadline_seconds: int = 60) -> bool:
+    """
+    Wait until the API answers with any 2xx on the given path,
+    falls back to a plain TCP check if HTTP fails repeatedly.
+    """
+    url = urljoin(_normalize_url(base_url) + "/", path.lstrip("/"))
+    start = time.monotonic()
+    attempt = 0
+    while time.monotonic() - start < deadline_seconds:
+        attempt += 1
+        try:
+            r = requests.get(url, timeout=2)
+            if 200 <= r.status_code < 300:
+                logging.info(f"Reolink API is ready at {url}")
+                return True
+            logging.info(f"API not ready yet, status {r.status_code}, attempt {attempt}")
+        except Exception as e:
+            logging.info(f"API not reachable yet, attempt {attempt}: {e}")
+            # simple TCP probe as a fallback
+            try:
+                p = urlparse(url)
+                host = p.hostname or "127.0.0.1"
+                port = p.port or 8081
+                with socket.create_connection((host, port), timeout=2):
+                    logging.info(f"TCP is open at {host}:{port}, waiting for HTTP")
+            except OSError:
+                pass
+        time.sleep(min(0.5 * (2 ** (attempt - 1)), 5.0))
+    logging.error(f"Reolink API did not become ready within {deadline_seconds} seconds at {url}")
+    return False
+
+
 class SystemController:
     """
     Controller to manage multiple cameras, capture images, and perform detection.
@@ -88,7 +130,11 @@ class SystemController:
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
         self.last_autofocus: Optional[datetime] = None
-        self.reolink_client = ReolinkAPIClient(reolink_api_url)
+        # wait once for the API to come up
+        _wait_for_api(reolink_api_url, path="/docs", deadline_seconds=60)
+
+        # now create the client and proceed
+        self.reolink_client = ReolinkAPIClient(_normalize_url(reolink_api_url))
 
         for ip in self.camera_data.keys():
             try:
@@ -134,23 +180,32 @@ class SystemController:
     def _safe_get_latest_image(self, ip: str, pose: int) -> Optional[Image.Image]:
         """
         Returns a PIL Image or None, never raises.
-        Assumes the API returns either JPEG bytes or empty bytes.
+        Handles HTTP 204 responses as 'no image yet'.
         """
         try:
-            data = self.reolink_client.get_latest_image(ip, pose)
-            if not data:  # None or empty
-                logging.warning(f"No image for {ip} pose {pose}, skipping")
+            resp = self.reolink_client.get_latest_image(ip, pose)
+            if resp is None:
                 return None
 
-            # If API already returns a PIL.Image
+            # If API returned a full Response object
+            if hasattr(resp, "status_code"):
+                if resp.status_code == 204:
+                    return None
+                if resp.status_code != 200:
+                    logging.warning(f"Unexpected status {resp.status_code} for {ip} pose {pose}")
+                    return None
+                data = resp.content
+            else:
+                data = resp  # already bytes or PIL
+
+            # Already a PIL Image
             if hasattr(data, "size"):
                 return data
 
-            # Otherwise assume bytes
+            # Decode JPEG bytes
             return Image.open(BytesIO(data))
 
         except UnidentifiedImageError:
-            logging.warning(f"Unreadable image for {ip} pose {pose}, skipping")
             return None
         except Exception as e:
             logging.error(f"Error getting image for {ip} pose {pose}: {e}")
