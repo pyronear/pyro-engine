@@ -8,12 +8,14 @@ import logging
 import sys
 import time
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import numpy as np
 import requests
 import urllib3
+from PIL import Image, UnidentifiedImageError
 
 # Add the parent folder of reolink_api to the import path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "reolink_api"))
@@ -89,7 +91,10 @@ class SystemController:
         self.reolink_client = ReolinkAPIClient(reolink_api_url)
 
         for ip in self.camera_data.keys():
-            self.reolink_client.start_patrol(ip)
+            try:
+                self.reolink_client.start_patrol(ip)
+            except Exception as e:
+                logging.warning(f"Could not start patrol on {ip} at startup, continuing: {e}")
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -102,18 +107,21 @@ class SystemController:
         now = datetime.now()
         if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
             logging.info("🔄 Hourly autofocus triggered after idle period")
-            self.last_autofocus = now
+
             for ip, cam in self.camera_data.items():
                 if cam.get("type") != "static":
-                    try:
-                        self.reolink_client.stop_patrol(ip)
-                        time.sleep(0.5)
-                        self.reolink_client.run_focus_optimization(ip)
-                        logging.info(f"Autofocus completed for {ip}")
-                        self.reolink_client.start_patrol(ip)
+                    pose = cam.get("poses", [])[-1]
+                    if self._safe_get_latest_image(ip, pose) is not None:
+                        try:
+                            self.reolink_client.stop_patrol(ip)
+                            time.sleep(0.5)
+                            self.reolink_client.run_focus_optimization(ip)
+                            logging.info(f"Autofocus completed for {ip}")
+                            self.reolink_client.start_patrol(ip)
+                            self.last_autofocus = now
 
-                    except Exception as e:
-                        logging.error(f"[Failed to run hourly focus finder on camera {ip} : {e}")
+                        except Exception as e:
+                            logging.error(f"[Failed to run hourly focus finder on camera {ip} : {e}")
 
     def _any_stream_active(self) -> bool:
         try:
@@ -122,6 +130,31 @@ class SystemController:
         except Exception as e:
             logging.error(f"Could not fetch stream status: {e}")
             return False
+
+    def _safe_get_latest_image(self, ip: str, pose: int) -> Optional[Image.Image]:
+        """
+        Returns a PIL Image or None, never raises.
+        Assumes the API returns either JPEG bytes or empty bytes.
+        """
+        try:
+            data = self.reolink_client.get_latest_image(ip, pose)
+            if not data:  # None or empty
+                logging.warning(f"No image for {ip} pose {pose}, skipping")
+                return None
+
+            # If API already returns a PIL.Image
+            if hasattr(data, "size"):
+                return data
+
+            # Otherwise assume bytes
+            return Image.open(BytesIO(data))
+
+        except UnidentifiedImageError:
+            logging.warning(f"Unreadable image for {ip} pose {pose}, skipping")
+            return None
+        except Exception as e:
+            logging.error(f"Error getting image for {ip} pose {pose}: {e}")
+            return None
 
     def inference_loop(self):
         # Early exit if a stream is already running
@@ -140,12 +173,12 @@ class SystemController:
                         return
                     try:
                         cam_id = f"{ip}_{pose}"
-                        frame = self.reolink_client.get_latest_image(ip, pose)
+                        frame = self._safe_get_latest_image(ip, pose)
+                        if frame is not None:
+                            logging.info(f"Captured image for {ip}, pose {pose}")
 
-                        logging.info(f"Captured image for {ip}, pose {pose}")
-
-                        self.is_day = is_day_time(None, frame, "ir")
-                        self.engine.predict(frame, cam_id)
+                            self.is_day = is_day_time(None, frame, "ir")
+                            self.engine.predict(frame, cam_id)
 
                     except requests.HTTPError as e:
                         logging.error(f"HTTP error for {camera_name}, pose {pose}: {e.response.text}")
@@ -159,12 +192,12 @@ class SystemController:
                     return
                 try:
                     cam_id = f"{ip}"
-                    frame = self.reolink_client.get_latest_image(ip, -1)
+                    frame = self._safe_get_latest_image(ip, -1)
+                    if frame is not None:
+                        logging.info(f"Captured image for {ip}")
 
-                    logging.info(f"Captured image for {ip}")
-
-                    self.is_day = is_day_time(None, frame, "ir")
-                    self.engine.predict(frame, cam_id)
+                        self.is_day = is_day_time(None, frame, "ir")
+                        self.engine.predict(frame, cam_id)
 
                 except requests.HTTPError as e:
                     logging.error(f"HTTP error for {camera_name}: {e.response.text}")
@@ -218,8 +251,6 @@ class SystemController:
                 # 3. After sleep, capture one image and re-check day/night
                 try:
                     ip = next(iter(self.camera_data.keys()))
-
-                    # Call camera.capture() → we assume it maps to get_latest_image()
                     frame = self.reolink_client.capture_image(ip)
 
                     self.is_day = is_day_time(None, frame, "ir")

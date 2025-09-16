@@ -109,7 +109,8 @@ def get_latest_image(camera_ip: str, pose: int):
     cam = CAMERA_REGISTRY[camera_ip]
 
     if pose not in cam.last_images or cam.last_images[pose] is None:
-        raise HTTPException(status_code=404, detail="No image available for this pose")
+        # Return 200 OK with empty content
+        return Response(content=b"", media_type="image/jpeg")
 
     buffer = BytesIO()
     cam.last_images[pose].save(buffer, format="JPEG")
