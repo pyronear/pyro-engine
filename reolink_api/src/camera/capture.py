@@ -11,7 +11,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 from anonymizer.vision import Anonymizer
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from fastapi.responses import Response
 from PIL import Image
 
@@ -109,7 +109,8 @@ def get_latest_image(camera_ip: str, pose: int):
     cam = CAMERA_REGISTRY[camera_ip]
 
     if pose not in cam.last_images or cam.last_images[pose] is None:
-        raise HTTPException(status_code=404, detail="No image available for this pose")
+        # Explicitly signal "nothing yet"
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     buffer = BytesIO()
     cam.last_images[pose].save(buffer, format="JPEG")
