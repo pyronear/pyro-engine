@@ -34,10 +34,11 @@ class ReolinkAPIClient:
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
 
-    def get_latest_image(self, camera_ip: str, pose: int) -> Image.Image:
-        """Fetches the last captured image for a given pose from memory."""
+    def get_latest_image(self, camera_ip: str, pose: int) -> Optional[Image.Image]:
         params = {"camera_ip": camera_ip, "pose": pose}
         resp = requests.get(f"{self.base_url}/capture/latest_image", params=params)
+        if resp.status_code == 204:
+            return None
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
 
