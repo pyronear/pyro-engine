@@ -5,14 +5,12 @@
 
 
 import logging
-import socket
 import sys
 import time
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urljoin, urlparse
 
 import numpy as np
 import requests
@@ -63,49 +61,6 @@ def is_day_time(cache, frame, strategy, delta=0):
             is_day = False
 
     return is_day
-
-
-def _wait_for_api(base_url: str, path: str = "/docs", deadline_seconds: int = 60) -> bool:
-    """
-    Wait until the API answers with any 2xx on the given path,
-    falls back to a plain TCP check if HTTP fails repeatedly.
-    """
-    url = urljoin(_normalize_url(base_url) + "/", path.lstrip("/"))
-    start = time.monotonic()
-    attempt = 0
-    while time.monotonic() - start < deadline_seconds:
-        attempt += 1
-        try:
-            r = requests.get(url, timeout=2)
-            if 200 <= r.status_code < 300:
-                logging.info(f"Reolink API is ready at {url}")
-                return True
-            logging.info(f"API not ready yet, status {r.status_code}, attempt {attempt}")
-        except Exception as e:
-            logging.info(f"API not reachable yet, attempt {attempt}: {e}")
-            # simple TCP probe as a fallback
-            try:
-                p = urlparse(url)
-                host = p.hostname or "127.0.0.1"
-                port = p.port or 8081
-                with socket.create_connection((host, port), timeout=2):
-                    logging.info(f"TCP is open at {host}:{port}, waiting for HTTP")
-            except OSError:
-                pass
-        time.sleep(min(0.5 * (2 ** (attempt - 1)), 5.0))
-    logging.error(f"Reolink API did not become ready within {deadline_seconds} seconds at {url}")
-    return False
-
-
-class SystemController:
-    """
-    Controller to manage multiple cameras, capture images, and perform detection.
-
-    Attributes:
-        engine (Engine): Image detection engine.
-        cameras (List[ReolinkCamera]): List of camera instances.
-        mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
-    """
 
 
 class SystemController:
