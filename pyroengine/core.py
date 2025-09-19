@@ -8,7 +8,6 @@ import logging
 import sys
 import time
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -64,6 +63,14 @@ def is_day_time(cache, frame, strategy, delta=0):
 
 
 class SystemController:
+    """
+    Controller to manage multiple cameras, capture images, and perform detection.
+    Attributes:
+        engine (Engine): Image detection engine.
+        cameras (List[ReolinkCamera]): List of camera instances.
+        mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
+    """
+
     def __init__(
         self,
         engine: Engine,
@@ -151,33 +158,8 @@ class SystemController:
             return False
 
     def _safe_get_latest_image(self, ip: str, pose: int) -> Optional[Image.Image]:
-        """
-        Returns a PIL Image or None, never raises.
-        Handles HTTP 204 responses as 'no image yet'.
-        """
         try:
-            resp = self.reolink_client.get_latest_image(ip, pose)
-            if resp is None:
-                return None
-
-            # If API returned a full Response object
-            if hasattr(resp, "status_code"):
-                if resp.status_code == 204:
-                    return None
-                if resp.status_code != 200:
-                    logging.warning(f"Unexpected status {resp.status_code} for {ip} pose {pose}")
-                    return None
-                data = resp.content
-            else:
-                data = resp  # already bytes or PIL
-
-            # Already a PIL Image
-            if hasattr(data, "size"):
-                return data
-
-            # Decode JPEG bytes
-            return Image.open(BytesIO(data))
-
+            return self.reolink_client.get_latest_image(ip, pose)
         except UnidentifiedImageError:
             return None
         except Exception as e:
