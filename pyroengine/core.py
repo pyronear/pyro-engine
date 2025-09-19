@@ -65,14 +65,6 @@ def is_day_time(cache, frame, strategy, delta=0):
     return is_day
 
 
-def _normalize_url(u: str) -> str:
-    if not u:
-        return "http://127.0.0.1:8081"
-    if u.startswith("http://0.0.0.0") or u.startswith("https://0.0.0.0"):
-        u = u.replace("0.0.0.0", "127.0.0.1", 1)
-    return u.rstrip("/")
-
-
 def _wait_for_api(base_url: str, path: str = "/docs", deadline_seconds: int = 60) -> bool:
     """
     Wait until the API answers with any 2xx on the given path,
@@ -115,6 +107,8 @@ class SystemController:
         mediamtx_server_ip (str): IP address of the MediaMTX server (optional).
     """
 
+
+class SystemController:
     def __init__(
         self,
         engine: Engine,
@@ -122,25 +116,47 @@ class SystemController:
         reolink_api_url,
         mediamtx_server_ip: Optional[str] = None,
     ) -> None:
-        """
-        Initialize the system controller.
-        """
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
         self.mediamtx_server_ip = mediamtx_server_ip
         self.last_autofocus: Optional[datetime] = None
-        # wait once for the API to come up
-        _wait_for_api(reolink_api_url, path="/docs", deadline_seconds=60)
 
-        # now create the client and proceed
-        self.reolink_client = ReolinkAPIClient(_normalize_url(reolink_api_url))
+        # 1. Loop until API client is actually usable
+        while True:
+            try:
+                logging.info("wait api ...")
+                # create the client
+                self.reolink_client = ReolinkAPIClient(reolink_api_url)
+                # sanity ping to ensure the API is really up
+                _ = self.reolink_client.get_stream_status()
+                logging.info("Reolink API client ready")
+                break
+            except Exception as e:
+                logging.error(f"API not ready: {e}")
+                time.sleep(30)
 
+        # optional startup actions, do not fail hard
         for ip in self.camera_data.keys():
             try:
                 self.reolink_client.start_patrol(ip)
             except Exception as e:
                 logging.warning(f"Could not start patrol on {ip} at startup, continuing: {e}")
+
+        if self.mediamtx_server_ip:
+            logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
+        else:
+            logging.info("No MediaMTX server IP provided, skipping levée de doute checks.")
+
+        # 2. Loop until inference loop runs without throwing
+        while True:
+            try:
+                logging.info("waiting cam ...")
+                self.inference_loop()
+                break
+            except Exception as e:
+                logging.error(f"Inference failed: {e}")
+                time.sleep(30)
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
