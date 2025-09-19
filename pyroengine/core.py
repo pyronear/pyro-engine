@@ -123,6 +123,7 @@ class SystemController:
         self.last_autofocus: Optional[datetime] = None
 
         # 1. Loop until API client is actually usable
+        time.sleep(30)  # let api start
         while True:
             try:
                 logging.info("wait api ...")
@@ -133,8 +134,8 @@ class SystemController:
                 logging.info("Reolink API client ready")
                 break
             except Exception as e:
-                logging.error(f"API not ready: {e}")
-                time.sleep(30)
+                logging.error(f"API not ready ...: {e}")
+                time.sleep(10)
 
         # optional startup actions, do not fail hard
         for ip in self.camera_data.keys():
@@ -149,6 +150,7 @@ class SystemController:
             logging.info("No MediaMTX server IP provided, skipping levée de doute checks.")
 
         # 2. Loop until inference loop runs without throwing
+        time.sleep(10)
         while True:
             try:
                 logging.info("waiting cam ...")
@@ -156,7 +158,7 @@ class SystemController:
                 break
             except Exception as e:
                 logging.error(f"Inference failed: {e}")
-                time.sleep(30)
+                time.sleep(10)
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
