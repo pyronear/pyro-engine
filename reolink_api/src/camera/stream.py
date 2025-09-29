@@ -10,7 +10,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, cast
 
 from anonymizer.rtsp_anonymize_srt import (
     AnonymizerWorker,
@@ -154,7 +154,8 @@ def stop_any_running_stream(request: Request | None) -> Optional[str]:
         return None
     app = request.app if request is not None else _APP
 
-    workers: dict[str, Pipeline] = app.state.stream_workers
+    assert app is not None, "FastAPI app must be provided"
+    workers = cast(dict[str, Pipeline], app.state.stream_workers)
     for cam_id, p in list(workers.items()):
         if is_pipeline_running(p):
             try:
@@ -168,7 +169,9 @@ def stop_any_running_stream(request: Request | None) -> Optional[str]:
             workers.pop(cam_id, None)
             return cam_id
 
-    procs: dict[str, subprocess.Popen] = app.state.stream_processes
+    assert app is not None, "FastAPI app must be provided"
+    procs = cast(dict[str, subprocess.Popen], app.state.stream_processes)
+
     for cam_id, proc in list(procs.items()):
         if is_process_running(proc):
             try:
@@ -243,7 +246,7 @@ def start_stream(camera_ip: str, request: Request):
 
         # update anonymizer threshold without restart
         try:
-            anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))  # type: ignore[attr-defined]
+            anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))
         except Exception:
             pass
 

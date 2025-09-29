@@ -97,7 +97,7 @@ def capture(
                 if latest_boxes and fresh:
                     if frames_store is not None and frames_store.get() is not None:
                         pkt = frames_store.get()
-                        src_h, src_w = pkt.array_bgr.shape[:2]  # type: ignore[attr-defined]
+                        src_h, src_w = pkt.array_bgr.shape[:2]
                         boxes_px_to_apply = _scale_and_clip_boxes(latest_boxes, src_w, src_h, img.width, img.height)
                     else:
                         boxes_px_to_apply = _scale_and_clip_boxes(

@@ -26,7 +26,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(threadName)s | %(message)s",
 )
 
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 # ----------------------------- SRT defaults -----------------------------
 
@@ -476,7 +476,11 @@ class AnonymizerWorker:
                 self._ensure_model()
                 rgb = cv2.cvtColor(pkt.array_bgr, cv2.COLOR_BGR2RGB)
                 im = Image.fromarray(rgb)
-                preds = self._model(im)  # Iterable of [x1 y1 x2 y2 conf] normalized
+                model = self._model
+                if model is None:
+                    raise RuntimeError("Inference model is not loaded")
+
+                preds = model(im)  # Iterable of [x1 y1 x2 y2 conf] normalized
                 boxes_px = boxes_px_from_norm(preds, im.width, im.height, self._conf)
                 self._boxes.set(boxes_px, pkt.ts)
                 self._last_ts = pkt.ts
