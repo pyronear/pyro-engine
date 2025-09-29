@@ -20,6 +20,22 @@ SRT_LATENCY = 50
 SRT_PORT_START = 8890
 SRT_STREAMID_PREFIX = "publish"
 
+# Default FFmpeg restream parameters
+FFMPEG_PARAMS: dict[str, object] = {
+    "discardcorrupt": True,
+    "low_delay": True,
+    "rtsp_transport": "tcp",
+    "video_codec": "libx264",
+    "b_frames": 0,
+    "gop_size": 14,
+    "bitrate": "700k",
+    "framerate": 10,
+    "preset": "veryfast",
+    "tune": "zerolatency",
+    "audio_disabled": True,
+    "output_format": "mpegts",
+}
+
 
 def normalize_stream_name(name: str) -> str:
     # lowercase, replace underscores by hyphens, drop trailing -nn
