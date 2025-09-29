@@ -249,8 +249,10 @@ class SystemController:
                 # 1. Stop patrol for all cameras
                 for ip in self.camera_data.keys():
                     try:
-                        self.reolink_client.stop_patrol(ip)
-                        logging.info(f"Stopped patrol for camera {ip} due to night.")
+                        patrol_status = self.reolink_client.get_patrol_status(ip)
+                        if not patrol_status.get("patrol_running", True):
+                            self.reolink_client.stop_patrol(ip)
+                            logging.info(f"Stopped patrol for camera {ip} due to night.")
                     except Exception as e:
                         logging.error(f"❌ Failed to stop patrol on camera {ip}: {e}")
 
@@ -265,6 +267,11 @@ class SystemController:
 
                     self.is_day = is_day_time(None, frame, "ir")
                     logging.info(f"After sleep, checked is_day using camera {ip}: {self.is_day}")
+                    if self.is_day:
+                        # Restart patrol
+                        self.check_and_restart_patrol()
+                        time.sleep(30)
+
                 except Exception as e:
                     logging.error(f"❌ Failed to check day/night after sleep: {e}")
                     self.is_day = False
