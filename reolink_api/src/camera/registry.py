@@ -22,6 +22,6 @@ for ip, conf in RAW_CONFIG.items():
         cam_type=conf.get("type", "static"),
         cam_poses=conf.get("poses"),
         cam_azimuths=conf.get("azimuths"),
-        focus_position=conf.get("focus_position", 720),
+        focus_position=conf.get("focus_position", None),
     )
     CAMERA_REGISTRY[ip] = cam
