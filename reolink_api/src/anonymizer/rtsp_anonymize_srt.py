@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence, Tuple, cast
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, cast
 
 import cv2
 import numpy as np
@@ -438,7 +438,7 @@ class AnonymizerWorker:
         self._poll = max(1, poll_ms) / 1000.0
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._model: Optional[Anonymizer] = None
+        self._model: Optional[Callable[[Image.Image], Iterable[Sequence[float]]]] = None
         self._last_ts: float = 0.0
         self._fps = FPSMeter("anonymizer")
 
@@ -685,16 +685,6 @@ if __name__ == "__main__":
     # MediaMTX SRT identifier
     parser.add_argument("--name", default="testcam", help="stream name or full streamid")
 
-    # Chaos testing
-    parser.add_argument("--chaos", action="store_true", help="randomly stop one worker for short pauses")
-    parser.add_argument("--chaos_pause_max", type=float, default=2.0)
-    parser.add_argument("--chaos_idle_min", type=float, default=3.0)
-    parser.add_argument("--chaos_idle_max", type=float, default=7.0)
-    parser.add_argument("--chaos_prob", type=float, default=0.35, help="probability to trigger on each cycle")
-    parser.add_argument(
-        "--chaos_worker_cooldown", type=float, default=60.0, help="min seconds between actions on the same worker"
-    )
-
     args = parser.parse_args()
 
     # Build RTSP input URL first
@@ -718,25 +708,9 @@ if __name__ == "__main__":
         conf_thres=args.conf,
     )
 
-    # Optional chaos
-    chaos = None
-    if args.chaos:
-        chaos = ChaosMonkey(
-            workers={"decoder": decoder, "anonymizer": anonym, "encoder": encoder},
-            pause_max_s=args.chaos_pause_max,
-            idle_min_s=args.chaos_idle_min,
-            idle_max_s=args.chaos_idle_max,
-            prob_trigger=args.chaos_prob,
-            worker_cooldown_s=args.chaos_worker_cooldown,
-            first_kick_s=0.0,
-        )
-        chaos.start()
-
     def _graceful(*_):
         logging.info("Stopping")
         try:
-            if chaos:
-                chaos.stop()
             decoder.stop()
             anonym.stop()
             encoder.stop()
