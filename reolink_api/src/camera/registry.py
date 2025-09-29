@@ -23,5 +23,6 @@ for ip, conf in RAW_CONFIG.items():
         cam_poses=conf.get("poses"),
         cam_azimuths=conf.get("azimuths"),
         focus_position=conf.get("focus_position", 720),
+        anonymizer=conf.get("anonymizer", False),
     )
     CAMERA_REGISTRY[ip] = cam

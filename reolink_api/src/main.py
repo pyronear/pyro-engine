@@ -17,14 +17,14 @@ from camera.patrol import patrol_loop, static_loop
 from camera.patrol import router as camera_patrol_router
 from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from camera.stream import router as camera_stream_router
-from camera.stream import stop_stream_if_idle
+from camera.stream import set_app_for_stream, stop_stream_if_idle
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Shared video state for the whole process
+    # Shared video state
     if not hasattr(app.state, "frames"):
         app.state.frames = LastFrameStore()
     if not hasattr(app.state, "boxes"):
@@ -37,11 +37,16 @@ async def lifespan(app: FastAPI):
         )
         app.state.anonymizer.start()
 
-    # A registry for active stream pipelines
+    # Registries
     if not hasattr(app.state, "stream_workers"):
-        app.state.stream_workers = {}  # type: dict[str, object]
+        app.state.stream_workers = {}  # type, dict[str, Pipeline]
+    if not hasattr(app.state, "stream_processes"):
+        app.state.stream_processes = {}  # type, dict[str, subprocess.Popen]
 
-    # Your existing patrol threads bootstrap
+    # Allow camera.stream idle thread to access app.state
+    set_app_for_stream(app)
+
+    # Your existing patrol loops
     for ip, cam in CAMERA_REGISTRY.items():
         if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
             continue
@@ -56,7 +61,7 @@ async def lifespan(app: FastAPI):
         PATROL_FLAGS[ip] = stop_flag
         thread.start()
 
-    # Idle auto stop thread, one per process
+    # Idle auto stop
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
     try:
@@ -67,7 +72,7 @@ async def lifespan(app: FastAPI):
             logging.info(f"Stopping loop for camera {ip}")
             flag.set()
 
-        # Stop any running pipelines
+        # Stop pipelines
         try:
             workers = getattr(app.state, "stream_workers", {})
             for cam_id, p in list(workers.items()):
@@ -82,6 +87,22 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logging.warning(f"Failed to stop decoder for {cam_id}: {e}")
                 workers.pop(cam_id, None)
+        except Exception:
+            pass
+
+        # Stop ffmpeg processes
+        try:
+            procs = getattr(app.state, "stream_processes", {})
+            for cam_id, proc in list(procs.items()):
+                try:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        proc.kill()
+                except Exception as e:
+                    logging.warning(f"Failed to stop ffmpeg for {cam_id}: {e}")
+                procs.pop(cam_id, None)
         except Exception:
             pass
 
