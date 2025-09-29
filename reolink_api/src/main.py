@@ -8,6 +8,7 @@ import logging
 import threading
 from contextlib import asynccontextmanager
 
+from anonymizer.rtsp_anonymize_srt import AnonymizerWorker, BoxStore, LastFrameStore
 from camera.capture import router as camera_capture_router
 from camera.control import router as camera_control_router
 from camera.focus import router as camera_focus_router
@@ -16,46 +17,101 @@ from camera.patrol import patrol_loop, static_loop
 from camera.patrol import router as camera_patrol_router
 from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from camera.stream import router as camera_stream_router
-from camera.stream import stop_stream_if_idle
+from camera.stream import set_app_for_stream, stop_stream_if_idle
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Shared video state
+    if not hasattr(app.state, "frames"):
+        app.state.frames = LastFrameStore()
+    if not hasattr(app.state, "boxes"):
+        app.state.boxes = BoxStore()
+    if not hasattr(app.state, "anonymizer"):
+        app.state.anonymizer = AnonymizerWorker(
+            frame_store=app.state.frames,
+            box_store=app.state.boxes,
+            conf_thres=0.35,
+        )
+        app.state.anonymizer.start()
+
+    # Registries
+    if not hasattr(app.state, "stream_workers"):
+        app.state.stream_workers = {}  # type, dict[str, Pipeline]
+    if not hasattr(app.state, "stream_processes"):
+        app.state.stream_processes = {}  # type, dict[str, subprocess.Popen]
+
+    # Allow camera.stream idle thread to access app.state
+    set_app_for_stream(app)
+
+    # Your existing patrol loops
     for ip, cam in CAMERA_REGISTRY.items():
         if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
             continue
-
         stop_flag = threading.Event()
-
         if cam.cam_type == "ptz":
-            thread = threading.Thread(
-                target=patrol_loop,
-                args=(ip, stop_flag),
-                daemon=True,
-            )
+            thread = threading.Thread(target=patrol_loop, args=(ip, stop_flag), daemon=True)
             logging.info(f"Starting patrol loop for PTZ camera {ip}")
         else:
-            thread = threading.Thread(
-                target=static_loop,
-                args=(ip, stop_flag),
-                daemon=True,
-            )
+            thread = threading.Thread(target=static_loop, args=(ip, stop_flag), daemon=True)
             logging.info(f"Starting static loop for camera {ip}")
-
         PATROL_THREADS[ip] = thread
         PATROL_FLAGS[ip] = stop_flag
         thread.start()
 
+    # Idle auto stop
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
     try:
-        yield  # Startup complete
+        yield
     finally:
+        # Stop patrol loops
         for ip, flag in PATROL_FLAGS.items():
             logging.info(f"Stopping loop for camera {ip}")
             flag.set()
+
+        # Stop pipelines
+        try:
+            workers = getattr(app.state, "stream_workers", {})
+            for cam_id, p in list(workers.items()):
+                try:
+                    if hasattr(p, "encoder"):
+                        p.encoder.stop()
+                except Exception as e:
+                    logging.warning(f"Failed to stop encoder for {cam_id}: {e}")
+                try:
+                    if hasattr(p, "decoder"):
+                        p.decoder.stop()
+                except Exception as e:
+                    logging.warning(f"Failed to stop decoder for {cam_id}: {e}")
+                workers.pop(cam_id, None)
+        except Exception:
+            pass
+
+        # Stop ffmpeg processes
+        try:
+            procs = getattr(app.state, "stream_processes", {})
+            for cam_id, proc in list(procs.items()):
+                try:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=2)
+                    except Exception:
+                        proc.kill()
+                except Exception as e:
+                    logging.warning(f"Failed to stop ffmpeg for {cam_id}: {e}")
+                procs.pop(cam_id, None)
+        except Exception:
+            pass
+
+        # Stop anonymizer
+        try:
+            if hasattr(app.state, "anonymizer"):
+                app.state.anonymizer.stop()
+        except Exception:
+            pass
 
 
 # Initialize FastAPI app and camera registry
