@@ -9,6 +9,8 @@ import io
 import logging
 import subprocess
 import threading
+import time
+from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence, Tuple, cast
 
 import cv2
@@ -17,15 +19,102 @@ from PIL import Image
 
 from anonymizer.vision import Anonymizer
 
-# ----------------------------- FFmpeg cmds -----------------------------
+# ----------------------------- Logging -----------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(threadName)s | %(message)s",
+)
+
+from urllib.parse import quote, urlencode
+
+# ----------------------------- SRT defaults -----------------------------
+
+SRT_PKT_SIZE = 1316
+SRT_MODE = "caller"
+SRT_LATENCY = 50
+SRT_PORT_START = 8890
+SRT_STREAMID_PREFIX = "publish"
+MEDIAMTX_SERVER_IP = "91.134.47.14"
+
+
+def normalize_stream_name(name: str) -> str:
+    """Replace spaces and unsafe characters for SRT streamid"""
+    return name.strip().replace(" ", "_")
+
+
+def build_srt_output_url(name_or_id: str) -> str:
+    """
+    If value looks like a full SRT streamid already, pass as is.
+    Otherwise prefix with publish and normalize.
+    """
+    if name_or_id.startswith("#!::") or name_or_id.startswith("publish:") or ":" in name_or_id:
+        streamid = name_or_id
+        safe_chars = ":,=/!"
+    else:
+        streamid = f"{SRT_STREAMID_PREFIX}:{normalize_stream_name(name_or_id)}"
+        safe_chars = ":"
+
+    query = urlencode(
+        {
+            "pkt_size": SRT_PKT_SIZE,
+            "mode": SRT_MODE,
+            "latency": SRT_LATENCY,
+            "streamid": streamid,
+        },
+        safe=safe_chars,
+    )
+    return f"srt://{MEDIAMTX_SERVER_IP}:{SRT_PORT_START}?{query}"
+
+
+# ----------------------------- Shared state -----------------------------
+
+
+@dataclass
+class FramePacket:
+    array_bgr: np.ndarray
+    ts: float
+
+
+class LastFrameStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._packet: Optional[FramePacket] = None
+
+    def update(self, frame_bgr: np.ndarray) -> None:
+        with self._lock:
+            self._packet = FramePacket(array_bgr=frame_bgr.copy(), ts=time.time())
+
+    def get(self) -> Optional[FramePacket]:
+        with self._lock:
+            return self._packet
+
+
+class BoxStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._boxes: List[Tuple[int, int, int, int]] = []
+        self._ts_src: float = 0.0
+
+    def set(self, boxes: List[Tuple[int, int, int, int]], ts_src: float) -> None:
+        with self._lock:
+            self._boxes = list(boxes)
+            self._ts_src = ts_src
+
+    def get(self) -> Tuple[List[Tuple[int, int, int, int]], float]:
+        with self._lock:
+            return list(self._boxes), self._ts_src
+
+
+# ----------------------------- FFmpeg helpers -----------------------------
 
 
 def build_decoder_cmd(
     rtsp_url: str,
     width: int,
     height: int,
-    rtsp_transport: str = "tcp",
     fps: Optional[int] = 10,
+    rtsp_transport: str = "tcp",
     analyzeduration: str = "0",
     probesize: str = "32k",
     low_delay: bool = True,
@@ -45,13 +134,10 @@ def build_decoder_cmd(
     cmd += ["-rtsp_transport", rtsp_transport, "-i", rtsp_url]
     if dec_threads and dec_threads > 1:
         cmd += ["-threads", str(dec_threads), "-thread_type", "slice"]
-
-    # Keep -vsync 1 for FFmpeg 4.x compatibility (Debian 11 on Pi).
     if fps and fps > 0:
         cmd += ["-r", str(fps), "-vsync", "1"]
     else:
         cmd += ["-fps_mode", "passthrough"]
-
     cmd += [
         "-an",
         "-pix_fmt",
@@ -83,7 +169,6 @@ def build_encoder_cmd(
     sliced_threads: bool = True,
     enc_input_fps: int = 10,
 ) -> List[str]:
-    # Merge low-latency params. We *do not* force frame-threads to avoid parse errors.
     params = x264_params.split(":") if x264_params else []
     have = {p.split("=")[0] for p in params if "=" in p}
     need = {
@@ -98,8 +183,6 @@ def build_encoder_cmd(
     for k, v in need.items():
         if k not in have:
             params.insert(0, f"{k}={v}")
-
-    # Sync -g with keyint if present in x264-params
     g_val = keyint
     for p in params:
         if p.startswith("keyint="):
@@ -108,7 +191,6 @@ def build_encoder_cmd(
             except Exception:
                 pass
             break
-
     x264_merged = ":".join(params)
 
     cmd: List[str] = [
@@ -127,7 +209,7 @@ def build_encoder_cmd(
         "-s",
         f"{width}x{height}",
         "-framerate",
-        str(max(1, enc_input_fps)),  # timestamps for rawvideo
+        str(max(1, enc_input_fps)),
         "-fflags",
         "+genpts",
         "-i",
@@ -160,7 +242,7 @@ def build_encoder_cmd(
         cmd += ["-crf", str(crf), "-maxrate", maxrate, "-bufsize", bufsize]
     else:
         cmd += ["-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize]
-    cmd += ["-f", "mpegts", srt_out]
+    cmd += ["-f", "mpegts", "-flush_packets", "1", srt_out]
     return cmd
 
 
@@ -176,43 +258,33 @@ def log_ffmpeg_stderr(proc: subprocess.Popen[bytes], name: str) -> None:
             pass
 
 
-# ----------------------------- Shared state -----------------------------
-
-
-class LatestFrame:
-    def __init__(self) -> None:
-        self._im: Optional[Image.Image] = None
+class FPSMeter:
+    def __init__(self, name: str, log_every_s: float = 5.0) -> None:
+        self.name = name
         self._lock = threading.Lock()
-        self._event = threading.Event()
+        self._count = 0
+        self._t0 = time.time()
+        self._last_log = self._t0
+        self._ema: Optional[float] = None
+        self._log_every = log_every_s
 
-    def update(self, im: Image.Image) -> None:
+    def tick(self, n: int = 1) -> None:
+        now = time.time()
         with self._lock:
-            self._im = im
-        self._event.set()
-
-    def wait_and_get(self, timeout: float = 0.05) -> Optional[Image.Image]:
-        if not self._event.wait(timeout=timeout):
-            return None
-        self._event.clear()
-        with self._lock:
-            return self._im
-
-
-class BoxState:
-    def __init__(self) -> None:
-        self._boxes: List[Tuple[int, int, int, int]] = []
-        self._lock = threading.Lock()
-
-    def set(self, boxes: List[Tuple[int, int, int, int]]) -> None:
-        with self._lock:
-            self._boxes = list(boxes)
-
-    def get(self) -> List[Tuple[int, int, int, int]]:
-        with self._lock:
-            return list(self._boxes)
+            self._count += n
+            dt = now - self._t0
+            if dt <= 0:
+                return
+            inst = self._count / dt
+            self._ema = inst if self._ema is None else 0.9 * self._ema + 0.1 * inst
+            if now - self._last_log >= self._log_every:
+                logging.info("FPS %s, current %.2f, smoothed %.2f", self.name, inst, self._ema or inst)
+                self._last_log = now
+                self._t0 = now
+                self._count = 0
 
 
-# ----------------------------- Vision helpers -----------------------------
+# ----------------------------- Vision utils -----------------------------
 
 
 def boxes_px_from_norm(
@@ -221,141 +293,73 @@ def boxes_px_from_norm(
     H: int,
     conf_th: float,
 ) -> List[Tuple[int, int, int, int]]:
-    out_px: List[Tuple[int, int, int, int]] = []
+    out = []
     for it in boxes_norm:
-        if it is None or len(it) < 4:
+        if not it or len(it) < 4:
             continue
         x1, y1, x2, y2 = map(float, it[:4])
         conf = float(it[4]) if len(it) >= 5 else 1.0
         if conf < conf_th:
             continue
-        x1p = max(0, min(W - 1, int(x1 * W)))
-        y1p = max(0, min(H - 1, int(y1 * H)))
-        x2p = max(0, min(W - 1, int(x2 * W)))
-        y2p = max(0, min(H - 1, int(y2 * H)))
+        x1p = int(max(0, min(W, x1 * W)))
+        y1p = int(max(0, min(H, y1 * H)))
+        x2p = int(max(0, min(W, x2 * W)))
+        y2p = int(max(0, min(H, y2 * H)))
         if x2p > x1p and y2p > y1p:
-            out_px.append((x1p, y1p, x2p, y2p))
-    return out_px
+            # clip again to W minus one and H minus one to be safe for slicing
+            x1p = min(x1p, W - 1)
+            y1p = min(y1p, H - 1)
+            x2p = min(x2p, W)
+            y2p = min(y2p, H)
+            out.append((x1p, y1p, x2p, y2p))
+    return out
 
 
-def paint_black(arr: np.ndarray, boxes_px: List[Tuple[int, int, int, int]]) -> None:
+def paint_black(arr_bgr: np.ndarray, boxes_px: List[Tuple[int, int, int, int]]) -> None:
     for x1, y1, x2, y2 in boxes_px:
-        arr[y1:y2, x1:x2, :] = 0
+        arr_bgr[y1:y2, x1:x2, :] = 0
 
 
-# ----------------------------- Model thread -----------------------------
+# ----------------------------- Workers -----------------------------
 
 
-def anonymizer_thread_fn(
-    latest: LatestFrame,
-    boxes_state: BoxState,
-    conf_thres: float,
-    stop_event: threading.Event,
-) -> None:
-    model: Optional[Anonymizer] = None
-    backoff_s = 1.0
-    while not stop_event.is_set():
-        try:
-            if model is None:
-                logging.info("Loading Anonymizer model")
-                model = Anonymizer()
-                logging.info("Model ready")
-
-            im = latest.wait_and_get(timeout=0.05)
-            if im is None:
-                continue
-
-            preds = model(im)
-            boxes_px = boxes_px_from_norm(preds, im.width, im.height, conf_thres)
-            boxes_state.set(boxes_px)
-
-        except BaseException as e:
-            logging.warning("Model thread error: %s", e)
-            model = None
-            stop_event.wait(backoff_s)
-            backoff_s = min(backoff_s * 2.0, 10.0)
-
-
-# ----------------------------- Worker -----------------------------
-
-
-class RTSPAnonymizeSRTWorker:
+class RTSPDecoderWorker:
     def __init__(
         self,
         rtsp_url: str,
-        srt_out: str,
-        width: int = 640,
-        height: int = 360,
+        width: int,
+        height: int,
         fps: int = 10,
         rtsp_transport: str = "tcp",
-        # anonymizer
-        conf_thres: float = 0.35,
-        # encoder
-        x264_preset: str = "veryfast",
-        x264_tune: str = "zerolatency",
-        x264_params: Optional[str] = "scenecut=40:rc-lookahead=0:ref=3",
-        bitrate: str = "700k",
-        bufsize: str = "800k",
-        maxrate: str = "900k",
-        use_crf: bool = False,
-        crf: int = 28,
-        keyint: int = 14,
-        pix_fmt: str = "yuv420p",
-        enc_threads: int = 1,
         dec_threads: int = 2,
+        store: Optional[LastFrameStore] = None,
     ) -> None:
         self.width = width
         self.height = height
         self.frame_bytes = width * height * 3
-        self.conf_thres = conf_thres
-
-        self.srt_out = srt_out
         self.dec_cmd = build_decoder_cmd(
             rtsp_url=rtsp_url,
             width=width,
             height=height,
-            rtsp_transport=rtsp_transport,
             fps=fps,
-            analyzeduration="0",
-            probesize="32k",
-            low_delay=True,
-            discardcorrupt=True,
+            rtsp_transport=rtsp_transport,
             dec_threads=dec_threads,
         )
-        self.enc_cmd = build_encoder_cmd(
-            srt_out=self.srt_out,
-            width=width,
-            height=height,
-            keyint=keyint or 40,
-            use_crf=use_crf,
-            crf=crf,
-            bitrate=bitrate,
-            bufsize=bufsize,
-            maxrate=maxrate,
-            threads=enc_threads,
-            preset=x264_preset,
-            tune=x264_tune,
-            pix_fmt=pix_fmt,
-            x264_params=x264_params or "scenecut=40:rc-lookahead=0:ref=3",
-            sliced_threads=True,
-            enc_input_fps=fps or 10,
-        )
-
+        self._store = store or LastFrameStore()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._dec: Optional[subprocess.Popen[bytes]] = None
-        self._enc: Optional[subprocess.Popen[bytes]] = None
+        self._proc: Optional[subprocess.Popen[bytes]] = None
+        self._fps = FPSMeter("decoder")
 
-        self.latest = LatestFrame()
-        self.boxes_state = BoxState()
-
-        self._model_thread: Optional[threading.Thread] = None
+    @property
+    def store(self) -> LastFrameStore:
+        return self._store
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="rtsp-anon-srt", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="decoder", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -363,73 +367,41 @@ class RTSPAnonymizeSRTWorker:
         if self._thread:
             self._thread.join(timeout=3)
 
-    def _open_procs(self) -> None:
+    def _open(self) -> None:
         logging.info("Starting decoder: %s", " ".join(self.dec_cmd))
-        self._dec = subprocess.Popen(
+        self._proc = subprocess.Popen(
             self.dec_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             bufsize=0,
         )
-        logging.info("Starting encoder: %s", " ".join(self.enc_cmd))
-        self._enc = subprocess.Popen(
-            self.enc_cmd,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0,
-        )
-        threading.Thread(target=log_ffmpeg_stderr, args=(self._dec, "decoder"), daemon=True).start()
-        threading.Thread(target=log_ffmpeg_stderr, args=(self._enc, "encoder"), daemon=True).start()
+        threading.Thread(target=log_ffmpeg_stderr, args=(self._proc, "decoder"), daemon=True).start()
 
-    def _close_procs(self) -> None:
-        for proc in (self._enc, self._dec):
-            if not proc:
-                continue
-            try:
-                if proc is self._enc and proc.stdin:
-                    proc.stdin.close()
-            except Exception:
-                pass
-            try:
-                proc.terminate()
-            except Exception:
-                pass
-            try:
-                proc.wait(timeout=2)
-            except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-        self._dec = None
-        self._enc = None
-
-    def _spawn_model_thread(self) -> None:
-        if self._model_thread and self._model_thread.is_alive():
+    def _close(self) -> None:
+        if not self._proc:
             return
-        self._model_thread = threading.Thread(
-            target=anonymizer_thread_fn,
-            args=(self.latest, self.boxes_state, self.conf_thres, self._stop),
-            daemon=True,
-            name="model-thread",
-        )
-        self._model_thread.start()
+        try:
+            self._proc.terminate()
+        except Exception:
+            pass
+        try:
+            self._proc.wait(timeout=2)
+        except Exception:
+            try:
+                self._proc.kill()
+            except Exception:
+                pass
+        self._proc = None
 
     def _run(self) -> None:
         buffer = bytearray(self.frame_bytes)
         view = memoryview(buffer)
-
         try:
-            self._open_procs()
-            assert self._dec and self._dec.stdout
-            assert self._enc and self._enc.stdin
-            dec_out: io.BufferedReader = cast(io.BufferedReader, self._dec.stdout)
-            enc_in: io.BufferedWriter = self._enc.stdin  # type: ignore[assignment]
-
-            self._spawn_model_thread()
+            self._open()
+            assert self._proc and self._proc.stdout
+            dec_out: io.BufferedReader = cast(io.BufferedReader, self._proc.stdout)
 
             while not self._stop.is_set():
-                # read exactly one frame into buffer (minimize copies)
                 n = 0
                 while n < self.frame_bytes and not self._stop.is_set():
                     m = dec_out.readinto(view[n:])
@@ -442,31 +414,338 @@ class RTSPAnonymizeSRTWorker:
                     break
 
                 frame = np.frombuffer(buffer, dtype=np.uint8).reshape((self.height, self.width, 3))
-
-                # push to model thread
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                self.latest.update(Image.fromarray(rgb))
-
-                # paint boxes
-                boxes = self.boxes_state.get()
-                if boxes:
-                    paint_black(frame, boxes)
-
-                # write, handling short writes
-                w = 0
-                while w < self.frame_bytes and not self._stop.is_set():
-                    try:
-                        wrote = enc_in.write(view[w:])
-                        if wrote is None or wrote == 0:
-                            raise BrokenPipeError("encoder write returned zero")
-                        w += wrote
-                    except BrokenPipeError:
-                        logging.warning("Encoder pipe closed")
-                        self._stop.set()
-                        break
+                self._store.update(frame)
+                self._fps.tick()
 
         except BaseException as e:
-            logging.error("Worker error: %s", e)
+            logging.error("Decoder worker error: %s", e)
         finally:
-            self._close_procs()
-            logging.info("Worker stopped")
+            self._close()
+            logging.info("Decoder stopped")
+
+
+class AnonymizerWorker:
+    def __init__(
+        self,
+        frame_store: LastFrameStore,
+        box_store: Optional[BoxStore] = None,
+        conf_thres: float = 0.3,
+        poll_ms: int = 10,
+    ) -> None:
+        self._frames = frame_store
+        self._boxes = box_store or BoxStore()
+        self._conf = conf_thres
+        self._poll = max(1, poll_ms) / 1000.0
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._model: Optional[Anonymizer] = None
+        self._last_ts: float = 0.0
+        self._fps = FPSMeter("anonymizer")
+
+    @property
+    def boxes(self) -> BoxStore:
+        return self._boxes
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="anonymizer", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    def _ensure_model(self) -> None:
+        if self._model is None:
+            logging.info("Loading Anonymizer model")
+            self._model = Anonymizer()
+            logging.info("Model ready")
+
+    def _run(self) -> None:
+        backoff = 1.0
+        while not self._stop.is_set():
+            try:
+                pkt = self._frames.get()
+                if pkt is None or pkt.ts <= self._last_ts:
+                    time.sleep(self._poll)
+                    continue
+
+                self._ensure_model()
+                rgb = cv2.cvtColor(pkt.array_bgr, cv2.COLOR_BGR2RGB)
+                im = Image.fromarray(rgb)
+                preds = self._model(im)  # Iterable of [x1 y1 x2 y2 conf] normalized
+                boxes_px = boxes_px_from_norm(preds, im.width, im.height, self._conf)
+                self._boxes.set(boxes_px, pkt.ts)
+                self._last_ts = pkt.ts
+                backoff = 1.0
+                self._fps.tick()
+
+            except BaseException as e:
+                logging.warning("Anonymizer error: %s", e)
+                self._model = None
+                time.sleep(backoff)
+                backoff = min(10.0, backoff * 2.0)
+        logging.info("Anonymizer stopped")
+
+
+class EncoderWorker:
+    def __init__(
+        self,
+        frame_store: LastFrameStore,
+        box_store: BoxStore,
+        width: int,
+        height: int,
+        srt_out: str,
+        target_fps: int = 10,
+        x264_preset: str = "veryfast",
+        x264_tune: str = "zerolatency",
+        x264_params: Optional[str] = "scenecut=40:rc-lookahead=0:ref=3",
+        bitrate: str = "700k",
+        bufsize: str = "800k",
+        maxrate: str = "900k",
+        use_crf: bool = False,
+        crf: int = 28,
+        keyint: int = 14,
+        pix_fmt: str = "yuv420p",
+        enc_threads: int = 1,
+    ) -> None:
+        self._frames = frame_store
+        self._boxes = box_store
+        self.width = width
+        self.height = height
+        self.frame_bytes = width * height * 3
+        self._interval = 1.0 / max(1, target_fps)
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._proc: Optional[subprocess.Popen[bytes]] = None
+        self._fps = FPSMeter("encoder")
+
+        self.enc_cmd = build_encoder_cmd(
+            srt_out=srt_out,
+            width=width,
+            height=height,
+            keyint=keyint,
+            use_crf=use_crf,
+            crf=crf,
+            bitrate=bitrate,
+            bufsize=bufsize,
+            maxrate=maxrate,
+            threads=enc_threads,
+            preset=x264_preset,
+            tune=x264_tune,
+            pix_fmt=pix_fmt,
+            x264_params=x264_params or "scenecut=40:rc-lookahead=0:ref=3",
+            enc_input_fps=int(round(1.0 / self._interval)),
+        )
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="encoder", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    def _open(self) -> None:
+        logging.info("Starting encoder: %s", " ".join(self.enc_cmd))
+        self._proc = subprocess.Popen(
+            self.enc_cmd,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        threading.Thread(target=log_ffmpeg_stderr, args=(self._proc, "encoder"), daemon=True).start()
+
+    def _close(self) -> None:
+        if not self._proc:
+            return
+        try:
+            if self._proc.stdin:
+                self._proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            self._proc.terminate()
+        except Exception:
+            pass
+        try:
+            self._proc.wait(timeout=2)
+        except Exception:
+            try:
+                self._proc.kill()
+            except Exception:
+                pass
+        self._proc = None
+
+    def _run(self) -> None:
+        try:
+            self._open()
+            assert self._proc and self._proc.stdin
+            enc_in: io.BufferedWriter = self._proc.stdin  # type: ignore[assignment]
+
+            next_deadline = time.time()
+            while not self._stop.is_set():
+                now = time.time()
+                if now < next_deadline:
+                    time.sleep(next_deadline - now)
+                next_deadline += self._interval
+
+                pkt = self._frames.get()
+                if pkt is None:
+                    continue
+
+                frame = pkt.array_bgr.copy()
+                boxes, ts_src = self._boxes.get()
+                if boxes and ts_src <= pkt.ts + 0.5:
+                    paint_black(frame, boxes)
+
+                try:
+                    wrote = enc_in.write(frame.tobytes())
+                    self._fps.tick()
+                    if wrote is None or wrote == 0:
+                        raise BrokenPipeError("encoder write returned zero")
+                except BrokenPipeError:
+                    logging.warning("Encoder pipe closed")
+                    self._stop.set()
+                    break
+
+        except BaseException as e:
+            logging.error("Encoder worker error: %s", e)
+        finally:
+            self._close()
+            logging.info("Encoder stopped")
+
+
+# ----------------------------- Runner -----------------------------
+
+
+def run_pipeline(
+    rtsp_url: str,
+    srt_out: str,
+    width: int = 640,
+    height: int = 360,
+    fps: int = 10,
+    conf_thres: float = 0.35,
+) -> Tuple[RTSPDecoderWorker, AnonymizerWorker, EncoderWorker]:
+    last_frames = LastFrameStore()
+    boxes = BoxStore()
+
+    decoder = RTSPDecoderWorker(rtsp_url=rtsp_url, width=width, height=height, fps=fps, store=last_frames)
+
+    anonym = AnonymizerWorker(
+        frame_store=last_frames,
+        box_store=boxes,
+        conf_thres=conf_thres,
+    )
+
+    encoder = EncoderWorker(
+        frame_store=last_frames,
+        box_store=boxes,
+        width=width,
+        height=height,
+        srt_out=srt_out,
+        target_fps=fps,
+    )
+
+    decoder.start()
+    anonym.start()
+    encoder.start()
+
+    return decoder, anonym, encoder
+
+
+if __name__ == "__main__":
+    import argparse
+    import signal
+    import time
+    from urllib.parse import quote
+
+    parser = argparse.ArgumentParser(description="RTSP anonymize to SRT with three independent workers")
+
+    # Camera defaults
+    parser.add_argument("--ip", default="192.168.1.12", help="camera IP")
+    parser.add_argument("--user", default="admin", help="camera username")
+    parser.add_argument("--pwd", default="@Pyronear", help="camera password")
+    parser.add_argument("--path", default="h264Preview_01_sub", help="RTSP path for the sub stream")
+    parser.add_argument("--rtsp_transport", default="tcp", choices=["tcp", "udp"], help="RTSP transport")
+
+    # Anonymizer and encoding options
+    parser.add_argument("--width", type=int, default=640)
+    parser.add_argument("--height", type=int, default=360)
+    parser.add_argument("--fps", type=int, default=10)
+    parser.add_argument("--conf", type=float, default=0.35, help="confidence threshold")
+
+    # MediaMTX SRT identifier
+    parser.add_argument("--name", default="testcam", help="stream name or full streamid")
+
+    # Chaos testing
+    parser.add_argument("--chaos", action="store_true", help="randomly stop one worker for short pauses")
+    parser.add_argument("--chaos_pause_max", type=float, default=2.0)
+    parser.add_argument("--chaos_idle_min", type=float, default=3.0)
+    parser.add_argument("--chaos_idle_max", type=float, default=7.0)
+    parser.add_argument("--chaos_prob", type=float, default=0.35, help="probability to trigger on each cycle")
+    parser.add_argument(
+        "--chaos_worker_cooldown", type=float, default=60.0, help="min seconds between actions on the same worker"
+    )
+
+    args = parser.parse_args()
+
+    # Build RTSP input URL first
+    USER_ENC = quote(args.user, safe="")
+    PWD_ENC = quote(args.pwd, safe="")
+    input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{args.ip}:554/{args.path}"
+
+    # Build SRT output URL next
+    srt_url = build_srt_output_url(args.name)
+
+    logging.info("Using RTSP url: %s", input_url)
+    logging.info("Streaming to SRT: %s", srt_url)
+
+    # Start workers
+    decoder, anonym, encoder = run_pipeline(
+        rtsp_url=input_url,
+        srt_out=srt_url,
+        width=args.width,
+        height=args.height,
+        fps=args.fps,
+        conf_thres=args.conf,
+    )
+
+    # Optional chaos
+    chaos = None
+    if args.chaos:
+        chaos = ChaosMonkey(
+            workers={"decoder": decoder, "anonymizer": anonym, "encoder": encoder},
+            pause_max_s=args.chaos_pause_max,
+            idle_min_s=args.chaos_idle_min,
+            idle_max_s=args.chaos_idle_max,
+            prob_trigger=args.chaos_prob,
+            worker_cooldown_s=args.chaos_worker_cooldown,
+            first_kick_s=0.0,
+        )
+        chaos.start()
+
+    def _graceful(*_):
+        logging.info("Stopping")
+        try:
+            if chaos:
+                chaos.stop()
+            decoder.stop()
+            anonym.stop()
+            encoder.stop()
+        finally:
+            logging.info("Bye")
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _graceful)
+    signal.signal(signal.SIGTERM, _graceful)
+
+    while True:
+        time.sleep(1)
