@@ -403,13 +403,20 @@ class Engine:
                     _, cam_azimuth, _ = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
-                    # Force a KeyError if the request failed
-                    response.json()["id"]
+
+                    try:
+                        # Force a KeyError if the request failed
+                        response.json()["id"]
+                    except ValueError:
+                        logging.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
+                        raise
+
                     # Clear
                     self._alerts.popleft()
                     logging.info(f"Camera '{cam_id}' - alert sent")
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
-                except (KeyError, ConnectionError) as e:
+
+                except (KeyError, ConnectionError, ValueError) as e:
                     logging.warning(f"Camera '{cam_id}' - unable to upload cache")
                     logging.warning(e)
                     break
