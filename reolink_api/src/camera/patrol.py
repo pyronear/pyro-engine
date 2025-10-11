@@ -116,7 +116,9 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 
     while not stop_flag.is_set():
         try:
+            logging.info(f"Capture")
             image = cam.capture()
+            print(image)
             if image:
                 cam.last_images[-1] = image
                 logging.info(f"[{camera_ip}] Updated static image (pose -1)")
