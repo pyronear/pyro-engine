@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
-from PIL import Image
+from PIL import Image, ImageResampling
 
 from camera.registry import CAMERA_REGISTRY
 from camera.time_utils import update_command_time
@@ -119,7 +119,7 @@ def capture(
         try:
             aspect_ratio = img.height / img.width
             new_height = int(width * aspect_ratio)
-            img = img.resize((width, new_height), Image.LANCZOS)
+            img = img.resize((width, new_height), ImageResampling.LANCZOS)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to resize image: {e}")
 
