@@ -25,12 +25,29 @@ class ReolinkAPIClient:
         resp.raise_for_status()
         return resp.json()
 
-    def capture_image(self, camera_ip: str, pos_id: Optional[int] = None) -> Image.Image:
-        """Triggers a live capture from the camera."""
+    def capture_image(
+        self,
+        camera_ip: str,
+        pos_id: Optional[int] = None,
+        width: Optional[int] = None,
+    ) -> Image.Image:
+        """Triggers a live capture from the camera.
+
+        Args:
+            camera_ip: IP address of the camera.
+            pos_id: Optional camera position preset ID.
+            width: Optional width in pixels to resize the output image while preserving aspect ratio.
+
+        Returns:
+            A PIL Image object containing the captured frame.
+        """
         params = {"camera_ip": camera_ip}
         if pos_id is not None:
             params["pos_id"] = str(pos_id)
-        resp = requests.get(f"{self.base_url}/capture/capture", params=params)
+        if width is not None:
+            params["width"] = str(width)
+
+        resp = requests.get(f"{self.base_url}/capture", params=params)
         resp.raise_for_status()
         return Image.open(BytesIO(resp.content))
 

@@ -70,6 +70,10 @@ def capture(
         default=False,
         description="If true and no recent boxes are available, return 503",
     ),
+    width: Optional[int] = Query(
+        default=None,
+        description="Resize output image to this width while preserving aspect ratio. If not provided, no resize is applied.",
+    ),
 ):
     update_command_time()
 
@@ -83,7 +87,6 @@ def capture(
 
     if anonymize:
         boxes_px_to_apply: List[Tuple[int, int, int, int]] = []
-
         try:
             boxes_store = getattr(request.app.state, "boxes", None)
             frames_store = getattr(request.app.state, "frames", None)
@@ -110,6 +113,15 @@ def capture(
             img = _paint_boxes_black(img, boxes_px_to_apply)
         elif strict:
             raise HTTPException(status_code=503, detail="No recent boxes available for anonymization")
+
+    # --- Resize by width only ---
+    if width is not None:
+        try:
+            aspect_ratio = img.height / img.width
+            new_height = int(width * aspect_ratio)
+            img = img.resize((width, new_height), Image.LANCZOS)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to resize image: {e}")
 
     buffer = BytesIO()
     img.save(buffer, format="JPEG")
