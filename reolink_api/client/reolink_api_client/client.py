@@ -28,28 +28,43 @@ class ReolinkAPIClient:
     def capture_image(
         self,
         camera_ip: str,
-        pos_id: Optional[int] = None,
-        width: Optional[int] = None,
+        width: int | None = None,
+        anonymize: bool = True,
+        strict: bool = False,
+        timeout: int = 20,
     ) -> Image.Image:
-        """Triggers a live capture from the camera.
-
-        Args:
-            camera_ip: IP address of the camera.
-            pos_id: Optional camera position preset ID.
-            width: Optional width in pixels to resize the output image while preserving aspect ratio.
-
-        Returns:
-            A PIL Image object containing the captured frame.
-        """
-        params = {"camera_ip": camera_ip}
-        if pos_id is not None:
-            params["pos_id"] = str(pos_id)
+        url = f"{self.base_url}/capture/capture"
+        params = {
+            "camera_ip": camera_ip,
+            "anonymize": str(anonymize).lower(),
+            "strict": str(strict).lower(),
+        }
         if width is not None:
             params["width"] = str(width)
 
-        resp = requests.get(f"{self.base_url}/capture", params=params)
+        resp = requests.get(url, params=params, timeout=timeout)
         resp.raise_for_status()
-        return Image.open(BytesIO(resp.content))
+
+        ctype = resp.headers.get("content-type", "").lower()
+
+        # If the service returns an image directly
+        if "image/" in ctype:
+            return Image.open(BytesIO(resp.content))
+
+        # If the service returns JSON with base64 or a bytes field
+        if "application/json" in ctype:
+            data = resp.json()
+            # Common patterns, adapt if your backend uses a different key
+            if "image_base64" in data:
+                import base64
+
+                img_bytes = base64.b64decode(data["image_base64"])
+                return Image.open(BytesIO(img_bytes))
+            if "bytes" in data:
+                return Image.open(BytesIO(bytes(data["bytes"])))
+            raise RuntimeError("JSON response did not contain image data")
+
+        raise RuntimeError(f"Unsupported content type: {ctype}")
 
     def get_latest_image(self, camera_ip: str, pose: int) -> Optional[Image.Image]:
         params = {"camera_ip": camera_ip, "pose": pose}
