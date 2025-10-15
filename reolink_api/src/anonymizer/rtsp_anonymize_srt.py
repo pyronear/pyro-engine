@@ -429,7 +429,7 @@ class AnonymizerWorker:
         self,
         frame_store: LastFrameStore,
         box_store: Optional[BoxStore] = None,
-        conf_thres: float = 0.3,
+        conf_thres: float = 0.25,
         poll_ms: int = 10,
     ) -> None:
         self._frames = frame_store
