@@ -197,11 +197,7 @@ class Anonymizer:
         xywh = xywh[:, cls_mask]
         conf = conf[cls_mask]
         cls_idx = cls_idx[cls_mask]
-
-        # print indices of detections that also pass confidence threshold
         keep_conf = conf > self.conf
-        if np.any(keep_conf):
-            print("Detected class indices:", cls_idx[keep_conf])
 
         # now apply confidence threshold
         keep = keep_conf
