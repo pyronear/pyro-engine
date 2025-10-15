@@ -73,7 +73,7 @@ class Anonymizer:
         self,
         model_folder="data",
         imgsz=640,
-        conf=0.15,
+        conf=0.25,
         iou=0,
         format="ncnn",
         model_path=None,
