@@ -171,43 +171,58 @@ class Anonymizer:
             return np.zeros((0, 5), dtype=np.float32)
 
         C, N = pred.shape
-        transposed = False
-        if C < N and C >= 5:
-            # expect C rows as 4 plus classes
-            pass
-        else:
+        if not (C < N and C >= 5):
             pred = pred.T
             C, N = pred.shape
-            transposed = True
             if C < 5:
                 return np.zeros((0, 5), dtype=np.float32)
 
-        xywh = pred[:4, :]  # 4 by N
-        cls_scores = pred[4:, :]  # nc by N, can be empty for one class
+        # split
+        xywh = pred[:4, :]  # shape 4 x N
+        cls_scores = pred[4:, :]  # shape K x N, can be empty
 
+        # confidences and class indices on the unfiltered set
         if cls_scores.size == 0:
             conf = pred[-1, :]  # one class export
+            cls_idx = np.zeros(N, dtype=int)
         else:
-            conf = np.max(cls_scores, axis=0)  # best class score per anchor
+            cls_idx = np.argmax(cls_scores, axis=0)
+            conf = np.max(cls_scores, axis=0)
 
-        keep = conf > self.conf
+        # filter by class index first, keep only classes < 10
+        cls_mask = cls_idx < 10
+        if not np.any(cls_mask):
+            return np.zeros((0, 5), dtype=np.float32)
+
+        xywh = xywh[:, cls_mask]
+        conf = conf[cls_mask]
+        cls_idx = cls_idx[cls_mask]
+
+        # print indices of detections that also pass confidence threshold
+        keep_conf = conf > self.conf
+        if np.any(keep_conf):
+            print("Detected class indices:", cls_idx[keep_conf])
+
+        # now apply confidence threshold
+        keep = keep_conf
         if not np.any(keep):
             return np.zeros((0, 5), dtype=np.float32)
 
         xywh = xywh[:, keep]
         conf = conf[keep]
 
-        det = np.concatenate([xywh.T, conf[:, None]], axis=1)  # M by 5
+        det = np.concatenate([xywh.T, conf[:, None]], axis=1)  # M x 5
         det[:, :4] = xywh2xyxy(det[:, :4])
 
+        # NMS on [x1 y1 x2 y2 conf]
         det = det[det[:, 4].argsort()]
-        det = nms(det)
-        det = det[::-1]
+        det = nms(det)[::-1]
 
         if det.shape[0] == 0:
             return np.zeros((0, 5), dtype=np.float32)
 
-        left_pad, top_pad = pad
+        # undo letterbox padding and normalize to [0, 1]
+        left_pad, top_pad = pad if isinstance(pad, tuple) else tuple(pad)
         det[:, 0:4:2] -= left_pad
         det[:, 1:4:2] -= top_pad
         det[:, 0:4:2] /= float(self.imgsz - 2 * left_pad)
