@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime
 
 from PIL import Image
-from reolink_api.src.rtsp_camera import RTSPCamera  # assumes the class below lives in rtsp_camera.py
+from reolink_api.src.camera.camera_rtsp import RTSPCamera  # assumes the class below lives in rtsp_camera.py
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s: %(message)s")
 logger = logging.getLogger("CaptureOnce")
