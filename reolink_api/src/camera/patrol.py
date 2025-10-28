@@ -108,29 +108,34 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
 
     logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
 
-
 def static_loop(camera_ip: str, stop_flag: threading.Event):
     cam = CAMERA_REGISTRY[camera_ip]
-
     logging.info(f"[{camera_ip}] Starting static camera loop")
 
-    # Stagger start so all cameras do not hit RTSP server at once
+    # décalage initial déjà présent
     initial_delay = random.uniform(0, 5)
     if stop_flag.wait(initial_delay):
         logging.info(f"[{camera_ip}] Static camera loop exited before first capture")
         return
 
     while not stop_flag.is_set():
+        # jitter par cycle, petite valeur pour éviter la re synchronisation
+        jitter = random.uniform(0.5, 2.0)
+        if stop_flag.wait(jitter):
+            break
+
         try:
             logging.info(f"[{camera_ip}] Capture")
             image = cam.capture()
             if image:
                 cam.last_images[-1] = image
                 logging.info(f"[{camera_ip}] Updated static image (pose -1)")
+            else:
+                logging.warning(f"[{camera_ip}] capture() returned None")
         except Exception as e:
             logging.error(f"[{camera_ip}] Error capturing static image: {e}")
 
-        # sleep ~30 seconds, but exit early if stop_flag is set
+        # période nominale
         if stop_flag.wait(30):
             break
 
