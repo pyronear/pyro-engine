@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-
+import random
 from fastapi import APIRouter, HTTPException, Request
 
 from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
@@ -114,9 +114,15 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 
     logging.info(f"[{camera_ip}] Starting static camera loop")
 
+    # Stagger start so all cameras do not hit RTSP server at once
+    initial_delay = random.uniform(0, 5)
+    if stop_flag.wait(initial_delay):
+        logging.info(f"[{camera_ip}] Static camera loop exited before first capture")
+        return
+
     while not stop_flag.is_set():
         try:
-            logging.info("Capture")
+            logging.info(f"[{camera_ip}] Capture")
             image = cam.capture()
             if image:
                 cam.last_images[-1] = image
@@ -124,6 +130,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
         except Exception as e:
             logging.error(f"[{camera_ip}] Error capturing static image: {e}")
 
+        # sleep ~30 seconds, but exit early if stop_flag is set
         if stop_flag.wait(30):
             break
 
