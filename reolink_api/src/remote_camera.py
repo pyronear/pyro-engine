@@ -104,18 +104,3 @@ class RemoteCamera:
 
         logger.warning(f"All attempts failed for {self.url}")
         return None
-
-
-# Example usage
-if __name__ == "__main__":
-    test_url = "http://gi003:25111964caza@185.73.168.32:1231/cgi-bin/snapshot.cgi"
-    cam = RemoteCamera(test_url)
-    logger.info(f"Testing capture on {test_url}")
-
-    img = cam.capture()
-    if img:
-        logger.info("✅ Capture successful!")
-        logger.info(f"Image mode={img.mode}, size={img.size}")
-        img.show()
-    else:
-        logger.error("❌ Capture failed.")
