@@ -1,10 +1,11 @@
-import requests
-from urllib.parse import urlparse, urlunparse
-from requests.auth import HTTPBasicAuth, HTTPDigestAuth
-from PIL import Image
-from io import BytesIO
-import re
 import logging
+import re
+from io import BytesIO
+from urllib.parse import urlparse, urlunparse
+
+import requests
+from PIL import Image
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 # Setup logger
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -74,7 +75,9 @@ class RemoteCamera:
                     msg += f" using auth={auth.__class__.__name__}"
                 logger.debug(msg)
                 r = requests.get(target_url, headers=headers, timeout=self.timeout, auth=auth)
-                logger.debug(f"Response from {target_url}: status={r.status_code}, content_length={len(r.content) if r.content else 0}")
+                logger.debug(
+                    f"Response from {target_url}: status={r.status_code}, content_length={len(r.content) if r.content else 0}"
+                )
                 if r.status_code == 200 and r.content:
                     try:
                         img = Image.open(BytesIO(r.content)).convert("RGB")

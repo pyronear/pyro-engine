@@ -116,7 +116,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 
     while not stop_flag.is_set():
         try:
-            logging.info(f"Capture")
+            logging.info("Capture")
             image = cam.capture()
             print(image)
             if image:
