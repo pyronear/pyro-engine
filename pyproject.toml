@@ -38,7 +38,6 @@ pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main"
 reolink_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "develop", subdirectory = "reolink_api/client" }
 python-dotenv = "==1.1.0"
 
-
 [tool.poetry.group.quality.dependencies]
 ruff = "^0.11.9"
 black = "^24.3.0"
