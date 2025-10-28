@@ -51,7 +51,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[object]:
         return cam_obj
 
     # 2. RTSP cameras
-    if cam_type == "rtsp":
+    if brand == "rtsp":
         rtsp_url = conf.get("rtsp_url")
         if not rtsp_url:
             logger.error("Camera %s declared as RTSP but missing 'rtsp_url'. Skipping registration.", key)
