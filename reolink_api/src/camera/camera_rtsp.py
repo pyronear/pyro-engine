@@ -1,10 +1,8 @@
 # Copyright (C) 2022-2025, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
+# Licensed under the Apache License 2.0
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
-import time
 from typing import Optional
 
 import cv2
@@ -15,11 +13,7 @@ logger.setLevel(logging.INFO)
 
 
 class RTSPCamera:
-    """
-    Camera that exposes an RTSP stream.
-    capture() grabs one frame via OpenCV and returns it as a Pillow Image.
-    This version is thread safe and does not rely on signal.alarm.
-    """
+    """Camera that exposes an RTSP stream and captures one frame as a Pillow Image."""
 
     def __init__(self, rtsp_url: str, ip_address: str = "", cam_type: str = "rtsp"):
         self.rtsp_url = rtsp_url
@@ -27,42 +21,23 @@ class RTSPCamera:
         self.cam_type = cam_type
         self.last_images: dict[int, Image.Image] = {}
 
-    def capture(self, timeout: int = 10) -> Optional[Image.Image]:
-        """
-        Try to open the RTSP stream and read a frame within `timeout` seconds.
-        Returns a Pillow Image (RGB) or None.
-        Safe to call from worker threads.
-        """
-        start_time = time.perf_counter()
-
+    def capture(self) -> Optional[Image.Image]:
+        """Open the RTSP stream and read a single frame, returning it as a Pillow Image."""
         cap = cv2.VideoCapture(self.rtsp_url)
         if not cap.isOpened():
             logger.error("Unable to open RTSP stream: %s", self.rtsp_url)
             cap.release()
             return None
 
-        frame = None
-        while True:
-            # Check timeout
-            if (time.perf_counter() - start_time) > timeout:
-                logger.error("RTSP capture timed out for %s", self.rtsp_url)
-                break
-
-            ret, frm = cap.read()
-            if ret and frm is not None:
-                frame = frm
-                break
-            # tiny sleep could be added if you want to avoid busy loop
-            # but usually cap.read() already blocks briefly
-
+        ret, frame = cap.read()
         cap.release()
 
-        if frame is None:
+        if not ret or frame is None:
+            logger.error("Failed to read frame from %s", self.rtsp_url)
             return None
 
         try:
-            img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            return img
+            return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         except Exception as e:
-            logger.error("RTSP capture error converting frame for %s: %s", self.rtsp_url, e)
+            logger.error("Error converting frame for %s: %s", self.rtsp_url, e)
             return None
