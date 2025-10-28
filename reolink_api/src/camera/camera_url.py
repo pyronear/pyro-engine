@@ -1,6 +1,5 @@
 # Copyright (C) 2022-2025, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
+# Licensed under the Apache License 2.0
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
@@ -18,67 +17,43 @@ logger.setLevel(logging.INFO)
 
 
 class URLCamera:
-    """
-    Camera that exposes a direct HTTP(S) snapshot endpoint that returns an image.
-
-    Supports:
-    - http://user:pass@host/...
-    - http://host/... ?usr=...&pwd=...
-
-    capture() returns a Pillow Image in RGB, or None on failure.
-    """
+    """Camera that exposes an HTTP or HTTPS snapshot URL and returns one frame as a Pillow Image."""
 
     def __init__(self, url: str, timeout: int = 5, cam_type: str = "static"):
         self.url = url
         self.timeout = timeout
         self.cam_type = cam_type
         self.last_images: dict[int, Image.Image] = {}
-        logger.debug(
-            "Initialized URLCamera url=%s timeout=%s cam_type=%s",
-            self._redact(url),
-            timeout,
-            cam_type,
-        )
 
     @staticmethod
     def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:
         """
         Remove user:pass@host from URL.
-        Returns (clean_url, (user, pass)) or (clean_url, None)
+        Return (clean_url, (user, pass)) or (clean_url, None).
         """
-        netloc = parsed.netloc
-        if "@" in netloc:
-            creds, hostport = netloc.rsplit("@", 1)
-            if ":" in creds:
-                user, password = creds.split(":", 1)
-            else:
-                user, password = creds, ""
+        if "@" in parsed.netloc:
+            creds, hostport = parsed.netloc.rsplit("@", 1)
+            user, password = creds.split(":", 1) if ":" in creds else (creds, "")
             cleaned = parsed._replace(netloc=hostport)
             return urlunparse(cleaned), (user, password)
         return urlunparse(parsed), None
 
     @staticmethod
     def _extract_query_credentials(url: str) -> Optional[Tuple[str, str]]:
-        """
-        Detect patterns like ...?usr=admin&pwd=1234
-        """
+        """Detect query patterns like ?usr=...&pwd=... and return (user, pass) if found."""
         m_usr = re.search(r"[?&]usr=([^&]+)", url)
         m_pwd = re.search(r"[?&]pwd=([^&]+)", url)
         if m_usr and m_pwd:
-            return (m_usr.group(1), m_pwd.group(1))
+            return m_usr.group(1), m_pwd.group(1)
         return None
 
     @staticmethod
     def _redact(url: str) -> str:
-        """
-        Produce a log friendly version of the URL with credentials masked.
-        """
+        """Return a log friendly version of the URL with credentials masked."""
         parsed = urlparse(url)
-        # remove user:pass@
         netloc = parsed.netloc.split("@")[-1]
         cleaned = parsed._replace(netloc=netloc)
         redacted = urlunparse(cleaned)
-        # mask usr, user, username, pwd, pass, password in query string
         redacted = re.sub(r"(usr|user|username)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
         redacted = re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
         return redacted
@@ -90,28 +65,27 @@ class URLCamera:
             ),
             "Accept": "image/*",
         }
+
         try:
             r = requests.get(target_url, headers=headers, timeout=self.timeout, auth=auth)
-            if r.status_code == 200 and r.content:
-                try:
-                    img = Image.open(BytesIO(r.content)).convert("RGB")
-                    return img
-                except Exception as e:
-                    logger.debug(
-                        "Failed to decode image from %s: %s",
-                        self._redact(target_url),
-                        e,
-                    )
         except requests.RequestException as e:
             logger.error("Request to %s failed: %s", self._redact(target_url), e)
-        return None
+            return None
+
+        if r.status_code != 200 or not r.content:
+            logger.error("Failed to read image content from %s", self._redact(target_url))
+            return None
+
+        try:
+            return Image.open(BytesIO(r.content)).convert("RGB")
+        except Exception as e:
+            logger.error("Error decoding image from %s: %s", self._redact(target_url), e)
+            return None
 
     def capture(self) -> Optional[Image.Image]:
         """
-        Try multiple auth strategies and URL variants.
+        Try to fetch a single snapshot using different auth methods, and return it as a Pillow Image.
         """
-        logger.info("Starting URL capture for %s", self._redact(self.url))
-
         parsed = urlparse(self.url)
         clean_url, auth_tuple = self._strip_credentials(parsed)
         query_auth = self._extract_query_credentials(self.url)
@@ -147,5 +121,5 @@ class URLCamera:
                     )
                     return img
 
-        logger.warning("All URL attempts failed for %s", self._redact(self.url))
+        logger.error("All URL attempts failed for %s", self._redact(self.url))
         return None
