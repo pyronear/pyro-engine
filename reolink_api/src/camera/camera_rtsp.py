@@ -25,6 +25,7 @@ class RTSPCamera:
         self.rtsp_url = rtsp_url
         self.ip_address = ip_address
         self.cam_type = cam_type
+        self.last_images: dict[int, Image.Image] = {}
 
     def capture(self, timeout: int = 10) -> Optional[Image.Image]:
         """
