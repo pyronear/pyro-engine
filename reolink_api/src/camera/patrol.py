@@ -117,85 +117,77 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
     from camera.registry import CAMERA_REGISTRY
 
     cam = CAMERA_REGISTRY[camera_ip]
-    rtsp_url = cam.rtsp_url  # important: on lit l'URL une fois
+    rtsp_url = cam.rtsp_url
 
     logging.info(f"[{camera_ip}] Starting static camera loop")
 
-    # on échelonne le démarrage pour ne pas tout frapper en même temps
+    # Décalage initial pour éviter le départ simultané
     initial_delay = random.uniform(0, 5)
     if stop_flag.wait(initial_delay):
         logging.info(f"[{camera_ip}] Static camera loop exited before first capture")
         return
 
-    cap = None  # handle OpenCV VideoCapture for this camera only
+    # Intervalle entre deux captures, plus court pour garder le flux vivant
+    period_s = 5.0
 
-    def open_cap():
-        c = cv2.VideoCapture(rtsp_url)
-        if not c.isOpened():
-            logging.error(f"[{camera_ip}] Unable to open RTSP stream: {rtsp_url}")
+    cap = None
+
+    def reopen():
+        nonlocal cap
+        # on ferme proprement l'ancien cap si besoin
+        if cap is not None:
             try:
-                c.release()
+                cap.release()
             except Exception:
                 pass
-            return None
-        return c
-
-    # première ouverture
-    cap = open_cap()
-
-    while not stop_flag.is_set():
-        try:
-            logging.info(f"[{camera_ip}] Capture")
-
-            # si cap est mort ou pas ouvert, on retente de l'ouvrir
-            if cap is None or not cap.isOpened():
-                logging.warning(f"[{camera_ip}] Reopening RTSP stream")
-                cap = open_cap()
-                if cap is None:
-                    # rien à faire ce tour ci
-                    if stop_flag.wait(30):
-                        break
-                    continue
-
-            ok, frame = cap.read()
-
-            if not ok or frame is None:
-                logging.error(f"[{camera_ip}] Failed to read frame from {rtsp_url}")
-                # on ferme la session, on forcera reopen au prochain tour
-                try:
-                    cap.release()
-                except Exception:
-                    pass
-                cap = None
-            else:
-                # succès, on convertit et on stocke
-                try:
-                    pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                    cam.last_images[-1] = pil_img
-                    logging.info(f"[{camera_ip}] Updated static image (pose -1)")
-                except Exception as e:
-                    logging.error(f"[{camera_ip}] Failed to convert/store frame: {e}")
-
-        except Exception as e:
-            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
-            # en cas d'erreur inattendue on ferme cap pour forcer une reconnexion propre ensuite
+        cap = cv2.VideoCapture(rtsp_url)
+        if not cap.isOpened():
+            logging.error(f"[{camera_ip}] Unable to open RTSP stream: {rtsp_url}")
             try:
-                if cap is not None:
-                    cap.release()
+                cap.release()
             except Exception:
                 pass
             cap = None
 
-        # tempo nominale entre deux captures
-        if stop_flag.wait(30):
+    # première ouverture
+    reopen()
+
+    while not stop_flag.is_set():
+        # On ne laisse pas une connexion dormir trop longtemps côté serveur.
+        # On choisit de rouvrir à chaque tour. Cela ressemble à "snapshot toutes les 5s"
+        # mais avec jitter global, donc charge lissée.
+        # Si tu veux tenter de réutiliser cap au lieu de rouvrir à chaque tour,
+        # commente la ligne suivante.
+        reopen()
+
+        logging.info(f"[{camera_ip}] Capture")
+
+        if cap is None:
+            # la caméra est down pour l'instant
+            if stop_flag.wait(period_s):
+                break
+            continue
+
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            logging.error(f"[{camera_ip}] Failed to read frame from {rtsp_url}")
+        else:
+            try:
+                pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                cam.last_images[-1] = pil_img
+                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
+            except Exception as e:
+                logging.error(f"[{camera_ip}] Failed to convert/store frame: {e}")
+
+        if stop_flag.wait(period_s):
             break
 
-    # cleanup final quand on arrête le thread
-    try:
-        if cap is not None:
+    # On nettoie en sortie
+    if cap is not None:
+        try:
             cap.release()
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     logging.info(f"[{camera_ip}] Static camera loop exited cleanly")
 
