@@ -41,19 +41,19 @@ def _add_query_param(url: str, key: str, value: str) -> str:
 
 def ffmpeg_grab_frame(rtsp_url: str, timeout_sec: int) -> Optional[Image.Image]:
     """
-    Grab exactly one frame using ffmpeg with a strict process timeout.
-    Uses -rw_timeout which is widely supported. Stays on UDP.
+    Grab exactly one frame using ffmpeg, keep it minimal and portable.
+    We rely on subprocess timeout only.
     """
     cmd = [
         "ffmpeg",
         "-hide_banner",
         "-loglevel", "error",
-        "-rw_timeout", str(timeout_sec * 1_000_000),  # microseconds
-        "-rtsp_transport", "udp",
-        "-probesize", "32k",
-        "-analyzeduration", "200k",
+        "-rtsp_transport", "udp",   # stay on UDP as you asked
+        "-probesize", "32k",        # faster start
+        "-analyzeduration", "200k", # faster start
         "-i", rtsp_url,
         "-frames:v", "1",
+        "-t", str(timeout_sec),     # limit decode duration
         "-f", "image2",
         "pipe:1",
     ]
