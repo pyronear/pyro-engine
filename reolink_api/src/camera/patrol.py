@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-import random
+
 from fastapi import APIRouter, HTTPException, Request
 
 from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
@@ -107,16 +107,24 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
         stop_flag.wait(sleep_time)
 
     logging.info(f"[{camera_ip}] Patrol loop exited cleanly")
+
+
 def static_loop(camera_ip: str, stop_flag: threading.Event):
     cam = CAMERA_REGISTRY[camera_ip]
-
     logging.info(f"[{camera_ip}] Starting static camera loop")
+    settle_until = 0.0
 
     while not stop_flag.is_set():
         try:
             image = cam.capture()
-            print("image size", camera_ip, image.size)
-            if image:
+            now = time.time()
+
+            # after a reconnect, wait a bit before storing
+            if getattr(cam, "_opened_at", 0):
+                settle_until = cam._opened_at + 1.0
+
+            if image and now >= settle_until:
+                print("image size", camera_ip, image.size)
                 cam.last_images[-1] = image
                 logging.info(f"[{camera_ip}] Updated static image (pose -1)")
         except Exception as e:
