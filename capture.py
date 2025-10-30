@@ -42,20 +42,17 @@ def _add_query_param(url: str, key: str, value: str) -> str:
 def ffmpeg_grab_frame(rtsp_url: str, timeout_sec: int) -> Optional[Image.Image]:
     """
     Grab exactly one frame using ffmpeg with a strict process timeout.
-    Returns a Pillow Image, or None on failure or timeout.
+    Uses -rw_timeout which is widely supported. Stays on UDP.
     """
-    # Keep UDP, add sensible socket timeout, reduce startup analysis
-    url = _add_query_param(rtsp_url, "stimeout", str(timeout_sec * 1_000_000))
-
     cmd = [
         "ffmpeg",
         "-hide_banner",
-        "-loglevel", "error",          # quiet unless real errors
-        "-rtsp_transport", "udp",      # stay on UDP as requested
-        "-stimeout", str(timeout_sec * 1_000_000),
+        "-loglevel", "error",
+        "-rw_timeout", str(timeout_sec * 1_000_000),  # microseconds
+        "-rtsp_transport", "udp",
         "-probesize", "32k",
         "-analyzeduration", "200k",
-        "-i", url,
+        "-i", rtsp_url,
         "-frames:v", "1",
         "-f", "image2",
         "pipe:1",
@@ -67,13 +64,13 @@ def ffmpeg_grab_frame(rtsp_url: str, timeout_sec: int) -> Optional[Image.Image]:
         logger.warning("ffmpeg timed out for %s", rtsp_url)
         return None
     except CalledProcessError as e:
-        # real decode or auth error
         if e.stderr:
             logger.error("ffmpeg error: %s", e.stderr.decode(errors="ignore").strip())
         return None
     except Exception as e:
         logger.error("ffmpeg exception: %s", e)
         return None
+
 
 
 def opencv_fallback(rtsp_url: str, ip_address: str, cam_type: str, timeout_sec: int) -> Optional[Image.Image]:
