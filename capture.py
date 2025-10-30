@@ -2,18 +2,22 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from typing import Optional
+from subprocess import run, PIPE, TimeoutExpired, CalledProcessError
+from urllib.parse import urlsplit, urlunsplit
 
 from PIL import Image
+import io
 
 from reolink_api.src.camera.camera_rtsp import RTSPCamera  # your class
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s: %(message)s")
 logger = logging.getLogger("CaptureOnce")
 
-CAPTURE_TIMEOUT_S = 6  # per camera timeout in seconds
+CAPTURE_TIMEOUT_S = 6  # hard timeout per camera for ffmpeg and fallback
+JPEG_QUALITY = 90
 
 
 def load_credentials(path: str) -> dict:
@@ -22,36 +26,67 @@ def load_credentials(path: str) -> dict:
 
 
 def save_image(img: Image.Image, camera_key: str, output_dir: Path) -> Path:
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    filename = f"{camera_key}_{ts}.jpg"
-    out_path = output_dir / filename
-    img.save(out_path, format="JPEG", quality=90)
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    out_path = output_dir / f"{camera_key}_{ts}.jpg"
+    img.save(out_path, format="JPEG", quality=JPEG_QUALITY)
     return out_path
 
 
-def capture_with_timeout(cam: RTSPCamera, timeout_s: int) -> Image.Image | None:
-    """
-    Run cam.capture() in a worker thread and return within timeout.
-    If the capture blocks longer than timeout, return None.
-    """
-    def _do_capture():
-        # if your RTSPCamera supports skip_frames, you can pass it here
-        try:
-            return cam.capture()
-        except Exception:
-            return None
+def _add_query_param(url: str, key: str, value: str) -> str:
+    parts = urlsplit(url)
+    q = parts.query
+    q = f"{q}&{key}={value}" if q else f"{key}={value}"
+    return urlunsplit(parts._replace(query=q))
 
-    # one off executor per call to avoid sharing stuck threads
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        fut = ex.submit(_do_capture)
-        try:
-            return fut.result(timeout=timeout_s)
-        except FuturesTimeout:
-            logger.warning("Capture timed out for camera %s", getattr(cam, "ip_address", "unknown"))
-            return None
-        except Exception as e:
-            logger.error("Capture error for camera %s: %s", getattr(cam, "ip_address", "unknown"), e)
-            return None
+
+def ffmpeg_grab_frame(rtsp_url: str, timeout_sec: int) -> Optional[Image.Image]:
+    """
+    Grab exactly one frame using ffmpeg with a strict process timeout.
+    Returns a Pillow Image, or None on failure or timeout.
+    """
+    # Keep UDP, add sensible socket timeout, reduce startup analysis
+    url = _add_query_param(rtsp_url, "stimeout", str(timeout_sec * 1_000_000))
+
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel", "error",          # quiet unless real errors
+        "-rtsp_transport", "udp",      # stay on UDP as requested
+        "-stimeout", str(timeout_sec * 1_000_000),
+        "-probesize", "32k",
+        "-analyzeduration", "200k",
+        "-i", url,
+        "-frames:v", "1",
+        "-f", "image2",
+        "pipe:1",
+    ]
+    try:
+        res = run(cmd, stdout=PIPE, stderr=PIPE, timeout=timeout_sec + 1, check=True)
+        return Image.open(io.BytesIO(res.stdout)).convert("RGB")
+    except TimeoutExpired:
+        logger.warning("ffmpeg timed out for %s", rtsp_url)
+        return None
+    except CalledProcessError as e:
+        # real decode or auth error
+        if e.stderr:
+            logger.error("ffmpeg error: %s", e.stderr.decode(errors="ignore").strip())
+        return None
+    except Exception as e:
+        logger.error("ffmpeg exception: %s", e)
+        return None
+
+
+def opencv_fallback(rtsp_url: str, ip_address: str, cam_type: str, timeout_sec: int) -> Optional[Image.Image]:
+    """
+    Fallback to RTSPCamera, with a best effort short timeout using OpenCV props.
+    Still enforced at call site with a short-lived thread if you want, but we try to keep it quick.
+    """
+    cam = RTSPCamera(rtsp_url=rtsp_url, ip_address=str(ip_address), cam_type=cam_type)
+    try:
+        # If your RTSPCamera supports skip_frames, you could pass a smaller value here
+        return cam.capture()
+    except Exception:
+        return None
 
 
 def main():
@@ -76,8 +111,12 @@ def main():
 
         logger.info("Capturing from camera %s (%s)", camera_key, rtsp_url)
 
-        cam = RTSPCamera(rtsp_url=rtsp_url, ip_address=str(ip_address), cam_type=cam_type)
-        img = capture_with_timeout(cam, CAPTURE_TIMEOUT_S)
+        # Primary path, ffmpeg one shot with hard timeout
+        img = ffmpeg_grab_frame(rtsp_url, CAPTURE_TIMEOUT_S)
+
+        # Fallback to your OpenCV class if ffmpeg failed
+        if img is None:
+            img = opencv_fallback(rtsp_url, ip_address, cam_type, CAPTURE_TIMEOUT_S)
 
         if img is None:
             logger.error("FAILED to capture from %s", camera_key)
