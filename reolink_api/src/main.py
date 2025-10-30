@@ -1,134 +1,111 @@
-# Copyright (C) 2020-2025, Pyronear.
-
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
+# minimal_static_api.py
+# Copyright (C) 2025, Pyronear.
+# Licensed under the Apache License 2.0
 
 import logging
 import threading
+import time
 from contextlib import asynccontextmanager
-
-from anonymizer.rtsp_anonymize_srt import AnonymizerWorker, BoxStore, LastFrameStore
-from camera.capture import router as camera_capture_router
-from camera.control import router as camera_control_router
-from camera.focus import router as camera_focus_router
-from camera.info import router as camera_info_router
-from camera.patrol import patrol_loop, static_loop
-from camera.patrol import router as camera_patrol_router
-from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
-from camera.stream import router as camera_stream_router
-from camera.stream import set_app_for_stream, stop_stream_if_idle
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s: %(message)s")
+
+# ----------------------------------------------------------------------
+# Static loop definition
+# ----------------------------------------------------------------------
+
+def static_loop(camera_ip: str, stop_flag: threading.Event):
+    cam = CAMERA_REGISTRY[camera_ip]
+    logging.info(f"[{camera_ip}] Starting static camera loop")
+    settle_until = 0.0
+
+    while not stop_flag.is_set():
+        try:
+            image = cam.capture()
+            now = time.time()
+
+            # After reconnect, wait a bit before saving
+            if getattr(cam, "_opened_at", 0):
+                settle_until = cam._opened_at + 1.0
+
+            if image and now >= settle_until:
+                print("image size", camera_ip, image.size)
+                cam.last_images[-1] = image
+                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
+        except Exception as e:
+            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
+
+        # Wait 30s or exit if flag set
+        if stop_flag.wait(30):
+            break
+
+    logging.info(f"[{camera_ip}] Static camera loop exited cleanly")
+
+
+# ----------------------------------------------------------------------
+# FastAPI app with lifespan
+# ----------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Shared video state
-    if not hasattr(app.state, "frames"):
-        app.state.frames = LastFrameStore()
-    if not hasattr(app.state, "boxes"):
-        app.state.boxes = BoxStore()
-    if not hasattr(app.state, "anonymizer"):
-        app.state.anonymizer = AnonymizerWorker(
-            frame_store=app.state.frames,
-            box_store=app.state.boxes,
-            conf_thres=0.35,
-        )
-        app.state.anonymizer.start()
+    logging.info("Starting minimal static loop service")
 
-    # Registries
-    if not hasattr(app.state, "stream_workers"):
-        app.state.stream_workers = {}  # type, dict[str, Pipeline]
-    if not hasattr(app.state, "stream_processes"):
-        app.state.stream_processes = {}  # type, dict[str, subprocess.Popen]
-
-    # Allow camera.stream idle thread to access app.state
-    set_app_for_stream(app)
-
-    # Your existing patrol loops
+    # Start static loops
     for ip, cam in CAMERA_REGISTRY.items():
-        if ip in PATROL_THREADS and PATROL_THREADS[ip].is_alive():
-            continue
         stop_flag = threading.Event()
-        if cam.cam_type == "ptz":
-            thread = threading.Thread(target=patrol_loop, args=(ip, stop_flag), daemon=True)
-            logging.info(f"Starting patrol loop for PTZ camera {ip}")
-        else:
-            thread = threading.Thread(target=static_loop, args=(ip, stop_flag), daemon=True)
-            logging.info(f"Starting static loop for camera {ip}")
+        thread = threading.Thread(target=static_loop, args=(ip, stop_flag), daemon=True)
         PATROL_THREADS[ip] = thread
         PATROL_FLAGS[ip] = stop_flag
         thread.start()
+        logging.info(f"Started static loop for camera {ip}")
 
-    # Idle auto stop
-    threading.Thread(target=stop_stream_if_idle, daemon=True).start()
+    yield
 
-    try:
-        yield
-    finally:
-        # Stop patrol loops
-        for ip, flag in PATROL_FLAGS.items():
-            logging.info(f"Stopping loop for camera {ip}")
-            flag.set()
+    # Stop all loops at shutdown
+    for ip, flag in PATROL_FLAGS.items():
+        logging.info(f"Stopping static loop for camera {ip}")
+        flag.set()
 
-        # Stop pipelines
-        try:
-            workers = getattr(app.state, "stream_workers", {})
-            for cam_id, p in list(workers.items()):
-                try:
-                    if hasattr(p, "encoder"):
-                        p.encoder.stop()
-                except Exception as e:
-                    logging.warning(f"Failed to stop encoder for {cam_id}: {e}")
-                try:
-                    if hasattr(p, "decoder"):
-                        p.decoder.stop()
-                except Exception as e:
-                    logging.warning(f"Failed to stop decoder for {cam_id}: {e}")
-                workers.pop(cam_id, None)
-        except Exception:
-            pass
-
-        # Stop ffmpeg processes
-        try:
-            procs = getattr(app.state, "stream_processes", {})
-            for cam_id, proc in list(procs.items()):
-                try:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=2)
-                    except Exception:
-                        proc.kill()
-                except Exception as e:
-                    logging.warning(f"Failed to stop ffmpeg for {cam_id}: {e}")
-                procs.pop(cam_id, None)
-        except Exception:
-            pass
-
-        # Stop anonymizer
-        try:
-            if hasattr(app.state, "anonymizer"):
-                app.state.anonymizer.stop()
-        except Exception:
-            pass
+    logging.info("All static loops stopped")
 
 
-# Initialize FastAPI app and camera registry
+# ----------------------------------------------------------------------
+# App initialization
+# ----------------------------------------------------------------------
+
 app = FastAPI(lifespan=lifespan)
 
-# CORS: allow all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,  # must be False with "*"
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(camera_info_router, prefix="/info", tags=["Info"])
-app.include_router(camera_capture_router, prefix="/capture", tags=["Capture"])
-app.include_router(camera_control_router, prefix="/control", tags=["Control"])
-app.include_router(camera_focus_router, prefix="/focus", tags=["Focus"])
-app.include_router(camera_patrol_router, prefix="/patrol", tags=["Patrol"])
-app.include_router(camera_stream_router, prefix="/stream", tags=["Stream"])
+# ----------------------------------------------------------------------
+# Simple endpoints
+# ----------------------------------------------------------------------
+
+@app.get("/")
+def root():
+    return {"status": "running", "cameras": list(CAMERA_REGISTRY.keys())}
+
+
+@app.get("/status/{camera_ip}")
+def status(camera_ip: str):
+    thread = PATROL_THREADS.get(camera_ip)
+    flag = PATROL_FLAGS.get(camera_ip)
+    running = thread and thread.is_alive() and flag and not flag.is_set()
+    return {"camera_ip": camera_ip, "loop_running": bool(running)}
+
+
+@app.post("/stop/{camera_ip}")
+def stop(camera_ip: str):
+    if camera_ip in PATROL_FLAGS:
+        PATROL_FLAGS[camera_ip].set()
+        return {"status": "stopping", "camera_ip": camera_ip}
+    raise ValueError(f"No active loop for {camera_ip}")
