@@ -1,7 +1,7 @@
 import logging
 import time
 
-from camera_api.camera_rtsp import CAMERAS, grab_frame_with_ffmpeg_to_file
+from camera_rtsp import CAMERAS, grab_frame_with_ffmpeg_to_file
 
 
 CAPTURE_INTERVAL = 30.0  # seconds between two passes on all cameras
