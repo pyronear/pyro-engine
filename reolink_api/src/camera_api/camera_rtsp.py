@@ -1,58 +1,29 @@
+# camera/rtsp_camera.py or similar
+
 import logging
-import os
 from typing import Optional
 
 import cv2
-import numpy as np
+from PIL import Image
 
-
-# Use TCP and a shorter timeout for RTSP inside OpenCV
-# stimeout is in microseconds
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
-
-logger = logging.getLogger(__name__)
-
-
-CAMERAS_CONFIG = {
-    "Serre de Gruas": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/E4CF7F9D-F85F-4ED6-AB56-E275181DD3EB",
-    },
-    "Blandine": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/1ECAC3E9-DB72-4CF3-8BD5-E55F4491356A",
-    },
-    "Aubignas": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/D2E6EC5F-5511-420B-A264-5B1447C6FF6F",
-    },
-    "Pieds de Boeufs": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/D4C8694C-964C-43BD-BD57-563E0E43C751",
-    },
-    "Saint Jean Chambre": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/6641704A-0873-40FE-82AE-22EC03AA4AA9",
-    },
-    "Bidon": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/14C4E0D6-E1D9-471D-802C-A903D91FE4C0",
-    },
-    "La Forestiere": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/3F8CD700-DFEE-401A-8445-CB9CB0DF3DFF",
-    },
-    "Sampzon": {
-        "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/4E10857C-107B-465E-99B3-8E8F0DBCB3E7",
-    },
-}
+logger = logging.getLogger("RTSPCamera")
+logger.setLevel(logging.INFO)
 
 
 class RTSPCamera:
-    """Simple RTSP camera wrapper around cv2.VideoCapture."""
+    """Camera that exposes an RTSP stream and captures one frame as a Pillow Image."""
 
-    def __init__(self, name: str, rtsp_url: str) -> None:
-        self.name = name
+    def __init__(self, rtsp_url: str, ip_address: str = "", cam_type: str = "rtsp"):
         self.rtsp_url = rtsp_url
+        self.ip_address = ip_address
+        self.cam_type = cam_type
+        self.last_images: dict[int, Image.Image] = {}
 
-    def capture(self) -> Optional[np.ndarray]:
-        """Open the RTSP stream, read a single frame as BGR array, then close."""
+    def capture(self) -> Optional[Image.Image]:
+        """Open the RTSP stream and read a single frame, returning it as a Pillow Image."""
         cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
         if not cap.isOpened():
-            logger.error("[%s] Unable to open RTSP stream", self.name)
+            logger.error("Unable to open RTSP stream: %s", self.rtsp_url)
             cap.release()
             return None
 
@@ -60,7 +31,12 @@ class RTSPCamera:
         cap.release()
 
         if not ok or frame is None:
-            logger.error("[%s] Failed to read frame", self.name)
+            logger.error("Failed to read frame from %s", self.rtsp_url)
             return None
 
-        return frame
+        try:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            return Image.fromarray(rgb)
+        except Exception as e:
+            logger.error("Error converting frame for %s: %s", self.rtsp_url, e)
+            return None
