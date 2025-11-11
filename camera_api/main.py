@@ -1,12 +1,11 @@
 import logging
 import time
 
-from camera_rtsp import CAMERAS, grab_frame_with_ffmpeg_to_file
+from camera_rtsp import CAMERAS_CONFIG, RTSPCamera
 
 
 CAPTURE_INTERVAL = 30.0  # seconds between two passes on all cameras
 PER_CAMERA_DELAY = 0.5   # short pause between cameras
-FFMPEG_TIMEOUT_MS = 5000
 
 
 def main() -> None:
@@ -15,19 +14,24 @@ def main() -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
     )
 
+    # Build camera objects
+    cameras = {
+        name: RTSPCamera(name=name, rtsp_url=cfg["rtsp_url"])
+        for name, cfg in CAMERAS_CONFIG.items()
+    }
+
     logging.info("Starting RTSP health check loop")
-    logging.info("Cameras: %s", ", ".join(CAMERAS.keys()))
+    logging.info("Cameras: %s", ", ".join(cameras.keys()))
 
     while True:
         cycle_start = time.time()
         logging.info("New capture cycle started")
 
-        for name, cfg in CAMERAS.items():
-            url = cfg["rtsp_url"]
+        for name, cam in cameras.items():
             t0 = time.time()
             logging.info("[%s] capture attempt", name)
 
-            frame = grab_frame_with_ffmpeg_to_file(url, timeout_ms=FFMPEG_TIMEOUT_MS)
+            frame = cam.capture()
             dt = time.time() - t0
 
             if frame is not None:

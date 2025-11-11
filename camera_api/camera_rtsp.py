@@ -1,16 +1,19 @@
 import logging
-import subprocess
-import tempfile
+import os
 from typing import Optional
 
 import cv2
 import numpy as np
 
 
+# Use TCP and a shorter timeout for RTSP inside OpenCV
+# stimeout is in microseconds
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
+
 logger = logging.getLogger(__name__)
 
 
-CAMERAS = {
+CAMERAS_CONFIG = {
     "Serre de Gruas": {
         "rtsp_url": "rtsp://DDSIS\\pyronear:4kX<x64K+Pr4@srvcamera:554/live/E4CF7F9D-F85F-4ED6-AB56-E275181DD3EB",
     },
@@ -38,52 +41,26 @@ CAMERAS = {
 }
 
 
-def grab_frame_with_ffmpeg_to_file(rtsp_url: str, timeout_ms: int = 5000) -> Optional[np.ndarray]:
-    """
-    Grab a single frame from the RTSP stream using ffmpeg,
-    write it to a temporary JPEG file, then load it as a BGR NumPy array.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as tmp:
-        cmd = [
-            "ffmpeg",
-            "-rtsp_transport",
-            "tcp",
-            "-stimeout",
-            str(timeout_ms * 1000),  # microseconds
-            "-i",
-            rtsp_url,
-            "-frames:v",
-            "1",
-            "-y",
-            tmp.name,
-        ]
+class RTSPCamera:
+    """Simple RTSP camera wrapper around cv2.VideoCapture."""
 
-        try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=False,
-            )
-        except Exception as e:
-            logger.error("ffmpeg failed to start for %s: %s", rtsp_url, e)
+    def __init__(self, name: str, rtsp_url: str) -> None:
+        self.name = name
+        self.rtsp_url = rtsp_url
+
+    def capture(self) -> Optional[np.ndarray]:
+        """Open the RTSP stream, read a single frame as BGR array, then close."""
+        cap = cv2.VideoCapture(self.rtsp_url, cv2.CAP_FFMPEG)
+        if not cap.isOpened():
+            logger.error("[%s] Unable to open RTSP stream", self.name)
+            cap.release()
             return None
 
-        if result.returncode != 0:
-            # log a bit of stderr to understand what ffmpeg complains about
-            err = result.stderr.decode(errors="ignore")
-            logger.error(
-                "ffmpeg error for %s, return code %s, stderr: %s",
-                rtsp_url,
-                result.returncode,
-                err[:300],
-            )
-            return None
+        ok, frame = cap.read()
+        cap.release()
 
-        # load the written JPEG
-        frame = cv2.imread(tmp.name)
-        if frame is None:
-            logger.error("cv2.imread failed for file created from %s", rtsp_url)
+        if not ok or frame is None:
+            logger.error("[%s] Failed to read frame", self.name)
             return None
 
         return frame
