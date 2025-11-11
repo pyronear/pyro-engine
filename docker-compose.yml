@@ -10,7 +10,7 @@ services:
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
     volumes:
       - ./data:/usr/src/app/data
-    command: uvicorn main:app --host 0.0.0.0 --port 8081
+    command: python main:app
     restart: always
     network_mode: host
     logging:
