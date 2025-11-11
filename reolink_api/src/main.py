@@ -13,36 +13,57 @@ from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s: %(message)s")
 
+CAPTURE_INTERVAL = 30.0  # target interval between two captures for each camera
+PER_CAMERA_DELAY = 0.1   # small pause between cameras to avoid hammering
+
 # ----------------------------------------------------------------------
-# Static loop definition
+# Static loop for all cameras, sequential capture
 # ----------------------------------------------------------------------
 
-def static_loop(camera_ip: str, stop_flag: threading.Event):
-    cam = CAMERA_REGISTRY[camera_ip]
-    logging.info(f"[{camera_ip}] Starting static camera loop")
-    settle_until = 0.0
+def static_loop_all(stop_flag: threading.Event):
+    logging.info("Starting static capture loop for all cameras")
+
+    # one settle_until per camera
+    settle_until = {ip: 0.0 for ip in CAMERA_REGISTRY}
 
     while not stop_flag.is_set():
-        try:
-            image = cam.capture()
-            now = time.time()
+        cycle_start = time.time()
 
-            # After reconnect, wait a bit before saving
-            if getattr(cam, "_opened_at", 0):
-                settle_until = cam._opened_at + 1.0
+        for ip, cam in CAMERA_REGISTRY.items():
+            if stop_flag.is_set():
+                break
 
-            if image and now >= settle_until:
-                print("image size", camera_ip, image.size)
-                cam.last_images[-1] = image
-                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
-        except Exception as e:
-            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
+            try:
+                image = cam.capture()
+                now = time.time()
 
-        # Wait 30s or exit if flag set
-        if stop_flag.wait(30):
+                # After reconnect, wait a bit before saving
+                if getattr(cam, "_opened_at", 0):
+                    settle_until[ip] = cam._opened_at + 1.0
+
+                if image and now >= settle_until[ip]:
+                    print("image size", ip, image.size)
+                    cam.last_images[-1] = image
+                    logging.info(f"[{ip}] Updated static image (pose -1)")
+            except Exception as e:
+                logging.error(f"[{ip}] Error capturing static image: {e}")
+
+            # short wait between cameras, and also early exit if stop_flag is set
+            if stop_flag.wait(PER_CAMERA_DELAY):
+                break
+
+        # keep roughly CAPTURE_INTERVAL seconds between two passes
+        elapsed = time.time() - cycle_start
+        remaining = CAPTURE_INTERVAL - elapsed
+        if remaining > 0 and stop_flag.wait(remaining):
             break
 
-    logging.info(f"[{camera_ip}] Static camera loop exited cleanly")
+    logging.info("Static capture loop exited cleanly")
+
+
+# single event controlling the whole loop
+STATIC_STOP_FLAG = threading.Event()
+STATIC_THREAD_KEY = "static_all"
 
 
 # ----------------------------------------------------------------------
@@ -53,23 +74,28 @@ def static_loop(camera_ip: str, stop_flag: threading.Event):
 async def lifespan(app: FastAPI):
     logging.info("Starting minimal static loop service")
 
-    # Start static loops
-    for ip, cam in CAMERA_REGISTRY.items():
-        stop_flag = threading.Event()
-        thread = threading.Thread(target=static_loop, args=(ip, stop_flag), daemon=True)
-        PATROL_THREADS[ip] = thread
-        PATROL_FLAGS[ip] = stop_flag
-        thread.start()
-        logging.info(f"Started static loop for camera {ip}")
+    # For compatibility with existing code, register the same stop flag
+    # under each camera ip in PATROL_FLAGS
+    for ip in CAMERA_REGISTRY:
+        PATROL_FLAGS[ip] = STATIC_STOP_FLAG
 
-    yield
+    # Start a single thread that loops over all cameras sequentially
+    thread = threading.Thread(
+        target=static_loop_all,
+        args=(STATIC_STOP_FLAG,),
+        daemon=True,
+    )
+    PATROL_THREADS[STATIC_THREAD_KEY] = thread
+    thread.start()
+    logging.info("Started single static loop for all cameras")
 
-    # Stop all loops at shutdown
-    for ip, flag in PATROL_FLAGS.items():
-        logging.info(f"Stopping static loop for camera {ip}")
-        flag.set()
-
-    logging.info("All static loops stopped")
+    try:
+        yield
+    finally:
+        logging.info("Stopping static capture loop")
+        STATIC_STOP_FLAG.set()
+        thread.join(timeout=5.0)
+        logging.info("All static loops stopped")
 
 
 # ----------------------------------------------------------------------
@@ -86,6 +112,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ----------------------------------------------------------------------
 # Simple endpoints
 # ----------------------------------------------------------------------
@@ -97,15 +124,22 @@ def root():
 
 @app.get("/status/{camera_ip}")
 def status(camera_ip: str):
-    thread = PATROL_THREADS.get(camera_ip)
-    flag = PATROL_FLAGS.get(camera_ip)
-    running = thread and thread.is_alive() and flag and not flag.is_set()
-    return {"camera_ip": camera_ip, "loop_running": bool(running)}
+    # status is now the same for every camera, controlled by the single worker thread
+    thread = PATROL_THREADS.get(STATIC_THREAD_KEY)
+    running = thread is not None and thread.is_alive() and not STATIC_STOP_FLAG.is_set()
+    return {
+        "camera_ip": camera_ip,
+        "loop_running": bool(running),
+    }
 
 
 @app.post("/stop/{camera_ip}")
 def stop(camera_ip: str):
+    # stopping any camera stops the global static loop
     if camera_ip in PATROL_FLAGS:
         PATROL_FLAGS[camera_ip].set()
-        return {"status": "stopping", "camera_ip": camera_ip}
+        return {
+            "status": "stopping_all",
+            "camera_ip": camera_ip,
+        }
     raise ValueError(f"No active loop for {camera_ip}")
