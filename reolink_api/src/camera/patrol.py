@@ -239,4 +239,5 @@ def patrol_status(camera_ip: str):
         "patrol_running": bool(is_running),
         "loop_type": loop_type,
         "failures": FAILURE_COUNT.get(camera_ip, 0),
-        "skip_until": i_
+        "skip_until": int(SKIP_UNTIL.get(camera_ip, 0.0)),
+    }
