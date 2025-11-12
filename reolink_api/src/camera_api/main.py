@@ -1,20 +1,9 @@
 # capture_loop.py
 import logging
-import os
-import subprocess
-import tempfile
 import time
-from typing import Dict, Optional
+from typing import Dict
 
-import cv2
-import numpy as np
-
-# ask OpenCV to prefer TCP, the server may or may not honor stimeout
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;5000000"
-
-# -----------------------
-# Camera configuration
-# -----------------------
+from camera_rtsp import RTSPCamera 
 CAMERAS: Dict[str, str] = {
     "Serre de Gruas": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/E4CF7F9D-F85F-4ED6-AB56-E275181DD3EB",
     "Blandine": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/1ECAC3E9-DB72-4CF3-8BD5-E55F4491356A",
@@ -26,50 +15,13 @@ CAMERAS: Dict[str, str] = {
     "Bidon": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/14C4E0D6-E1D9-471D-802C-A903D91FE4C0",
 }
 
-CAPTURE_INTERVAL = 30.0   # seconds between two passes on all cameras
-PER_CAMERA_DELAY = 0.2    # pause between cameras
-CAPTURE_TIMEOUT_S = 5.0   # hard timeout per camera
-
-# optional backoff to avoid hammering a bad camera
+CAPTURE_INTERVAL = 30.0
+PER_CAMERA_DELAY = 0.2
+CAPTURE_TIMEOUT_S = 5.0
 MAX_FAILS_BEFORE_SKIP = 1
-SKIP_DURATION = 120.0     # seconds
+SKIP_DURATION = 120.0
 
 log = logging.getLogger("rtsp_loop")
-
-
-def grab_frame_ffmpeg(rtsp_url: str, timeout_s: float) -> Optional[np.ndarray]:
-    """
-    Grab one frame using ffmpeg with a hard process timeout.
-    Writes to a temp JPEG then reads it with OpenCV.
-    Returns BGR ndarray or None.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=True) as tmp:
-        cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel", "error",
-            "-rtsp_transport", "tcp",
-            "-i", rtsp_url,
-            "-frames:v", "1",
-            "-y", tmp.name,
-        ]
-        try:
-            subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=timeout_s,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            log.error("ffmpeg timed out after %.1fs for %s", timeout_s, rtsp_url)
-            return None
-
-        frame = cv2.imread(tmp.name)
-        if frame is None:
-            log.error("ffmpeg returned no image for %s", rtsp_url)
-            return None
-        return frame
 
 
 def main() -> None:
@@ -77,6 +29,7 @@ def main() -> None:
     log.info("Starting RTSP sequential capture loop")
     log.info("Cameras: %s", ", ".join(CAMERAS.keys()))
 
+    cameras = {name: RTSPCamera(url, ip_address=name, default_timeout_s=CAPTURE_TIMEOUT_S) for name, url in CAMERAS.items()}
     failure_count = {name: 0 for name in CAMERAS}
     skip_until = {name: 0.0 for name in CAMERAS}
 
@@ -84,7 +37,7 @@ def main() -> None:
         cycle_start = time.time()
         log.info("New cycle")
 
-        for name, url in CAMERAS.items():
+        for name, cam in cameras.items():
             now = time.time()
             if now < skip_until[name]:
                 left = skip_until[name] - now
@@ -93,12 +46,11 @@ def main() -> None:
 
             t0 = time.time()
             log.info("[%s] capture attempt", name)
-
-            frame = grab_frame_ffmpeg(url, CAPTURE_TIMEOUT_S)
+            img = cam.capture()  # uses ffmpeg with hard timeout internally
             dt = time.time() - t0
 
-            if frame is not None:
-                h, w = frame.shape[:2]
+            if img is not None:
+                w, h = img.size
                 log.info("[%s] capture ok in %.2fs, size %dx%d", name, dt, w, h)
                 failure_count[name] = 0
             else:
