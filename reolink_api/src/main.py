@@ -17,8 +17,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 
 CAPTURE_INTERVAL = 30.0
 PER_CAMERA_DELAY = 0.2
-MAX_FAILS_BEFORE_SKIP = 1
-SKIP_DURATION = 120.0
+MAX_FAILS_BEFORE_SKIP = 2
+SKIP_DURATION = 30 * 60 #30mn
 
 # runtime state
 last_images: Dict[str, Image.Image] = {}
