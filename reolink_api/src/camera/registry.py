@@ -86,6 +86,8 @@ for key, conf in RAW_CONFIG.items():
         cam_obj = build_camera_object(key, conf)
         if cam_obj is not None:
             CAMERA_REGISTRY[key] = cam_obj
+            im = cam_obj.capture()
+            print(f"Image captured from {key}, image size {im.size}")
         else:
             logger.warning("Camera %s was not registered due to configuration error.", key)
     except Exception as e:
