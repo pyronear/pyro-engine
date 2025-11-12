@@ -10,7 +10,7 @@ services:
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
     volumes:
       - ./data:/usr/src/app/data
-    command: python main.py
+    command: python camera_api/main.py
     restart: always
     network_mode: host
     logging:
