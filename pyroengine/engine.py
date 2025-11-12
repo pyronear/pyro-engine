@@ -107,6 +107,7 @@ class Engine:
 
         # API Setup
         self.api_client: dict[str, Any] = {}
+        api_url = None
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
             for _id, (camera_token, _, _) in cam_creds.items():
