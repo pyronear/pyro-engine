@@ -1,9 +1,5 @@
 # Copyright (C) 2020-2025, Pyronear.
 
-# This program is licensed under the Apache License 2.0.
-# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
-
 from __future__ import annotations
 
 import logging
@@ -16,6 +12,13 @@ from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
 router = APIRouter()
 
+# backoff settings for static cameras
+MAX_FAILS_BEFORE_SKIP = 2            # skip after 2 consecutive failures
+SKIP_DURATION = 30 * 60.0            # skip for 30 minutes
+
+# per camera state for the static loop
+FAILURE_COUNT: dict[str, int] = {}
+SKIP_UNTIL: dict[str, float] = {}
 
 def _is_thread_alive(obj: object) -> bool:
     try:
@@ -59,7 +62,7 @@ def _is_stream_running_for(app, camera_ip: str) -> bool:
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event):
     cam = CAMERA_REGISTRY[camera_ip]
-    poses = cam.cam_poses or []
+    poses = getattr(cam, "cam_poses", []) or []
 
     if not poses:
         logging.warning(f"[{camera_ip}] No poses defined, exiting patrol loop")
@@ -112,24 +115,53 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event):
 def static_loop(camera_ip: str, stop_flag: threading.Event):
     cam = CAMERA_REGISTRY[camera_ip]
     logging.info(f"[{camera_ip}] Starting static camera loop")
+
+    # init per camera state
+    FAILURE_COUNT.setdefault(camera_ip, 0)
+    SKIP_UNTIL.setdefault(camera_ip, 0.0)
+
     settle_until = 0.0
 
     while not stop_flag.is_set():
-        try:
-            image = cam.capture()
-            now = time.time()
+        now = time.time()
 
-            # after a reconnect, wait a bit before storing
-            if getattr(cam, "_opened_at", 0):
-                settle_until = cam._opened_at + 1.0
+        # skip window
+        if now < SKIP_UNTIL[camera_ip]:
+            left = int(SKIP_UNTIL[camera_ip] - now)
+            logging.warning(f"[{camera_ip}] Skipped for {left}s due to previous failures")
+        else:
+            try:
+                # capture with internal timeout handled by RTSPCamera
+                image = cam.capture()
+                now = time.time()
 
-            if image and now >= settle_until:
-                print("image size", camera_ip, image.size)
-                cam.last_images[-1] = image
-                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
-        except Exception as e:
-            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
+                # after a reconnect, wait a bit before storing
+                if getattr(cam, "_opened_at", 0):
+                    settle_until = cam._opened_at + 1.0
 
+                if image and now >= settle_until:
+                    cam.last_images[-1] = image
+                    logging.info(f"[{camera_ip}] Updated static image (pose -1)")
+                    # success, reset failure counter and clear skip
+                    FAILURE_COUNT[camera_ip] = 0
+                    SKIP_UNTIL[camera_ip] = 0.0
+                else:
+                    # failure or filtered store
+                    FAILURE_COUNT[camera_ip] += 1
+                    logging.error(f"[{camera_ip}] Capture returned no image, failures={FAILURE_COUNT[camera_ip]}")
+                    if FAILURE_COUNT[camera_ip] >= MAX_FAILS_BEFORE_SKIP:
+                        SKIP_UNTIL[camera_ip] = time.time() + SKIP_DURATION
+                        logging.error(f"[{camera_ip}] Entering skip window for {int(SKIP_DURATION)}s")
+
+            except Exception as e:
+                # capture raised
+                FAILURE_COUNT[camera_ip] += 1
+                logging.error(f"[{camera_ip}] Error capturing static image: {e}, failures={FAILURE_COUNT[camera_ip]}")
+                if FAILURE_COUNT[camera_ip] >= MAX_FAILS_BEFORE_SKIP:
+                    SKIP_UNTIL[camera_ip] = time.time() + SKIP_DURATION
+                    logging.error(f"[{camera_ip}] Entering skip window for {int(SKIP_DURATION)}s")
+
+        # sleep 30 seconds or exit early
         if stop_flag.wait(30):
             break
 
@@ -159,7 +191,7 @@ def start_patrol(camera_ip: str, request: Request):
 
     stop_flag = threading.Event()
 
-    if cam.cam_type == "ptz":
+    if getattr(cam, "cam_type", "static") == "ptz":
         target_fn = patrol_loop
         loop_type = "patrol"
     else:
@@ -206,4 +238,5 @@ def patrol_status(camera_ip: str):
         "camera_ip": camera_ip,
         "patrol_running": bool(is_running),
         "loop_type": loop_type,
-    }
+        "failures": FAILURE_COUNT.get(camera_ip, 0),
+        "skip_until": i_
