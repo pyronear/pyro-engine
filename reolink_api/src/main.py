@@ -1,111 +1,77 @@
-# minimal_static_api.py
-# Copyright (C) 2025, Pyronear.
-# Licensed under the Apache License 2.0
-
+# capture_loop.py
 import logging
-import threading
 import time
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+from camera.registry import CAMERA_REGISTRY  # uses your RAW_CONFIG and builds the objects
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s: %(message)s")
+CAPTURE_INTERVAL = 30.0
+PER_CAMERA_DELAY = 0.2
+MAX_FAILS_BEFORE_SKIP = 1
+SKIP_DURATION = 120.0
 
-# ----------------------------------------------------------------------
-# Static loop definition
-# ----------------------------------------------------------------------
+log = logging.getLogger("rtsp_loop")
 
-def static_loop(camera_ip: str, stop_flag: threading.Event):
-    cam = CAMERA_REGISTRY[camera_ip]
-    logging.info(f"[{camera_ip}] Starting static camera loop")
-    settle_until = 0.0
 
-    while not stop_flag.is_set():
-        try:
-            image = cam.capture()
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+
+    cameras = CAMERA_REGISTRY  # Dict[str, object with .capture()]
+    names = list(cameras.keys())
+    log.info("Starting sequential capture loop with registry")
+    log.info("Cameras: %s", ", ".join(names))
+
+    failure_count = {name: 0 for name in names}
+    skip_until = {name: 0.0 for name in names}
+
+    while True:
+        cycle_start = time.time()
+        log.info("New cycle")
+
+        for name in names:
+            cam = cameras[name]
             now = time.time()
+            if now < skip_until[name]:
+                left = skip_until[name] - now
+                log.warning("[%s] skipped for %.0fs due to previous failure", name, left)
+                continue
 
-            # After reconnect, wait a bit before saving
-            if getattr(cam, "_opened_at", 0):
-                settle_until = cam._opened_at + 1.0
+            t0 = time.time()
+            log.info("[%s] capture attempt", name)
 
-            if image and now >= settle_until:
-                print("image size", camera_ip, image.size)
-                cam.last_images[-1] = image
-                logging.info(f"[{camera_ip}] Updated static image (pose -1)")
-        except Exception as e:
-            logging.error(f"[{camera_ip}] Error capturing static image: {e}")
+            img = None
+            try:
+                img = cam.capture()  # RTSPCamera uses ffmpeg with hard timeout internally
+            except Exception as e:
+                log.error("[%s] capture raised: %s", name, e)
 
-        # Wait 30s or exit if flag set
-        if stop_flag.wait(30):
-            break
+            dt = time.time() - t0
 
-    logging.info(f"[{camera_ip}] Static camera loop exited cleanly")
+            if img is not None:
+                try:
+                    w, h = img.size  # Pillow Image
+                except Exception:
+                    # fallback if a camera returns a NumPy array
+                    try:
+                        h, w = img.shape[:2]
+                    except Exception:
+                        w, h = -1, -1
+                log.info("[%s] capture ok in %.2fs, size %dx%d", name, dt, w, h)
+                failure_count[name] = 0
+            else:
+                failure_count[name] += 1
+                log.error("[%s] timed out or failed in %.2fs", name, dt)
+                if failure_count[name] >= MAX_FAILS_BEFORE_SKIP:
+                    skip_until[name] = time.time() + SKIP_DURATION
+                    log.error("[%s] will be skipped for %.0fs", name, SKIP_DURATION)
 
+            time.sleep(PER_CAMERA_DELAY)
 
-# ----------------------------------------------------------------------
-# FastAPI app with lifespan
-# ----------------------------------------------------------------------
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logging.info("Starting minimal static loop service")
-
-    # Start static loops
-    for ip, cam in CAMERA_REGISTRY.items():
-        stop_flag = threading.Event()
-        thread = threading.Thread(target=static_loop, args=(ip, stop_flag), daemon=True)
-        PATROL_THREADS[ip] = thread
-        PATROL_FLAGS[ip] = stop_flag
-        thread.start()
-        logging.info(f"Started static loop for camera {ip}")
-
-    yield
-
-    # Stop all loops at shutdown
-    for ip, flag in PATROL_FLAGS.items():
-        logging.info(f"Stopping static loop for camera {ip}")
-        flag.set()
-
-    logging.info("All static loops stopped")
+        elapsed = time.time() - cycle_start
+        remaining = CAPTURE_INTERVAL - elapsed
+        log.info("Cycle finished in %.2fs, sleep %.2fs", elapsed, max(0.0, remaining))
+        if remaining > 0:
+            time.sleep(remaining)
 
 
-# ----------------------------------------------------------------------
-# App initialization
-# ----------------------------------------------------------------------
-
-app = FastAPI(lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ----------------------------------------------------------------------
-# Simple endpoints
-# ----------------------------------------------------------------------
-
-@app.get("/")
-def root():
-    return {"status": "running", "cameras": list(CAMERA_REGISTRY.keys())}
-
-
-@app.get("/status/{camera_ip}")
-def status(camera_ip: str):
-    thread = PATROL_THREADS.get(camera_ip)
-    flag = PATROL_FLAGS.get(camera_ip)
-    running = thread and thread.is_alive() and flag and not flag.is_set()
-    return {"camera_ip": camera_ip, "loop_running": bool(running)}
-
-
-@app.post("/stop/{camera_ip}")
-def stop(camera_ip: str):
-    if camera_ip in PATROL_FLAGS:
-        PATROL_FLAGS[camera_ip].set()
-        return {"status": "stopping", "camera_ip": camera_ip}
-    raise ValueError(f"No active loop for {camera_ip}")
+if __name__ == "__main__":
+    main()

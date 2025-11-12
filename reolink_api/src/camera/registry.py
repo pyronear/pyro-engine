@@ -62,6 +62,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[object]:
             ip_address=ip_addr,
             cam_type="static",
         )
+
         logger.info("Registered RTSP camera %s (ip=%s)", key, ip_addr)
         return cam_obj
 
