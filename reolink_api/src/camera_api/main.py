@@ -22,10 +22,7 @@ CAMERAS: Dict[str, str] = {
     "Saint Jean Chambre": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/6641704A-0873-40FE-82AE-22EC03AA4AA9",
     "La Forestiere": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/3F8CD700-DFEE-401A-8445-CB9CB0DF3DFF",
     "Sampzon": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/4E10857C-107B-465E-99B3-8E8F0DBCB3E7",
-    "Bidon": r"rtsp://DDSIS\pyronear:4kX<x64K+Pr4@srvcamera:554/live/14C4E0D6-E1D9-471D-802C-A903D91FE4C0",
 
-
-    
 }
 
 
