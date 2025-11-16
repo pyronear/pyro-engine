@@ -150,36 +150,6 @@ def capture(
     )
 
 
-@router.get("/")
-def capture_root(
-    request: Request,
-    camera_ip: str,
-    pos_id: Optional[int] = Query(default=None),
-    anonymize: bool = Query(default=True, description="Apply anonymization using latest boxes"),
-    max_age_ms: Optional[int] = Query(
-        default=None,
-        description="Only use boxes if not older than this many milliseconds",
-    ),
-    strict: bool = Query(
-        default=False,
-        description="If true and no recent boxes are available, return 503",
-    ),
-    width: Optional[int] = Query(
-        default=None,
-        description="Resize output image to this width while preserving aspect ratio. If not provided, no resize is applied.",
-    ),
-):
-    return _capture_impl(
-        request=request,
-        camera_ip=camera_ip,
-        pos_id=pos_id,
-        anonymize=anonymize,
-        max_age_ms=max_age_ms,
-        strict=strict,
-        width=width,
-    )
-
-
 @router.get("/latest_image")
 def get_latest_image(camera_ip: str, pose: int):
     cam = CAMERA_REGISTRY.get(camera_ip)
