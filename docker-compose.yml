@@ -1,9 +1,9 @@
 services:
-  reolink-api:
+  pyro-camera-api:
     build:
-      context: ./reolink_api
-    image: pyronear/reolink-api:latest
-    container_name: reolink-api
+      context: ./pyro_camera_api
+    image: pyronear/pyro-camera-api:latest
+    container_name: pyro-camera-api
     environment:
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
