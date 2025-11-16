@@ -1,5 +1,4 @@
 # Copyright (C) 2022-2025, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
@@ -19,7 +18,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# Lookup dictionaries for pan and tilt speeds
 PAN_SPEEDS = {
     "reolink-823S2": {1: 1.4723, 2: 2.7747, 3: 4.2481, 4: 5.6113, 5: 7.3217},
     "reolink-823A16": {1: 1.4403, 2: 2.714, 3: 4.1801, 4: 5.6259, 5: 7.2743},
@@ -31,12 +29,12 @@ TILT_SPEEDS = {
 }
 
 
-def get_pan_speed_per_sec(model: str, level: int) -> Optional[float]:
-    return PAN_SPEEDS.get(model, {}).get(level)
+def get_pan_speed_per_sec(backend: str, level: int) -> Optional[float]:
+    return PAN_SPEEDS.get(backend, {}).get(level)
 
 
-def get_tilt_speed_per_sec(model: str, level: int) -> Optional[float]:
-    return TILT_SPEEDS.get(model, {}).get(level)
+def get_tilt_speed_per_sec(backend: str, level: int) -> Optional[float]:
+    return TILT_SPEEDS.get(backend, {}).get(level)
 
 
 @router.post("/move")
@@ -64,7 +62,7 @@ def move_camera(
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     conf = RAW_CONFIG.get(camera_ip, {})
-    model = conf.get("backend", "unknown")
+    backend = conf.get("backend", "unknown")
 
     try:
         if pose_id is not None:
@@ -74,26 +72,26 @@ def move_camera(
 
         if degrees is not None and direction:
             if direction in ["Left", "Right"]:
-                deg_per_sec = get_pan_speed_per_sec(model, speed)
+                deg_per_sec = get_pan_speed_per_sec(backend, speed)
             elif direction in ["Up", "Down"]:
-                deg_per_sec = get_tilt_speed_per_sec(model, speed)
+                deg_per_sec = get_tilt_speed_per_sec(backend, speed)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
 
             if deg_per_sec is None:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported model '{model}' or speed level {speed}",
+                    detail=f"Unsupported backend '{backend}' or speed level {speed}",
                 )
 
             duration_sec = abs(degrees) / deg_per_sec
             logger.info(
-                "[%s] Moving %s for %.2fs at speed %s (model=%s)",
+                "[%s] Moving %s for %.2fs at speed %s (backend=%s)",
                 camera_ip,
                 direction,
                 duration_sec,
                 speed,
-                model,
+                backend,
             )
 
             cam.move_camera(direction, speed=speed)  # type: ignore[arg-type]
@@ -109,7 +107,7 @@ def move_camera(
                 "degrees": degrees,
                 "duration": round(duration_sec, 2),
                 "speed": speed,
-                "model": model,
+                "backend": backend,
             }
 
         if direction:
@@ -188,7 +186,6 @@ def zoom_camera(camera_ip: str, level: int):
     if not (0 <= level <= 64):
         raise HTTPException(status_code=400, detail="Zoom level must be between 0 and 64")
 
-    # Only some cameras have a start_zoom_focus method, usually Reolink
     if not hasattr(cam, "start_zoom_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support zoom control")
 
