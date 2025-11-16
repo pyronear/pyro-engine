@@ -15,7 +15,7 @@ from PIL import Image
 from pyro_camera_api.api.deps import get_camera
 from pyro_camera_api.camera.base import BaseCamera
 from pyro_camera_api.core.config import RAW_CONFIG
-from pyro_camera_api.services.anonymization import paint_boxes_black, scale_and_clip_boxes
+from pyro_camera_api.services.anonymizer import paint_boxes_black, scale_and_clip_boxes
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()

@@ -15,8 +15,8 @@ from urllib.parse import urlencode
 
 import cv2
 import numpy as np
-from anonymizer.vision import Anonymizer  # your detection model
 from PIL import Image
+from pyro_camera_api.services.vision import Anonymizer
 
 logger = logging.getLogger(__name__)
 
