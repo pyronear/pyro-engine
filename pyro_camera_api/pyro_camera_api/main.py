@@ -1,5 +1,5 @@
-# pyro_camera_api/main.py
-# Copyright (C) 2020-2025, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
+
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
@@ -20,17 +20,15 @@ from pyro_camera_api.api.routes_stream import router as stream_router
 from pyro_camera_api.camera.patrol import patrol_loop, static_loop
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from pyro_camera_api.core.logging import setup_logging
-from pyro_camera_api.services.anonymizer import AnonymizerWorker, BoxStore, LastFrameStore
+from pyro_camera_api.services.anonymizer_rtsp import AnonymizerWorker, BoxStore, LastFrameStore
 from pyro_camera_api.services.stream import set_app_for_stream, stop_stream_if_idle
 
-# Configure logging once at import time
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # shared video state
     if not hasattr(app.state, "frames"):
         app.state.frames = LastFrameStore()
     if not hasattr(app.state, "boxes"):
@@ -43,16 +41,13 @@ async def lifespan(app: FastAPI):
         )
         app.state.anonymizer.start()
 
-    # registries for stream pipelines and processes
     if not hasattr(app.state, "stream_workers"):
         app.state.stream_workers = {}  # type: ignore[assignment]
     if not hasattr(app.state, "stream_processes"):
         app.state.stream_processes = {}  # type: ignore[assignment]
 
-    # allow stream service to access app.state
     set_app_for_stream(app)
 
-    # start patrol or static loops for each camera
     for cam_id, cam in CAMERA_REGISTRY.items():
         if cam_id in PATROL_THREADS and PATROL_THREADS[cam_id].is_alive():
             continue
@@ -69,18 +64,15 @@ async def lifespan(app: FastAPI):
         PATROL_FLAGS[cam_id] = stop_flag
         thread.start()
 
-    # idle auto stop thread for streams
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
     try:
         yield
     finally:
-        # stop patrol loops
         for cam_id, flag in PATROL_FLAGS.items():
             logger.info("Stopping loop for camera %s", cam_id)
             flag.set()
 
-        # stop pipelines
         try:
             workers = getattr(app.state, "stream_workers", {})
             for cam_id, p in list(workers.items()):
@@ -98,7 +90,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
-        # stop ffmpeg processes
         try:
             procs = getattr(app.state, "stream_processes", {})
             for cam_id, proc in list(procs.items()):
@@ -114,7 +105,6 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
-        # stop anonymizer worker
         try:
             if hasattr(app.state, "anonymizer"):
                 app.state.anonymizer.stop()
@@ -124,7 +114,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -133,9 +122,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(health_router, prefix="/health", tags=["Health"])
-app.include_router(cameras_router, prefix="/capture", tags=["Capture"])
+app.include_router(cameras_router, tags=["Cameras"])
 app.include_router(control_router, prefix="/control", tags=["Control"])
 app.include_router(focus_router, prefix="/focus", tags=["Focus"])
 app.include_router(patrol_router, prefix="/patrol", tags=["Patrol"])
