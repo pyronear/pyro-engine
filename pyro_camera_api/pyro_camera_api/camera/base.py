@@ -72,24 +72,15 @@ class FocusMixin(ABC):
 
     @abstractmethod
     def set_manual_focus(self, position: int) -> None:
-        """
-        Set manual focus to a specific position.
-
-        Args:
-            position: Backend specific focus position value.
-        """
+        """Set manual focus to a specific position."""
         ...
 
     @abstractmethod
-    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
+    def get_focus_level(self) -> Optional[dict]:
         """
-        Run a focus search algorithm and return best focus position.
+        Retrieve current focus and zoom information.
 
-        Args:
-            save_images: If true, implementation may save intermediate images.
-            retry_depth: Optional parameter for implementations that want retries.
-
-        Returns:
-            Best focus position found as an integer.
+        Expected shape for dict (Reolink)
+          { "focus": int | None, "zoom": int | None }
         """
         ...

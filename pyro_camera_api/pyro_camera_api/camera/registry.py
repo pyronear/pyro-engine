@@ -12,13 +12,12 @@ from pyro_camera_api.camera.backends.url import URLCamera
 from pyro_camera_api.camera.base import BaseCamera
 from pyro_camera_api.core.config import CAM_PWD, CAM_USER, RAW_CONFIG
 
-logger = logging.getLogger("CameraRegistry")
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Global registry of camera objects, keyed by camera id or ip
+# Global registry of camera objects, keyed by camera id
 CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 
-# Patrol threading state, we will later move the logic to camera.patrol
+# Patrol threading state, later managed in camera.patrol
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
 
@@ -27,22 +26,22 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """
     Build the appropriate camera object based on configuration.
 
-    Expected keys in conf
-      brand   "reolink", "rtsp", "http" or "url"
-      type    "ptz" or "static"
-      ip_address   optional, default is key
-      rtsp_url     for RTSP cameras
-      url          for HTTP snapshot cameras
-      poses        PTZ positions
+    Expected keys in conf:
+      backend:  "reolink", "rtsp", "url"
+      type:     "ptz" or "static"
+      ip_address
+      rtsp_url       if backend == "rtsp"
+      url            if backend == "url"
+      poses
       azimuths
-      focus_position
+      focus_position (Reolink only)
     """
-    brand = conf.get("brand", "").lower()
+    backend = conf.get("backend", "").lower()
     cam_type = conf.get("type", "static").lower()
     ip_addr = conf.get("ip_address", key)
 
-    # Reolink cameras
-    if "reolink" in brand:
+    # Reolink camera (full control)
+    if backend == "reolink":
         cam = ReolinkCamera(
             camera_id=key,
             ip_address=ip_addr,
@@ -56,11 +55,11 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered Reolink camera %s", key)
         return cam
 
-    # RTSP cameras
-    if brand == "rtsp":
+    # RTSP camera (capture only)
+    if backend == "rtsp":
         rtsp_url = conf.get("rtsp_url")
         if not rtsp_url:
-            logger.error("Camera %s declared as RTSP but missing 'rtsp_url'", key)
+            logger.error("Camera %s declared as RTSP backend but missing 'rtsp_url'", key)
             return None
 
         cam = RTSPCamera(
@@ -72,11 +71,11 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered RTSP camera %s", key)
         return cam
 
-    # HTTP or URL snapshot cameras
-    if brand in ("http", "https", "url", ""):
+    # URL / HTTP snapshot camera (capture only)
+    if backend in ("url", "http", "https"):
         snapshot_url = conf.get("url")
         if not snapshot_url:
-            logger.error("Camera %s declared as HTTP snapshot but missing 'url'", key)
+            logger.error("Camera %s declared as URL backend but missing 'url'", key)
             return None
 
         cam = URLCamera(
@@ -84,10 +83,11 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             url=snapshot_url,
             cam_type="static",
         )
-        logger.info("Registered HTTP snapshot camera %s", key)
+        logger.info("Registered URL snapshot camera %s", key)
         return cam
 
-    logger.error("Unknown camera brand for %s, value was %s", key, brand)
+    # Backend not recognized
+    logger.error("Unknown backend for %s, value was '%s'", key, backend)
     return None
 
 
@@ -100,4 +100,4 @@ for key, conf in RAW_CONFIG.items():
         else:
             logger.warning("Camera %s was not registered due to configuration error", key)
     except Exception as exc:
-        logger.error("Failed to initialize camera %s, %s", key, exc)
+        logger.error("Failed to initialize camera %s: %s", key, exc)
