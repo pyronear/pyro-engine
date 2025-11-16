@@ -6,10 +6,9 @@ import time
 from io import BytesIO
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from PIL import Image
-from pyro_camera_api.api.deps import get_camera
-from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.services.anonymization import paint_boxes_black, scale_and_clip_boxes
 from pyro_camera_api.utils.time_utils import update_command_time
@@ -59,7 +58,6 @@ def get_camera_infos():
 def capture(
     request: Request,
     camera_ip: str,
-    cam: BaseCamera = Depends(get_camera),
     pos_id: Optional[int] = Query(default=None),
     anonymize: bool = Query(default=True, description="Apply anonymization using latest boxes"),
     max_age_ms: Optional[int] = Query(
@@ -77,7 +75,10 @@ def capture(
 ):
     update_command_time()
 
-    # at this point cam is guaranteed to exist, or 404 would already be raised by get_camera
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail="Unknown camera")
+
     img: Optional[Image.Image] = cam.capture(pos_id=pos_id)
     if img is None:
         raise HTTPException(status_code=500, detail="Failed to capture image")
@@ -129,12 +130,11 @@ def capture(
 
 
 @router.get("/latest_image")
-def get_latest_image(
-    camera_ip: str,
-    pose: int,
-    cam: BaseCamera = Depends(get_camera),
-):
-    # cam is guaranteed to exist thanks to get_camera
+def get_latest_image(camera_ip: str, pose: int):
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail="Unknown camera")
+
     if pose not in cam.last_images or cam.last_images[pose] is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
