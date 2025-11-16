@@ -17,18 +17,17 @@ test:
 single-docs:
 	sphinx-build docs/source docs/_build -a
 
-
-# update requirements.txt
+# Update requirements.txt for the main project
 lock:
 	poetry lock
 	poetry export -f requirements.txt --without-hashes --output requirements.txt
 
-# Generate requirements and build Docker image
+# Generate requirements and build camera API Docker image
 build-api:
-	poetry export -C reolink-api -f requirements.txt --without-hashes --output requirements.txt
-	docker build -f reolink_api/Dockerfile reolink_api -t pyronear/reolink-api:latest
+	poetry export -C pyro_camera_api -f requirements.txt --without-hashes --output pyro_camera_api/requirements.txt
+	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 
-# Build the docker
+# Build the engine Docker image
 build-app:
 	docker build . -t pyronear/pyro-engine:latest
 
@@ -41,20 +40,20 @@ build-optional-lib:
 	pip install -e .[docs]
 	pip install -e .[dev]
 
-# Run the engine wrapper
+# Build both images and run the stack
 run:
 	docker build . -t pyronear/pyro-engine:latest
-	docker build -f reolink_api/Dockerfile reolink_api -t pyronear/reolink-api:latest
+	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 	docker compose up -d
 
 # Get log from engine wrapper
-log: 
+log:
 	docker logs -f --tail 50 engine
 
-# Get log from live_stream wrapper
-log-api: 
-	docker logs -f --tail 50 reolink-api
+# Get log from camera API wrapper
+log-api:
+	docker logs -f --tail 50 pyro-camera-api
 
-# Stop the engine wrapper
+# Stop the stack
 stop:
 	docker compose down
