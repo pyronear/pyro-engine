@@ -10,7 +10,6 @@ services:
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
     volumes:
       - ./data:/usr/src/app/data
-    command: uvicorn main:app --host 0.0.0.0 --port 8081
     restart: always
     network_mode: host
     logging:
@@ -18,6 +17,7 @@ services:
       options:
         max-size: "100m"
         max-file: "5"
+
 
   engine:
     build:
