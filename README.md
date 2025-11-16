@@ -89,21 +89,21 @@ Additionally, you'll need a `./data` folder which contains:
 ```json
   {
       "169.254.7.1": {
-          "brand": "reolink",
+          "backend": "reolink",
           "type": "static",
           "token": "",
           "azimuth": 322,
           "id": 9,
       },
       "169.254.7.2": {
-          "brand": "reolink",
+          "backend": "reolink",
           "type": "static",
           "token": "",
           "azimuth": 251,
           "id": 10,
       },
       "169.254.7.3": {
-          "brand": "reolink",
+          "backend": "reolink",
           "type": "ptz",
           "token": "",
           "focus_position": 700,

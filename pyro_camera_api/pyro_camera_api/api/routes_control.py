@@ -64,7 +64,7 @@ def move_camera(
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     conf = RAW_CONFIG.get(camera_ip, {})
-    model = conf.get("brand", "unknown")
+    model = conf.get("backend", "unknown")
 
     try:
         if pose_id is not None:
