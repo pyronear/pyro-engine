@@ -43,8 +43,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     cam_type = conf.get("type", "static").lower()
     ip_addr = conf.get("ip_address", key)
 
-    # Reolink camera (full control)
-    if backend == "reolink":
+    # Reolink camera
+    if "reolink" in backend:
         cam = ReolinkCamera(
             camera_id=key,
             ip_address=ip_addr,

@@ -12,7 +12,6 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from PIL import Image
-
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.services.anonymizer import paint_boxes_black, scale_and_clip_boxes
@@ -33,18 +32,16 @@ def list_cameras():
 def get_camera_infos():
     camera_infos = []
     for cam_id, conf in RAW_CONFIG.items():
-        camera_infos.append(
-            {
-                "id": conf.get("id", cam_id),
-                "camera_id": cam_id,
-                "ip": conf.get("ip_address", cam_id),
-                "backend": conf.get("backend", "unknown"),
-                "type": conf.get("type", "Unknown"),
-                "name": conf.get("name", cam_id),
-                "azimuths": conf.get("azimuths", []),
-                "poses": conf.get("poses", []),
-            }
-        )
+        camera_infos.append({
+            "id": conf.get("id", cam_id),
+            "camera_id": cam_id,
+            "ip": conf.get("ip_address", cam_id),
+            "backend": conf.get("backend", "unknown"),
+            "type": conf.get("type", "Unknown"),
+            "name": conf.get("name", cam_id),
+            "azimuths": conf.get("azimuths", []),
+            "poses": conf.get("poses", []),
+        })
     return {"cameras": camera_infos}
 
 
