@@ -11,6 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, cast
+from urllib.parse import urlencode
 
 import cv2
 import numpy as np
