@@ -54,7 +54,7 @@ class PyroCameraAPIClient:
     # ------------------------------------------------------------------
 
     def list_cameras(self) -> List[str]:
-        resp = self._request("GET", "/cameras/cameras")
+        resp = self._request("GET", "/cameras/cameras_list")
         data = resp.json()
         return data.get("camera_ids", [])
 

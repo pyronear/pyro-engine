@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 Box = Tuple[int, int, int, int]
 
 
-@router.get("/cameras")
+@router.get("/cameras_list")
 def list_cameras():
     """
     Return the list of configured camera identifiers.
