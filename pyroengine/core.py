@@ -16,10 +16,9 @@ import requests
 import urllib3
 from PIL import Image, UnidentifiedImageError
 
-# Add the parent folder of reolink_api to the import path
-sys.path.append(str(Path(__file__).resolve().parent.parent / "reolink_api"))
+# Add the parent folder of pyro_camera_api to the import path
+sys.path.append(str(Path(__file__).resolve().parent.parent / "pyro_camera_api"))
 
-from reolink_api_client import ReolinkAPIClient
 
 from .engine import Engine
 
@@ -75,7 +74,7 @@ class SystemController:
         self,
         engine: Engine,
         camera_data: Dict[str, Dict[str, Any]],
-        reolink_api_url,
+        pyro_camera_api_url,
         mediamtx_server_ip: Optional[str] = None,
     ) -> None:
         self.engine = engine
@@ -90,7 +89,7 @@ class SystemController:
             try:
                 logging.info("wait api ...")
                 # create the client
-                self.reolink_client = ReolinkAPIClient(reolink_api_url)
+                self.reolink_client = ReolinkAPIClient(pyro_camera_api_url)
                 # sanity ping to ensure the API is really up
                 _ = self.reolink_client.get_stream_status()
                 logging.info("Reolink API client ready")

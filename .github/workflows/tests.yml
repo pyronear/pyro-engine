@@ -127,5 +127,5 @@ jobs:
           license: 'Apache-2.0'
           owner: 'Pyronear'
           starting-year: 2020
-          folders: 'pyroengine,docs,scripts,.github,src,reolink_api'
+          folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api'
           ignores: 'version.py,__init__.py'

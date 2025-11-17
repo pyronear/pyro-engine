@@ -68,7 +68,7 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
     )
 
-    sys_controller = SystemController(engine, camera_data, args.reolink_api_url, MEDIAMTX_SERVER_IP)
+    sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url, MEDIAMTX_SERVER_IP)
 
     sys_controller.main_loop(args.period, args.send_alerts)
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     # Camera & cache
 
-    parser.add_argument("--reolink_api_url", type=str, default="http://127.0.0.1:8081", help="Camera api url")
+    parser.add_argument("--pyro_camera_api_url", type=str, default="http://127.0.0.1:8081", help="Camera api url")
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
     parser.add_argument(
