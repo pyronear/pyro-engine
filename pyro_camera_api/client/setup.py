@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from setuptools import setup, find_packages
+from setuptools import setup
 
 PKG_NAME = "pyro_camera_api_client"
 VERSION = os.getenv("BUILD_VERSION", "0.1.0.dev0")

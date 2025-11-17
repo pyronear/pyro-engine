@@ -54,42 +54,18 @@ class PyroCameraAPIClient:
     # ------------------------------------------------------------------
 
     def list_cameras(self) -> List[str]:
-        resp = self._request("GET", "/capture/cameras")
+        resp = self._request("GET", "/cameras/cameras")
         data = resp.json()
         return data.get("camera_ids", [])
 
-    def camera_infos(self) -> List[Dict[str, Any]]:
-        resp = self._request("GET", "/capture/camera_infos")
+    def get_camera_infos(self) -> List[Dict[str, Any]]:
+        resp = self._request("GET", "/cameras/camera_infos")
         data = resp.json()
         return data.get("cameras", [])
 
     # ------------------------------------------------------------------
     # Capture
     # ------------------------------------------------------------------
-
-    def capture_jpeg(
-        self,
-        camera_ip: str,
-        pos_id: Optional[int] = None,
-        anonymize: bool = True,
-        max_age_ms: Optional[int] = None,
-        strict: bool = False,
-        width: Optional[int] = None,
-    ) -> bytes:
-        params: Dict[str, Any] = {
-            "camera_ip": camera_ip,
-            "anonymize": anonymize,
-            "strict": strict,
-        }
-        if pos_id is not None:
-            params["pos_id"] = pos_id
-        if max_age_ms is not None:
-            params["max_age_ms"] = max_age_ms
-        if width is not None:
-            params["width"] = width
-
-        resp = self._request("GET", "/capture/capture", params=params, stream=True)
-        return resp.content
 
     def capture_image(
         self,
@@ -110,7 +86,7 @@ class PyroCameraAPIClient:
         )
         return Image.open(io.BytesIO(data)).convert("RGB")
 
-    def latest_image(
+    def get_latest_image(
         self,
         camera_ip: str,
         pose: int,
@@ -125,7 +101,7 @@ class PyroCameraAPIClient:
     # PTZ control
     # ------------------------------------------------------------------
 
-    def move(
+    def move_camera(
         self,
         camera_ip: str,
         direction: Optional[str] = None,
@@ -147,7 +123,7 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/control/move", params=params)
         return resp.json()
 
-    def stop(self, camera_ip: str) -> Dict[str, Any]:
+    def stop_camera(self, camera_ip: str) -> Dict[str, Any]:
         resp = self._request("POST", f"/control/stop/{camera_ip}")
         return resp.json()
 
@@ -171,7 +147,7 @@ class PyroCameraAPIClient:
     # Focus
     # ------------------------------------------------------------------
 
-    def manual_focus(self, camera_ip: str, position: int) -> Dict[str, Any]:
+    def set_manual_focus(self, camera_ip: str, position: int) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip, "position": position}
         resp = self._request("POST", "/focus/manual", params=params)
         return resp.json()
@@ -181,12 +157,12 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/focus/set_autofocus", params=params)
         return resp.json()
 
-    def focus_status(self, camera_ip: str) -> Dict[str, Any]:
+    def get_focus_status(self, camera_ip: str) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/focus/status", params=params)
         return resp.json()
 
-    def focus_finder(self, camera_ip: str, save_images: bool = False) -> Dict[str, Any]:
+    def run_focus_optimization(self, camera_ip: str, save_images: bool = False) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip, "save_images": save_images}
         resp = self._request("POST", "/focus/focus_finder", params=params)
         return resp.json()
@@ -205,7 +181,7 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/patrol/stop_patrol", params=params)
         return resp.json()
 
-    def patrol_status(self, camera_ip: str) -> Dict[str, Any]:
+    def get_patrol_status(self, camera_ip: str) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/patrol/patrol_status", params=params)
         return resp.json()
@@ -222,7 +198,7 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/stream/stop_stream")
         return resp.json()
 
-    def stream_status(self) -> Dict[str, Any]:
+    def get_stream_status(self) -> Dict[str, Any]:
         resp = self._request("GET", "/stream/status")
         return resp.json()
 
