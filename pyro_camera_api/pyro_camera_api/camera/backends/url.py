@@ -7,12 +7,12 @@ from __future__ import annotations
 import logging
 import re
 from io import BytesIO
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import requests
 from PIL import Image
-from requests.auth import HTTPBasicAuth, HTTPDigestAuth
+from requests.auth import HTTPDigestAuth
 
 from pyro_camera_api.camera.base import BaseCamera
 
@@ -34,50 +34,38 @@ class URLCamera(BaseCamera):
         self.timeout = timeout
 
     @staticmethod
-    def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:
-        """
-        Remove user:pass@host from URL and return clean URL plus optional credentials.
-
-        Returns:
-            tuple[str, Optional[tuple[str, str]]]: (clean_url, (user, password)) or (clean_url, None).
-        """
-        if "@" in parsed.netloc:
-            creds, hostport = parsed.netloc.rsplit("@", 1)
-            user, password = creds.split(":", 1) if ":" in creds else (creds, "")
-            cleaned = parsed._replace(netloc=hostport)
-            return urlunparse(cleaned), (user, password)
-        return urlunparse(parsed), None
-
-    @staticmethod
-    def _extract_query_credentials(url: str) -> Optional[Tuple[str, str]]:
-        """
-        Detect query patterns like ?usr=...&pwd=... and return (user, password) if found.
-        """
-        m_usr = re.search(r"[?&]usr=([^&]+)", url)
-        m_pwd = re.search(r"[?&]pwd=([^&]+)", url)
-        if m_usr and m_pwd:
-            return m_usr.group(1), m_pwd.group(1)
-        return None
-
-    @staticmethod
     def _redact(url: str) -> str:
         """
-        Return a log friendly version of the URL with credentials masked.
+        Mask credentials in URL for safe logging.
         """
         parsed = urlparse(url)
+        # Drop user info from netloc
         netloc = parsed.netloc.split("@")[-1]
         cleaned = parsed._replace(netloc=netloc)
         redacted = urlunparse(cleaned)
+        # Mask query credentials
         redacted = re.sub(r"(usr|user|username)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
         redacted = re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
         return redacted
 
+    @staticmethod
+    def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:
+        """
+        Remove user:pass@ from the URL authority.
+
+        Returns:
+            clean_url, (user, password) or clean_url, None
+        """
+        if "@" in parsed.netloc:
+            creds, hostport = parsed.netloc.rsplit("@", 1)
+            user, pwd = creds.split(":", 1) if ":" in creds else (creds, "")
+            cleaned = parsed._replace(netloc=hostport)
+            return urlunparse(cleaned), (user, pwd)
+        return urlunparse(parsed), None
+
     def _fetch_image(self, target_url: str, auth=None) -> Optional[Image.Image]:
         """
         Perform the HTTP GET and try to decode the response as an image.
-
-        This method logs detailed information when the request fails so that
-        camera side errors can be diagnosed from the logs.
         """
         headers = {
             "User-Agent": (
@@ -85,11 +73,10 @@ class URLCamera(BaseCamera):
             ),
             "Accept": "image/*",
         }
-
         redacted = self._redact(target_url)
 
         try:
-            response = requests.get(
+            resp = requests.get(
                 target_url,
                 headers=headers,
                 timeout=self.timeout,
@@ -99,29 +86,69 @@ class URLCamera(BaseCamera):
             logger.error("Request to %s failed, %s", redacted, exc)
             return None
 
-        if response.status_code != 200:
-            # Log status plus a small head of headers and body to help debugging
-            header_sample = dict(list(response.headers.items())[:5])
-            body_head = response.content[:200]
+        if resp.status_code != 200:
+            header_sample = dict(list(resp.headers.items())[:5])
+            body_head = resp.content[:200]
             logger.error(
                 "HTTP error for %s, status=%s, headers=%r, body_head=%r",
                 redacted,
-                response.status_code,
+                resp.status_code,
                 header_sample,
                 body_head,
             )
             return None
 
-        if not response.content:
-            logger.error("Empty response content from %s, status=%s", redacted, response.status_code)
+        if not resp.content:
+            logger.error("Empty response content from %s, status=%s", redacted, resp.status_code)
             return None
 
         try:
-            img = Image.open(BytesIO(response.content)).convert("RGB")
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
         except Exception as exc:
             logger.error("Error decoding image from %s, %s", redacted, exc)
             return None
 
+        return img
+
+    def _capture_foscam_style(self) -> Optional[Image.Image]:
+        """
+        For URLs that already embed usr and pwd as query params.
+
+        Example:
+        http://host:1340/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=XXX&pwd=YYY
+        """
+        redacted = self._redact(self.url)
+        logger.info("Trying Foscam style URL snapshot for %s", redacted)
+        img = self._fetch_image(self.url, auth=None)
+        if img is not None:
+            logger.info("URL capture OK from %s (no auth), size=%s", redacted, img.size)
+        return img
+
+    def _capture_digest_style(self) -> Optional[Image.Image]:
+        """
+        For URLs that require HTTP Digest authentication.
+
+        Example:
+        http://user:pass@host:port/cgi-bin/snapshot.cgi
+        """
+        parsed = urlparse(self.url)
+        clean_url, creds = self._strip_credentials(parsed)
+
+        if not creds:
+            logger.error(
+                "Digest style URL snapshot requires inline credentials in %s",
+                self._redact(self.url),
+            )
+            return None
+
+        user, pwd = creds
+        redacted = self._redact(clean_url)
+        logger.info("Trying Digest auth snapshot for %s as user '%s'", redacted, user)
+
+        auth = HTTPDigestAuth(user, pwd)
+        img = self._fetch_image(clean_url, auth=auth)
+        if img is not None:
+            logger.info("URL capture OK from %s (HTTPDigestAuth), size=%s", redacted, img.size)
         return img
 
     def capture(self, pos_id: Optional[int] = None) -> Optional[Image.Image]:
@@ -129,47 +156,17 @@ class URLCamera(BaseCamera):
         Fetch a single snapshot from the configured URL and return it as a Pillow Image.
 
         For URL cameras pos_id is ignored but kept for API compatibility.
-        The method tries multiple URL plus auth combinations:
-        original URL, URL without inline credentials, then with optional
-        basic or digest authentication inferred from inline credentials or
-        usr and pwd parameters in the query string.
+
+        Current behavior with your configuration:
+        - If the URL contains 'CGIProxy.fcgi' it uses the URL as is,
+          which works for adf_1340 that uses usr and pwd in the query.
+        - Otherwise it expects 'user:password@host' in the URL and uses HTTP Digest auth
+          against the cleaned URL without embedded credentials, which is the case
+          for adf_1231, adf_1200, adf_1320, adf_5559, adf_5995.
         """
         _ = pos_id
 
-        parsed = urlparse(self.url)
-        clean_url, auth_tuple = self._strip_credentials(parsed)
-        query_auth = self._extract_query_credentials(self.url)
+        if "CGIProxy.fcgi" in self.url:
+            return self._capture_foscam_style()
 
-        auth_candidates: List[Optional[object]] = [None]
-
-        if query_auth:
-            user, password = query_auth
-            auth_candidates.append(HTTPBasicAuth(user, password))
-            auth_candidates.append(HTTPDigestAuth(user, password))
-
-        if auth_tuple:
-            user, password = auth_tuple
-            auth_candidates.append(HTTPBasicAuth(user, password))
-            auth_candidates.append(HTTPDigestAuth(user, password))
-
-        candidate_urls = [self.url, clean_url]
-        seen: set[str] = set()
-
-        for auth in auth_candidates:
-            for candidate_url in candidate_urls:
-                if candidate_url in seen:
-                    continue
-                seen.add(candidate_url)
-
-                img = self._fetch_image(candidate_url, auth=auth)
-                if img is not None:
-                    logger.info(
-                        "URL capture OK from %s (%s), size=%s",
-                        self._redact(candidate_url),
-                        auth.__class__.__name__ if auth else "no auth",
-                        img.size,
-                    )
-                    return img
-
-        logger.error("All URL attempts failed for %s", self._redact(self.url))
-        return None
+        return self._capture_digest_style()
