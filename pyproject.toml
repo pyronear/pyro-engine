@@ -35,7 +35,7 @@ huggingface_hub = "==0.23.1"
 pillow = "==11.0.0"
 ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
-pyro_camera_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "develop", subdirectory = "pyro_camera_api/client" }
+pyro_camera_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "pyro-camera-api", subdirectory = "pyro_camera_api/client" }
 python-dotenv = "==1.1.0"
 
 

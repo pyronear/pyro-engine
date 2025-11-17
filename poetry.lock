@@ -1311,6 +1311,30 @@ files = [
 dev = ["build", "flake8", "mypy", "pytest", "twine"]
 
 [[package]]
+name = "pyro-camera-api-client"
+version = "0.1.0"
+description = "Python client to interact with the Pyro Camera API"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+pillow = "*"
+requests = "*"
+
+[package.extras]
+dev = ["httpx", "mypy", "pytest", "ruff"]
+
+[package.source]
+type = "git"
+url = "https://github.com/pyronear/pyro-engine.git"
+reference = "pyro-camera-api"
+resolved_reference = "164392a2c3909778c4dce6750be7f03f6b11f838"
+subdirectory = "pyro_camera_api/client"
+
+[[package]]
 name = "pyroclient"
 version = "0.2.0.dev0"
 description = "Python Client for Pyronear wildfire alert API"
@@ -1479,30 +1503,6 @@ files = [
     {file = "PyYAML-6.0.2-cp39-cp39-win_amd64.whl", hash = "sha256:39693e1f8320ae4f43943590b49779ffb98acb81f788220ea932a6b6c51004d8"},
     {file = "pyyaml-6.0.2.tar.gz", hash = "sha256:d584d9ec91ad65861cc08d42e834324ef890a082e591037abe114850ff7bbc3e"},
 ]
-
-[[package]]
-name = "reolink-api-client"
-version = "0.1.0"
-description = "Python client to interact with the Reolink API server"
-optional = false
-python-versions = ">=3.9"
-groups = ["main"]
-files = []
-develop = false
-
-[package.dependencies]
-pillow = "*"
-requests = "*"
-
-[package.extras]
-dev = ["httpx", "mypy", "pytest", "ruff"]
-
-[package.source]
-type = "git"
-url = "https://github.com/pyronear/pyro-engine.git"
-reference = "develop"
-resolved_reference = "96485347a1476ee244bfeadd39c7e94a885fbaa0"
-subdirectory = "reolink_api/client"
 
 [[package]]
 name = "requests"
@@ -1837,4 +1837,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "4869cbcdbdb3f79e42f98429b50235eea0052a45d5dd449a9107e6c4d96a975d"
+content-hash = "2fb9fa250a27c151e13fb51b0685b688d011b0d7d6b464bb0b05a82ebe3dacf1"
