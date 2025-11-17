@@ -1,8 +1,6 @@
 # Copyright (C) 2022-2025, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
 
 from __future__ import annotations
 
@@ -38,8 +36,10 @@ class URLCamera(BaseCamera):
     @staticmethod
     def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:
         """
-        Remove user:pass@host from URL.
-        Return (clean_url, (user, pass)) or (clean_url, None).
+        Remove user:pass@host from URL and return clean URL plus optional credentials.
+
+        Returns:
+            tuple[str, Optional[tuple[str, str]]]: (clean_url, (user, password)) or (clean_url, None).
         """
         if "@" in parsed.netloc:
             creds, hostport = parsed.netloc.rsplit("@", 1)
@@ -50,7 +50,9 @@ class URLCamera(BaseCamera):
 
     @staticmethod
     def _extract_query_credentials(url: str) -> Optional[Tuple[str, str]]:
-        """Detect query patterns like ?usr=...&pwd=... and return (user, pass) if found."""
+        """
+        Detect query patterns like ?usr=...&pwd=... and return (user, password) if found.
+        """
         m_usr = re.search(r"[?&]usr=([^&]+)", url)
         m_pwd = re.search(r"[?&]pwd=([^&]+)", url)
         if m_usr and m_pwd:
@@ -59,7 +61,9 @@ class URLCamera(BaseCamera):
 
     @staticmethod
     def _redact(url: str) -> str:
-        """Return a log friendly version of the URL with credentials masked."""
+        """
+        Return a log friendly version of the URL with credentials masked.
+        """
         parsed = urlparse(url)
         netloc = parsed.netloc.split("@")[-1]
         cleaned = parsed._replace(netloc=netloc)
@@ -69,6 +73,12 @@ class URLCamera(BaseCamera):
         return redacted
 
     def _fetch_image(self, target_url: str, auth=None) -> Optional[Image.Image]:
+        """
+        Perform the HTTP GET and try to decode the response as an image.
+
+        This method logs detailed information when the request fails so that
+        camera side errors can be diagnosed from the logs.
+        """
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
@@ -76,29 +86,55 @@ class URLCamera(BaseCamera):
             "Accept": "image/*",
         }
 
-        try:
-            r = requests.get(target_url, headers=headers, timeout=self.timeout, auth=auth)
-        except requests.RequestException as e:
-            logger.error("Request to %s failed: %s", self._redact(target_url), e)
-            return None
-
-        if r.status_code != 200 or not r.content:
-            logger.error("Failed to read image content from %s", self._redact(target_url))
-            return None
+        redacted = self._redact(target_url)
 
         try:
-            return Image.open(BytesIO(r.content)).convert("RGB")
-        except Exception as e:
-            logger.error("Error decoding image from %s: %s", self._redact(target_url), e)
+            response = requests.get(
+                target_url,
+                headers=headers,
+                timeout=self.timeout,
+                auth=auth,
+            )
+        except requests.RequestException as exc:
+            logger.error("Request to %s failed, %s", redacted, exc)
             return None
+
+        if response.status_code != 200:
+            # Log status plus a small head of headers and body to help debugging
+            header_sample = dict(list(response.headers.items())[:5])
+            body_head = response.content[:200]
+            logger.error(
+                "HTTP error for %s, status=%s, headers=%r, body_head=%r",
+                redacted,
+                response.status_code,
+                header_sample,
+                body_head,
+            )
+            return None
+
+        if not response.content:
+            logger.error("Empty response content from %s, status=%s", redacted, response.status_code)
+            return None
+
+        try:
+            img = Image.open(BytesIO(response.content)).convert("RGB")
+        except Exception as exc:
+            logger.error("Error decoding image from %s, %s", redacted, exc)
+            return None
+
+        return img
 
     def capture(self, pos_id: Optional[int] = None) -> Optional[Image.Image]:
         """
-        Try to fetch a single snapshot using different auth methods and return it as a Pillow Image.
+        Fetch a single snapshot from the configured URL and return it as a Pillow Image.
 
-        pos_id is accepted for API compatibility but ignored for URL cameras.
+        For URL cameras pos_id is ignored but kept for API compatibility.
+        The method tries multiple URL plus auth combinations:
+        original URL, URL without inline credentials, then with optional
+        basic or digest authentication inferred from inline credentials or
+        usr and pwd parameters in the query string.
         """
-        _ = pos_id  # unused, keeps same capture signature as other backends
+        _ = pos_id
 
         parsed = urlparse(self.url)
         clean_url, auth_tuple = self._strip_credentials(parsed)
@@ -107,17 +143,17 @@ class URLCamera(BaseCamera):
         auth_candidates: List[Optional[object]] = [None]
 
         if query_auth:
-            u, p = query_auth
-            auth_candidates.append(HTTPBasicAuth(u, p))
-            auth_candidates.append(HTTPDigestAuth(u, p))
+            user, password = query_auth
+            auth_candidates.append(HTTPBasicAuth(user, password))
+            auth_candidates.append(HTTPDigestAuth(user, password))
 
         if auth_tuple:
-            u, p = auth_tuple
-            auth_candidates.append(HTTPBasicAuth(u, p))
-            auth_candidates.append(HTTPDigestAuth(u, p))
+            user, password = auth_tuple
+            auth_candidates.append(HTTPBasicAuth(user, password))
+            auth_candidates.append(HTTPDigestAuth(user, password))
 
         candidate_urls = [self.url, clean_url]
-        seen = set()
+        seen: set[str] = set()
 
         for auth in auth_candidates:
             for candidate_url in candidate_urls:
