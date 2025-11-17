@@ -7,6 +7,7 @@ from PIL import Image
 
 from pyroengine.core import SystemController, is_day_time
 
+
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
