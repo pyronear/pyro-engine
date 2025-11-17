@@ -1,4 +1,4 @@
-# Copyright (C) 2020-2025, Pyronear.
+# Copyright (C) 2022-2025, Pyronear.
 
 import os
 from pathlib import Path

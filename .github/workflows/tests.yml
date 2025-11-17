@@ -126,6 +126,6 @@ jobs:
         with:
           license: 'Apache-2.0'
           owner: 'Pyronear'
-          starting-year: 2020
+          starting-year: 2022
           folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api'
           ignores: 'version.py,__init__.py'
