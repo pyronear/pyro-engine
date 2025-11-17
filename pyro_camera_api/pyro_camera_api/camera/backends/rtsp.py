@@ -14,6 +14,7 @@ from typing import Optional
 import cv2
 import numpy as np
 from PIL import Image
+
 from pyro_camera_api.camera.base import BaseCamera
 
 logger = logging.getLogger(__name__)

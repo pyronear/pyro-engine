@@ -12,6 +12,7 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from PIL import Image
+
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.services.anonymizer import paint_boxes_black, scale_and_clip_boxes

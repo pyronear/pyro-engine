@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 
 from fastapi import APIRouter, HTTPException
+
 from pyro_camera_api.camera.base import FocusMixin, PTZMixin
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.utils.time_utils import update_command_time

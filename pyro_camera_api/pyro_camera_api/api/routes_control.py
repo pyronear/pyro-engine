@@ -9,6 +9,7 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+
 from pyro_camera_api.camera.base import PTZMixin
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG

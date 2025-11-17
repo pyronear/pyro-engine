@@ -9,6 +9,7 @@ import logging
 import threading
 
 from fastapi import APIRouter, HTTPException, Request
+
 from pyro_camera_api.camera.patrol import (
     FAILURE_COUNT,
     SKIP_UNTIL,

@@ -10,6 +10,7 @@ import subprocess
 import threading
 
 from fastapi import APIRouter, HTTPException, Request
+
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG, STREAMS
 from pyro_camera_api.services.anonymizer_rtsp import EncoderWorker, RTSPDecoderWorker

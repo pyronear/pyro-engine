@@ -17,6 +17,7 @@ import numpy as np
 import requests
 import urllib3
 from PIL import Image
+
 from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
 
 __all__ = ["ReolinkCamera"]

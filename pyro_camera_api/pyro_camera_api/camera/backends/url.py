@@ -14,8 +14,9 @@ from urllib.parse import urlparse, urlunparse
 
 import requests
 from PIL import Image
-from pyro_camera_api.camera.base import BaseCamera
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
+
+from pyro_camera_api.camera.base import BaseCamera
 
 logger = logging.getLogger(__name__)
 

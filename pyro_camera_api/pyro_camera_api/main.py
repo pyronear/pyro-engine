@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from pyro_camera_api.api.routes_cameras import router as cameras_router
 from pyro_camera_api.api.routes_control import router as control_router
 from pyro_camera_api.api.routes_focus import router as focus_router

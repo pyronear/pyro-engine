@@ -11,6 +11,7 @@ from typing import Optional
 
 import requests
 from PIL import Image
+
 from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
 
 __all__ = ["FakeCamera"]
