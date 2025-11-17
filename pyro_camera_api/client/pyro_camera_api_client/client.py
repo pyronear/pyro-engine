@@ -1,0 +1,231 @@
+# Copyright (C) 2022-2025, Pyronear.
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
+from __future__ import annotations
+
+import io
+from typing import Any, Dict, List, Optional
+
+import requests
+from PIL import Image
+
+
+class PyroCameraAPIClient:
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float = 5.0,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
+    ) -> requests.Response:
+        url = f"{self.base_url}{path}"
+        resp = requests.request(
+            method=method,
+            url=url,
+            params=params,
+            json=json,
+            timeout=self.timeout,
+            stream=stream,
+        )
+        resp.raise_for_status()
+        return resp
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    def health(self) -> Dict[str, Any]:
+        resp = self._request("GET", "/health")
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Camera info
+    # ------------------------------------------------------------------
+
+    def list_cameras(self) -> List[str]:
+        resp = self._request("GET", "/capture/cameras")
+        data = resp.json()
+        return data.get("camera_ids", [])
+
+    def camera_infos(self) -> List[Dict[str, Any]]:
+        resp = self._request("GET", "/capture/camera_infos")
+        data = resp.json()
+        return data.get("cameras", [])
+
+    # ------------------------------------------------------------------
+    # Capture
+    # ------------------------------------------------------------------
+
+    def capture_jpeg(
+        self,
+        camera_ip: str,
+        pos_id: Optional[int] = None,
+        anonymize: bool = True,
+        max_age_ms: Optional[int] = None,
+        strict: bool = False,
+        width: Optional[int] = None,
+    ) -> bytes:
+        params: Dict[str, Any] = {
+            "camera_ip": camera_ip,
+            "anonymize": anonymize,
+            "strict": strict,
+        }
+        if pos_id is not None:
+            params["pos_id"] = pos_id
+        if max_age_ms is not None:
+            params["max_age_ms"] = max_age_ms
+        if width is not None:
+            params["width"] = width
+
+        resp = self._request("GET", "/capture/capture", params=params, stream=True)
+        return resp.content
+
+    def capture_image(
+        self,
+        camera_ip: str,
+        pos_id: Optional[int] = None,
+        anonymize: bool = True,
+        max_age_ms: Optional[int] = None,
+        strict: bool = False,
+        width: Optional[int] = None,
+    ) -> Image.Image:
+        data = self.capture_jpeg(
+            camera_ip=camera_ip,
+            pos_id=pos_id,
+            anonymize=anonymize,
+            max_age_ms=max_age_ms,
+            strict=strict,
+            width=width,
+        )
+        return Image.open(io.BytesIO(data)).convert("RGB")
+
+    def latest_image(
+        self,
+        camera_ip: str,
+        pose: int,
+    ) -> Optional[Image.Image]:
+        params = {"camera_ip": camera_ip, "pose": pose}
+        resp = self._request("GET", "/capture/latest_image", params=params, stream=True)
+        if resp.status_code == 204 or not resp.content:
+            return None
+        return Image.open(io.BytesIO(resp.content)).convert("RGB")
+
+    # ------------------------------------------------------------------
+    # PTZ control
+    # ------------------------------------------------------------------
+
+    def move(
+        self,
+        camera_ip: str,
+        direction: Optional[str] = None,
+        speed: int = 10,
+        pose_id: Optional[int] = None,
+        degrees: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "camera_ip": camera_ip,
+            "speed": speed,
+        }
+        if direction is not None:
+            params["direction"] = direction
+        if pose_id is not None:
+            params["pose_id"] = pose_id
+        if degrees is not None:
+            params["degrees"] = degrees
+
+        resp = self._request("POST", "/control/move", params=params)
+        return resp.json()
+
+    def stop(self, camera_ip: str) -> Dict[str, Any]:
+        resp = self._request("POST", f"/control/stop/{camera_ip}")
+        return resp.json()
+
+    def list_presets(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/control/preset/list", params=params)
+        return resp.json()
+
+    def set_preset(self, camera_ip: str, idx: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"camera_ip": camera_ip}
+        if idx is not None:
+            params["idx"] = idx
+        resp = self._request("POST", "/control/preset/set", params=params)
+        return resp.json()
+
+    def zoom(self, camera_ip: str, level: int) -> Dict[str, Any]:
+        resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}")
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Focus
+    # ------------------------------------------------------------------
+
+    def manual_focus(self, camera_ip: str, position: int) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip, "position": position}
+        resp = self._request("POST", "/focus/manual", params=params)
+        return resp.json()
+
+    def set_autofocus(self, camera_ip: str, disable: bool = True) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip, "disable": disable}
+        resp = self._request("POST", "/focus/set_autofocus", params=params)
+        return resp.json()
+
+    def focus_status(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/focus/status", params=params)
+        return resp.json()
+
+    def focus_finder(self, camera_ip: str, save_images: bool = False) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip, "save_images": save_images}
+        resp = self._request("POST", "/focus/focus_finder", params=params)
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Patrol
+    # ------------------------------------------------------------------
+
+    def start_patrol(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("POST", "/patrol/start_patrol", params=params)
+        return resp.json()
+
+    def stop_patrol(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("POST", "/patrol/stop_patrol", params=params)
+        return resp.json()
+
+    def patrol_status(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/patrol/patrol_status", params=params)
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Stream
+    # ------------------------------------------------------------------
+
+    def start_stream(self, camera_ip: str) -> Dict[str, Any]:
+        resp = self._request("POST", f"/stream/start_stream/{camera_ip}")
+        return resp.json()
+
+    def stop_stream(self) -> Dict[str, Any]:
+        resp = self._request("POST", "/stream/stop_stream")
+        return resp.json()
+
+    def stream_status(self) -> Dict[str, Any]:
+        resp = self._request("GET", "/stream/status")
+        return resp.json()
+
+    def is_stream_running(self, camera_ip: str) -> Dict[str, Any]:
+        resp = self._request("GET", f"/stream/is_stream_running/{camera_ip}")
+        return resp.json()
