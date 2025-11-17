@@ -1,5 +1,4 @@
 # Copyright (C) 2022-2025, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
@@ -18,7 +17,12 @@ router = APIRouter()
 
 @router.post("/manual")
 def manual_focus(camera_ip: str, position: int):
-    """Set manual focus to a specific position."""
+    """
+    Set a manual focus level for a camera in [0,1000].
+
+    The camera must support manual focus via FocusMixin.
+    `position` is applied directly to the camera's focus motor.
+    """
     update_command_time()
 
     cam = CAMERA_REGISTRY.get(camera_ip)
@@ -28,7 +32,6 @@ def manual_focus(camera_ip: str, position: int):
     if not isinstance(cam, FocusMixin):
         raise HTTPException(status_code=400, detail="Camera does not support manual focus")
 
-    # Reolink implementation returns a dict, but we keep it opaque here
     result = cam.set_manual_focus(position)  # type: ignore[call-arg]
 
     return {
@@ -42,9 +45,10 @@ def manual_focus(camera_ip: str, position: int):
 @router.post("/set_autofocus")
 def toggle_autofocus(camera_ip: str, disable: bool = True):
     """
-    Enable or disable camera autofocus if supported.
+    Enable or disable autofocus mode on a camera.
 
-    Reolink cameras expose set_auto_focus(disable).
+    When `disable` is True autofocus is turned off and manual control can be applied.
+    When `disable` is False autofocus is activated if supported by the backend.
     """
     update_command_time()
 
@@ -68,9 +72,10 @@ def toggle_autofocus(camera_ip: str, disable: bool = True):
 @router.get("/status")
 def get_focus_status(camera_ip: str):
     """
-    Return current focus and zoom level if supported.
+    Return the current autofocus and zoom information exposed by the camera.
 
-    Reolink cameras expose get_focus_level().
+    The backend must implement get_focus_level which typically returns
+    the current focus position and zoom position encoded in a device specific structure.
     """
     update_command_time()
 
@@ -91,9 +96,13 @@ def get_focus_status(camera_ip: str):
 @router.post("/focus_finder")
 def run_focus_optimization(camera_ip: str, save_images: bool = False):
     """
-    Run the autofocus search algorithm on a PTZ camera that supports FocusMixin.
+    Run the autofocus search algorithm and return the optimal focus position.
 
-    Optionally move to pose index one first if cam_poses is defined.
+    This operation is supported only on PTZ cameras implementing FocusMixin.
+    If the camera exposes PTZ presets the algorithm tries moving to the second
+    preset before the optimization step when available.
+    The optional `save_images` parameter allows storing captured frames generated
+    during the autofocus process.
     """
     update_command_time()
 
@@ -104,11 +113,9 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     if not isinstance(cam, FocusMixin):
         raise HTTPException(status_code=400, detail="Camera does not support autofocus")
 
-    # Static cameras are explicitly not supported
     if getattr(cam, "cam_type", "static") == "static":
         raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
 
-    # Optional move to pose one if PTZ and poses are defined
     if isinstance(cam, PTZMixin):
         cam_poses = getattr(cam, "cam_poses", None)
         if cam_poses and len(cam_poses) > 1:
@@ -117,7 +124,6 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
                 cam.move_camera("ToPos", idx=pose1, speed=50)  # type: ignore[call-arg]
                 time.sleep(1)
             except Exception:
-                # Do not fail autofocus just because preset move failed
                 pass
 
     best_position = cam.focus_finder(save_images=save_images)  # type: ignore[call-arg]

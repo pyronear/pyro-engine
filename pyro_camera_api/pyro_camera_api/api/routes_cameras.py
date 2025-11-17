@@ -26,11 +26,24 @@ Box = Tuple[int, int, int, int]
 
 @router.get("/cameras")
 def list_cameras():
+    """
+    Return the list of configured camera identifiers.
+
+    The identifiers come from the loaded RAW_CONFIG mapping and correspond
+    to the keys used in CAMERA_REGISTRY and in the API endpoints.
+    """
     return {"camera_ids": list(RAW_CONFIG.keys())}
 
 
 @router.get("/camera_infos")
 def get_camera_infos():
+    """
+    Return metadata for all configured cameras.
+
+    Each entry includes the camera identifier, IP address, backend name,
+    camera type, human readable name, azimuths, and preset poses, based on
+    the RAW_CONFIG content.
+    """
     camera_infos = []
     for cam_id, conf in RAW_CONFIG.items():
         camera_infos.append({
@@ -55,6 +68,43 @@ def _capture_impl(
     strict: bool,
     width: Optional[int],
 ) -> Response:
+    """
+    Internal helper that captures a frame and applies optional anonymization.
+
+    The function retrieves the target camera from CAMERA_REGISTRY, captures
+    a snapshot, optionally applies anonymization using the latest detected
+    boxes stored on app.state, optionally resizes the image by width while
+    preserving aspect ratio, and returns the result as a JPEG response.
+
+    Parameters
+    ----------
+    request:
+        The incoming FastAPI request, used to access shared state such
+        as frames and detection boxes.
+    camera_ip:
+        Identifier of the camera, usually the IP address used as key
+        in CAMERA_REGISTRY and RAW_CONFIG.
+    pos_id:
+        Optional preset pose to use before capturing, if supported by
+        the camera implementation.
+    anonymize:
+        If true, black rectangles are drawn over regions defined by
+        the latest detection boxes.
+    max_age_ms:
+        Maximum age in milliseconds allowed for the detection boxes.
+        If the boxes are older than this value they are ignored.
+    strict:
+        If true and no recent boxes are available while anonymize is
+        requested, the call fails with HTTP 503.
+    width:
+        Optional target width for the output image in pixels. Height
+        is computed from the original aspect ratio.
+
+    Returns
+    -------
+    Response
+        A FastAPI Response containing the JPEG encoded image.
+    """
     update_command_time()
 
     cam = CAMERA_REGISTRY.get(camera_ip)
@@ -140,6 +190,17 @@ def capture(
         description="Resize output image to this width while preserving aspect ratio. If not provided, no resize is applied.",
     ),
 ):
+    """
+    Capture a snapshot from the requested camera.
+
+    This endpoint captures a single image from the specified camera, optionally
+    moves to a preset position, applies anonymization based on the latest
+    detection boxes, and optionally resizes the image by width.
+
+    Query parameters control anonymization, freshness of detection boxes,
+    strict behavior when no boxes are available, and target output width.
+    The response is always a JPEG image.
+    """
     return _capture_impl(
         request=request,
         camera_ip=camera_ip,
@@ -153,6 +214,27 @@ def capture(
 
 @router.get("/latest_image")
 def get_latest_image(camera_ip: str, pose: int):
+    """
+    Return the last stored image for a given camera and pose.
+
+    The camera backend may cache captured frames per preset pose in its
+    last_images mapping. This endpoint exposes that cache. If there is
+    no image for the requested pose, the endpoint returns HTTP 204 with
+    an empty body.
+
+    Parameters
+    ----------
+    camera_ip:
+        Identifier of the camera to query, usually the IP address.
+    pose:
+        Pose index used as key in the camera last_images cache.
+
+    Returns
+    -------
+    Response
+        A JPEG image response if a cached frame exists, otherwise a
+        204 no content response.
+    """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")

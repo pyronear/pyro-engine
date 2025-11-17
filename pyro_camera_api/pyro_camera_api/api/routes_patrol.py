@@ -1,5 +1,4 @@
 # Copyright (C) 2022-2025, Pyronear.
-
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
@@ -25,6 +24,20 @@ logger = logging.getLogger(__name__)
 
 @router.post("/start_patrol")
 def start_patrol(camera_ip: str, request: Request):
+    """
+    Start automated patrol mode for a given camera.
+
+    For PTZ cameras, the patrol loop cycles across configured preset positions.
+    For static cameras, the static_loop simply triggers periodic captures.
+
+    Patrol will not start if:
+    - the camera is unknown
+    - a stream is currently active on the same camera (409 Conflict)
+    - a patrol thread is already running for the camera (idempotent response)
+
+    Returns:
+        JSON object containing status, camera IP, and patrol loop type.
+    """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if not cam:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -38,7 +51,6 @@ def start_patrol(camera_ip: str, request: Request):
 
     # already running
     if camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive():
-        # keep same behavior as your old code, raw target name
         return {
             "status": "already_running",
             "camera_ip": camera_ip,
@@ -69,6 +81,16 @@ def start_patrol(camera_ip: str, request: Request):
 
 @router.post("/stop_patrol")
 def stop_patrol(camera_ip: str):
+    """
+    Request termination of the patrol loop for a camera.
+
+    This does not forcibly kill the thread. The thread receives the stop flag and
+    finishes gracefully before exiting. If no patrol is running for the camera,
+    an HTTP 404 error is raised.
+
+    Returns:
+        JSON object confirming that termination has been signaled.
+    """
     if camera_ip not in PATROL_FLAGS:
         raise HTTPException(status_code=404, detail="No patrol running for this camera")
 
@@ -78,6 +100,17 @@ def stop_patrol(camera_ip: str):
 
 @router.get("/patrol_status")
 def patrol_status(camera_ip: str):
+    """
+    Get the patrol state and diagnostic counters for a camera.
+
+    Returns information including:
+        - whether patrol is currently running
+        - type of patrol loop (static or preset patrol)
+        - number of recent patrol failures
+        - timestamp at which retry should resume (skip-until logic)
+
+    This endpoint is safe to call periodically from UI dashboards.
+    """
     thread = PATROL_THREADS.get(camera_ip)
     flag = PATROL_FLAGS.get(camera_ip)
     is_running = bool(thread and thread.is_alive() and flag and not flag.is_set())

@@ -47,11 +47,17 @@ def move_camera(
     degrees: Optional[float] = None,
 ):
     """
-    Move the camera.
+    Move a PTZ camera for a short action.
 
-    If pose_id is provided, move to the preset pose.
-    If degrees is provided, move that many degrees in the given direction.
-    Otherwise move in the specified direction Up Down Left Right.
+    This endpoint supports three modes of operation based on the request
+    parameters.
+
+    If pose_id is provided the camera moves to the given preset pose.
+    If degrees and direction are provided the camera moves for the
+    duration needed to cover the requested angle using a model specific
+    speed table.
+    If only direction is provided the camera starts moving in that
+    direction at the requested speed without a fixed duration.
     """
     update_command_time()
 
@@ -130,7 +136,13 @@ def move_camera(
 
 @router.post("/stop/{camera_ip}")
 def stop_camera(camera_ip: str):
-    """Stop the camera movement."""
+    """
+    Stop the current movement of a PTZ camera.
+
+    This endpoint sends a Stop command to the camera PTZ control.
+    If the camera is not registered or does not support PTZ controls
+    an error is returned.
+    """
     update_command_time()
 
     cam = CAMERA_REGISTRY.get(camera_ip)
@@ -151,6 +163,13 @@ def stop_camera(camera_ip: str):
 
 @router.get("/preset/list")
 def list_presets(camera_ip: str):
+    """
+    List all configured PTZ presets for a camera.
+
+    The camera must provide a get_ptz_preset method.
+    The response contains the raw preset structure as returned by
+    the camera backend.
+    """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -164,6 +183,13 @@ def list_presets(camera_ip: str):
 
 @router.post("/preset/set")
 def set_preset(camera_ip: str, idx: Optional[int] = None):
+    """
+    Create or update a PTZ preset on a camera.
+
+    If idx is provided the preset is set or overwritten at this index.
+    If idx is not provided the backend chooses the first free preset
+    slot if such a behavior is implemented on the camera side.
+    """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -177,7 +203,13 @@ def set_preset(camera_ip: str, idx: Optional[int] = None):
 
 @router.post("/zoom/{camera_ip}/{level}")
 def zoom_camera(camera_ip: str, level: int):
-    """Adjust the camera zoom level between 0 and 64."""
+    """
+    Adjust the optical zoom level of a camera between 0 and 64.
+
+    The camera must implement a start_zoom_focus method.
+    Level represents the target zoom position accepted by the camera
+    which is usually an integer range specific to the backend.
+    """
     update_command_time()
 
     cam = CAMERA_REGISTRY.get(camera_ip)
