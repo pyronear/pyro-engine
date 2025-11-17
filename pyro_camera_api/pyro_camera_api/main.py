@@ -124,7 +124,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router, tags=["Health"])
-app.include_router(cameras_router, tags=["Cameras"])
+app.include_router(cameras_router, prefix="/cameras", tags=["Cameras"])
 app.include_router(control_router, prefix="/control", tags=["Control"])
 app.include_router(focus_router, prefix="/focus", tags=["Focus"])
 app.include_router(patrol_router, prefix="/patrol", tags=["Patrol"])
