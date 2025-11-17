@@ -128,4 +128,4 @@ jobs:
           owner: 'Pyronear'
           starting-year: 2022
           folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api'
-          ignores: 'version.py,__init__.py'
+          ignore-files: 'version.py,__init__.py'
