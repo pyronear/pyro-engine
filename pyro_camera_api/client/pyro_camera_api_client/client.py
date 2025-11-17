@@ -28,14 +28,23 @@ class PyroCameraAPIClient:
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
         stream: bool = False,
+        timeout: Optional[float] = None,
     ) -> requests.Response:
+        """
+        Internal helper for HTTP calls.
+
+        If timeout is None, use the default timeout stored on the client.
+        You can pass timeout=None to disable the requests timeout entirely.
+        """
         url = f"{self.base_url}{path}"
+        effective_timeout = self.timeout if timeout is None else timeout
+
         resp = requests.request(
             method=method,
             url=url,
             params=params,
             json=json,
-            timeout=self.timeout,
+            timeout=effective_timeout,
             stream=stream,
         )
         resp.raise_for_status()
@@ -67,6 +76,30 @@ class PyroCameraAPIClient:
     # Capture
     # ------------------------------------------------------------------
 
+    def capture_jpeg(
+        self,
+        camera_ip: str,
+        pos_id: Optional[int] = None,
+        anonymize: bool = True,
+        max_age_ms: Optional[int] = None,
+        strict: bool = False,
+        width: Optional[int] = None,
+    ) -> bytes:
+        params: Dict[str, Any] = {
+            "camera_ip": camera_ip,
+            "anonymize": anonymize,
+            "strict": strict,
+        }
+        if pos_id is not None:
+            params["pos_id"] = pos_id
+        if max_age_ms is not None:
+            params["max_age_ms"] = max_age_ms
+        if width is not None:
+            params["width"] = width
+
+        resp = self._request("GET", "/cameras/capture", params=params, stream=True)
+        return resp.content
+
     def capture_image(
         self,
         camera_ip: str,
@@ -92,7 +125,7 @@ class PyroCameraAPIClient:
         pose: int,
     ) -> Optional[Image.Image]:
         params = {"camera_ip": camera_ip, "pose": pose}
-        resp = self._request("GET", "/capture/latest_image", params=params, stream=True)
+        resp = self._request("GET", "/cameras/latest_image", params=params, stream=True)
         if resp.status_code == 204 or not resp.content:
             return None
         return Image.open(io.BytesIO(resp.content)).convert("RGB")
@@ -162,9 +195,25 @@ class PyroCameraAPIClient:
         resp = self._request("GET", "/focus/status", params=params)
         return resp.json()
 
-    def run_focus_optimization(self, camera_ip: str, save_images: bool = False) -> Dict[str, Any]:
+    def run_focus_optimization(
+        self,
+        camera_ip: str,
+        save_images: bool = False,
+        request_timeout: Optional[float] = 120.0,
+    ) -> Dict[str, Any]:
+        """
+        Run the autofocus search on the camera.
+
+        request_timeout lets you override the default client timeout.
+        Use a larger value for long autofocus sequences or pass None to disable timeout.
+        """
         params = {"camera_ip": camera_ip, "save_images": save_images}
-        resp = self._request("POST", "/focus/focus_finder", params=params)
+        resp = self._request(
+            "POST",
+            "/focus/focus_finder",
+            params=params,
+            timeout=request_timeout,
+        )
         return resp.json()
 
     # ------------------------------------------------------------------
