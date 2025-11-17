@@ -122,7 +122,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health_router, prefix="/health", tags=["Health"])
+app.include_router(health_router, tags=["Health"])
 app.include_router(cameras_router, tags=["Cameras"])
 app.include_router(control_router, prefix="/control", tags=["Control"])
 app.include_router(focus_router, prefix="/focus", tags=["Focus"])
