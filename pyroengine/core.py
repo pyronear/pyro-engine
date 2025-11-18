@@ -64,12 +64,11 @@ def is_day_time(cache, frame, strategy, delta=0):
 class SystemController:
     """
     Controller to manage multiple cameras, capture images, and perform detection.
-
-    Attributes:
-        engine (Engine): Image detection engine.
-        camera_data (Dict[str, Dict[str, Any]]): Mapping camera IP to configuration.
-        mediamtx_server_ip (str): IP address of the MediaMTX server if provided.
     """
+
+    API_INITIAL_WAIT = 30
+    API_RETRY_DELAY = 10
+    POST_READY_WAIT = 10
 
     def __init__(
         self,
@@ -85,7 +84,7 @@ class SystemController:
         self.last_autofocus: Optional[datetime] = None
 
         # Wait for the camera API to be available
-        time.sleep(30)
+        time.sleep(self.API_INITIAL_WAIT)
         while True:
             try:
                 logging.info("Waiting for Pyro Camera API")
@@ -95,7 +94,7 @@ class SystemController:
                 break
             except Exception as e:
                 logging.error(f"API not ready: {e}")
-                time.sleep(10)
+                time.sleep(self.API_RETRY_DELAY)
 
         # Optional startup actions, do not fail hard
         for ip in self.camera_data.keys():
@@ -110,7 +109,7 @@ class SystemController:
             logging.info("No MediaMTX server IP provided, skipping levee de doute checks")
 
         # Wait and then loop until inference passes once
-        time.sleep(10)
+        time.sleep(self.POST_READY_WAIT)
         while True:
             try:
                 logging.info("Waiting for cameras")
@@ -118,7 +117,7 @@ class SystemController:
                 break
             except Exception as e:
                 logging.error(f"Inference failed: {e}")
-                time.sleep(10)
+                time.sleep(self.API_RETRY_DELAY)
 
         if self.mediamtx_server_ip:
             logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
@@ -154,15 +153,29 @@ class SystemController:
 
     def _any_stream_active(self) -> bool:
         """
-        Return True if any stream pipeline or ffmpeg process is active.
+        Return True if any stream is active.
 
-        Uses the new stream status keys active_pipelines and active_ffmpeg.
+        Supports both the new keys active_pipelines and active_ffmpeg
+        and the legacy key active_streams used in older APIs and tests.
         """
         try:
             status = self.camera_api_client.get_stream_status()
-            active_pipelines = status.get("active_pipelines") or []
-            active_ffmpeg = status.get("active_ffmpeg") or []
-            return bool(active_pipelines or active_ffmpeg)
+
+            # New format with explicit lists
+            active_pipelines = status.get("active_pipelines")
+            active_ffmpeg = status.get("active_ffmpeg")
+            if active_pipelines is not None or active_ffmpeg is not None:
+                return bool(active_pipelines or active_ffmpeg)
+
+            # Backward compatible support for legacy field
+            active_streams = status.get("active_streams")
+            if active_streams is not None:
+                try:
+                    return int(active_streams) > 0
+                except (TypeError, ValueError):
+                    return bool(active_streams)
+
+            return False
         except Exception as e:
             logging.error(f"Could not fetch stream status: {e}")
             return False

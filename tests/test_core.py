@@ -8,6 +8,13 @@ from PIL import Image
 from pyroengine.core import SystemController, is_day_time
 
 
+# Disable sleeps in SystemController during tests to make them fast
+@pytest.fixture(autouse=True)
+def fast_sleep(monkeypatch):
+    # SystemController uses time.sleep from pyroengine.core
+    monkeypatch.setattr("pyroengine.core.time.sleep", lambda *_args, **_kwargs: None)
+
+
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
