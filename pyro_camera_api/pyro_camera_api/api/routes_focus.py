@@ -34,7 +34,7 @@ def manual_focus(camera_ip: str, position: int):
     if not isinstance(cam, FocusMixin):
         raise HTTPException(status_code=400, detail="Camera does not support manual focus")
 
-    result = cam.set_manual_focus(position)  # type: ignore[call-arg]
+    result = cam.set_manual_focus(position)
 
     return {
         "status": "manual_focus",
@@ -61,7 +61,7 @@ def toggle_autofocus(camera_ip: str, disable: bool = True):
     if not hasattr(cam, "set_auto_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support autofocus control")
 
-    result = cam.set_auto_focus(disable)  # type: ignore[call-arg]
+    result = cam.set_auto_focus(disable)
 
     return {
         "status": "autofocus",
@@ -88,7 +88,7 @@ def get_focus_status(camera_ip: str):
     if not hasattr(cam, "get_focus_level"):
         raise HTTPException(status_code=400, detail="Camera does not expose focus status")
 
-    data = cam.get_focus_level()  # type: ignore[call-arg]
+    data = cam.get_focus_level()
     if not data:
         raise HTTPException(status_code=500, detail="Could not retrieve focus level")
 
@@ -123,12 +123,12 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
         if cam_poses and len(cam_poses) > 1:
             pose1 = cam_poses[1]
             try:
-                cam.move_camera("ToPos", idx=pose1, speed=50)  # type: ignore[call-arg]
+                cam.move_camera("ToPos", idx=pose1, speed=50)
                 time.sleep(1)
             except Exception:
                 pass
 
-    best_position = cam.focus_finder(save_images=save_images)  # type: ignore[call-arg]
+    best_position = cam.focus_finder(save_images=save_images)
 
     return {
         "camera_ip": camera_ip,

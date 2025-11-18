@@ -19,7 +19,7 @@ from PIL import Image, UnidentifiedImageError
 # Add the parent folder of pyro_camera_api to the import path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "pyro_camera_api"))
 
-from pyro_camera_api_client.client import PyroCameraAPIClient  # type: ignore[import-untyped]
+from pyro_camera_api_client.client import PyroCameraAPIClient
 
 from .engine import Engine
 

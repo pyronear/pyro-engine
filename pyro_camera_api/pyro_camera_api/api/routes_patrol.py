@@ -56,7 +56,7 @@ def start_patrol(camera_ip: str, request: Request):
         return {
             "status": "already_running",
             "camera_ip": camera_ip,
-            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,  # type: ignore[attr-defined]
+            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,
         }
 
     stop_flag = threading.Event()

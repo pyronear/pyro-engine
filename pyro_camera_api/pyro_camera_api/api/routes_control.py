@@ -76,7 +76,7 @@ def move_camera(
     try:
         if pose_id is not None:
             logger.info("[%s] Moving to preset pose %s at speed %s", camera_ip, pose_id, speed)
-            cam.move_camera("ToPos", speed=speed, idx=pose_id)  # type: ignore[arg-type]
+            cam.move_camera("ToPos", speed=speed, idx=pose_id)
             return {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
 
         if degrees is not None and direction:
@@ -103,9 +103,9 @@ def move_camera(
                 backend,
             )
 
-            cam.move_camera(direction, speed=speed)  # type: ignore[arg-type]
+            cam.move_camera(direction, speed=speed)
             time.sleep(duration_sec)
-            cam.move_camera("Stop")  # type: ignore[arg-type]
+            cam.move_camera("Stop")
 
             logger.info("[%s] Movement %s stopped after ~%.2fs", camera_ip, direction, duration_sec)
 
@@ -121,7 +121,7 @@ def move_camera(
 
         if direction:
             logger.info("[%s] Moving %s at speed %s", camera_ip, direction, speed)
-            cam.move_camera(direction, speed=speed)  # type: ignore[arg-type]
+            cam.move_camera(direction, speed=speed)
             return {"status": "ok", "camera_ip": camera_ip, "direction": direction, "speed": speed}
 
         raise HTTPException(
@@ -155,7 +155,7 @@ def stop_camera(camera_ip: str):
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     try:
-        cam.move_camera("Stop")  # type: ignore[arg-type]
+        cam.move_camera("Stop")
         logger.info("[%s] Movement stopped", camera_ip)
         return {"message": f"Camera {camera_ip} stopped moving"}
     except Exception as exc:
@@ -179,7 +179,7 @@ def list_presets(camera_ip: str):
     if not hasattr(cam, "get_ptz_preset"):
         raise HTTPException(status_code=400, detail="Camera does not support presets")
 
-    presets = cam.get_ptz_preset()  # type: ignore[call-arg]
+    presets = cam.get_ptz_preset()
     return {"camera_ip": camera_ip, "presets": presets}
 
 
@@ -199,7 +199,7 @@ def set_preset(camera_ip: str, idx: Optional[int] = None):
     if not hasattr(cam, "set_ptz_preset"):
         raise HTTPException(status_code=400, detail="Camera does not support presets")
 
-    cam.set_ptz_preset(idx=idx)  # type: ignore[call-arg]
+    cam.set_ptz_preset(idx=idx)
     return {"status": "preset_set", "camera_ip": camera_ip, "id": idx}
 
 
@@ -225,7 +225,7 @@ def zoom_camera(camera_ip: str, level: int):
         raise HTTPException(status_code=400, detail="Camera does not support zoom control")
 
     try:
-        cam.start_zoom_focus(level)  # type: ignore[call-arg]
+        cam.start_zoom_focus(level)
         logger.info("[%s] Zoom set to %s", camera_ip, level)
         return {"message": f"Zoom set to {level}", "camera_ip": camera_ip}
     except Exception as exc:

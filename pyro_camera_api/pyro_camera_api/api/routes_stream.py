@@ -145,7 +145,7 @@ def stop_stream(request: Request):
         cam = CAMERA_REGISTRY.get(stopped_cam)
         if cam:
             try:
-                cam.start_zoom_focus(position=0)  # type: ignore[attr-defined]
+                cam.start_zoom_focus(position=0)
                 logger.info("[%s] Zoom reset to position 0 after stream stop", stopped_cam)
             except Exception as exc:
                 logger.warning("[%s] Failed to reset zoom, %s", stopped_cam, exc)

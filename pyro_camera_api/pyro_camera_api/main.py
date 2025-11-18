@@ -44,9 +44,9 @@ async def lifespan(app: FastAPI):
         app.state.anonymizer.start()
 
     if not hasattr(app.state, "stream_workers"):
-        app.state.stream_workers = {}  # type: ignore[assignment]
+        app.state.stream_workers = {}
     if not hasattr(app.state, "stream_processes"):
-        app.state.stream_processes = {}  # type: ignore[assignment]
+        app.state.stream_processes = {}
 
     set_app_for_stream(app)
 

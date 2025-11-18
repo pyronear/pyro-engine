@@ -13,11 +13,14 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from PIL import Image
+from PIL.Image import Resampling
 
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.services.anonymizer import paint_boxes_black, scale_and_clip_boxes
 from pyro_camera_api.utils.time_utils import update_command_time
+
+LANCZOS = Resampling.LANCZOS
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -163,7 +166,7 @@ def _capture_impl(
         try:
             aspect_ratio = img.height / img.width
             new_height = int(width * aspect_ratio)
-            img = img.resize((width, new_height), Image.LANCZOS)
+            img = img.resize((width, new_height), LANCZOS)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Failed to resize image: {exc}")
 
