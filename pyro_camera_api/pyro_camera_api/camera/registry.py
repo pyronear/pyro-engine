@@ -100,8 +100,16 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             camera_id=key,
             image_url=image_url,
             cam_type=cam_type,
+            cam_poses=conf.get("poses", []),
+            cam_azimuths=conf.get("azimuths", []),
+            focus_position=conf.get("focus_position"),
         )
-        logger.info("Registered Fake camera %s with image %s", key, image_url)
+        logger.info(
+            "Registered Fake camera %s with image %s and poses %s",
+            key,
+            image_url,
+            conf.get("poses"),
+        )
         return cam
 
     # Backend not recognized

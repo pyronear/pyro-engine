@@ -36,11 +36,18 @@ class FakeCamera(BaseCamera, PTZMixin, FocusMixin):
         camera_id: str,
         image_url: str = DEFAULT_FAKE_IMAGE_URL,
         cam_type: str = "static",
+        cam_poses: Optional[list[int]] = None,
+        cam_azimuths: Optional[list[int]] = None,
+        focus_position: Optional[int] = None,
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.image_url = image_url
         self._cached_image: Optional[Image.Image] = None
-        self.focus_position: Optional[int] = None
+
+        # PTZ and focus metadata used by patrol and API routes
+        self.cam_poses: list[int] = cam_poses or []
+        self.cam_azimuths: list[int] = cam_azimuths or []
+        self.focus_position: Optional[int] = focus_position
 
     # ------------------------------------------------------------------
     # Internal helpers
