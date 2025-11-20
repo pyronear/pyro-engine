@@ -99,7 +99,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         cam = FakeCamera(
             camera_id=key,
             image_url=image_url,
-            cam_type="static",
+            cam_type=cam_type,
         )
         logger.info("Registered Fake camera %s with image %s", key, image_url)
         return cam
