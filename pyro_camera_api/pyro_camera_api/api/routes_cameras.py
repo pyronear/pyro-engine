@@ -175,7 +175,7 @@ def _capture_impl(
             raise HTTPException(status_code=400, detail=f"Failed to resize image: {exc}")
 
     buffer = BytesIO()
-    img.save(buffer, format="JPEG", quality=quality, subsampling=0)
+    img.save(buffer, format="JPEG", quality=quality)
     return Response(buffer.getvalue(), media_type="image/jpeg")
 
 
@@ -255,5 +255,5 @@ def get_latest_image(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     buffer = BytesIO()
-    cam.last_images[pose].save(buffer, format="JPEG", quality=quality, subsampling=0)
+    cam.last_images[pose].save(buffer, format="JPEG", quality=quality)
     return Response(buffer.getvalue(), media_type="image/jpeg")
