@@ -71,6 +71,7 @@ def _capture_impl(
     max_age_ms: Optional[int],
     strict: bool,
     width: Optional[int],
+    quality: int,
 ) -> Response:
     """
     Internal helper that captures a frame and applies optional anonymization.
@@ -103,6 +104,9 @@ def _capture_impl(
     width:
         Optional target width for the output image in pixels. Height
         is computed from the original aspect ratio.
+    quality:
+        JPEG quality parameter from 1 to 100. Higher means better quality
+        and larger file size.
 
     Returns
     -------
@@ -171,7 +175,7 @@ def _capture_impl(
             raise HTTPException(status_code=400, detail=f"Failed to resize image: {exc}")
 
     buffer = BytesIO()
-    img.save(buffer, format="JPEG")
+    img.save(buffer, format="JPEG", quality=quality, subsampling=0)
     return Response(buffer.getvalue(), media_type="image/jpeg")
 
 
@@ -193,6 +197,12 @@ def capture(
         default=None,
         description="Resize output image to this width while preserving aspect ratio. If not provided, no resize is applied.",
     ),
+    quality: int = Query(
+        default=95,
+        ge=1,
+        le=100,
+        description="JPEG quality that controls compression level. Higher means better quality and larger file size.",
+    ),
 ):
     """
     Capture a snapshot from the requested camera.
@@ -202,7 +212,8 @@ def capture(
     detection boxes, and optionally resizes the image by width.
 
     Query parameters control anonymization, freshness of detection boxes,
-    strict behavior when no boxes are available, and target output width.
+    strict behavior when no boxes are available, target output width,
+    and JPEG quality which controls compression.
     The response is always a JPEG image.
     """
     return _capture_impl(
@@ -213,6 +224,7 @@ def capture(
         max_age_ms=max_age_ms,
         strict=strict,
         width=width,
+        quality=quality,
     )
 
 

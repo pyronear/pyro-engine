@@ -86,7 +86,28 @@ class PyroCameraAPIClient:
         max_age_ms: Optional[int] = None,
         strict: bool = False,
         width: Optional[int] = None,
+        quality: Optional[int] = None,
     ) -> bytes:
+        """
+        Capture a JPEG image from the camera.
+
+        Parameters
+        ----------
+        camera_ip:
+            Camera identifier
+        pos_id:
+            Optional preset
+        anonymize:
+            Apply anonymization
+        max_age_ms:
+            Max age for boxes
+        strict:
+            Fail if no recent boxes when anonymize is true
+        width:
+            Target width in pixels
+        quality:
+            JPEG quality between 1 and 100. If None the server default is used.
+        """
         params: Dict[str, Any] = {
             "camera_ip": camera_ip,
             "anonymize": anonymize,
@@ -98,6 +119,8 @@ class PyroCameraAPIClient:
             params["max_age_ms"] = max_age_ms
         if width is not None:
             params["width"] = width
+        if quality is not None:
+            params["quality"] = quality
 
         resp = self._request("GET", "/cameras/capture", params=params, stream=True)
         return resp.content
@@ -110,6 +133,7 @@ class PyroCameraAPIClient:
         max_age_ms: Optional[int] = None,
         strict: bool = False,
         width: Optional[int] = None,
+        quality: Optional[int] = None,
     ) -> Image.Image:
         data = self.capture_jpeg(
             camera_ip=camera_ip,
@@ -118,6 +142,7 @@ class PyroCameraAPIClient:
             max_age_ms=max_age_ms,
             strict=strict,
             width=width,
+            quality=quality,
         )
         return Image.open(io.BytesIO(data)).convert("RGB")
 
