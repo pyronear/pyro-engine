@@ -150,11 +150,17 @@ class PyroCameraAPIClient:
         self,
         camera_ip: str,
         pose: int,
+        quality: Optional[int] = None,
     ) -> Optional[Image.Image]:
         params = {"camera_ip": camera_ip, "pose": pose}
+        if quality is not None:
+            params["quality"] = quality
+
         resp = self._request("GET", "/cameras/latest_image", params=params, stream=True)
+
         if resp.status_code == 204 or not resp.content:
             return None
+
         return Image.open(io.BytesIO(resp.content)).convert("RGB")
 
     # ------------------------------------------------------------------

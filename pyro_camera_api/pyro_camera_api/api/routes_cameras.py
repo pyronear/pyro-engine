@@ -229,7 +229,16 @@ def capture(
 
 
 @router.get("/latest_image")
-def get_latest_image(camera_ip: str, pose: int):
+def get_latest_image(
+    camera_ip: str,
+    pose: int,
+    quality: int = Query(
+        default=95,
+        ge=1,
+        le=100,
+        description="JPEG quality that controls compression level. Higher means better quality and larger file size.",
+    ),
+):
     """
     Return the last stored image for a given camera and pose.
 
@@ -237,19 +246,6 @@ def get_latest_image(camera_ip: str, pose: int):
     last_images mapping. This endpoint exposes that cache. If there is
     no image for the requested pose, the endpoint returns HTTP 204 with
     an empty body.
-
-    Parameters
-    ----------
-    camera_ip:
-        Identifier of the camera to query, usually the IP address.
-    pose:
-        Pose index used as key in the camera last_images cache.
-
-    Returns
-    -------
-    Response
-        A JPEG image response if a cached frame exists, otherwise a
-        204 no content response.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
@@ -259,5 +255,5 @@ def get_latest_image(camera_ip: str, pose: int):
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     buffer = BytesIO()
-    cam.last_images[pose].save(buffer, format="JPEG")
+    cam.last_images[pose].save(buffer, format="JPEG", quality=quality, subsampling=0)
     return Response(buffer.getvalue(), media_type="image/jpeg")
