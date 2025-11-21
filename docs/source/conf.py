@@ -27,7 +27,7 @@ import pyroengine
 master_doc = "index"
 project = "pyroengine"
 author = "Pyronear"
-copyright = f"2020-{datetime.now().year}, {author}"
+copyright = f"2022-{datetime.now().year}, {author}"
 
 # The full version, including alpha/beta/rc tags
 version = pyroengine.__version__

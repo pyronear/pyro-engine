@@ -8,6 +8,13 @@ from PIL import Image
 from pyroengine.core import SystemController, is_day_time
 
 
+# Disable sleeps in SystemController during tests to make them fast
+@pytest.fixture(autouse=True)
+def fast_sleep(monkeypatch):
+    # SystemController uses time.sleep from pyroengine.core
+    monkeypatch.setattr("pyroengine.core.time.sleep", lambda *_args, **_kwargs: None)
+
+
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
@@ -42,7 +49,7 @@ def test_is_day_time_time_strategy(tmp_path):
         assert not is_day_time(cache, None, "time")
 
 
-@patch("pyroengine.core.ReolinkAPIClient")
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_focus_finder_runs_hourly(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
@@ -56,7 +63,7 @@ def test_focus_finder_runs_hourly(mock_client_class, mock_engine, mock_camera_da
     assert mock_client.start_patrol.called
 
 
-@patch("pyroengine.core.ReolinkAPIClient")
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     dummy_img = Image.new("RGB", (100, 100), (255, 200, 200))
@@ -73,7 +80,7 @@ def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_ca
     mock_client.get_latest_image.assert_called()
 
 
-@patch("pyroengine.core.ReolinkAPIClient")
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
@@ -89,7 +96,7 @@ def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_
     assert not mock_engine.predict.called
 
 
-@patch("pyroengine.core.ReolinkAPIClient")
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_client.get_latest_image.side_effect = Exception("Something went wrong")
@@ -104,7 +111,7 @@ def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mo
     assert not mock_engine.predict.called
 
 
-@patch("pyroengine.core.ReolinkAPIClient")
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_client.get_stream_status.return_value = {"active_streams": 1}

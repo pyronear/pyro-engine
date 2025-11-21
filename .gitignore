@@ -128,3 +128,4 @@ docker-compose.override.yml
 captured_images/
 captured_positions/
 *.jpg
+**DS_Store**
