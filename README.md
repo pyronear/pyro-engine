@@ -70,7 +70,7 @@ The API supports multiple camera backends through a common abstraction:
 * `reolink` backend, for Reolink PTZ or static cameras
 * `rtsp` backend, for RTSP streams
 * `url` backend, for HTTP snapshot URLs
-* `fake` backend, for development and tests
+* `mock` backend, for development and tests
 
 Each backend has its own class and inherits from the same base interface. The system selects the correct implementation at runtime based on the `backend` field in `credentials.json`. The API routes are the same for all camera types. PTZ cameras use pose and movement, other cameras ignore pose parameters without failing.
 
@@ -131,7 +131,7 @@ The important field for the camera API is:
 
 Other fields such as `type`, `azimuth`, `poses`, or `bbox_mask_url` are used by the engine and the API.
 
-Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, `reolink` PTZ and `fake`.
+Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, `reolink` PTZ and `mock`.
 
 ```json
 {
@@ -181,9 +181,9 @@ Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, 
     "token": "JWT_TOKEN_HERE"
   },
 
-  "fake_camera_1": {
-    "name": "fake_camera_1",
-    "backend": "fake",
+  "mock_camera_1": {
+    "name": "mock_camera_1",
+    "backend": "mock",
     "type": "static",
     "azimuth": 0,
     "id": "14",

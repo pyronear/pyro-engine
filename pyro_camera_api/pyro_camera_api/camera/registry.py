@@ -1,8 +1,7 @@
 # Copyright (C) 2022-2025, Pyronear.
-
+#
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
-
 
 from __future__ import annotations
 
@@ -10,7 +9,7 @@ import logging
 import threading
 from typing import Dict, Optional
 
-from pyro_camera_api.camera.backends.fake import FakeCamera
+from pyro_camera_api.camera.backends.mock import MockCamera
 from pyro_camera_api.camera.backends.reolink import ReolinkCamera
 from pyro_camera_api.camera.backends.rtsp import RTSPCamera
 from pyro_camera_api.camera.backends.url import URLCamera
@@ -33,11 +32,11 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      backend:  "reolink", "rtsp", "url", "fake"
+      backend:  "reolink", "rtsp", "url", "mock"
       type:     "ptz" or "static"
       ip_address
       rtsp_url (if backend=rtsp)
-      url (if backend=url or backend=fake)
+      url (if backend=url or backend=mock)
       poses, azimuths, focus_position (Reolink only)
     """
     backend = conf.get("backend", "").lower()
@@ -90,13 +89,13 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered URL snapshot camera %s", key)
         return cam
 
-    # Fake camera backend (for tests and demos)
-    if backend == "fake":
+    # Mock camera backend for tests and demos
+    if backend in ("mock", "mock"):
         image_url = conf.get(
             "url",
             "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/fire_sample_image.jpg",
         )
-        cam = FakeCamera(
+        cam = MockCamera(
             camera_id=key,
             image_url=image_url,
             cam_type=cam_type,
@@ -105,7 +104,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             focus_position=conf.get("focus_position"),
         )
         logger.info(
-            "Registered Fake camera %s with image %s and poses %s",
+            "Registered Mock camera %s with image %s and poses %s",
             key,
             image_url,
             conf.get("poses"),
