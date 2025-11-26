@@ -28,7 +28,7 @@
 
 # PyroEngine repository
 
-This repository contains two main components used in Pyronear wildfire detection deployments.
+This repository contains two main components used in Pyronear wildfire detection deployments:  `pyroengine` and `pyro_camera_api`
 
 | Directory          | Description                                                               |
 | ------------------ | ------------------------------------------------------------------------- |
