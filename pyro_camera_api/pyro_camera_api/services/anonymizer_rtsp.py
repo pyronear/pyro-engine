@@ -11,7 +11,6 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, cast
-from urllib.parse import urlencode
 
 import cv2
 import numpy as np
@@ -23,41 +22,10 @@ logger = logging.getLogger(__name__)
 
 # ----------------------------- SRT defaults -----------------------------
 
-SRT_PKT_SIZE = 1316
-SRT_MODE = "caller"
-SRT_LATENCY = 50
-SRT_PORT_START = 8890
-SRT_STREAMID_PREFIX = "publish"
-MEDIAMTX_SERVER_IP = "91.134.47.14"
-
 
 def normalize_stream_name(name: str) -> str:
     """Replace spaces and unsafe characters for SRT streamid"""
     return name.strip().replace(" ", "_")
-
-
-def build_srt_output_url(name_or_id: str) -> str:
-    """
-    If value looks like a full SRT streamid already, pass as is.
-    Otherwise prefix with publish and normalize.
-    """
-    if name_or_id.startswith("#!::") or name_or_id.startswith("publish:") or ":" in name_or_id:
-        streamid = name_or_id
-        safe_chars = ":,=/!"
-    else:
-        streamid = f"{SRT_STREAMID_PREFIX}:{normalize_stream_name(name_or_id)}"
-        safe_chars = ":"
-
-    query = urlencode(
-        {
-            "pkt_size": SRT_PKT_SIZE,
-            "mode": SRT_MODE,
-            "latency": SRT_LATENCY,
-            "streamid": streamid,
-        },
-        safe=safe_chars,
-    )
-    return f"srt://{MEDIAMTX_SERVER_IP}:{SRT_PORT_START}?{query}"
 
 
 # ----------------------------- Shared state -----------------------------

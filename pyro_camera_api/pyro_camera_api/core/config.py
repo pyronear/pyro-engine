@@ -47,11 +47,6 @@ CAM_USER = os.getenv("CAM_USER")
 CAM_PWD = os.getenv("CAM_PWD")
 MEDIAMTX_SERVER_IP = os.getenv("MEDIAMTX_SERVER_IP")
 
-if not CAM_USER or not CAM_PWD:
-    raise RuntimeError("Missing env variables CAM_USER or CAM_PWD")
-if not MEDIAMTX_SERVER_IP:
-    raise RuntimeError("Missing env variable MEDIAMTX_SERVER_IP")
-
 CREDENTIALS_PATH = Path("/usr/src/app/data/credentials.json")
 
 RAW_CONFIG = {}

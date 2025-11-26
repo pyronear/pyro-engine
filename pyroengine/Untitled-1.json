@@ -1,0 +1,42 @@
+{
+    "169.254.7.1": {
+        "azimuth": 265,
+        "bbox_mask_url": "https://occlusion-masks-json.s3.sbg.io.cloud.ovh.net/st-peray",
+        "adapter": "reolink-duo2",
+        "id": "9",
+        "name": "st-peray-01",
+        "poses": [],
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5Iiwic2NvcGVzIjpbImNhbWVyYSJdLCJvcmdhbml6YXRpb25faWQiOjQsImV4cCI6MTc5MjA2ODA0M30.73ENlyq4VjJ_YJeKxBv12A6ynnvE0Ij_MFN9fc6RF5s",
+        "type": "static"
+    },
+    "169.254.7.2": {
+        "azimuth": 262,
+        "bbox_mask_url": "https://occlusion-masks-json.s3.sbg.io.cloud.ovh.net/st-peray",
+        "adapter": "reolink-810a",
+        "id": "10",
+        "name": "st-peray-02",
+        "poses": [],
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMCIsInNjb3BlcyI6WyJjYW1lcmEiXSwib3JnYW5pemF0aW9uX2lkIjo0LCJleHAiOjE3OTIwNjgwNDZ9.6SnF8BvrCkzDXMKBbCPgTJsZxGyUSDrDxKf9KY8TTWo",
+        "type": "static"
+    },
+    "169.254.7.3": {
+        "azimuths": [
+            265,
+            310,
+            341,
+            358
+        ],
+        "bbox_mask_url": "https://occlusion-masks-json.s3.sbg.io.cloud.ovh.net/st-peray",
+        "adapter": "reolink-823A16",
+        "id": "11",
+        "name": "st-peray-03",
+        "poses": [
+            0,
+            1,
+            2,
+            3
+        ],
+        "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMSIsInNjb3BlcyI6WyJjYW1lcmEiXSwib3JnYW5pemF0aW9uX2lkIjo0LCJleHAiOjE3OTIwNjgwNDh9.9SOU6ymxOBHb_oSRw-9hioMRxGGV8AciOWL2RDY-SNI",
+        "type": "ptz"
+    }
+}

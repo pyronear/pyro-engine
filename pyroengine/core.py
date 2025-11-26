@@ -75,12 +75,10 @@ class SystemController:
         engine: Engine,
         camera_data: Dict[str, Dict[str, Any]],
         pyro_camera_api_url: str,
-        mediamtx_server_ip: Optional[str] = None,
     ) -> None:
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
-        self.mediamtx_server_ip = mediamtx_server_ip
         self.last_autofocus: Optional[datetime] = None
 
         # Wait for the camera API to be available
@@ -103,11 +101,6 @@ class SystemController:
             except Exception as e:
                 logging.warning(f"Could not start patrol on {ip} at startup, continuing: {e}")
 
-        if self.mediamtx_server_ip:
-            logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
-        else:
-            logging.info("No MediaMTX server IP provided, skipping levee de doute checks")
-
         # Wait and then loop until inference passes once
         time.sleep(self.POST_READY_WAIT)
         while True:
@@ -118,11 +111,6 @@ class SystemController:
             except Exception as e:
                 logging.error(f"Inference failed: {e}")
                 time.sleep(self.API_RETRY_DELAY)
-
-        if self.mediamtx_server_ip:
-            logging.info(f"Using MediaMTX server IP: {self.mediamtx_server_ip}")
-        else:
-            logging.info("No MediaMTX server IP provided, skipping levee de doute checks")
 
     def focus_finder(self) -> None:
         """
