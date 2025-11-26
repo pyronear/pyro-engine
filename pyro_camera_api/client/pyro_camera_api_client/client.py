@@ -66,13 +66,13 @@ class PyroCameraAPIClient:
 
     def list_cameras(self) -> List[str]:
         resp = self._request("GET", "/cameras/cameras_list")
-        data = resp.json()
-        return data.get("camera_ids", [])
+        resp.raise_for_status()
+        return resp.json()
 
     def get_camera_infos(self) -> List[Dict[str, Any]]:
         resp = self._request("GET", "/cameras/camera_infos")
-        data = resp.json()
-        return data.get("cameras", [])
+        resp.raise_for_status()
+        return resp.json()
 
     # ------------------------------------------------------------------
     # Capture
