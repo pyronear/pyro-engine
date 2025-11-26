@@ -42,9 +42,8 @@ def normalize_stream_name(name: str) -> str:
 
 
 load_dotenv()
-
-CAM_USER = os.getenv("CAM_USER")
-CAM_PWD = os.getenv("CAM_PWD")
+CAM_USER: str = os.getenv("CAM_USER", "")
+CAM_PWD: str = os.getenv("CAM_PWD", "")
 MEDIAMTX_SERVER_IP = os.getenv("MEDIAMTX_SERVER_IP")
 
 CREDENTIALS_PATH = Path("/usr/src/app/data/credentials.json")
