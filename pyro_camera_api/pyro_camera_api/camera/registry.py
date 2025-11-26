@@ -9,10 +9,10 @@ import logging
 import threading
 from typing import Dict, Optional
 
-from pyro_camera_api.camera.backends.mock import MockCamera
-from pyro_camera_api.camera.backends.reolink import ReolinkCamera
-from pyro_camera_api.camera.backends.rtsp import RTSPCamera
-from pyro_camera_api.camera.backends.url import URLCamera
+from pyro_camera_api.camera.adapters.mock import MockCamera
+from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
+from pyro_camera_api.camera.adapters.rtsp import RTSPCamera
+from pyro_camera_api.camera.adapters.url import URLCamera
 from pyro_camera_api.camera.base import BaseCamera
 from pyro_camera_api.core.config import CAM_PWD, CAM_USER, RAW_CONFIG
 
@@ -32,19 +32,19 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      backend:  "reolink", "rtsp", "url", "mock"
+      adapter:  "reolink", "rtsp", "url", "mock"
       type:     "ptz" or "static"
       ip_address
-      rtsp_url (if backend=rtsp)
-      url (if backend=url or backend=mock)
+      rtsp_url (if adapter=rtsp)
+      url (if adapter=url or adapter=mock)
       poses, azimuths, focus_position (Reolink only)
     """
-    backend = conf.get("backend", "").lower()
+    adapter = conf.get("adapter", "").lower()
     cam_type = conf.get("type", "static").lower()
     ip_addr = conf.get("ip_address", key)
 
     # Reolink camera
-    if "reolink" in backend:
+    if "reolink" in adapter:
         cam = ReolinkCamera(
             camera_id=key,
             ip_address=ip_addr,
@@ -59,10 +59,10 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         return cam
 
     # RTSP camera (capture only)
-    if backend == "rtsp":
+    if adapter == "rtsp":
         rtsp_url = conf.get("rtsp_url")
         if not rtsp_url:
-            logger.error("Camera %s declared as RTSP backend but missing 'rtsp_url'", key)
+            logger.error("Camera %s declared as RTSP adapter but missing 'rtsp_url'", key)
             return None
 
         cam = RTSPCamera(
@@ -75,10 +75,10 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         return cam
 
     # URL / HTTP snapshot camera (capture only)
-    if backend in ("url", "http", "https"):
+    if adapter in ("url", "http", "https"):
         snapshot_url = conf.get("url")
         if not snapshot_url:
-            logger.error("Camera %s declared as URL backend but missing 'url'", key)
+            logger.error("Camera %s declared as URL adapter but missing 'url'", key)
             return None
 
         cam = URLCamera(
@@ -89,8 +89,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered URL snapshot camera %s", key)
         return cam
 
-    # Mock camera backend for tests and demos
-    if backend in ("mock", "mock"):
+    # Mock camera adapter for tests and demos
+    if adapter in ("mock", "mock"):
         image_url = conf.get(
             "url",
             "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/fire_sample_image.jpg",
@@ -111,8 +111,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         )
         return cam
 
-    # Backend not recognized
-    logger.error("Unknown backend for %s, value was '%s'", key, backend)
+    # adapter not recognized
+    logger.error("Unknown adapter for %s, value was '%s'", key, adapter)
     return None
 
 

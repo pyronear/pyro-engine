@@ -24,7 +24,7 @@ DEFAULT_FAKE_IMAGE_URL = "https://github.com/pyronear/pyro-engine/releases/downl
 
 class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     """
-    Mock camera backend for development and testing.
+    Mock camera adapter for development and testing.
 
     It downloads one reference image once, then returns that same image
     for every capture call, mimicking a stable camera feed.

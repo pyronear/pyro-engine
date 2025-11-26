@@ -44,7 +44,7 @@ def get_camera_infos():
     """
     Return metadata for all configured cameras.
 
-    Each entry includes the camera identifier, IP address, backend name,
+    Each entry includes the camera identifier, IP address, adapter name,
     camera type, human readable name, azimuths, and preset poses, based on
     the RAW_CONFIG content.
     """
@@ -54,7 +54,7 @@ def get_camera_infos():
             "id": conf.get("id", cam_id),
             "camera_id": cam_id,
             "ip": conf.get("ip_address", cam_id),
-            "backend": conf.get("backend", "unknown"),
+            "adapter": conf.get("adapter", "unknown"),
             "type": conf.get("type", "Unknown"),
             "name": conf.get("name", cam_id),
             "azimuths": conf.get("azimuths", []),
@@ -242,7 +242,7 @@ def get_latest_image(
     """
     Return the last stored image for a given camera and pose.
 
-    The camera backend may cache captured frames per preset pose in its
+    The camera adapter may cache captured frames per preset pose in its
     last_images mapping. This endpoint exposes that cache. If there is
     no image for the requested pose, the endpoint returns HTTP 204 with
     an empty body.

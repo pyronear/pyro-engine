@@ -50,7 +50,7 @@ def toggle_autofocus(camera_ip: str, disable: bool = True):
     Enable or disable autofocus mode on a camera.
 
     When `disable` is True autofocus is turned off and manual control can be applied.
-    When `disable` is False autofocus is activated if supported by the backend.
+    When `disable` is False autofocus is activated if supported by the adapter.
     """
     update_command_time()
 
@@ -76,7 +76,7 @@ def get_focus_status(camera_ip: str):
     """
     Return the current autofocus and zoom information exposed by the camera.
 
-    The backend must implement get_focus_level which typically returns
+    The adapter must implement get_focus_level which typically returns
     the current focus position and zoom position encoded in a device specific structure.
     """
     update_command_time()

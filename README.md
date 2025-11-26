@@ -33,7 +33,7 @@ This repository contains two main components used in Pyronear wildfire detection
 | Directory          | Description                                                               |
 | ------------------ | ------------------------------------------------------------------------- |
 | `pyroengine/`      | Detection engine that runs the wildfire model on edge devices             |
-| `pyro_camera_api/` | Camera control API that exposes a unified interface for multiple backends |
+| `pyro_camera_api/` | Camera control API that exposes a unified interface for multiple adapters |
 | `scripts/`         | Shell scripts for deployment and debugging                                |
 | `src/`             | Helper scripts for camera control, focus, calibration and experiments     |
 | `tests/`           | Test suite for the detection engine                                       |
@@ -65,14 +65,14 @@ prediction = engine.predict(im)
 
 The `pyro_camera_api` package provides a REST API and a Python client to control cameras and retrieve images in a unified way.
 
-The API supports multiple camera backends through a common abstraction:
+The API supports multiple camera adapters through a common abstraction:
 
-* `reolink` backend, for Reolink PTZ or static cameras
-* `rtsp` backend, for RTSP streams
-* `url` backend, for HTTP snapshot URLs
-* `mock` backend, for development and tests
+* `reolink` adapter, for Reolink PTZ or static cameras
+* `rtsp` adapter, for RTSP streams
+* `url` adapter, for HTTP snapshot URLs
+* `mock` adapter, for development and tests
 
-Each backend has its own class and inherits from the same base interface. The system selects the correct implementation at runtime based on the `backend` field in `credentials.json`. The API routes are the same for all camera types. PTZ cameras use pose and movement, other cameras ignore pose parameters without failing.
+Each adapter has its own class and inherits from the same base interface. The system selects the correct implementation at runtime based on the `adapter` field in `credentials.json`. The API routes are the same for all camera types. PTZ cameras use pose and movement, other cameras ignore pose parameters without failing.
 
 ### Simple API usage example
 
@@ -121,23 +121,23 @@ A `./data` directory is expected with at least:
 
 ---
 
-## Camera configuration and backends
+## Camera configuration and adapters
 
 The camera configuration is stored in `credentials.json`. Each key represents a camera identifier and the entry defines how to access and control it.
 
 The important field for the camera API is:
 
-* `backend` which selects the camera implementation
+* `adapter` which selects the camera implementation
 
 Other fields such as `type`, `azimuth`, `poses`, or `bbox_mask_url` are used by the engine and the API.
 
-Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, `reolink` PTZ and `mock`.
+Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, `reolink` PTZ and `mock`.
 
 ```json
 {
   "url_camera_1": {
     "name": "url_camera_1",
-    "backend": "url",
+    "adapter": "url",
     "url": "http://user:password@camera-host:1234/cgi-bin/snapshot.cgi",
     "azimuth": 0,
     "id": "10",
@@ -149,7 +149,7 @@ Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, 
 
   "rtsp_camera_1": {
     "name": "rtsp_camera_1",
-    "backend": "rtsp",
+    "adapter": "rtsp",
     "rtsp_url": "rtsp://user:password@camera-host:554/live/STREAM_ID",
     "azimuth": 0,
     "id": "11",
@@ -161,7 +161,7 @@ Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, 
 
   "reolink_static_1": {
     "name": "reolink_static_1",
-    "backend": "reolink",
+    "adapter": "reolink",
     "type": "static",
     "azimuth": 45,
     "id": "12",
@@ -172,7 +172,7 @@ Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, 
 
   "reolink_ptz_1": {
     "name": "reolink_ptz_1",
-    "backend": "reolink",
+    "adapter": "reolink",
     "type": "ptz",
     "id": "13",
     "poses": [0, 1, 2, 3],
@@ -183,7 +183,7 @@ Below is one generic example for each backend: `url`, `rtsp`, `reolink` static, 
 
   "mock_camera_1": {
     "name": "mock_camera_1",
-    "backend": "mock",
+    "adapter": "mock",
     "type": "static",
     "azimuth": 0,
     "id": "14",

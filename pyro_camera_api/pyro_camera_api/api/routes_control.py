@@ -32,12 +32,12 @@ TILT_SPEEDS = {
 }
 
 
-def get_pan_speed_per_sec(backend: str, level: int) -> Optional[float]:
-    return PAN_SPEEDS.get(backend, {}).get(level)
+def get_pan_speed_per_sec(adapter: str, level: int) -> Optional[float]:
+    return PAN_SPEEDS.get(adapter, {}).get(level)
 
 
-def get_tilt_speed_per_sec(backend: str, level: int) -> Optional[float]:
-    return TILT_SPEEDS.get(backend, {}).get(level)
+def get_tilt_speed_per_sec(adapter: str, level: int) -> Optional[float]:
+    return TILT_SPEEDS.get(adapter, {}).get(level)
 
 
 @router.post("/move")
@@ -71,7 +71,7 @@ def move_camera(
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     conf = RAW_CONFIG.get(camera_ip, {})
-    backend = conf.get("backend", "unknown")
+    adapter = conf.get("adapter", "unknown")
 
     try:
         if pose_id is not None:
@@ -81,26 +81,26 @@ def move_camera(
 
         if degrees is not None and direction:
             if direction in ["Left", "Right"]:
-                deg_per_sec = get_pan_speed_per_sec(backend, speed)
+                deg_per_sec = get_pan_speed_per_sec(adapter, speed)
             elif direction in ["Up", "Down"]:
-                deg_per_sec = get_tilt_speed_per_sec(backend, speed)
+                deg_per_sec = get_tilt_speed_per_sec(adapter, speed)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
 
             if deg_per_sec is None:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported backend '{backend}' or speed level {speed}",
+                    detail=f"Unsupported adapter '{adapter}' or speed level {speed}",
                 )
 
             duration_sec = abs(degrees) / deg_per_sec
             logger.info(
-                "[%s] Moving %s for %.2fs at speed %s (backend=%s)",
+                "[%s] Moving %s for %.2fs at speed %s (adapter=%s)",
                 camera_ip,
                 direction,
                 duration_sec,
                 speed,
-                backend,
+                adapter,
             )
 
             cam.move_camera(direction, speed=speed)
@@ -116,7 +116,7 @@ def move_camera(
                 "degrees": degrees,
                 "duration": round(duration_sec, 2),
                 "speed": speed,
-                "backend": backend,
+                "adapter": adapter,
             }
 
         if direction:
@@ -170,7 +170,7 @@ def list_presets(camera_ip: str):
 
     The camera must provide a get_ptz_preset method.
     The response contains the raw preset structure as returned by
-    the camera backend.
+    the camera adapter.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
@@ -189,7 +189,7 @@ def set_preset(camera_ip: str, idx: Optional[int] = None):
     Create or update a PTZ preset on a camera.
 
     If idx is provided the preset is set or overwritten at this index.
-    If idx is not provided the backend chooses the first free preset
+    If idx is not provided the adapter chooses the first free preset
     slot if such a behavior is implemented on the camera side.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
@@ -210,7 +210,7 @@ def zoom_camera(camera_ip: str, level: int):
 
     The camera must implement a start_zoom_focus method.
     Level represents the target zoom position accepted by the camera
-    which is usually an integer range specific to the backend.
+    which is usually an integer range specific to the adapter.
     """
     update_command_time()
 

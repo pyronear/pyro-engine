@@ -135,7 +135,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             logger.warning("[%s] Skipped for %ds due to previous failures", camera_ip, left)
         else:
             try:
-                # capture with internal timeout handled by RTSP or URL backends
+                # capture with internal timeout handled by RTSP or URL adapters
                 image = cam.capture()
                 now = time.time()
 
