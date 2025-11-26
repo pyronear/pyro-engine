@@ -115,7 +115,7 @@ CAM_PWD=my_dummy_pwd
 
 A `./data` directory is expected with at least:
 
-* `credentials.json`
+* `credentials.json`, see [Camera configuration ](#camera-configuration-and-backends) to understand how to fill it
 * optionally `model.onnx` to override weights from Hugging Face
 * optionally `config.json` to override model configuration
 
