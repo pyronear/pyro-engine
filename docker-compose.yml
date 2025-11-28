@@ -1,16 +1,15 @@
 services:
-  reolink-api:
+  pyro-camera-api:
     build:
-      context: ./reolink_api
-    image: pyronear/reolink-api:latest
-    container_name: reolink-api
+      context: ./pyro_camera_api
+    image: pyronear/pyro-camera-api:latest
+    container_name: pyro-camera-api
     environment:
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
     volumes:
       - ./data:/usr/src/app/data
-    command: uvicorn main:app --host 0.0.0.0 --port 8081
     restart: always
     network_mode: host
     logging:
@@ -18,6 +17,7 @@ services:
       options:
         max-size: "100m"
         max-file: "5"
+
 
   engine:
     build:
@@ -28,7 +28,6 @@ services:
       API_URL: ${API_URL}
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
-      MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
     volumes:
       - ./data:/usr/src/app/data
     command: python run.py
