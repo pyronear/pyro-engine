@@ -35,7 +35,7 @@ huggingface_hub = "==0.23.1"
 pillow = "==11.0.0"
 ncnn = "==1.0.20240410"
 pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
-reolink_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "develop", subdirectory = "reolink_api/client" }
+pyro_camera_api_client = { git = "https://github.com/pyronear/pyro-engine.git", branch = "pyro-camera-api", subdirectory = "pyro_camera_api/client" }
 python-dotenv = "==1.1.0"
 
 
@@ -76,7 +76,7 @@ source = ["pyroengine"]
 
 [tool.mypy]
 python_version = "3.11"
-files = "pyroengine/,reolink_api/"
+files = "pyroengine/,pyro_camera_api/"
 show_error_codes = true
 pretty = true
 warn_unused_ignores = true
@@ -131,7 +131,7 @@ exclude = [".git"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine", "reolink_api"]
+known-first-party = ["pyroengine", "pyro_camera_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -139,7 +139,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "src/**.py" = ["D", "T201", "S101", "ANN"]
 ".github/**.py" = ["D", "T201", "ANN"]
 "tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001"]
-"reolink_api/**.py" = ["D", "T201", "S101", "ANN"]
+"pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN"]
 
 [tool.ruff.format]
 quote-style = "double"
