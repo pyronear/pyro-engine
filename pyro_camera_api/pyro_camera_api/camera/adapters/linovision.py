@@ -485,32 +485,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         return int(zoom)
 
 
-    def wait_reached_zoom_raw(
-        self,
-        target_zoom: int,
-        timeout_s: float = 15.0,
-        poll_s: float = 0.15,
-    ) -> dict:
-        target = int(target_zoom)
-        t0 = time.time()
-        last = None
-        while time.time() - t0 < timeout_s:
-            st = self.get_ptz_status()
-            last = st
-            if st.get("zoom_raw") is not None and int(st["zoom_raw"]) == target:
-                return st
-            time.sleep(poll_s)
-        raise RuntimeError(f"Timeout waiting for zoom_raw={target}, last={last}")
-
-
     def start_zoom_focus(
         self,
         position: int,
-        wait: bool = True,
-        timeout_s: float = 15.0,
-        poll_s: float = 0.15,
-        horizontal_speed: float = 80.0,
-        vertical_speed: float = 80.0,
     ) -> Optional[dict]:
         """
         Linovision uses absoluteZoom inside PTZ absoluteEx.
@@ -532,19 +509,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             azimuth_deg=az,
             elevation_deg=el,
             zoom=z,
-            horizontal_speed=horizontal_speed,
-            vertical_speed=vertical_speed,
             prefer_current_elevation=True,
         )
 
-        if not wait:
-            return None
-
-        return self.wait_reached_zoom_raw(
-            target_zoom=z,
-            timeout_s=timeout_s,
-            poll_s=poll_s,
-        )
 
 
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
