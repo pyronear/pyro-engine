@@ -64,7 +64,14 @@ STREAMS: dict[str, dict] = {}
 if RAW_CONFIG:
     for ip, cfg in RAW_CONFIG.items():
         id_or_name = cfg.get("streamid") or cfg.get("stream_name") or cfg.get("name", "stream")
-        input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554/h264Preview_01_sub"
+        adapter = (cfg.get("adapter") or cfg.get("brand") or "").lower()
+
+        if "linovision" in adapter or "hikvision" in adapter:
+            channel = str(cfg.get("rtsp_channel", cfg.get("channel", "102")))
+            path = cfg.get("rtsp_path", f"/Streaming/Channels/{channel}")
+            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554{path}"
+        else:
+            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554/h264Preview_01_sub"
 
         if id_or_name.startswith("#!::") or id_or_name.startswith("publish:") or ":" in id_or_name:
             streamid = id_or_name
