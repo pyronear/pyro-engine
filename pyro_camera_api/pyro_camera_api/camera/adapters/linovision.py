@@ -481,9 +481,71 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         logger.warning("Auto focus setting not implemented for Linovision (disable=%s)", disable)
         return None
 
-    def start_zoom_focus(self, position: int):
-        logger.warning("Zoom/focus control not implemented for Linovision (position=%s)", position)
-        return None
+    def _zoom_to_raw(self, zoom: int) -> int:
+        return int(zoom)
+
+
+    def wait_reached_zoom_raw(
+        self,
+        target_zoom: int,
+        timeout_s: float = 15.0,
+        poll_s: float = 0.15,
+    ) -> dict:
+        target = int(target_zoom)
+        t0 = time.time()
+        last = None
+        while time.time() - t0 < timeout_s:
+            st = self.get_ptz_status()
+            last = st
+            if st.get("zoom_raw") is not None and int(st["zoom_raw"]) == target:
+                return st
+            time.sleep(poll_s)
+        raise RuntimeError(f"Timeout waiting for zoom_raw={target}, last={last}")
+
+
+    def start_zoom_focus(
+        self,
+        position: int,
+        wait: bool = True,
+        timeout_s: float = 15.0,
+        poll_s: float = 0.15,
+        horizontal_speed: float = 80.0,
+        vertical_speed: float = 80.0,
+    ) -> Optional[dict]:
+        """
+        Linovision uses absoluteZoom inside PTZ absoluteEx.
+        position is the absoluteZoom value, valid range is usually 1..25 on your device.
+
+        This method keeps current azimuth and elevation, and only changes zoom.
+        If wait is True, it blocks until zoom_raw equals the requested value.
+        """
+        if self.cam_type == "static":
+            return None
+
+        st0 = self.get_ptz_status()
+        az = float(st0["azimuth_deg"])
+        el = float(st0["elevation_deg"])
+
+        z = int(self._clamp(float(position), 1.0, 25.0))
+
+        self.move_absolute(
+            azimuth_deg=az,
+            elevation_deg=el,
+            zoom=z,
+            horizontal_speed=horizontal_speed,
+            vertical_speed=vertical_speed,
+            prefer_current_elevation=True,
+        )
+
+        if not wait:
+            return None
+
+        return self.wait_reached_zoom_raw(
+            target_zoom=z,
+            timeout_s=timeout_s,
+            poll_s=poll_s,
+        )
+
 
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         _ = save_images
