@@ -112,9 +112,11 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         return raw
 
     @staticmethod
-    def _percent_to_range(percent: float, vmin: float, vmax: float) -> float:
-        pct = max(0.0, min(100.0, float(percent)))
-        return vmin + (pct / 100.0) * (vmax - vmin)
+    def _map_range(value: float, src_min: float, src_max: float, dst_min: float, dst_max: float) -> float:
+        v = max(src_min, min(src_max, float(value)))
+        if src_max == src_min:
+            return dst_min
+        return dst_min + (v - src_min) * (dst_max - dst_min) / (src_max - src_min)
 
     def _real_to_camera_azimuth(self, real_azimuth_deg: float) -> float:
         return (float(real_azimuth_deg) + self.azimuth_offset_deg) % 360.0
@@ -208,8 +210,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         azimuth_deg: float,
         elevation_deg: Optional[float] = None,
         zoom: Optional[int] = None,
-        horizontal_speed: float = 80.0,
-        vertical_speed: float = 80.0,
+        horizontal_speed: float = 64.0,
+        vertical_speed: float = 64.0,
         prefer_current_elevation: bool = False,
     ) -> None:
         if self.cam_type == "static":
@@ -229,14 +231,14 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         else:
             el = self._clamp(float(elevation_deg), -10.0, 90.0)
 
-        # Accept normalized 0-100 speeds and map to device range
-        hs = self._clamp(self._percent_to_range(horizontal_speed, 0.1, 80.0), 0.1, 80.0)
-        vs = self._clamp(self._percent_to_range(vertical_speed, 0.1, 80.0), 0.1, 80.0)
+        # Accept Reolink-style speeds (1-64) and map to device range
+        hs = self._clamp(self._map_range(horizontal_speed, 1.0, 64.0, 0.1, 80.0), 0.1, 80.0)
+        vs = self._clamp(self._map_range(vertical_speed, 1.0, 64.0, 0.1, 80.0), 0.1, 80.0)
 
         z = None
         if zoom is not None:
-            # Accept zoom in 0-100 and map to device range
-            z = int(self._clamp(self._percent_to_range(zoom, 1.0, 25.0), 1.0, 25.0))
+            # Accept zoom in Reolink-style 0-64 and map to device range
+            z = int(self._clamp(self._map_range(zoom, 0.0, 64.0, 1.0, 25.0), 1.0, 25.0))
 
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/absoluteEx"
 
@@ -304,8 +306,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         pose_id: int,
         elevation_deg: Optional[float] = None,
         zoom: Optional[int] = None,
-        horizontal_speed: float = 80.0,
-        vertical_speed: float = 80.0,
+        horizontal_speed: float = 64.0,
+        vertical_speed: float = 64.0,
         timeout_s: float = 15.0,
         poll_s: float = 0.15,
         prefer_current_elevation: bool = False,
@@ -394,7 +396,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             )
 
         pan, tilt, zoom = 0, 0, 0
-        v = int(max(1, min(100, speed)))
+        # Accept Reolink-style speed (1-64) and map to ISAPI expected 1-100 range
+        v = int(round(self._map_range(speed, 1.0, 64.0, 1.0, 100.0)))
 
         if op == "Left":
             pan = -v
