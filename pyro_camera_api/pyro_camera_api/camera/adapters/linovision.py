@@ -111,6 +111,11 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             raw = 0
         return raw
 
+    @staticmethod
+    def _percent_to_range(percent: float, vmin: float, vmax: float) -> float:
+        pct = max(0.0, min(100.0, float(percent)))
+        return vmin + (pct / 100.0) * (vmax - vmin)
+
     def _real_to_camera_azimuth(self, real_azimuth_deg: float) -> float:
         return (float(real_azimuth_deg) + self.azimuth_offset_deg) % 360.0
 
@@ -224,12 +229,14 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         else:
             el = self._clamp(float(elevation_deg), -10.0, 90.0)
 
-        hs = self._clamp(float(horizontal_speed), 0.1, 80.0)
-        vs = self._clamp(float(vertical_speed), 0.1, 80.0)
+        # Accept normalized 0-100 speeds and map to device range
+        hs = self._clamp(self._percent_to_range(horizontal_speed, 0.1, 80.0), 0.1, 80.0)
+        vs = self._clamp(self._percent_to_range(vertical_speed, 0.1, 80.0), 0.1, 80.0)
 
         z = None
         if zoom is not None:
-            z = int(self._clamp(float(zoom), 1.0, 25.0))
+            # Accept zoom in 0-100 and map to device range
+            z = int(self._clamp(self._percent_to_range(zoom, 1.0, 25.0), 1.0, 25.0))
 
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/absoluteEx"
 
