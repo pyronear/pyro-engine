@@ -177,8 +177,11 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         if az_el is None or el_el is None:
             raise RuntimeError(f"Unexpected PTZ status XML, body {resp.text[:400]}")
 
-        az10 = int(az_el.text)
-        el10 = int(el_el.text)
+        az_text = az_el.text or "0"
+        el_text = el_el.text or "0"
+
+        az10 = int(az_text)
+        el10 = int(el_text)
         zoom = int(z_el.text) if z_el is not None and z_el.text is not None else None
 
         return {
@@ -524,6 +527,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             zoom=z,
             prefer_current_elevation=True,
         )
+        return {"zoom_raw": z}
 
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         _ = save_images
