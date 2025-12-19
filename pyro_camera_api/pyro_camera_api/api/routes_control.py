@@ -88,10 +88,14 @@ def move_camera(
                 raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
 
             if deg_per_sec is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported adapter '{adapter}' or speed level {speed}",
-                )
+                # Fallback for adapters without calibrated speed tables (e.g., linovision)
+                try:
+                    deg_per_sec = max(0.1, float(speed))
+                except Exception:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unsupported adapter '{adapter}' or speed level {speed}",
+                    )
 
             duration_sec = abs(degrees) / deg_per_sec
             logger.info(
