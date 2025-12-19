@@ -1,5 +1,8 @@
 # Copyright (C) 2022-2025, Pyronear.
+
 # This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
 
 from __future__ import annotations
 
@@ -73,6 +76,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         self._auth = HTTPDigestAuth(self.username, self.password)
         self._base = f"{self.protocol}://{self.ip_address}"
+        self.disable_ptz_osd()
 
     def _build_url(self, path: str) -> str:
         if not path.startswith("/"):
@@ -485,15 +489,14 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def get_auto_focus(self):
         logger.warning("Auto focus retrieval not implemented for Linovision")
-        return None
+        return
 
     def set_auto_focus(self, disable: bool):
         logger.warning("Auto focus setting not implemented for Linovision (disable=%s)", disable)
-        return None
+        return
 
     def _zoom_to_raw(self, zoom: int) -> int:
         return int(zoom)
-
 
     def start_zoom_focus(
         self,
@@ -522,8 +525,6 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             prefer_current_elevation=True,
         )
 
-
-
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         _ = save_images
         _ = retry_depth
@@ -533,8 +534,26 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
     def set_manual_focus(self, position: int):
         self.focus_position = position
         logger.warning("Manual focus not implemented for Linovision yet (position=%s)", position)
-        return None
+        return
 
     def get_focus_level(self):
         logger.warning("Focus level not implemented for Linovision yet")
-        return None
+        return
+
+    def disable_ptz_osd(self):
+        path = "/ISAPI/System/Video/inputs/channels/1/overlays"
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <VideoOverlay version="2.0" xmlns="http://www.std-cgi.com/ver20/XMLSchema">
+        <PTZInfoOverlay>
+            <enabled>false</enabled>
+        </PTZInfoOverlay>
+    </VideoOverlay>
+    """
+        resp = self._request(
+            "PUT",
+            path,
+            data=xml,
+            headers={"Content-Type": "application/xml"},
+        )
+        if self._handle_response(resp, "PTZ OSD disabled") is None:
+            raise RuntimeError("Failed to disable PTZ OSD")
