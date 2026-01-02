@@ -22,7 +22,7 @@ from pyroclient import client
 from requests.exceptions import ConnectionError
 from requests.models import Response
 
-from pyroengine.utils import box_iou, nms
+from pyroengine.utils import box_iou, nms, multi_resolution_frame
 
 from .vision import Classifier
 
@@ -90,7 +90,7 @@ class Engine:
         cache_size: int = 100,
         cache_folder: str = "data/",
         backup_size: int = 30,
-        jpeg_quality: int = 80,
+        avif_quality: int = 50,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
@@ -118,7 +118,7 @@ class Engine:
         self.frame_saving_period = frame_saving_period
         self.nb_consecutive_frames = nb_consecutive_frames
         self.frame_size = frame_size
-        self.jpeg_quality = jpeg_quality
+        self.avif_quality = avif_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
@@ -168,7 +168,7 @@ class Engine:
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float:
+    def _update_states(self, input_frame: Image.Image, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float | Image.Image:
         prev_ongoing = self._states[cam_key]["ongoing"]
 
         conf_th = self.conf_thresh * self.nb_consecutive_frames
@@ -233,6 +233,7 @@ class Engine:
         if output_predictions.size > 0:
             output_predictions = np.atleast_2d(output_predictions)
 
+        frame = multi_resolution_frame(input_frame, frame, output_predictions.tolist())
         self._states[cam_key]["last_predictions"].append((
             frame,
             preds,
@@ -252,7 +253,7 @@ class Engine:
                 self._states[cam_key]["miss_count"] = 0
 
         self._states[cam_key]["ongoing"] = new_ongoing
-        return conf
+        return conf, frame
 
     def predict(
         self, frame: Image.Image, cam_id: Optional[str] = None, fake_pred: Optional[np.ndarray] = None
@@ -272,26 +273,10 @@ class Engine:
             the predicted confidence
         """
         cam_key = cam_id or "-1"
+        input_frame = frame.copy()
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
-
-        # Heartbeat
-        if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
-            if (
-                self._states[cam_key]["last_image_sent"] is None
-                or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
-            ):
-                # send image periodically
-                logging.info(f"Uploading periodical image for cam {cam_id}")
-                self._states[cam_key]["last_image_sent"] = time.time()
-                ip = cam_id.split("_")[0]
-                if ip in self.api_client.keys():
-                    stream = io.BytesIO()
-                    frame.save(stream, format="JPEG", quality=self.jpeg_quality)
-                    response = self.api_client[ip].update_last_image(stream.getvalue())
-                    logging.info(response.text)
 
         # Update occlusion masks
         if (
@@ -326,10 +311,26 @@ class Engine:
                 preds = np.reshape(preds, (-1, 5))
 
         logging.info(f"pred for {cam_key} : {preds}")
-        conf = self._update_states(frame, preds, cam_key)
-
+        conf, frame = self._update_states(input_frame, frame, preds, cam_key)
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False)
+
+        # Heartbeat
+        if len(self.api_client) > 0 and isinstance(cam_id, str):
+            heartbeat_with_timeout(self, cam_id, timeout=1)
+            if (
+                self._states[cam_key]["last_image_sent"] is None
+                or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
+            ):
+                # send image periodically
+                logging.info(f"Uploading periodical image for cam {cam_id}")
+                self._states[cam_key]["last_image_sent"] = time.time()
+                ip = cam_id.split("_")[0]
+                if ip in self.api_client.keys():
+                    stream = io.BytesIO()
+                    frame.save(stream, format="avif", quality=self.avif_quality)
+                    response = self.api_client[ip].update_last_image(stream.getvalue())
+                    logging.info(response.text)
 
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
@@ -397,7 +398,7 @@ class Engine:
                 try:
                     # Detection creation
                     stream = io.BytesIO()
-                    frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                    frame_info["frame"].save(stream, format="avif", quality=self.avif_quality)
                     bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
                     _, cam_azimuth, _ = self.cam_creds[cam_id]
