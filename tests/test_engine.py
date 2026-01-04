@@ -170,6 +170,31 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         assert len(engine._alerts) == 0
 
 
+@pytest.mark.parametrize("save_detections_frames, expected_backup_calls", [(True, 1), (False, 0)])
+def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_frames, expected_backup_calls):
+    api_url = os.environ.get("API_URL")
+    api_token = os.environ.get("API_TOKEN")
+
+    if not api_url or not api_token:
+        pytest.skip("API_URL and API_TOKEN must be set to run this test against the real API")
+
+    cam_creds = {"dummy_cam": (api_token, 0, None)}
+    engine = Engine(
+        api_url=api_url,
+        cache_folder=str(tmp_path),
+        cam_creds=cam_creds,
+        save_detections_frames=save_detections_frames,
+    )
+
+    engine._stage_alert(Image.new("RGB", (8, 8)), "dummy_cam", int(time.time()), bboxes=[])
+
+    with patch.object(engine, "_local_backup") as mock_backup:
+        engine._process_alerts()
+
+    assert len(engine._alerts) == 0
+    assert mock_backup.call_count == expected_backup_calls
+
+
 def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
     # Cache
     folder = str(tmpdir_factory.mktemp("engine_cache"))
