@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2025, Pyronear.
+# Copyright (C) 2022-2026, Pyronear.
 
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
@@ -61,7 +61,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         return cam
 
     # Linovision / ISAPI cameras
-    if "linovision" in adapter or "hikvision" in adapter:
+    if "linovision" in adapter:
         cam = LinovisionCamera(
             camera_id=key,
             ip_address=ip_addr,
