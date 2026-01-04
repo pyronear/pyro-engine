@@ -61,7 +61,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         return cam
 
     # Linovision / ISAPI cameras
-    if "linovision" in adapter:
+    if "linovision" in adapter or "hikvision" in adapter:
         cam = LinovisionCamera(
             camera_id=key,
             ip_address=ip_addr,
