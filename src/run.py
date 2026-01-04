@@ -62,7 +62,7 @@ def main(args):
         frame_size=args.frame_size,
         cache_backup_period=args.cache_backup_period,
         cache_size=args.cache_size,
-        jpeg_quality=args.jpeg_quality,
+        avif_quality=args.avif_quality,
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
     )
@@ -93,7 +93,7 @@ if __name__ == "__main__":
         default=(720, 1280),
         help="Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)",
     )
-    parser.add_argument("--jpeg_quality", type=int, default=80, help="Jpeg compression")
+    parser.add_argument("--avif_quality", type=int, default=50, help="avif compression")
     parser.add_argument(
         "--cache-size",
         type=int,
