@@ -64,6 +64,7 @@ class Engine:
         cache_size: maximum number of alerts to save in cache
         day_time_strategy: strategy to define if it's daytime
         save_captured_frames: save all captured frames for debugging
+        save_detections_frames: Save all locally detection frames locally
         kwargs: keyword args of Classifier
 
     Examples:
@@ -93,6 +94,7 @@ class Engine:
         jpeg_quality: int = 80,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
+        save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,
@@ -122,6 +124,7 @@ class Engine:
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
+        self.save_detections_frames = save_detections_frames
         self.cam_creds = cam_creds
         self.send_last_image_period = send_last_image_period
         self.last_bbox_mask_fetch_period = last_bbox_mask_fetch_period
@@ -392,7 +395,8 @@ class Engine:
                 logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
                 # Save alert on device
-                self._local_backup(frame_info["frame"], cam_id)
+                if self.save_detections_frames:
+                    self._local_backup(frame_info["frame"], cam_id)
 
                 try:
                     # Detection creation
