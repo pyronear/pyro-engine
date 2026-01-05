@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+Watchdog script for Pyro Engine hardware.
+
+It checks the main Pi health endpoint and pings camera IPs, tracking failures
+and power-cycling relays after repeated failures with cooldown/daily limits.
+
+Cron setup (every 10 minutes):
+  1) Edit crontab:  crontab -e
+  2) Add the line:
+     */10 * * * * /usr/bin/python3 /home/pi/pyro-engine/watchdog/pi_zero/watchdog.py >> /home/pi/watchdog.log 2>&1
+
+Adjust the path to match where this repo lives on the Pi.
+"""
 
 import datetime as dt
 import json
