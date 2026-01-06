@@ -33,6 +33,8 @@ MAIN_PI_IP = "192.168.1.99"
 MAIN_HEALTH_URL = f"http://{MAIN_PI_IP}:8081/health"
 
 CAM_IPS = ["192.168.1.11", "192.168.1.12"]
+WIFI_INTERFACE = "wlan0"
+INTERNET_IP = "1.1.1.1"
 
 PING_COUNT = 2
 TIMEOUT = 2  # seconds, used for ping and HTTP timeout
@@ -47,6 +49,8 @@ STATE_DIR = Path("/tmp")
 LOG_FILE = Path("/home/pi/watchdog.log")
 
 FAIL_MAIN_FILE = STATE_DIR / "fail_main"
+FAIL_WIFI_FILE = STATE_DIR / "fail_wifi"
+FAIL_INTERNET_FILE = STATE_DIR / "fail_internet"
 FAIL_CAM_FILES = {ip: STATE_DIR / f"fail_cam_{ip.split('.')[-1]}" for ip in CAM_IPS}
 
 MAIN_LAST_REBOOT_FILE = STATE_DIR / "last_reboot_main"
@@ -118,6 +122,42 @@ def http_health_ok(url: str) -> bool:
         return data.get("status") == "ok"
     except Exception:
         return False
+
+
+def wifi_connected(interface: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["iw", "dev", interface, "link"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        result = None
+
+    if result is not None and result.returncode == 0:
+        output = result.stdout.strip()
+        if "Not connected" in output:
+            return False
+        return bool(output)
+
+    try:
+        result = subprocess.run(
+            ["iwgetid", "-r", interface],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        result = None
+
+    if result is not None:
+        return result.returncode == 0 and bool(result.stdout.strip())
+
+    logging.warning("WiFi check unavailable; skipping WiFi reboot logic.")
+    return True
 
 # ================ FAIL COUNTERS ===========
 
@@ -216,6 +256,18 @@ def main() -> None:
         max_reboots_per_day=MAX_REBOOTS_PER_DAY,
     )
 
+    reboot_12v = False
+
+    wifi_ok = wifi_connected(WIFI_INTERFACE)
+    wifi_fails = update_fail_counter(wifi_ok, FAIL_WIFI_FILE, f"WiFi {WIFI_INTERFACE}")
+    if wifi_fails >= MAX_FAILS:
+        reboot_12v = True
+
+    internet_ok = ping_host(INTERNET_IP)
+    internet_fails = update_fail_counter(internet_ok, FAIL_INTERNET_FILE, f"Internet {INTERNET_IP}")
+    if internet_fails >= MAX_FAILS:
+        reboot_12v = True
+
     main_ok = http_health_ok(MAIN_HEALTH_URL)
     main_fails = update_fail_counter(main_ok, FAIL_MAIN_FILE, "Main Pi health")
 
@@ -223,7 +275,6 @@ def main() -> None:
         power_cycle(RELAY_MAIN, "Main Pi", MAIN_LAST_REBOOT_FILE, MAIN_DAILY_FILE, guard)
         write_int(FAIL_MAIN_FILE, 0)
 
-    reboot_cams = False
     cam_results: list[tuple[str, bool, int]] = []
 
     for ip in CAM_IPS:
@@ -232,7 +283,7 @@ def main() -> None:
         fails = update_fail_counter(ok, FAIL_CAM_FILES[ip], f"Camera {ip}", log_result=False)
         cam_results.append((ip, ok, fails))
         if fails >= MAX_FAILS:
-            reboot_cams = True
+            reboot_12v = True
 
     if cam_results:
         parts = []
@@ -250,10 +301,12 @@ def main() -> None:
         else:
             logging.info(summary)
 
-    if reboot_cams:
-        power_cycle(RELAY_CAMS, "Cameras / 12V", CAMS_LAST_REBOOT_FILE, CAMS_DAILY_FILE, guard)
+    if reboot_12v:
+        power_cycle(RELAY_CAMS, "Cameras / Router 12V", CAMS_LAST_REBOOT_FILE, CAMS_DAILY_FILE, guard)
         for ip in CAM_IPS:
             write_int(FAIL_CAM_FILES[ip], 0)
+        write_int(FAIL_WIFI_FILE, 0)
+        write_int(FAIL_INTERNET_FILE, 0)
 
 if __name__ == "__main__":
     try:
