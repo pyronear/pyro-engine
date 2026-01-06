@@ -23,7 +23,7 @@ import RPi.GPIO as GPIO
 # ================= CONFIG =================
 
 RELAY_PIZERO = 16
-PIZERO_IP = "192.168.1.62"
+PIZERO_IP = "192.168.1.98"
 
 PING_COUNT = 2
 TIMEOUT = 2  # seconds, used for ping timeout
