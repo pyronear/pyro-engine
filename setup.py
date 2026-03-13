@@ -6,23 +6,21 @@
 import os
 from pathlib import Path
 
-from setuptools import setup  # , find_packages
+from setuptools import find_packages, setup
 
 PKG_NAME = "pyroengine"
-VERSION = os.getenv("BUILD_VERSION", "3.0.1.dev0")
+VERSION = os.getenv("BUILD_VERSION", "3.0.0")
 
+print(f"Building wheel {PKG_NAME}-{VERSION}")
 
-if __name__ == "__main__":
-    print(f"Building wheel {PKG_NAME}-{VERSION}")
+cwd = Path(__file__).parent.absolute()
+pkg_dir = cwd.joinpath(PKG_NAME)
 
-    cwd = Path(__file__).parent.absolute()
-    pkg_dir = cwd.joinpath(PKG_NAME)
+with open(pkg_dir.joinpath("version.py"), "w", encoding="utf-8") as f:
+    f.write(f"__version__ = '{VERSION}'\n")
 
-    with open(pkg_dir.joinpath("version.py"), "w", encoding="utf-8") as f:
-        f.write(f"__version__ = '{VERSION}'\n")
-
-    setup(
-        name=PKG_NAME,
-        version=VERSION,
-        packages=[PKG_NAME],
-    )
+setup(
+    name=PKG_NAME,
+    version=VERSION,
+    packages=find_packages(),
+)
