@@ -65,6 +65,7 @@ def main(args):
         jpeg_quality=args.jpeg_quality,
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
+        save_detections_frames=args.save_detections_frames,
     )
 
     sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
@@ -133,6 +134,12 @@ if __name__ == "__main__":
         type=bool,
         default=False,
         help="Save all captured frames locally",
+    )
+    parser.add_argument(
+        "--save_detections_frames",
+        type=bool,
+        default=False,
+        help="Save all locally detection frames locally",
     )
     parser.add_argument(
         "--send_alerts",
