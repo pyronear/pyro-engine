@@ -92,7 +92,14 @@ class Classifier:
         else:
             try:
                 onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "best.onnx")
-                self.ort_session = onnxruntime.InferenceSession(onnx_file)
+                available_providers = onnxruntime.get_available_providers()
+                if "CUDAExecutionProvider" in available_providers:
+                    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                    logging.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
+                else:
+                    providers = ["CPUExecutionProvider"]
+                    logging.info("CUDA not available — using CPUExecutionProvider for ONNX inference")
+                self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
