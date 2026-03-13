@@ -96,9 +96,12 @@ class Classifier:
                 if "CUDAExecutionProvider" in available_providers:
                     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
                     logging.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
+                elif "CoreMLExecutionProvider" in available_providers:
+                    providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+                    logging.info("CoreML (MPS) is available — using CoreMLExecutionProvider for ONNX inference")
                 else:
                     providers = ["CPUExecutionProvider"]
-                    logging.info("CUDA not available — using CPUExecutionProvider for ONNX inference")
+                    logging.info("No GPU provider available — using CPUExecutionProvider for ONNX inference")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
