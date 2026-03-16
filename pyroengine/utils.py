@@ -7,6 +7,7 @@
 import cv2
 import numpy as np
 from tqdm import tqdm
+from PIL import Image
 
 __all__ = ["DownloadProgressBar", "letterbox", "nms", "xywh2xyxy"]
 
@@ -108,6 +109,28 @@ def nms(boxes: np.ndarray, overlapThresh: int = 0):
 
     return boxes[indices]
 
+def multi_resolution_frame(high_resolution_frame: Image.Image, low_resolution_frame: Image.Image, bboxes: list) -> Image.Image:
+    """
+    Creates a multi_resolution_frame image that has the size of high_resolution_frame.
+    The bboxes parts of the image are retrieved from the high_resolution_frame.
+    The rest of the image is retrieved from the low_resolution_frame.
+    The goal is to have a light image with high resolution only on the bboxes parts.
+
+    Args:
+        high_resolution_frame (Image.Image): The initial image that has high resolution.
+        low_resolution_frame (Image.Image): The already resized image that has lower resolution but weighs less.
+        bboxes (List): A list of list that contains the relative coordinate in order xmin, ymin, xmax, ymax, conf
+
+    Returns:
+        (Image.Image): The multi_resolution_frame image.
+    """
+    high_res_width, high_res_height = high_resolution_frame.size
+    result_frame = low_resolution_frame.resize((high_res_width, high_res_height), Image.BILINEAR)
+
+    for bbox in bboxes:
+        high_res_bbox = (round(bbox[0] * high_res_width), round(bbox[1] * high_res_height), round(bbox[2] * high_res_width), round(bbox[3] * high_res_height))
+        result_frame.paste(high_resolution_frame.crop(high_res_bbox), (high_res_bbox[0], high_res_bbox[1]))
+    return result_frame
 
 class DownloadProgressBar(tqdm):
     def update_to(self, b=1, bsize=1, tsize=None):
