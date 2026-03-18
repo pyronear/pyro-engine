@@ -410,10 +410,12 @@ class Engine:
                     response = self.api_client[ip].create_detection(stream.getvalue(), bboxes, pose_id)
 
                     try:
-                        # Force a KeyError if the request failed
                         response.json()["id"]
                     except ValueError:
                         logging.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
+                        raise
+                    except KeyError:
+                        logging.error(f"Camera '{cam_id}' - unexpected API response: {response.text}")
                         raise
 
                     # Clear
