@@ -42,13 +42,11 @@ def main(args):
 
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
-            cam_azimuths = cam_data["azimuths"]
-            for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths, strict=False):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
+            cam_pose_ids = cam_data["pose_ids"]
+            for pos_id, pose_id in zip(cam_poses, cam_pose_ids, strict=False):
+                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], pose_id, bbox_mask_url)
         else:
-            cam_poses = []
-            cam_azimuths = [cam_data["azimuth"]]
-            splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"], bbox_mask_url
+            splitted_cam_creds[_ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
 
     engine = Engine(
         model_path=args.model_path,
