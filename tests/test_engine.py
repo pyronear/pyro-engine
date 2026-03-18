@@ -131,7 +131,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0, None)}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 1, None)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
