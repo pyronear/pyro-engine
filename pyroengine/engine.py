@@ -381,7 +381,7 @@ class Engine:
                         continue
                     filled = src.copy()
                     filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
-                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled.tolist()]
+                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
