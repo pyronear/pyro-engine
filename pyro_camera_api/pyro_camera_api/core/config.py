@@ -51,7 +51,7 @@ CREDENTIALS_PATH = Path("/usr/src/app/data/credentials.json")
 RAW_CONFIG = {}
 if CREDENTIALS_PATH.exists():
     try:
-        with open(CREDENTIALS_PATH, "r", encoding="utf8") as f:
+        with Path(CREDENTIALS_PATH).open("r", encoding="utf8") as f:
             RAW_CONFIG = json.load(f)
     except Exception:
         RAW_CONFIG = {}
@@ -73,7 +73,7 @@ if RAW_CONFIG:
         else:
             input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554/h264Preview_01_sub"
 
-        if id_or_name.startswith("#!::") or id_or_name.startswith("publish:") or ":" in id_or_name:
+        if id_or_name.startswith(("#!::", "publish:")) or ":" in id_or_name:
             streamid = id_or_name
             safe_chars = ":,=/!"
         else:

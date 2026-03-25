@@ -1,5 +1,5 @@
 import hashlib
-import os
+import pathlib
 import shutil
 
 import numpy as np
@@ -20,8 +20,8 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0", "best.onnx")
-    assert os.path.isfile(model_path)
+    model_path = str(pathlib.Path(folder) / "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0" / "best.onnx")
+    assert pathlib.Path(model_path).is_file()
 
     # Test occlusion mask
     out = model(mock_wildfire_image, {})
@@ -37,7 +37,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
 
 def sha256sum(path):
-    with open(path, "rb") as f:
+    with pathlib.Path(path).open("rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
 
@@ -46,18 +46,18 @@ def test_download(tmpdir_factory):
 
     # First download
     _ = Classifier(model_folder=folder, format="onnx")
-    model_path = os.path.join(folder, "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0/best.onnx")
-    assert os.path.isfile(model_path)
+    model_path = str(pathlib.Path(folder) / "onnx_cpu_yolo11s_mighty-mongoose_v5.1.0" / "best.onnx")
+    assert pathlib.Path(model_path).is_file()
 
     hash1 = sha256sum(model_path)
 
     # Delete and download again
-    os.remove(model_path)
-    shutil.rmtree(os.path.dirname(model_path), ignore_errors=True)
+    pathlib.Path(model_path).unlink()
+    shutil.rmtree(pathlib.Path(model_path).parent, ignore_errors=True)
     _ = Classifier(model_folder=folder, format="onnx")
 
     hash2 = sha256sum(model_path)
 
     # Test that the model was re-downloaded (at least once more)
     assert hash1 == hash2  # optional if content is static
-    assert os.path.exists(model_path)
+    assert pathlib.Path(model_path).exists()

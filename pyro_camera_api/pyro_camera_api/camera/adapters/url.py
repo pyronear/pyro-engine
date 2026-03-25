@@ -47,8 +47,7 @@ class URLCamera(BaseCamera):
         redacted = urlunparse(cleaned)
         # Mask query credentials
         redacted = re.sub(r"(usr|user|username)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
-        redacted = re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
-        return redacted
+        return re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
 
     @staticmethod
     def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:

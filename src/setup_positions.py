@@ -6,6 +6,7 @@
 import argparse
 import json
 import os
+import pathlib
 import time
 
 import cv2
@@ -47,7 +48,7 @@ def main():
 
     args = parser.parse_args()
 
-    with open(args.creds, "r") as f:
+    with pathlib.Path(args.creds).open("r") as f:
         creds = json.load(f)
 
     selected_creds = {args.ip: creds[args.ip]} if args.ip else creds
@@ -60,7 +61,7 @@ def main():
         cam_azimuths = cam_data.get("azimuths", [cam_data.get("azimuth", 0)])
 
         output_folder = f"{args.output_folder}/{ip.replace('.', '_')}"
-        os.makedirs(output_folder, exist_ok=True)
+        pathlib.Path(output_folder).mkdir(exist_ok=True, parents=True)
 
         camera = ReolinkCamera(
             ip_address=ip,
@@ -88,7 +89,7 @@ def main():
                     image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
                     image_np = cv2.resize(image_np, (2560, 1440))
                     filename = f"pose_{new_pose_id}.jpg"
-                    image_path = os.path.join(output_folder, filename)
+                    image_path = str(pathlib.Path(output_folder) / filename)
                     cv2.imwrite(image_path, image_np)
                     print(f"Image saved at {image_path}")
                 else:

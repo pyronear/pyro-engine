@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException
 
@@ -125,8 +128,8 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
             try:
                 cam.move_camera("ToPos", idx=pose1, speed=50)
                 time.sleep(1)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Could not move camera to pose %s before focus: %s", pose1, exc)
 
     best_position = cam.focus_finder(save_images=save_images)
 

@@ -81,8 +81,8 @@ def start_stream(camera_ip: str, request: Request):
 
         try:
             anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to parse conf from stream config, using default: %s", exc)
 
         decoder = RTSPDecoderWorker(
             rtsp_url=input_url,

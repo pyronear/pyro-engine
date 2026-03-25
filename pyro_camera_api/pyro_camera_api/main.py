@@ -89,8 +89,8 @@ async def lifespan(app: FastAPI):
                 except Exception as exc:
                     logger.warning("Failed to stop decoder for %s, %s", cam_id, exc)
                 workers.pop(cam_id, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Error stopping stream workers on shutdown: %s", exc)
 
         try:
             procs = getattr(app.state, "stream_processes", {})
@@ -104,14 +104,14 @@ async def lifespan(app: FastAPI):
                 except Exception as exc:
                     logger.warning("Failed to stop ffmpeg for %s, %s", cam_id, exc)
                 procs.pop(cam_id, None)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Error stopping ffmpeg processes on shutdown: %s", exc)
 
         try:
             if hasattr(app.state, "anonymizer"):
                 app.state.anonymizer.stop()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Error stopping anonymizer on shutdown: %s", exc)
 
 
 app = FastAPI(lifespan=lifespan)

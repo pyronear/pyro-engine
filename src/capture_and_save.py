@@ -5,6 +5,7 @@
 
 import argparse
 import os
+import pathlib
 import time
 
 import cv2
@@ -41,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     output_folder = f"{args.output_folder}/{args.ip.split('.')[-1]}"
-    os.makedirs(output_folder, exist_ok=True)
+    pathlib.Path(output_folder).mkdir(exist_ok=True, parents=True)
 
     # Initialize camera
     camera = ReolinkCamera(
@@ -64,7 +65,7 @@ def main():
                 image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
                 resized = cv2.resize(image_np, (1280, 720))
                 filename = f"pose_{pose_id}.jpg"
-                image_path = os.path.join(output_folder, filename)
+                image_path = str(pathlib.Path(output_folder) / filename)
                 cv2.imwrite(image_path, resized)
                 print(f"Saved resized image to {image_path}")
             else:

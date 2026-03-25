@@ -49,8 +49,8 @@ def is_stream_running_for(app: Any, camera_ip: str) -> bool:
         try:
             if _is_thread_alive(p.decoder) and _is_thread_alive(p.encoder):
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not check anonymizer pipeline state for %s: %s", camera_ip, exc)
 
     # plain ffmpeg restream
     proc = procs.get(camera_ip)
@@ -58,8 +58,8 @@ def is_stream_running_for(app: Any, camera_ip: str) -> bool:
         try:
             if proc.poll() is None:
                 return True
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not check ffmpeg process state for %s: %s", camera_ip, exc)
 
     return False
 

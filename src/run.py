@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import pathlib
 
 import urllib3
 from dotenv import load_dotenv
@@ -24,37 +25,38 @@ def main(args):
 
     # .env loading
     load_dotenv(".env")
-    API_URL = os.environ.get("API_URL")
-    assert isinstance(API_URL, str)
-    CAM_USER = os.environ.get("CAM_USER")
-    CAM_PWD = os.environ.get("CAM_PWD")
-    assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
+    api_url = os.environ.get("API_URL")
+    assert isinstance(api_url, str)
+    cam_user = os.environ.get("CAM_USER")
+    cam_pwd = os.environ.get("CAM_PWD")
+    assert isinstance(cam_user, str)
+    assert isinstance(cam_pwd, str)
 
     # Loading camera creds
-    with open(args.creds, "rb") as json_file:
+    with pathlib.Path(args.creds).open("rb") as json_file:
         camera_data = json.load(json_file)
 
     splitted_cam_creds = {}
-    for _ip, cam_data in camera_data.items():
+    for ip, cam_data in camera_data.items():
         bbox_mask_url = None
-        if "bbox_mask_url" in cam_data.keys():
+        if "bbox_mask_url" in cam_data:
             bbox_mask_url = cam_data["bbox_mask_url"]
 
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
             for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths, strict=False):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
+                splitted_cam_creds[ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
-            splitted_cam_creds[_ip] = cam_data["token"], cam_data["azimuth"], bbox_mask_url
+            splitted_cam_creds[ip] = cam_data["token"], cam_data["azimuth"], bbox_mask_url
 
     engine = Engine(
         model_path=args.model_path,
         conf_thresh=args.thresh,
         max_bbox_size=args.max_bbox_size,
-        api_url=API_URL,
+        api_url=api_url,
         cam_creds=splitted_cam_creds,
         cache_folder=args.cache,
         backup_size=args.backup_size,

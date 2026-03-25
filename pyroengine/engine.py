@@ -12,7 +12,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Never, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -29,21 +29,22 @@ from .vision import Classifier
 __all__ = ["Engine"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logger = logging.getLogger(__name__)
 
 
-def handler(signum, frame):
+def handler(signum, frame) -> Never:
     raise TimeoutError("Heartbeat check timed out")
 
 
-def heartbeat_with_timeout(api_instance, cam_id, timeout=1):
+def heartbeat_with_timeout(api_instance, cam_id, timeout=1) -> None:
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(timeout)
     try:
         api_instance.heartbeat(cam_id)
     except TimeoutError:
-        logging.warning(f"Heartbeat check timed out for {cam_id}")
+        logger.warning(f"Heartbeat check timed out for {cam_id}")
     except ConnectionError:
-        logging.warning(f"Unable to reach the pyro-api with {cam_id}")
+        logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
 
@@ -111,9 +112,9 @@ class Engine:
         self.api_client: dict[str, Any] = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for _id, (camera_token, _, _) in cam_creds.items():
-                ip = _id.split("_")[0]
-                if ip not in self.api_client.keys():
+            for id_, (camera_token, _, _) in cam_creds.items():
+                ip = id_.split("_")[0]
+                if ip not in self.api_client:
                     self.api_client[ip] = client.Client(camera_token, api_url)
 
         # Cache & relaxation
@@ -287,21 +288,21 @@ class Engine:
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
             ):
                 # send image periodically
-                logging.info(f"Uploading periodical image for cam {cam_id}")
+                logger.info(f"Uploading periodical image for cam {cam_id}")
                 self._states[cam_key]["last_image_sent"] = time.time()
                 ip = cam_id.split("_")[0]
-                if ip in self.api_client.keys():
+                if ip in self.api_client:
                     stream = io.BytesIO()
                     frame.save(stream, format="JPEG", quality=self.jpeg_quality)
                     response = self.api_client[ip].update_last_image(stream.getvalue())
-                    logging.info(response.text)
+                    logger.info(response.text)
 
         # Update occlusion masks
         if (
             self._states[cam_key]["last_bbox_mask_fetch"] is None
             or time.time() - self._states[cam_key]["last_bbox_mask_fetch"] > self.last_bbox_mask_fetch_period
         ):
-            logging.info(f"Update occlusion masks for cam {cam_key}")
+            logger.info(f"Update occlusion masks for cam {cam_key}")
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
             bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_key]
             if bbox_mask_url is not None:
@@ -310,9 +311,9 @@ class Engine:
                     response = requests.get(full_url)
                     bbox_mask_dict = response.json()
                     self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
-                    logging.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
+                    logger.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
                 except requests.exceptions.RequestException:
-                    logging.info(f"No occluson available for: {cam_key}")
+                    logger.info(f"No occluson available for: {cam_key}")
 
         # Inference with ONNX
         if fake_pred is None:
@@ -328,7 +329,7 @@ class Engine:
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
 
-        logging.info(f"pred for {cam_key} : {preds}")
+        logger.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
 
         if self.save_captured_frames:
@@ -337,7 +338,7 @@ class Engine:
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-        logging.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -366,12 +367,12 @@ class Engine:
             "bboxes": bboxes,
         })
 
-    def fill_empty_bboxes(self):
+    def fill_empty_bboxes(self) -> None:
         cam_id_to_indices: Dict[str, list[int]] = {}
         for i, alert in enumerate(self._alerts):
             cam_id_to_indices.setdefault(alert["cam_id"], []).append(i)
 
-        for cam_id, indices in cam_id_to_indices.items():
+        for indices in cam_id_to_indices.values():
             non_empty_indices = [i for i in indices if self._alerts[i]["bboxes"]]
             if not non_empty_indices:
                 continue
@@ -392,7 +393,7 @@ class Engine:
                 # try to upload the oldest element
                 frame_info = self._alerts[0]
                 cam_id = frame_info["cam_id"]
-                logging.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+                logger.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
 
                 # Save alert on device
                 if self.save_detections_frames:
@@ -412,17 +413,17 @@ class Engine:
                         # Force a KeyError if the request failed
                         response.json()["id"]
                     except ValueError:
-                        logging.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
+                        logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
                         raise
 
                     # Clear
                     self._alerts.popleft()
-                    logging.info(f"Camera '{cam_id}' - alert sent")
+                    logger.info(f"Camera '{cam_id}' - alert sent")
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
                 except (KeyError, ConnectionError, ValueError) as e:
-                    logging.warning(f"Camera '{cam_id}' - unable to upload cache")
-                    logging.warning(e)
+                    logger.warning(f"Camera '{cam_id}' - unable to upload cache")
+                    logger.warning(e)
                     break
 
     def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:

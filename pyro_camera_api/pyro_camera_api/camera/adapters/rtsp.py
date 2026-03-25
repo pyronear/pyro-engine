@@ -25,8 +25,8 @@ def _safe_url(u: str) -> str:
             scheme, rest = u.split("://", 1)
             after_at = rest.split("@", 1)[1]
             return f"{scheme}://***:***@{after_at}"
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not redact credentials from URL: %s", exc)
     return u
 
 

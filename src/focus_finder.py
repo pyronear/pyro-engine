@@ -21,7 +21,7 @@ def process_all_cameras(
     if not Path(credentials_path).is_file():
         sys.exit(f"Credentials file not found: {credentials_path}")
 
-    with open(credentials_path, "r", encoding="utf-8") as f:
+    with Path(credentials_path).open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     for ip, cfg in data.items():

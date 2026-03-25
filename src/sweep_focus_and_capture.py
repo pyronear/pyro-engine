@@ -6,6 +6,7 @@
 
 import argparse
 import os
+import pathlib
 import time
 
 from dotenv import load_dotenv
@@ -29,7 +30,7 @@ focus_values = list(range(680, 750, 1))
 
 # Output directory for saved images
 output_dir = "focus_tests"
-os.makedirs(output_dir, exist_ok=True)
+pathlib.Path(output_dir).mkdir(exist_ok=True, parents=True)
 
 # Create the camera instance
 cam = ReolinkCamera(
@@ -50,7 +51,7 @@ for focus in focus_values:
     time.sleep(2)  # Give the camera time to adjust focus
     img = cam.capture()
     if img:
-        path = os.path.join(output_dir, f"focus_{focus}.jpg")
+        path = str(pathlib.Path(output_dir) / f"focus_{focus}.jpg")
         img.resize((1280, 720)).save(path)
         print(f"📸 Saved image at {path}")
     else:

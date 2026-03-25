@@ -110,7 +110,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
     @staticmethod
     def _azimuth_deg_to_raw(azimuth_deg: float) -> int:
-        raw = int(round((float(azimuth_deg) % 360.0) * 10.0))
+        raw = round((float(azimuth_deg) % 360.0) * 10.0)
         if raw == 3600:
             raw = 0
         return raw
@@ -404,7 +404,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         pan, tilt, zoom = 0, 0, 0
         # Accept Reolink-style speed (1-64) and map to ISAPI expected 1-100 range
-        v = int(round(self._map_range(speed, 1.0, 64.0, 1.0, 100.0)))
+        v = round(self._map_range(speed, 1.0, 64.0, 1.0, 100.0))
 
         if op == "Left":
             pan = -v
