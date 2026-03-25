@@ -4,7 +4,16 @@ import shutil
 
 import numpy as np
 
-from pyroengine.vision import Classifier
+# Canonical import — Classifier lives in pyro_predictor
+from pyro_predictor import Classifier
+
+# pyroengine.vision shim must re-export the same class
+from pyroengine.vision import Classifier as ClassifierShim
+
+
+def test_shim_is_same_class():
+    """pyroengine.vision.Classifier must be the same object as pyro_predictor.Classifier."""
+    assert ClassifierShim is Classifier
 
 
 def test_classifier(tmpdir_factory, mock_wildfire_image):
