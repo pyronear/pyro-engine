@@ -27,7 +27,7 @@ def test_predictor_offline(mock_wildfire_image, mock_forest_image):
     out = predictor.predict(mock_wildfire_image)
     assert isinstance(out, float)
     assert 0 <= out <= 1
-    assert predictor._states["-1"]["ongoing"] is True
+    assert predictor._states["-1"]["ongoing"]
 
 
 def test_predictor_per_camera_state(mock_wildfire_image, mock_forest_image):
