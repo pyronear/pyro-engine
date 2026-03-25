@@ -1,3 +1,4 @@
+import pathlib
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -37,8 +38,7 @@ def test_is_day_time_ir_strategy():
 
 def test_is_day_time_time_strategy(tmp_path):
     cache = tmp_path
-    with open(cache / "sunset_sunrise.txt", "w") as f:
-        f.write("06:00\n18:00\n")
+    pathlib.Path(cache / "sunset_sunrise.txt").write_text("06:00\n18:00\n")
 
     with patch("pyroengine.core.datetime") as mock_datetime:
         mock_datetime.now.return_value = datetime(2024, 6, 17, 10, 0)

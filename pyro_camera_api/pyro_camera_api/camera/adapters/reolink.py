@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 import logging
-import os
+import operator
+import pathlib
 import time
 from io import BytesIO
 from typing import List, Optional
@@ -87,8 +88,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
-                image = Image.open(image_data).convert("RGB")
-                return image
+                return Image.open(image_data).convert("RGB")
             logger.error("Failed to capture image: %s, %s", response.status_code, response.text)
         except requests.RequestException as e:
             logger.error("Request failed: %s", e)
@@ -188,6 +188,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             ]
             response = requests.post(url, json=data, verify=False)  # nosec: B501
             return self._handle_response(response, "Started ZoomFocus successfully.")
+        return None
 
     def set_manual_focus(self, position: int):
         """
@@ -205,6 +206,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             ]
             response = requests.post(url, json=data, verify=False)  # nosec: B501
             return self._handle_response(response, f"Manual focus set at position {position}")
+        return None
 
     def get_focus_level(self):
         """Retrieve the current manual focus and zoom positions."""
@@ -231,11 +233,11 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         _ = retry_depth  # unused, kept for signature compatibility
 
-        ABS_MIN = 600
-        ABS_MAX = 900
+        abs_min = 600
+        abs_max = 900
 
         def clamp_focus(pos: int) -> int:
-            return max(ABS_MIN, min(ABS_MAX, pos))
+            return max(abs_min, min(abs_max, pos))
 
         def capture_and_score(pos: int) -> float:
             pos = clamp_focus(pos)
@@ -249,7 +251,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             logger.info("[%s] Focus %s: Sharpness = %.2f", self.ip_address, pos, score_local)
             if save_images:
                 folder = f"focus_debug/{self.ip_address.replace('.', '_')}"
-                os.makedirs(folder, exist_ok=True)
+                pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
                 image.save(f"{folder}/focus_{pos}.jpg")
             return score_local
 
@@ -295,7 +297,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             else:
                 break
 
-        best_focus, best_score = max(history, key=lambda x: x[1])
+        best_focus, best_score = max(history, key=operator.itemgetter(1))
         for fine_step in [3, 1]:
             improved = True
             while improved:

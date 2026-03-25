@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import subprocess
 import threading
@@ -103,10 +104,8 @@ def log_ffmpeg_output(proc: subprocess.Popen, camera_id: str) -> None:
     for line in iter(proc.stderr.readline, b""):
         if not line:
             break
-        try:
+        with contextlib.suppress(Exception):
             logger.info("[ffmpeg %s] %s", camera_id, line.decode(errors="ignore").rstrip())
-        except Exception:
-            pass
 
 
 def build_ffmpeg_restream_cmd(input_url: str, output_url: str) -> list[str]:

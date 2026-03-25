@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import subprocess
 import threading
@@ -79,10 +80,8 @@ def start_stream(camera_ip: str, request: Request):
         fps: int = int(cfg_stream.get("fps", 10))
         rtsp_transport: str = cfg_stream.get("rtsp_transport", "tcp")
 
-        try:
+        with contextlib.suppress(Exception):
             anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))
-        except Exception:
-            pass
 
         decoder = RTSPDecoderWorker(
             rtsp_url=input_url,

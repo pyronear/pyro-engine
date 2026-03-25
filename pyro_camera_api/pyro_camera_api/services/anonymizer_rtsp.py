@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import contextlib
 import io
 import logging
 import subprocess
@@ -147,10 +148,8 @@ def build_encoder_cmd(
     g_val = keyint
     for p in params:
         if p.startswith("keyint="):
-            try:
+            with contextlib.suppress(Exception):
                 g_val = int(p.split("=", 1)[1])
-            except Exception:
-                pass
             break
     x264_merged = ":".join(params)
 
@@ -213,10 +212,8 @@ def log_ffmpeg_stderr(proc: subprocess.Popen[bytes], name: str) -> None:
     for line in iter(proc.stderr.readline, b""):
         if not line:
             break
-        try:
-            logging.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            logger.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
 
 
 class FPSMeter:
@@ -239,7 +236,7 @@ class FPSMeter:
             inst = self._count / dt
             self._ema = inst if self._ema is None else 0.9 * self._ema + 0.1 * inst
             if now - self._last_log >= self._log_every:
-                logging.info("FPS %s, current %.2f, smoothed %.2f", self.name, inst, self._ema or inst)
+                logger.info("FPS %s, current %.2f, smoothed %.2f", self.name, inst, self._ema or inst)
                 self._last_log = now
                 self._t0 = now
                 self._count = 0
@@ -250,8 +247,8 @@ class FPSMeter:
 
 def boxes_px_from_norm(
     boxes_norm: Iterable[Sequence[float]],
-    W: int,
-    H: int,
+    width: int,
+    height: int,
     conf_th: float,
 ) -> List[Tuple[int, int, int, int]]:
     out = []
@@ -262,16 +259,16 @@ def boxes_px_from_norm(
         conf = float(it[4]) if len(it) >= 5 else 1.0
         if conf < conf_th:
             continue
-        x1p = int(max(0, min(W, x1 * W)))
-        y1p = int(max(0, min(H, y1 * H)))
-        x2p = int(max(0, min(W, x2 * W)))
-        y2p = int(max(0, min(H, y2 * H)))
+        x1p = int(max(0, min(width, x1 * width)))
+        y1p = int(max(0, min(height, y1 * height)))
+        x2p = int(max(0, min(width, x2 * width)))
+        y2p = int(max(0, min(height, y2 * height)))
         if x2p > x1p and y2p > y1p:
-            # clip again to W minus one and H minus one to be safe for slicing
-            x1p = min(x1p, W - 1)
-            y1p = min(y1p, H - 1)
-            x2p = min(x2p, W)
-            y2p = min(y2p, H)
+            # clip again to width minus one and height minus one to be safe for slicing
+            x1p = min(x1p, width - 1)
+            y1p = min(y1p, height - 1)
+            x2p = min(x2p, width)
+            y2p = min(y2p, height)
             out.append((x1p, y1p, x2p, y2p))
     return out
 
@@ -329,7 +326,7 @@ class RTSPDecoderWorker:
             self._thread.join(timeout=3)
 
     def _open(self) -> None:
-        logging.info("Starting decoder: %s", " ".join(self.dec_cmd))
+        logger.info("Starting decoder: %s", " ".join(self.dec_cmd))
         self._proc = subprocess.Popen(
             self.dec_cmd,
             stdout=subprocess.PIPE,
@@ -341,17 +338,13 @@ class RTSPDecoderWorker:
     def _close(self) -> None:
         if not self._proc:
             return
-        try:
+        with contextlib.suppress(Exception):
             self._proc.terminate()
-        except Exception:
-            pass
         try:
             self._proc.wait(timeout=2)
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 self._proc.kill()
-            except Exception:
-                pass
         self._proc = None
 
     def _run(self) -> None:
@@ -359,7 +352,8 @@ class RTSPDecoderWorker:
         view = memoryview(buffer)
         try:
             self._open()
-            assert self._proc and self._proc.stdout
+            assert self._proc
+            assert self._proc.stdout
             dec_out: io.BufferedReader = cast(io.BufferedReader, self._proc.stdout)
 
             while not self._stop.is_set():
@@ -367,7 +361,7 @@ class RTSPDecoderWorker:
                 while n < self.frame_bytes and not self._stop.is_set():
                     m = dec_out.readinto(view[n:])
                     if not m:
-                        logging.warning("Decoder ended")
+                        logger.warning("Decoder ended")
                         self._stop.set()
                         break
                     n += m
@@ -379,10 +373,10 @@ class RTSPDecoderWorker:
                 self._fps.tick()
 
         except BaseException as e:
-            logging.error("Decoder worker error: %s", e)
+            logger.error("Decoder worker error: %s", e)
         finally:
             self._close()
-            logging.info("Decoder stopped")
+            logger.info("Decoder stopped")
 
 
 class AnonymizerWorker:
@@ -421,9 +415,9 @@ class AnonymizerWorker:
 
     def _ensure_model(self) -> None:
         if self._model is None:
-            logging.info("Loading Anonymizer model")
+            logger.info("Loading Anonymizer model")
             self._model = Anonymizer()
-            logging.info("Model ready")
+            logger.info("Model ready")
 
     def _run(self) -> None:
         backoff = 1.0
@@ -449,11 +443,11 @@ class AnonymizerWorker:
                 self._fps.tick()
 
             except BaseException as e:
-                logging.warning("Anonymizer error: %s", e)
+                logger.warning("Anonymizer error: %s", e)
                 self._model = None
                 time.sleep(backoff)
                 backoff = min(10.0, backoff * 2.0)
-        logging.info("Anonymizer stopped")
+        logger.info("Anonymizer stopped")
 
 
 class EncoderWorker:
@@ -503,7 +497,7 @@ class EncoderWorker:
             tune=x264_tune,
             pix_fmt=pix_fmt,
             x264_params=x264_params or "scenecut=40:rc-lookahead=0:ref=3",
-            enc_input_fps=int(round(1.0 / self._interval)),
+            enc_input_fps=round(1.0 / self._interval),
         )
 
     def start(self) -> None:
@@ -519,7 +513,7 @@ class EncoderWorker:
             self._thread.join(timeout=3)
 
     def _open(self) -> None:
-        logging.info("Starting encoder: %s", " ".join(self.enc_cmd))
+        logger.info("Starting encoder: %s", " ".join(self.enc_cmd))
         self._proc = subprocess.Popen(
             self.enc_cmd,
             stdin=subprocess.PIPE,
@@ -536,23 +530,20 @@ class EncoderWorker:
                 self._proc.stdin.close()
         except Exception:
             pass
-        try:
+        with contextlib.suppress(Exception):
             self._proc.terminate()
-        except Exception:
-            pass
         try:
             self._proc.wait(timeout=2)
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 self._proc.kill()
-            except Exception:
-                pass
         self._proc = None
 
     def _run(self) -> None:
         try:
             self._open()
-            assert self._proc and self._proc.stdin
+            assert self._proc
+            assert self._proc.stdin
             enc_in: io.BufferedWriter = self._proc.stdin  # type: ignore[assignment]
 
             next_deadline = time.time()
@@ -577,15 +568,15 @@ class EncoderWorker:
                     if wrote is None or wrote == 0:
                         raise BrokenPipeError("encoder write returned zero")
                 except BrokenPipeError:
-                    logging.warning("Encoder pipe closed")
+                    logger.warning("Encoder pipe closed")
                     self._stop.set()
                     break
 
         except BaseException as e:
-            logging.error("Encoder worker error: %s", e)
+            logger.error("Encoder worker error: %s", e)
         finally:
             self._close()
-            logging.info("Encoder stopped")
+            logger.info("Encoder stopped")
 
 
 # ----------------------------- Runner -----------------------------
