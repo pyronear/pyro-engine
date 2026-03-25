@@ -6,4 +6,4 @@
 from .predictor import Predictor
 from .vision import Classifier
 
-__all__ = ["Predictor", "Classifier"]
+__all__ = ["Classifier", "Predictor"]

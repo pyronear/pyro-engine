@@ -56,7 +56,9 @@ class Predictor:
         **kwargs: Any,
     ) -> None:
         self.verbose = verbose
-        self.model = Classifier(model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size, verbose=verbose, **kwargs)
+        self.model = Classifier(
+            model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size, verbose=verbose, **kwargs
+        )
         self.conf_thresh = conf_thresh
         self.model_conf_thresh = model_conf_thresh
         self.max_bbox_size = max_bbox_size

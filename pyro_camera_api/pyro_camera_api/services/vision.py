@@ -57,7 +57,7 @@ class Anonymizer:
 
     Examples:
         >>> from pyroengine.vision import Anonymizer
-        >>> anonymizer = Anonymizer(format="onnx", conf=0.2)
+        >>> anonymizer = Anonymizer(model_format="onnx", conf=0.2)
         >>> from PIL import Image
         >>> img = Image.open("car.jpg")
         >>> detections = anonymizer(img)
@@ -75,7 +75,7 @@ class Anonymizer:
         imgsz=640,
         conf=0.25,
         iou=0,
-        format="ncnn",
+        model_format="ncnn",
         model_path=None,
     ) -> None:
         if model_path:
@@ -85,12 +85,12 @@ class Anonymizer:
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
             self.format = "onnx"
         else:
-            if format == "ncnn":
+            if model_format == "ncnn":
                 if not self.is_arm_architecture():
                     logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
-            elif format == "onnx":
+            elif model_format == "onnx":
                 model = MODEL_NAME.replace("ncnn", "onnx")
                 self.format = "onnx"
             else:
@@ -103,7 +103,7 @@ class Anonymizer:
                 logger.info(f"Downloading model from {model_url} ...")
                 pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
                 with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-                    urlretrieve(model_url, model_path, reporthook=t.update_to)
+                    urlretrieve(model_url, model_path, reporthook=t.update_to)  # noqa: S310
                 logger.info("Model downloaded!")
 
             # Extract .tar.gz archive
@@ -113,7 +113,7 @@ class Anonymizer:
                 if not pathlib.Path(extract_path).is_dir():
                     pathlib.Path(extract_path).mkdir(exist_ok=True, parents=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(extract_path)  # 👈 extract *inside* the versioned folder
+                        tar.extractall(extract_path)  # noqa: S202  # trusted source
                     logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 

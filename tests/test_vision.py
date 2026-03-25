@@ -46,8 +46,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
 
 def sha256sum(path):
-    with pathlib.Path(path).open("rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
 def test_download(tmpdir_factory):

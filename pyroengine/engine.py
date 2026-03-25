@@ -3,7 +3,6 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-import glob
 import io
 import logging
 import shutil
@@ -16,11 +15,10 @@ from typing import Any, Dict, Never, Optional, Tuple
 import numpy as np
 import requests
 from PIL import Image
-from pyroclient import client
-from requests.exceptions import ConnectionError
-from requests.models import Response
-
 from pyro_predictor import Predictor
+from pyroclient import client
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.models import Response
 
 __all__ = ["Engine"]
 
@@ -28,18 +26,18 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 logger = logging.getLogger(__name__)
 
 
-def handler(signum, frame) -> Never:
+def handler(_signum: int, _frame: object) -> Never:
     raise TimeoutError("Heartbeat check timed out")
 
 
-def heartbeat_with_timeout(api_instance, cam_id, timeout=1) -> None:
+def heartbeat_with_timeout(api_instance: object, cam_id: str, timeout: int = 1) -> None:
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(timeout)
     try:
         api_instance.heartbeat(cam_id)
     except TimeoutError:
         logger.warning(f"Heartbeat check timed out for {cam_id}")
-    except ConnectionError:
+    except RequestsConnectionError:
         logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
@@ -96,7 +94,7 @@ class Engine(Predictor):
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
         super().__init__(
@@ -147,7 +145,8 @@ class Engine(Predictor):
         # Restore pending alerts cache
         self._alerts: deque = deque(maxlen=cache_size)
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
-        assert self._cache.is_dir()
+        if not self._cache.is_dir():
+            raise ValueError(f"Cache folder does not exist: {self._cache}")
 
     def _new_state(self) -> Dict[str, Any]:
         state = super()._new_state()
@@ -164,7 +163,7 @@ class Engine(Predictor):
         self,
         frame: Image.Image,
         cam_id: Optional[str] = None,
-        occlusion_bboxes: Optional[Dict[Any, Any]] = None,
+        occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # noqa: ARG002
         fake_pred: Optional[np.ndarray] = None,
     ) -> float:
         """Computes the confidence that the image contains wildfire cues
@@ -218,7 +217,7 @@ class Engine(Predictor):
             if bbox_mask_url is not None:
                 full_url = f"{bbox_mask_url}_{azimuth}.json"
                 try:
-                    response = requests.get(full_url)
+                    response = requests.get(full_url, timeout=5)
                     bbox_mask_dict = response.json()
                     self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
                     logger.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
@@ -331,7 +330,7 @@ class Engine(Predictor):
                     logger.info(f"Camera '{cam_id}' - alert sent")
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
-                except (KeyError, ConnectionError, ValueError) as e:
+                except (KeyError, RequestsConnectionError, ValueError) as e:
                     logger.warning(f"Camera '{cam_id}' - unable to upload cache")
                     logger.warning(e)
                     break
@@ -352,7 +351,7 @@ class Engine(Predictor):
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
 
-    def _clean_local_backup(self, backup_cache) -> None:
+    def _clean_local_backup(self, backup_cache: Path) -> None:
         """Clean local backup when it's bigger than _backup_size MB
 
         Args:
@@ -361,14 +360,7 @@ class Engine(Predictor):
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
         for folder in backup_by_days:
-            s = (
-                sum(
-                    Path(f).stat().st_size
-                    for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
-                    if Path(f).is_file()
-                )
-                // 1024**2
-            )
+            s = sum(f.stat().st_size for f in backup_cache.rglob("*") if f.is_file()) // 1024**2
             if s > self._backup_size:
                 shutil.rmtree(folder)
             else:

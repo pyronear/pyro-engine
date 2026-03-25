@@ -31,7 +31,7 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 logger = logging.getLogger(__name__)
 
 
-def is_day_time(cache, frame, strategy, delta=0):
+def is_day_time(cache: Optional[Path], frame: Image.Image, strategy: str, delta: int = 0) -> bool:
     """
     Determine whether it is daytime based on the selected strategy.
 

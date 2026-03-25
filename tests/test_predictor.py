@@ -1,9 +1,6 @@
 import logging
 
 import numpy as np
-import pytest
-from PIL import Image
-
 from pyro_predictor import Classifier, Predictor
 
 
@@ -13,22 +10,24 @@ def test_predictor_direct_import():
     assert Classifier is not None
 
 
-def test_predictor_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
-    folder = str(tmpdir_factory.mktemp("predictor_cache"))
+def test_predictor_offline(mock_wildfire_image, mock_forest_image):
     predictor = Predictor(nb_consecutive_frames=4, verbose=False)
 
     out = predictor.predict(mock_forest_image)
-    assert isinstance(out, float) and 0 <= out <= 1
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
     assert len(predictor._states["-1"]["last_predictions"]) == 1
     assert predictor._states["-1"]["ongoing"] is False
 
     out = predictor.predict(mock_wildfire_image)
-    assert isinstance(out, float) and 0 <= out <= 1
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
     assert len(predictor._states["-1"]["last_predictions"]) == 2
 
     out = predictor.predict(mock_wildfire_image)
-    assert isinstance(out, float) and 0 <= out <= 1
-    assert predictor._states["-1"]["ongoing"] == True
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
+    assert predictor._states["-1"]["ongoing"] is True
 
 
 def test_predictor_per_camera_state(mock_wildfire_image, mock_forest_image):

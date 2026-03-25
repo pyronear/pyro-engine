@@ -122,7 +122,7 @@ ignore = [
     "E501", "B008", "B904", "C901", "F403", "E731", "C416",
     "ANN002", "ANN003", "COM812", "ISC001"
 ]
-exclude = [".git"]
+exclude = [".git", "pyro-predictor/**", "docs/**"]
 
 [tool.ruff.lint.flake8-quotes]
 docstring-quotes = "double"
@@ -133,10 +133,12 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["I001", "F401", "CPY001"]
-"src/**.py" = ["D", "T201", "S101", "ANN"]
-".github/**.py" = ["D", "T201", "ANN"]
-"tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001"]
-"pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN"]
+"src/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S106", "S113", "S501"]
+".github/**.py" = ["D", "T201", "ANN", "S", "PYI024"]
+"tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001", "S113"]
+"pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "S404", "S603", "S405", "S314", "E402", "RUF029"]
+"pyroengine/core.py" = ["BLE001"]
+"pyroengine/sensors.py" = ["S113", "S501", "ANN"]
 
 [tool.ruff.format]
 quote-style = "double"

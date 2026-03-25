@@ -5,6 +5,7 @@
 
 import logging
 import os
+import pathlib
 import platform
 import tarfile
 from typing import Tuple
@@ -50,7 +51,7 @@ class Classifier:
     ) -> None:
         self.verbose = verbose
         if model_path:
-            if not os.path.isfile(model_path):
+            if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
             if os.path.splitext(model_path)[-1].lower() != ".onnx":
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
@@ -59,7 +60,9 @@ class Classifier:
             if format == "ncnn":
                 if not self.is_arm_architecture():
                     if self.verbose:
-                        logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
+                        logger.info(
+                            "NCNN format is optimized for arm architecture only, switching to onnx is recommended"
+                        )
                 model = MODEL_NAME
                 self.format = "ncnn"
             elif format == "onnx":
@@ -71,11 +74,13 @@ class Classifier:
             model_path = os.path.join(model_folder, model)
             model_url = MODEL_URL_FOLDER + model
 
-            if not os.path.isfile(model_path):
+            if not pathlib.Path(model_path).is_file():
                 if self.verbose:
                     logger.info(f"Downloading model from {model_url} ...")
-                os.makedirs(model_folder, exist_ok=True)
-                with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path, disable=not self.verbose) as t:
+                pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
+                with DownloadProgressBar(
+                    unit="B", unit_scale=True, miniters=1, desc=model_path, disable=not self.verbose
+                ) as t:
                     urlretrieve(model_url, model_path, reporthook=t.update_to)
                 if self.verbose:
                     logger.info("Model downloaded!")
@@ -84,7 +89,7 @@ class Classifier:
             if model_path.endswith(".tar.gz"):
                 base_name = os.path.basename(model_path).replace(".tar.gz", "")
                 extract_path = os.path.join(model_folder, base_name)
-                if not os.path.isdir(extract_path):
+                if not pathlib.Path(extract_path).is_dir():
                     with tarfile.open(model_path, "r:gz") as tar:
                         tar.extractall(model_folder)
                     if self.verbose:
