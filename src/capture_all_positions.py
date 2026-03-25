@@ -7,6 +7,7 @@
 import argparse
 import json
 import os
+import pathlib
 import time
 
 import cv2
@@ -24,14 +25,12 @@ CAM_STOP_TIME = 0.3
 def calculate_center_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_time, shift_angle=0):
     effective_angle = fov / 2 - (4 * fov - 3 * overlap - 180) + overlap / 2 + shift_angle
 
-    shift_time = effective_angle / cam_speed_deg_per_sec - cam_stop_time * 2  # higher speed, longer stop
-    return shift_time
+    return effective_angle / cam_speed_deg_per_sec - cam_stop_time * 2  # higher speed, longer stop
 
 
 def calculate_overlap_shift_time(fov, overlap, cam_speed_deg_per_sec, cam_stop_time):
     effective_angle = fov - overlap
-    shift_time = effective_angle / cam_speed_deg_per_sec - cam_stop_time
-    return shift_time
+    return effective_angle / cam_speed_deg_per_sec - cam_stop_time
 
 
 def draw_axes_on_image(image, fov):
@@ -136,9 +135,9 @@ def process_camera(ip, cam_data, args):
                     image_np = draw_axes_on_image(image_np, args.fov)
                 image_np = cv2.resize(image_np, (2560, 1440))
                 filename = f"{ip.replace('.', '_')}_im_{i}.jpg"
-                actual_folder = os.path.join(args.output_folder, ip.replace(".", "_"))
-                os.makedirs(actual_folder, exist_ok=True)
-                image_path = os.path.join(actual_folder, filename)
+                actual_folder = pathlib.Path(args.output_folder) / ip.replace(".", "_")
+                actual_folder.mkdir(exist_ok=True, parents=True)
+                image_path = str(actual_folder / filename)
                 cv2.imwrite(image_path, image_np)
                 print(f"✅ Saved image at {image_path}")
             else:
@@ -175,14 +174,14 @@ def main():
     args = parser.parse_args()
 
     if args.ip:
-        with open(args.creds, "r") as f:
+        with pathlib.Path(args.creds).open("r") as f:
             creds = json.load(f)
         if args.ip in creds:
             process_camera(args.ip, creds[args.ip], args)
         else:
             print(f"❌ IP {args.ip} not found in credentials file.")
     else:
-        with open(args.creds, "r") as f:
+        with pathlib.Path(args.creds).open("r") as f:
             creds = json.load(f)
         for ip, cam_data in creds.items():
             process_camera(ip, cam_data, args)

@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
-import os
+import pathlib
 import platform
 import tarfile
 from typing import Tuple
@@ -79,15 +79,15 @@ class Anonymizer:
         model_path=None,
     ) -> None:
         if model_path:
-            if not os.path.isfile(model_path):
+            if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
-            if os.path.splitext(model_path)[-1].lower() != ".onnx":
+            if pathlib.Path(model_path).suffix.lower() != ".onnx":
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
             self.format = "onnx"
         else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
-                    logging.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
+                    logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
             elif format == "onnx":
@@ -96,41 +96,41 @@ class Anonymizer:
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
-            model_path = os.path.join(model_folder, model)
+            model_path = str(pathlib.Path(model_folder) / model)
             model_url = MODEL_URL_FOLDER + model
 
-            if not os.path.isfile(model_path):
-                logging.info(f"Downloading model from {model_url} ...")
-                os.makedirs(model_folder, exist_ok=True)
+            if not pathlib.Path(model_path).is_file():
+                logger.info(f"Downloading model from {model_url} ...")
+                pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
                 with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
                     urlretrieve(model_url, model_path, reporthook=t.update_to)
-                logging.info("Model downloaded!")
+                logger.info("Model downloaded!")
 
             # Extract .tar.gz archive
             if model_path.endswith(".tar.gz"):
-                base_name = os.path.basename(model_path).replace(".tar.gz", "")
-                extract_path = os.path.join(model_folder, base_name)
-                if not os.path.isdir(extract_path):
-                    os.makedirs(extract_path, exist_ok=True)
+                base_name = pathlib.Path(model_path).name.replace(".tar.gz", "")
+                extract_path = str(pathlib.Path(model_folder) / base_name)
+                if not pathlib.Path(extract_path).is_dir():
+                    pathlib.Path(extract_path).mkdir(exist_ok=True, parents=True)
                     with tarfile.open(model_path, "r:gz") as tar:
                         tar.extractall(extract_path)  # 👈 extract *inside* the versioned folder
-                    logging.info(f"Extracted model to: {extract_path}")
+                    logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 
         if self.format == "ncnn":
             self.model = ncnn.Net()
-            self.model.load_param(os.path.join(model_path, "best_ncnn_model", "model.ncnn.param"))
-            self.model.load_model(os.path.join(model_path, "best_ncnn_model", "model.ncnn.bin"))
+            self.model.load_param(str(pathlib.Path(model_path) / "best_ncnn_model" / "model.ncnn.param"))
+            self.model.load_model(str(pathlib.Path(model_path) / "best_ncnn_model" / "model.ncnn.bin"))
 
         else:
             try:
-                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "model.onnx")
+                onnx_file = model_path if model_path.endswith(".onnx") else str(pathlib.Path(model_path) / "model.onnx")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file)
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
 
-            logging.info(f"ONNX model loaded successfully from {model_path}")
+            logger.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
         self.conf = conf
@@ -170,11 +170,11 @@ class Anonymizer:
         if pred.ndim != 2 or pred.size == 0:
             return np.zeros((0, 5), dtype=np.float32)
 
-        C, N = pred.shape
-        if not (C < N and C >= 5):
+        n_ch, n_det = pred.shape
+        if not (n_ch < n_det and n_ch >= 5):
             pred = pred.T
-            C, N = pred.shape
-            if C < 5:
+            n_ch, n_det = pred.shape
+            if n_ch < 5:
                 return np.zeros((0, 5), dtype=np.float32)
 
         # split
@@ -184,7 +184,7 @@ class Anonymizer:
         # confidences and class indices on the unfiltered set
         if cls_scores.size == 0:
             conf = pred[-1, :]  # one class export
-            cls_idx = np.zeros(N, dtype=int)
+            cls_idx = np.zeros(n_det, dtype=int)
         else:
             cls_idx = np.argmax(cls_scores, axis=0)
             conf = np.max(cls_scores, axis=0)
@@ -227,7 +227,7 @@ class Anonymizer:
 
         return det.astype(np.float32)
 
-    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict = {}) -> np.ndarray:
+    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict | None = None) -> np.ndarray:
         """Run the classifier on an input image.
 
         Args:
@@ -237,6 +237,8 @@ class Anonymizer:
         Returns:
             Processed predictions.
         """
+        if occlusion_bboxes is None:
+            occlusion_bboxes = {}
         np_img, pad = self.prep_process(pil_img)
 
         if self.format == "ncnn":

@@ -11,13 +11,11 @@ from setuptools import find_packages, setup
 PKG_NAME = "pyroengine"
 VERSION = os.getenv("BUILD_VERSION", "3.0.0")
 
-print(f"Building wheel {PKG_NAME}-{VERSION}")
 
 cwd = Path(__file__).parent.absolute()
 pkg_dir = cwd.joinpath(PKG_NAME)
 
-with open(pkg_dir.joinpath("version.py"), "w", encoding="utf-8") as f:
-    f.write(f"__version__ = '{VERSION}'\n")
+Path(pkg_dir.joinpath("version.py")).write_text(f"__version__ = '{VERSION}'\n", encoding="utf-8")
 
 setup(
     name=PKG_NAME,

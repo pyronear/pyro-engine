@@ -105,6 +105,6 @@ html_logo = "_static/img/pyronear-logo-dark.png"
 html_static_path = ["_static"]
 
 
-def setup(app):
+def setup(app) -> None:
     app.add_css_file("css/custom_theme.css")
     app.add_js_file("js/custom.js")

@@ -28,6 +28,7 @@ __all__ = ["SystemController", "is_day_time"]
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logger = logging.getLogger(__name__)
 
 
 def is_day_time(cache, frame, strategy, delta=0):
@@ -45,7 +46,7 @@ def is_day_time(cache, frame, strategy, delta=0):
     """
     is_day = True
     if cache and strategy in ["both", "time"]:
-        with open(cache.joinpath("sunset_sunrise.txt")) as f:
+        with Path(cache.joinpath("sunset_sunrise.txt")).open() as f:
             lines = f.readlines()
         sunrise = datetime.strptime(lines[0].strip(), "%H:%M")
         sunset = datetime.strptime(lines[1].strip(), "%H:%M")
@@ -85,31 +86,31 @@ class SystemController:
         time.sleep(self.API_INITIAL_WAIT)
         while True:
             try:
-                logging.info("Waiting for Pyro Camera API")
+                logger.info("Waiting for Pyro Camera API")
                 self.camera_api_client = PyroCameraAPIClient(pyro_camera_api_url)
                 _ = self.camera_api_client.get_stream_status()
-                logging.info("Pyro Camera API client ready")
+                logger.info("Pyro Camera API client ready")
                 break
             except Exception as e:
-                logging.error(f"API not ready: {e}")
+                logger.error(f"API not ready: {e}")
                 time.sleep(self.API_RETRY_DELAY)
 
         # Optional startup actions, do not fail hard
-        for ip in self.camera_data.keys():
+        for ip in self.camera_data:
             try:
                 self.camera_api_client.start_patrol(ip)
             except Exception as e:
-                logging.warning(f"Could not start patrol on {ip} at startup, continuing: {e}")
+                logger.warning(f"Could not start patrol on {ip} at startup, continuing: {e}")
 
         # Wait and then loop until inference passes once
         time.sleep(self.POST_READY_WAIT)
         while True:
             try:
-                logging.info("Waiting for cameras")
+                logger.info("Waiting for cameras")
                 self.inference_loop()
                 break
             except Exception as e:
-                logging.error(f"Inference failed: {e}")
+                logger.error(f"Inference failed: {e}")
                 time.sleep(self.API_RETRY_DELAY)
 
     def focus_finder(self) -> None:
@@ -120,7 +121,7 @@ class SystemController:
         """
         now = datetime.now()
         if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
-            logging.info("Hourly autofocus triggered after idle period")
+            logger.info("Hourly autofocus triggered after idle period")
 
             for ip, cam in self.camera_data.items():
                 if cam.get("type") != "static":
@@ -133,11 +134,11 @@ class SystemController:
                             self.camera_api_client.stop_patrol(ip)
                             time.sleep(0.5)
                             self.camera_api_client.run_focus_optimization(ip)
-                            logging.info(f"Autofocus completed for {ip}")
+                            logger.info(f"Autofocus completed for {ip}")
                             self.camera_api_client.start_patrol(ip)
                             self.last_autofocus = now
                         except Exception as e:
-                            logging.error(f"[Failed to run hourly focus finder on camera {ip}: {e}")
+                            logger.error(f"[Failed to run hourly focus finder on camera {ip}: {e}")
 
     def _any_stream_active(self) -> bool:
         """
@@ -165,7 +166,7 @@ class SystemController:
 
             return False
         except Exception as e:
-            logging.error(f"Could not fetch stream status: {e}")
+            logger.error(f"Could not fetch stream status: {e}")
             return False
 
     def _safe_get_latest_image(self, ip: str, pose: int) -> Optional[Image.Image]:
@@ -174,7 +175,7 @@ class SystemController:
         except UnidentifiedImageError:
             return None
         except Exception as e:
-            logging.error(f"Error getting image for {ip} pose {pose}: {e}")
+            logger.error(f"Error getting image for {ip} pose {pose}: {e}")
             return None
 
     def inference_loop(self) -> None:
@@ -184,7 +185,7 @@ class SystemController:
         This skips processing entirely if a stream is currently active.
         """
         if self._any_stream_active():
-            logging.info("Stream detected, skipping inference on all cameras")
+            logger.info("Stream detected, skipping inference on all cameras")
             return
 
         for ip, cam in self.camera_data.items():
@@ -193,35 +194,35 @@ class SystemController:
             if cam.get("type") == "ptz":
                 for pose in cam.get("poses", []):
                     if self._any_stream_active():
-                        logging.info("Stream turned on during loop, stopping inference immediately")
+                        logger.info("Stream turned on during loop, stopping inference immediately")
                         return
                     try:
                         cam_id = f"{ip}_{pose}"
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
-                            logging.info(f"Captured image for {ip}, pose {pose}")
+                            logger.info(f"Captured image for {ip}, pose {pose}")
                             self.is_day = is_day_time(None, frame, "ir")
                             self.engine.predict(frame, cam_id)
                     except requests.HTTPError as e:
-                        logging.error(f"HTTP error for {camera_name}, pose {pose}: {e.response.text}")
+                        logger.error(f"HTTP error for {camera_name}, pose {pose}: {e.response.text}")
                     except Exception as e:
-                        logging.error(f"Error for {camera_name}, pose {pose}: {e}")
+                        logger.error(f"Error for {camera_name}, pose {pose}: {e}")
 
             else:
                 if self._any_stream_active():
-                    logging.info("Stream turned on during loop, stopping inference immediately")
+                    logger.info("Stream turned on during loop, stopping inference immediately")
                     return
                 try:
                     cam_id = ip
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
-                        logging.info(f"Captured image for {ip}")
+                        logger.info(f"Captured image for {ip}")
                         self.is_day = is_day_time(None, frame, "ir")
                         self.engine.predict(frame, cam_id)
                 except requests.HTTPError as e:
-                    logging.error(f"HTTP error for {camera_name}: {e.response.text}")
+                    logger.error(f"HTTP error for {camera_name}: {e.response.text}")
                 except Exception as e:
-                    logging.error(f"Error for {camera_name}: {e}")
+                    logger.error(f"Error for {camera_name}: {e}")
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -230,20 +231,20 @@ class SystemController:
         try:
             stream_status = self.camera_api_client.get_stream_status()
         except Exception as e:
-            logging.error(f"Could not check if stream is running: {e}")
+            logger.error(f"Could not check if stream is running: {e}")
             return
 
         active_pipelines = stream_status.get("active_pipelines") or []
         active_ffmpeg = stream_status.get("active_ffmpeg") or []
         if not active_pipelines and not active_ffmpeg:
-            for ip in self.camera_data.keys():
+            for ip in self.camera_data:
                 try:
                     patrol_status = self.camera_api_client.get_patrol_status(ip)
                     if not patrol_status.get("patrol_running", False):
                         self.camera_api_client.start_patrol(ip)
-                        logging.info(f"Patrol restarted on camera {ip}")
+                        logger.info(f"Patrol restarted on camera {ip}")
                 except Exception as e:
-                    logging.error(f"Could not check or restart patrol on camera {ip}: {e}")
+                    logger.error(f"Could not check or restart patrol on camera {ip}: {e}")
 
     def main_loop(self, period: int, send_alerts: bool = True) -> None:
         """
@@ -263,31 +264,31 @@ class SystemController:
             start_ts = time.time()
 
             if not self.is_day:
-                for ip in self.camera_data.keys():
+                for ip in self.camera_data:
                     try:
                         patrol_status = self.camera_api_client.get_patrol_status(ip)
                         if not patrol_status.get("patrol_running", True):
                             self.camera_api_client.stop_patrol(ip)
-                            logging.info(f"Stopped patrol for camera {ip} due to night")
+                            logger.info(f"Stopped patrol for camera {ip} due to night")
                     except Exception as e:
-                        logging.error(f"Failed to stop patrol on camera {ip}: {e}")
+                        logger.error(f"Failed to stop patrol on camera {ip}: {e}")
 
-                logging.info("Nighttime detected by at least one camera, sleeping for 1 hour")
+                logger.info("Nighttime detected by at least one camera, sleeping for 1 hour")
                 time.sleep(3600)
 
                 try:
                     ip = next(iter(self.camera_data.keys()))
                     frame = self.camera_api_client.capture_image(ip)
                     self.is_day = is_day_time(None, frame, "ir")
-                    logging.info(f"Re checked day and night using camera {ip}, result is_day={self.is_day}")
+                    logger.info(f"Re checked day and night using camera {ip}, result is_day={self.is_day}")
 
                     if self.is_day:
-                        logging.info("Day detected, restarting patrols")
+                        logger.info("Day detected, restarting patrols")
                         self.check_and_restart_patrol()
                         time.sleep(30)
-                        logging.info("Patrols restarted successfully, waiting 30 seconds before next check")
+                        logger.info("Patrols restarted successfully, waiting 30 seconds before next check")
                 except Exception as e:
-                    logging.error(f"Failed to check day and night after sleep: {e}")
+                    logger.error(f"Failed to check day and night after sleep: {e}")
                     self.is_day = False
 
             else:
@@ -295,9 +296,9 @@ class SystemController:
                     try:
                         self.engine._process_alerts()
                     except Exception as e:
-                        logging.error(f"Error processing alerts: {e}")
+                        logger.error(f"Error processing alerts: {e}")
                 else:
-                    logging.info("Run focus finder")
+                    logger.info("Run focus finder")
                     self.focus_finder()
 
                 self.check_and_restart_patrol()
@@ -305,5 +306,5 @@ class SystemController:
 
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)
-                logging.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f} seconds")
+                logger.info(f"Loop run under {loop_time:.2f} seconds, sleeping for {sleep_time:.2f} seconds")
                 time.sleep(sleep_time)
