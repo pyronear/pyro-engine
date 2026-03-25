@@ -4,7 +4,6 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
-import contextlib
 import io
 import logging
 import subprocess
@@ -148,8 +147,10 @@ def build_encoder_cmd(
     g_val = keyint
     for p in params:
         if p.startswith("keyint="):
-            with contextlib.suppress(Exception):
+            try:
                 g_val = int(p.split("=", 1)[1])
+            except Exception as exc:
+                logger.debug("Could not parse keyint from x264 params, using default %s: %s", g_val, exc)
             break
     x264_merged = ":".join(params)
 
@@ -212,8 +213,7 @@ def log_ffmpeg_stderr(proc: subprocess.Popen[bytes], name: str) -> None:
     for line in iter(proc.stderr.readline, b""):
         if not line:
             break
-        with contextlib.suppress(Exception):
-            logger.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
+        logger.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
 
 
 class FPSMeter:
@@ -338,13 +338,17 @@ class RTSPDecoderWorker:
     def _close(self) -> None:
         if not self._proc:
             return
-        with contextlib.suppress(Exception):
+        try:
             self._proc.terminate()
+        except Exception as exc:
+            logger.debug("Decoder terminate failed (process may already be dead): %s", exc)
         try:
             self._proc.wait(timeout=2)
         except Exception:
-            with contextlib.suppress(Exception):
+            try:
                 self._proc.kill()
+            except Exception as exc:
+                logger.debug("Decoder kill failed: %s", exc)
         self._proc = None
 
     def _run(self) -> None:
@@ -528,15 +532,19 @@ class EncoderWorker:
         try:
             if self._proc.stdin:
                 self._proc.stdin.close()
-        except Exception:
-            pass
-        with contextlib.suppress(Exception):
+        except Exception as exc:
+            logger.debug("Encoder stdin close failed: %s", exc)
+        try:
             self._proc.terminate()
+        except Exception as exc:
+            logger.debug("Encoder terminate failed (process may already be dead): %s", exc)
         try:
             self._proc.wait(timeout=2)
         except Exception:
-            with contextlib.suppress(Exception):
+            try:
                 self._proc.kill()
+            except Exception as exc:
+                logger.debug("Encoder kill failed: %s", exc)
         self._proc = None
 
     def _run(self) -> None:
