@@ -55,8 +55,8 @@ def is_day_time(cache: Optional[Path], frame: Image.Image, strategy: str, delta:
             is_day = False
 
     if strategy in ["both", "ir"]:
-        frame = np.array(frame)
-        if np.max(frame[:, :, 0] - frame[:, :, 1]) == 0:
+        frame_arr = np.array(frame)
+        if np.max(frame_arr[:, :, 0] - frame_arr[:, :, 1]) == 0:
             is_day = False
 
     return is_day

@@ -30,7 +30,7 @@ def handler(_signum: int, _frame: object) -> Never:
     raise TimeoutError("Heartbeat check timed out")
 
 
-def heartbeat_with_timeout(api_instance: object, cam_id: str, timeout: int = 1) -> None:
+def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 1) -> None:  # noqa: ANN401
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(timeout)
     try:
