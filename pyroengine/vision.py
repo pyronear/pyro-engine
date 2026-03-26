@@ -8,18 +8,18 @@ import pathlib
 import platform
 import tarfile
 from typing import Tuple
-from urllib.request import urlretrieve
 
 import ncnn
 import numpy as np
 import onnxruntime
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
+from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_nimble-narwhal_v6.0.0/resolve/main/"
+MODEL_REPO_ID = "pyronear/yolo11s_nimble-narwhal_v6.0.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
@@ -66,13 +66,11 @@ class Classifier:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
             model_path = str(pathlib.Path(model_folder) / model)
-            model_url = MODEL_URL_FOLDER + model
 
             if not pathlib.Path(model_path).is_file():
-                logger.info(f"Downloading model from {model_url} ...")
+                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
                 pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
-                with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-                    urlretrieve(model_url, model_path, reporthook=t.update_to)
+                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=model_folder)
                 logger.info("Model downloaded!")
 
             # Extract archive
