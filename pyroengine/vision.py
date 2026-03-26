@@ -19,8 +19,8 @@ from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_mighty-mongoose_v5.1.0/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11s_mighty-mongoose_v5.1.0.tar.gz"
+MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_nimble-narwhal_v6.0.0/resolve/main/"
+MODEL_NAME = "ncnn_cpu.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
@@ -75,13 +75,14 @@ class Classifier:
                     urlretrieve(model_url, model_path, reporthook=t.update_to)
                 logger.info("Model downloaded!")
 
-            # Extract .tar.gz archive
+            # Extract archive
             if model_path.endswith(".tar.gz"):
                 base_name = pathlib.Path(model_path).name.replace(".tar.gz", "")
                 extract_path = str(pathlib.Path(model_folder) / base_name)
                 if not pathlib.Path(extract_path).is_dir():
+                    pathlib.Path(extract_path).mkdir(parents=True, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(model_folder)
+                        tar.extractall(extract_path)
                     logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 
@@ -97,12 +98,9 @@ class Classifier:
                 if "CUDAExecutionProvider" in available_providers:
                     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
                     logger.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
-                elif "CoreMLExecutionProvider" in available_providers:
-                    providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-                    logger.info("CoreML (MPS) is available — using CoreMLExecutionProvider for ONNX inference")
                 else:
                     providers = ["CPUExecutionProvider"]
-                    logger.info("No GPU provider available — using CPUExecutionProvider for ONNX inference")
+                    logger.info("Using CPUExecutionProvider for ONNX inference")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
