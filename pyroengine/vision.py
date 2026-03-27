@@ -8,19 +8,19 @@ import pathlib
 import platform
 import tarfile
 from typing import Tuple
-from urllib.request import urlretrieve
 
 import ncnn
 import numpy as np
 import onnxruntime
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
+from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_mighty-mongoose_v5.1.0/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11s_mighty-mongoose_v5.1.0.tar.gz"
+MODEL_REPO_ID = "pyronear/yolo11s_nimble-narwhal_v6.0.0"
+MODEL_NAME = "ncnn_cpu.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
@@ -66,22 +66,21 @@ class Classifier:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
             model_path = str(pathlib.Path(model_folder) / model)
-            model_url = MODEL_URL_FOLDER + model
 
             if not pathlib.Path(model_path).is_file():
-                logger.info(f"Downloading model from {model_url} ...")
+                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
                 pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
-                with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-                    urlretrieve(model_url, model_path, reporthook=t.update_to)
+                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=model_folder)
                 logger.info("Model downloaded!")
 
-            # Extract .tar.gz archive
+            # Extract archive
             if model_path.endswith(".tar.gz"):
                 base_name = pathlib.Path(model_path).name.replace(".tar.gz", "")
                 extract_path = str(pathlib.Path(model_folder) / base_name)
                 if not pathlib.Path(extract_path).is_dir():
+                    pathlib.Path(extract_path).mkdir(parents=True, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(model_folder)
+                        tar.extractall(extract_path)
                     logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 
@@ -97,12 +96,9 @@ class Classifier:
                 if "CUDAExecutionProvider" in available_providers:
                     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
                     logger.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
-                elif "CoreMLExecutionProvider" in available_providers:
-                    providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-                    logger.info("CoreML (MPS) is available — using CoreMLExecutionProvider for ONNX inference")
                 else:
                     providers = ["CPUExecutionProvider"]
-                    logger.info("No GPU provider available — using CPUExecutionProvider for ONNX inference")
+                    logger.info("Using CPUExecutionProvider for ONNX inference")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
