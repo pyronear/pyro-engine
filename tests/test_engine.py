@@ -56,13 +56,24 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert isinstance(out, float)
     assert 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
-    assert engine._states["-1"]["ongoing"]
+    assert not engine._states["-1"]["ongoing"]
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
-    assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
     assert engine._states["-1"]["last_predictions"][2][3] < datetime.now().isoformat()
     assert engine._states["-1"]["last_predictions"][2][4] is False
+
+    out = engine.predict(mock_wildfire_image)
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
+    assert len(engine._states["-1"]["last_predictions"]) == 4
+    assert engine._states["-1"]["ongoing"]
+    assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
+    assert engine._states["-1"]["last_predictions"][3][1].shape[0] > 0
+    assert engine._states["-1"]["last_predictions"][3][1].shape[1] == 5
+    assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
+    assert engine._states["-1"]["last_predictions"][3][3] < datetime.now().isoformat()
+    assert engine._states["-1"]["last_predictions"][3][4] is False
 
 
 def create_dummy_onnx_model(model_path):
