@@ -82,7 +82,7 @@ if __name__ == "__main__":
     )
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
-    parser.add_argument("--thresh", type=float, default=0.2, help="Confidence threshold")
+    parser.add_argument("--thresh", type=float, default=0.35, help="Confidence threshold")
     parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
 
     # Camera & cache
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nb-consecutive_frames",
         type=int,
-        default=5,
+        default=6,
         help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
