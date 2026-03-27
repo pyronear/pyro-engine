@@ -7,7 +7,7 @@ import logging
 import pathlib
 import platform
 import tarfile
-from typing import Tuple
+from typing import Optional, Tuple
 from urllib.request import urlretrieve
 
 import ncnn
@@ -227,7 +227,7 @@ class Anonymizer:
 
         return det.astype(np.float32)
 
-    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict | None = None) -> np.ndarray:
+    def __call__(self, pil_img: Image.Image, occlusion_bboxes: Optional[dict] = None) -> np.ndarray:
         """Run the classifier on an input image.
 
         Args:
