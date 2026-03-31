@@ -48,6 +48,10 @@ class Classifier:
         max_bbox_size=0.4,
         verbose=True,
     ) -> None:
+        self.verbose = verbose
+        if not verbose:
+            logger.setLevel(logging.WARNING)
+
         if model_path:
             if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
