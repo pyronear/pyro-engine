@@ -20,6 +20,11 @@ import sys
 from datetime import datetime
 
 sys.path.insert(0, pathlib.Path("../..").resolve())
+from unittest.mock import MagicMock
+
+for mod_name in ("ncnn", "onnxruntime"):
+    sys.modules[mod_name] = MagicMock()
+
 import pyroengine
 
 # -- Project information -----------------------------------------------------
