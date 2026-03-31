@@ -46,6 +46,7 @@ class Classifier:
         format="ncnn",
         model_path=None,
         max_bbox_size=0.4,
+        verbose=True,
     ) -> None:
         if model_path:
             if not pathlib.Path(model_path).is_file():
