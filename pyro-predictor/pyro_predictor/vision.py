@@ -4,25 +4,25 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
-import os
 import pathlib
 import platform
 import tarfile
 from typing import Tuple
-from urllib.request import urlretrieve
 
 import ncnn
 import numpy as np
 import onnxruntime
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from .utils import DownloadProgressBar, box_iou, letterbox, nms, xywh2xyxy
+from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_URL_FOLDER = "https://huggingface.co/pyronear/yolo11s_mighty-mongoose_v5.1.0/resolve/main/"
-MODEL_NAME = "ncnn_cpu_yolo11s_mighty-mongoose_v5.1.0.tar.gz"
+MODEL_REPO_ID = "pyronear/yolo11s_nimble-narwhal_v6.0.0"
+MODEL_NAME = "ncnn_cpu.tar.gz"
 
+logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 
@@ -30,12 +30,11 @@ class Classifier:
     """Implements an image classification model using YOLO backend.
 
     Examples:
-        >>> from pyro_predictor.vision import Classifier
+        >>> from pyroengine.vision import Classifier
         >>> model = Classifier()
 
     Args:
         model_path: model path
-        verbose: if False, suppress all informational log output
     """
 
     def __init__(
@@ -47,22 +46,17 @@ class Classifier:
         format="ncnn",
         model_path=None,
         max_bbox_size=0.4,
-        verbose=True,
     ) -> None:
-        self.verbose = verbose
         if model_path:
             if not pathlib.Path(model_path).is_file():
                 raise ValueError(f"Model file not found: {model_path}")
-            if os.path.splitext(model_path)[-1].lower() != ".onnx":
+            if pathlib.Path(model_path).suffix.lower() != ".onnx":
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
             self.format = "onnx"
         else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
-                    if self.verbose:
-                        logger.info(
-                            "NCNN format is optimized for arm architecture only, switching to onnx is recommended"
-                        )
+                    logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
             elif format == "onnx":
@@ -71,59 +65,46 @@ class Classifier:
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
-            model_path = os.path.join(model_folder, model)
-            model_url = MODEL_URL_FOLDER + model
+            model_path = str(pathlib.Path(model_folder) / model)
 
             if not pathlib.Path(model_path).is_file():
-                if self.verbose:
-                    logger.info(f"Downloading model from {model_url} ...")
+                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
                 pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
-                with DownloadProgressBar(
-                    unit="B", unit_scale=True, miniters=1, desc=model_path, disable=not self.verbose
-                ) as t:
-                    urlretrieve(model_url, model_path, reporthook=t.update_to)
-                if self.verbose:
-                    logger.info("Model downloaded!")
+                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=model_folder)
+                logger.info("Model downloaded!")
 
-            # Extract .tar.gz archive
+            # Extract archive
             if model_path.endswith(".tar.gz"):
-                base_name = os.path.basename(model_path).replace(".tar.gz", "")
-                extract_path = os.path.join(model_folder, base_name)
+                base_name = pathlib.Path(model_path).name.replace(".tar.gz", "")
+                extract_path = str(pathlib.Path(model_folder) / base_name)
                 if not pathlib.Path(extract_path).is_dir():
+                    pathlib.Path(extract_path).mkdir(parents=True, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(model_folder)
-                    if self.verbose:
-                        logger.info(f"Extracted model to: {extract_path}")
+                        tar.extractall(extract_path)
+                    logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 
         if self.format == "ncnn":
             self.model = ncnn.Net()
-            self.model.load_param(os.path.join(model_path, "best_ncnn_model", "model.ncnn.param"))
-            self.model.load_model(os.path.join(model_path, "best_ncnn_model", "model.ncnn.bin"))
+            self.model.load_param(str(pathlib.Path(model_path) / "best_ncnn_model" / "model.ncnn.param"))
+            self.model.load_model(str(pathlib.Path(model_path) / "best_ncnn_model" / "model.ncnn.bin"))
 
         else:
             try:
-                onnx_file = model_path if model_path.endswith(".onnx") else os.path.join(model_path, "best.onnx")
+                onnx_file = model_path if model_path.endswith(".onnx") else str(pathlib.Path(model_path) / "best.onnx")
                 available_providers = onnxruntime.get_available_providers()
                 if "CUDAExecutionProvider" in available_providers:
                     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-                    if self.verbose:
-                        logger.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
-                elif "CoreMLExecutionProvider" in available_providers:
-                    providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-                    if self.verbose:
-                        logger.info("CoreML (MPS) is available — using CoreMLExecutionProvider for ONNX inference")
+                    logger.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
                 else:
                     providers = ["CPUExecutionProvider"]
-                    if self.verbose:
-                        logger.info("No GPU provider available — using CPUExecutionProvider for ONNX inference")
+                    logger.info("Using CPUExecutionProvider for ONNX inference")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
 
-            if self.verbose:
-                logger.info(f"ONNX model loaded successfully from {model_path}")
+            logger.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
         self.conf = conf
@@ -188,7 +169,7 @@ class Classifier:
 
         return pred
 
-    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict = {}) -> np.ndarray:
+    def __call__(self, pil_img: Image.Image, occlusion_bboxes: dict | None = None) -> np.ndarray:
         """Run the classifier on an input image.
 
         Args:
@@ -198,6 +179,8 @@ class Classifier:
         Returns:
             Processed predictions.
         """
+        if occlusion_bboxes is None:
+            occlusion_bboxes = {}
         np_img, pad = self.prep_process(pil_img)
 
         if self.format == "ncnn":
@@ -221,8 +204,7 @@ class Classifier:
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
-        if self.verbose:
-            logger.info(f"Model original pred : {pred}")
+        logger.info(f"Model original pred : {pred}")
 
         # Remove prediction in bbox occlusion mask
         if len(occlusion_bboxes):
