@@ -188,13 +188,6 @@ def click_to_move(
         "moves": [],
     }
 
-    # Micro-impulse duration (seconds): briefest possible move command.
-    # The camera will coast by ~bias(speed=1) degrees after Stop.
-    # Calibrated at zoom 41:
-    #   reolink-823A16: ~1.92° ± 0.10° per micro-pulse at speed 1
-    #   reolink-823S2:  ~1.05° ± 0.11° per micro-pulse at speed 1
-    _MICRO_IMPULSE_DUR = 0.05
-
     try:
         # Pan
         if abs(pan_deg) >= 0.5:
@@ -209,12 +202,11 @@ def click_to_move(
                 cam.move_camera("Stop")
                 result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": pan_speed, "duration": round(duration, 2)})
             elif pan_speeds:
-                # Angle too small for calibrated model — micro-impulse at lowest speed
+                # Angle too small for calibrated model — micro-impulse: move+stop back-to-back
                 logger.info("[%s] click_to_move pan %s %.2f° micro-impulse speed=1", camera_ip, pan_direction, abs(pan_deg))
                 cam.move_camera(pan_direction, speed=1)
-                time.sleep(_MICRO_IMPULSE_DUR)
                 cam.move_camera("Stop")
-                result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": 1, "duration": _MICRO_IMPULSE_DUR, "micro": True})
+                result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": 1, "duration": 0, "micro": True})
             else:
                 result["moves"].append({"axis": "pan", "skipped": True, "reason": "no speed table for adapter"})
 
@@ -233,9 +225,8 @@ def click_to_move(
             elif tilt_speeds:
                 logger.info("[%s] click_to_move tilt %s %.2f° micro-impulse speed=1", camera_ip, tilt_direction, abs(tilt_deg))
                 cam.move_camera(tilt_direction, speed=1)
-                time.sleep(_MICRO_IMPULSE_DUR)
                 cam.move_camera("Stop")
-                result["moves"].append({"axis": "tilt", "direction": tilt_direction, "deg": round(abs(tilt_deg), 3), "speed": 1, "duration": _MICRO_IMPULSE_DUR, "micro": True})
+                result["moves"].append({"axis": "tilt", "direction": tilt_direction, "deg": round(abs(tilt_deg), 3), "speed": 1, "duration": 0, "micro": True})
             else:
                 result["moves"].append({"axis": "tilt", "skipped": True, "reason": "no speed table for adapter"})
 
@@ -253,14 +244,18 @@ def move_camera(
     speed: int = 10,
     pose_id: Optional[int] = None,
     degrees: Optional[float] = None,
+    duration: Optional[float] = None,
 ):
     """
     Move a PTZ camera for a short action.
 
-    This endpoint supports three modes of operation based on the request
+    This endpoint supports four modes of operation based on the request
     parameters.
 
     If pose_id is provided the camera moves to the given preset pose.
+    If duration and direction are provided the camera moves for exactly
+    that duration (seconds) server-side, then stops. Use duration=0 for
+    a micro-impulse (move+stop back-to-back).
     If degrees and direction are provided the camera moves for the
     duration needed to cover the requested angle using a model specific
     speed table.
@@ -284,6 +279,21 @@ def move_camera(
             logger.info("[%s] Moving to preset pose %s at speed %s", camera_ip, pose_id, speed)
             cam.move_camera("ToPos", speed=speed, idx=pose_id)
             return {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+
+        if duration is not None and direction:
+            logger.info("[%s] Moving %s for %.3fs at speed %s (adapter=%s)", camera_ip, direction, duration, speed, adapter)
+            cam.move_camera(direction, speed=speed)
+            if duration > 0:
+                time.sleep(duration)
+            cam.move_camera("Stop")
+            return {
+                "status": "ok",
+                "camera_ip": camera_ip,
+                "direction": direction,
+                "duration": round(duration, 3),
+                "speed": speed,
+                "adapter": adapter,
+            }
 
         if degrees is not None and direction:
             if direction in ["Left", "Right"]:
@@ -310,12 +320,10 @@ def move_camera(
             duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
 
             # Micro-impulse fallback: requested angle is below bias at this speed
-            _MICRO_DUR = 0.05
             micro = duration_sec == 0.0 and abs(degrees) > 0
             if micro:
                 logger.info("[%s] Moving %s %.2f° micro-impulse speed=1 (adapter=%s)", camera_ip, direction, abs(degrees), adapter)
                 cam.move_camera(direction, speed=1)
-                time.sleep(_MICRO_DUR)
                 cam.move_camera("Stop")
             else:
                 logger.info(
@@ -330,14 +338,14 @@ def move_camera(
                 time.sleep(duration_sec)
                 cam.move_camera("Stop")
 
-            logger.info("[%s] Movement %s stopped after ~%.2fs", camera_ip, direction, _MICRO_DUR if micro else duration_sec)
+            logger.info("[%s] Movement %s stopped after ~%.2fs", camera_ip, direction, 0.0 if micro else duration_sec)
 
             return {
                 "status": "ok",
                 "camera_ip": camera_ip,
                 "direction": direction,
                 "degrees": degrees,
-                "duration": round(_MICRO_DUR if micro else duration_sec, 2),
+                "duration": 0 if micro else round(duration_sec, 2),
                 "speed": 1 if micro else speed,
                 "adapter": adapter,
                 "micro": micro,

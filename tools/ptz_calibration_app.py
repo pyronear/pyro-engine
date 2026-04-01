@@ -228,8 +228,13 @@ class DirectClient:
             st.warning(f"PTZ command failed ({op}): {exc}")
             return False
 
-    def move(self, direction: str, speed: int = 10) -> bool:
-        return self._ptz(direction, speed)
+    def move(self, direction: str, speed: int = 10, duration: Optional[float] = None) -> bool:
+        ok = self._ptz(direction, speed)
+        if ok and duration is not None:
+            if duration > 0:
+                time.sleep(duration)
+            self._ptz("Stop")
+        return ok
 
     def stop(self) -> bool:
         return self._ptz("Stop")
@@ -315,8 +320,11 @@ class APIClient:
             return Image.open(BytesIO(r.content)).convert("RGB")
         return None
 
-    def move(self, direction: str, speed: int = 10) -> bool:
-        r = self._post("control/move", camera_ip=self.ip, direction=direction, speed=speed)
+    def move(self, direction: str, speed: int = 10, duration: Optional[float] = None) -> bool:
+        params: Dict = {"camera_ip": self.ip, "direction": direction, "speed": speed}
+        if duration is not None:
+            params["duration"] = duration
+        r = self._post("control/move", **params)
         return r is not None and r.status_code == 200
 
     def stop(self) -> bool:
@@ -566,18 +574,18 @@ with tab_view:
         cols_pad = st.columns([1, 1, 1])
         with cols_pad[1]:
             if st.button("⬆️"):
-                client.move("Up", speed_m); time.sleep(dur_m); client.stop()
+                client.move("Up", speed_m, duration=dur_m)
         cols_lr = st.columns([1, 1, 1])
         with cols_lr[0]:
             if st.button("⬅️"):
-                client.move("Left", speed_m); time.sleep(dur_m); client.stop()
+                client.move("Left", speed_m, duration=dur_m)
         with cols_lr[2]:
             if st.button("➡️"):
-                client.move("Right", speed_m); time.sleep(dur_m); client.stop()
+                client.move("Right", speed_m, duration=dur_m)
         cols_pad2 = st.columns([1, 1, 1])
         with cols_pad2[1]:
             if st.button("⬇️"):
-                client.move("Down", speed_m); time.sleep(dur_m); client.stop()
+                client.move("Down", speed_m, duration=dur_m)
 
         if st.button("🛑 STOP", type="primary"):
             client.stop()
@@ -649,9 +657,7 @@ def _ctm_move_axis(
     b = bias.get(speed, 0.0)
     omega = speeds[speed]
     duration = (abs(axis_deg) - b) / omega
-    client.move(direction, speed=speed)
-    time.sleep(duration)
-    client.stop()
+    client.move(direction, speed=speed, duration=duration)
     return {"deg": axis_deg, "direction": direction, "speed": speed, "duration": round(duration, 2), "bias": b, "omega": omega}
 
 
@@ -1245,9 +1251,7 @@ with tab_calib:
                             ph.warning(f"Before capture failed (speed={speed_c}, T={T_c}s) - skipped")
                             continue
 
-                        client.move(direction_fwd, speed=speed_c)
-                        time.sleep(T_c)
-                        client.stop()
+                        client.move(direction_fwd, speed=speed_c, duration=T_c)
                         time.sleep(settle_time)
 
                         img_a = client.capture()
@@ -1481,7 +1485,7 @@ with tab_calib:
         mc1, mc2, mc3, mc4 = st.columns(4)
         micro_axis = mc1.radio("Axis", ["pan", "tilt"], horizontal=True, key="micro_axis")
         micro_reps = mc2.number_input("Repetitions", 3, 20, 5, 1, key="micro_reps")
-        micro_dur = mc3.number_input("Impulse duration (s)", 0.01, 0.5, 0.05, 0.01, key="micro_dur", format="%.2f")
+        micro_dur = mc3.number_input("Impulse duration (s)", 0.0, 0.5, 0.0, 0.01, key="micro_dur", format="%.2f")
         micro_zoom = mc4.number_input("Zoom (max=better precision)", 0, 64, 41, 1, key="micro_zoom")
 
         micro_settle = st.slider("Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="micro_settle")
@@ -1528,9 +1532,7 @@ with tab_calib:
                     ph_m.warning(f"Before capture failed (rep {rep + 1}) — skipped")
                     continue
 
-                client.move(direction_m, speed=1)
-                time.sleep(micro_dur)
-                client.stop()
+                client.move(direction_m, speed=1, duration=micro_dur)
                 time.sleep(micro_settle)
 
                 img_am = client.capture()
@@ -1812,9 +1814,7 @@ with tab_results:
                 elif st.button("▶️ Run", key="btn_test_move"):
                     direction_test = "Right" if test_axis == "pan" else "Down"
                     img_before_t = client.capture()
-                    client.move(direction_test, speed=test_speed)
-                    time.sleep(T_cmd)
-                    client.stop()
+                    client.move(direction_test, speed=test_speed, duration=T_cmd)
                     time.sleep(1.5)
                     img_after_t = client.capture()
                     if img_before_t and img_after_t:
