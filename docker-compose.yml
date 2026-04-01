@@ -12,6 +12,12 @@ services:
       - ./data:/usr/src/app/data
     restart: always
     network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health || exit 1"]
+      interval: 30s
+      retries: 3
+      start_period: 20s
+      timeout: 5s
     logging:
       driver: json-file
       options:
