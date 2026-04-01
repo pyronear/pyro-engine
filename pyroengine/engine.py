@@ -97,7 +97,7 @@ class Engine(Predictor):
         cache_folder: str = "data/",
         backup_size: int = 30,
         jpeg_quality: int = 80,
-        multires_quality: int = 50,
+        multires_quality: int = 80,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         save_detections_frames: Optional[bool] = False,
