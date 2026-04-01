@@ -137,7 +137,7 @@ class Engine(Predictor):
             state["last_bbox_mask_fetch"] = None
 
         # Occlusion masks
-        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
+        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], str]] = {"-1": (None, {}, "0")}
         if isinstance(cam_creds, dict):
             for cam_id, (_, pose_id, bbox_mask_url) in cam_creds.items():
                 self.occlusion_masks[cam_id] = (bbox_mask_url, {}, pose_id)
