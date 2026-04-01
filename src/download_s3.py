@@ -28,6 +28,8 @@ def main(args):
             key = obj["Key"]
             local_path = output / key
             local_path.parent.mkdir(parents=True, exist_ok=True)
+            if local_path.exists() and local_path.stat().st_size == obj["Size"]:
+                continue
             print(f"Downloading {key} ({obj['Size'] / 1024:.1f} KB)")
             s3.download_file(args.bucket, key, str(local_path))
             count += 1
