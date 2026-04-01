@@ -2,7 +2,7 @@ services:
   pyro-camera-api:
     build:
       context: ./pyro_camera_api
-    image: pyronear/pyro-camera-api:latest
+    image: pyronear/pyro-camera-api:${PYRO_ENGINE_VERSION:-latest}
     container_name: pyro-camera-api
     environment:
       CAM_USER: ${CAM_USER}
@@ -28,7 +28,7 @@ services:
   engine:
     build:
       context: ./engine
-    image: pyronear/pyro-engine:latest
+    image: pyronear/pyro-engine:${PYRO_ENGINE_VERSION:-latest}
     container_name: engine
     environment:
       API_URL: ${API_URL}
