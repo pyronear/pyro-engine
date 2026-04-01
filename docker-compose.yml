@@ -30,9 +30,19 @@ services:
       CAM_PWD: ${CAM_PWD}
     volumes:
       - ./data:/usr/src/app/data
-    command: python run.py
+    command: >
+      sh -c '
+        truncate -s 0 engine.log &&
+        python run.py 2>&1 | tee -a engine.log
+      '
     restart: always
     network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 'confidence' engine.log || exit 1"]
+      interval: 30s
+      retries: 3
+      start_period: 20s
+      timeout: 5s
     logging:
       driver: json-file
       options:
