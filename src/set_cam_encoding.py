@@ -142,6 +142,7 @@ def set_both_streams_encoding(camera_ip, token):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Update Reolink camera streams settings.")
     parser.add_argument("--ip", required=True, help="IP address of the camera")
+    parser.add_argument("--get", action="store_true", help="Only display current settings without changing them")
     args = parser.parse_args()
 
     camera_ip = args.ip
@@ -152,4 +153,7 @@ if __name__ == "__main__":
 
     token = get_token(camera_ip)
     if token:
-        set_both_streams_encoding(camera_ip, token)
+        if args.get:
+            get_encoding_settings(camera_ip, token)
+        else:
+            set_both_streams_encoding(camera_ip, token)
