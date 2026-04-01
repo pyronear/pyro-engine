@@ -313,7 +313,7 @@ class Engine(Predictor):
                     # Detection creation
                     bboxes = self._alerts[0]["bboxes"]
                     if not bboxes:
-                        logging.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
+                        logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
                         self._alerts.popleft()
                         continue
                     stream = io.BytesIO()
@@ -329,7 +329,7 @@ class Engine(Predictor):
                         logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
                         raise
                     except KeyError:
-                        logging.error(f"Camera '{cam_id}' - unexpected API response: {response.text}")
+                        logger.error(f"Camera '{cam_id}' - unexpected API response: {response.text}")
                         raise
 
                     # Clear

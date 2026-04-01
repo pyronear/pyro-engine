@@ -37,7 +37,7 @@ def main(args):
         camera_data = json.load(json_file)
 
     splitted_cam_creds = {}
-    for _ip, cam_data in camera_data.items():
+    for ip, cam_data in camera_data.items():
         bbox_mask_url = None
         if "bbox_mask_url" in cam_data:
             bbox_mask_url = cam_data["bbox_mask_url"]
@@ -46,9 +46,9 @@ def main(args):
             cam_poses = cam_data["poses"]
             cam_pose_ids = cam_data["pose_ids"]
             for pos_id, pose_id in zip(cam_poses, cam_pose_ids, strict=False):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], pose_id, bbox_mask_url)
+                splitted_cam_creds[ip + "_" + str(pos_id)] = (cam_data["token"], pose_id, bbox_mask_url)
         else:
-            splitted_cam_creds[_ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
+            splitted_cam_creds[ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
 
     engine = Engine(
         model_path=args.model_path,
