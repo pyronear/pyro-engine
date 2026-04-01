@@ -32,7 +32,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     volumes:
       - ./data:/usr/src/app/data
-    command: python run.py --force_detections True
+    command: python run.py
     restart: always
     network_mode: host
     logging:
