@@ -284,7 +284,7 @@ class Engine(Predictor):
 
         # TEST MODE: override preds with a fake high-confidence detection
         if self.force_detections:
-            preds = np.array([[0.45, 0.45, 0.55, 0.55, 0.95]])
+            preds = np.array([[0.45, 0.75, 0.55, 0.85, 0.95]])
 
         logger.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
