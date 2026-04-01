@@ -496,7 +496,7 @@ class Engine(Predictor):
                     self._s3_client.upload_fileobj(crop_buf, self.s3_bucket, crop_key)
                     logger.info(f"S3: uploaded {crop_key}")
 
-                # Upload multi-resolution AVIF
+                # Upload multi-resolution WEBP
                 multires = self._multi_resolution_frame(original, frame_info["frame"], bboxes)
                 multires_buf = io.BytesIO()
                 multires.save(multires_buf, format="WEBP", quality=self.multires_quality)
@@ -504,6 +504,14 @@ class Engine(Predictor):
                 multires_key = f"{prefix}_multires.webp"
                 self._s3_client.upload_fileobj(multires_buf, self.s3_bucket, multires_key)
                 logger.info(f"S3: uploaded {multires_key}")
+
+                # Upload full 4K original as WEBP
+                full4k_buf = io.BytesIO()
+                original.save(full4k_buf, format="WEBP", quality=self.multires_quality)
+                full4k_buf.seek(0)
+                full4k_key = f"{prefix}_4k.webp"
+                self._s3_client.upload_fileobj(full4k_buf, self.s3_bucket, full4k_key)
+                logger.info(f"S3: uploaded {full4k_key}")
         except Exception:
             logger.warning(f"S3: failed to upload for cam {cam_id}", exc_info=True)
 
