@@ -29,10 +29,12 @@ RUN pip install --no-cache-dir --default-timeout=500 -r /tmp/requirements.txt &&
     rm -f /tmp/requirements.txt
 
 WORKDIR /opt/pyroengine_src
+COPY ./pyro-predictor ./pyro-predictor
 COPY ./pyroengine ./pyroengine
 COPY ./setup.py ./setup.py
 
-RUN pip install --no-cache-dir -e . \
+RUN pip install --no-cache-dir -e ./pyro-predictor \
+    && pip install --no-cache-dir -e . \
     && rm -rf /root/.cache/pip
 
 WORKDIR /usr/src/app
