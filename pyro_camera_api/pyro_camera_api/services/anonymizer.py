@@ -36,10 +36,10 @@ def scale_and_clip_boxes(
     out: List[Box] = []
 
     for x1, y1, x2, y2 in boxes_px:
-        nx1 = max(0, min(dst_w, int(round(x1 * sx))))
-        ny1 = max(0, min(dst_h, int(round(y1 * sy))))
-        nx2 = max(0, min(dst_w, int(round(x2 * sx))))
-        ny2 = max(0, min(dst_h, int(round(y2 * sy))))
+        nx1 = max(0, min(dst_w, round(x1 * sx)))
+        ny1 = max(0, min(dst_h, round(y1 * sy)))
+        nx2 = max(0, min(dst_w, round(x2 * sx)))
+        ny2 = max(0, min(dst_h, round(y2 * sy)))
 
         if nx2 > nx1 and ny2 > ny1:
             nx1 = min(nx1, dst_w - 1)

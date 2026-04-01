@@ -4,7 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
-import os
+import pathlib
 import time
 from io import BytesIO
 from typing import List, Optional
@@ -20,6 +20,7 @@ __all__ = ["ReolinkCamera"]
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class ReolinkCamera:
@@ -52,7 +53,7 @@ class ReolinkCamera:
         cam_azimuths: Optional[List[int]] = None,
         protocol: str = "https",
         focus_position: Optional[int] = None,
-    ):
+    ) -> None:
         self.ip_address = ip_address
         self.username = username
         self.password = password
@@ -80,15 +81,15 @@ class ReolinkCamera:
 
     def _handle_response(self, response, success_message: str):
         """Handles HTTP responses, logging success or errors based on response data."""
-        # logging.info(f"{response.status_code}")
+        # logger.info(f"{response.status_code}")
         if response.status_code == 200:
             response_data = response.json()
             if response_data[0]["code"] == 0:
-                logging.debug(success_message)
+                logger.debug(success_message)
             else:
-                logging.error(f"Error: {response_data}")
+                logger.error(f"Error: {response_data}")
             return response_data
-        logging.error(f"Failed operation: {response.status_code}, {response.text}")
+        logger.error(f"Failed operation: {response.status_code}, {response.text}")
         return None
 
     def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
@@ -106,20 +107,19 @@ class ReolinkCamera:
             self.move_camera("ToPos", idx=int(pos_id), speed=50)
             time.sleep(1)
         url = self._build_url("Snap")
-        logging.debug("Start capture")
+        logger.debug("Start capture")
 
         try:
             response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
-                image = Image.open(image_data).convert("RGB")
-                return image
-            logging.error(f"Failed to capture image: {response.status_code}, {response.text}")
+                return Image.open(image_data).convert("RGB")
+            logger.error(f"Failed to capture image: {response.status_code}, {response.text}")
         except requests.RequestException as e:
-            logging.error(f"Request failed: {e}")
+            logger.error(f"Request failed: {e}")
         return None
 
-    def move_camera(self, operation: str, speed: int = 20, idx: int = 0):
+    def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
         """
         Sends a command to move the camera.
 
@@ -145,7 +145,7 @@ class ReolinkCamera:
         operation: str = "Right",
         speed: int = 20,
         save_path: str = "im.jpg",
-    ):
+    ) -> None:
         """
         Moves the camera in a specified direction for a specified number of seconds.
 
@@ -178,7 +178,7 @@ class ReolinkCamera:
             return response_data[0].get("value", {}).get("PtzPreset", [])
         return None
 
-    def set_ptz_preset(self, idx: Optional[int] = None):
+    def set_ptz_preset(self, idx: Optional[int] = None) -> None:
         """
         Sets a PTZ preset position. If no ID is provided, finds the next available slot.
 
@@ -246,6 +246,7 @@ class ReolinkCamera:
             ]
             response = requests.post(url, json=data, verify=False)
             return self._handle_response(response, "Started ZoomFocus successfully.")
+        return None
 
     def set_manual_focus(self, position: int):
         """
@@ -265,6 +266,7 @@ class ReolinkCamera:
             ]
             response = requests.post(url, json=data, verify=False)
             return self._handle_response(response, f"Manual focus set at position {position}")
+        return None
 
     def get_focus_level(self):
         """Retrieve the current manual focus and zoom positions."""
@@ -298,12 +300,12 @@ class ReolinkCamera:
         Returns:
             int: Best focus position found.
         """
-        MAX_RETRIES = 10
-        ABS_MIN = 600
-        ABS_MAX = 900
+        max_retries = 10
+        abs_min = 600
+        abs_max = 900
 
         def capture_and_score(pos):
-            pos = max(ABS_MIN, min(ABS_MAX, pos))  # Clamp to global bounds
+            pos = max(abs_min, min(abs_max, pos))  # Clamp to global bounds
             self.set_manual_focus(pos)
             start = time.time()
             image = self.capture()
@@ -311,19 +313,19 @@ class ReolinkCamera:
             if image is None:
                 return 0
             score = self._measure_sharpness(image)
-            logging.info(f"[{self.ip_address}] Focus {pos}: Sharpness = {score:.2f}, Time = {duration:.2f}s")
+            logger.info(f"[{self.ip_address}] Focus {pos}: Sharpness = {score:.2f}, Time = {duration:.2f}s")
 
             if save_images:
                 folder = f"focus_debug/{self.ip_address.replace('.', '_')}"
-                os.makedirs(folder, exist_ok=True)
+                pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
                 image.save(f"{folder}/focus_{pos}.jpg")
 
             return score
 
         if self.cam_type != "static":
             current = self.focus_position if self.focus_position is not None else 720
-            min_focus = max(ABS_MIN, current - 50)
-            max_focus = min(ABS_MAX, current + 50)
+            min_focus = max(abs_min, current - 50)
+            max_focus = min(abs_max, current + 50)
 
             sharp_current = capture_and_score(current)
             sharp_prev = capture_and_score(current - 1)
@@ -334,7 +336,7 @@ class ReolinkCamera:
             elif sharp_next > sharp_current:
                 direction = 1
             else:
-                logging.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
+                logger.info(f"[{self.ip_address}] Best focus already at {current} with sharpness {sharp_current:.2f}")
                 self.focus_position = current
                 self.set_manual_focus(self.focus_position)
                 return current
@@ -356,17 +358,17 @@ class ReolinkCamera:
             # Check ±15 around the greedy result
             for offset in [-15, 15]:
                 probe_pos = best_pos + offset
-                if ABS_MIN <= probe_pos <= ABS_MAX:
+                if abs_min <= probe_pos <= abs_max:
                     probe_score = capture_and_score(probe_pos)
                     if probe_score > best_score:
-                        logging.info(
+                        logger.info(
                             f"[{self.ip_address}] Found better focus at offset {offset} → retrying from {probe_pos}"
                         )
-                        if retry_depth < MAX_RETRIES:
+                        if retry_depth < max_retries:
                             self.focus_position = probe_pos
                             return self.focus_finder(save_images=save_images, retry_depth=retry_depth + 1)
 
-            logging.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
+            logger.info(f"[{self.ip_address}] Best focus position: {best_pos} with sharpness {best_score:.2f}")
             self.focus_position = best_pos
             self.set_manual_focus(self.focus_position)
             return best_pos

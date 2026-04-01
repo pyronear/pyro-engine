@@ -46,7 +46,7 @@ def letterbox(
     # Scale ratio (new / old)
     r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
     # Compute padding
-    new_unpad = round(shape[1] * r), round(shape[0] * r)
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
     if auto:  # minimum rectangle
         dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
@@ -54,8 +54,8 @@ def letterbox(
     dh /= 2
     if shape[::-1] != new_unpad:  # resize
         im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
-    top, bottom = round(dh - 0.1), round(dh + 0.1)
-    left, right = round(dw - 0.1), round(dw + 0.1)
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     # add border
     h, w = im.shape[:2]
     im_b = np.zeros((h + top + bottom, w + left + right, 3)) + color
@@ -84,7 +84,7 @@ def box_iou(box1: np.ndarray, box2: np.ndarray, eps: float = 1e-7):
     return inter / ((a2 - a1).prod(1) + (b2 - b1).prod(1)[:, None] - inter + eps)
 
 
-def nms(boxes: np.ndarray, overlap_thresh: int = 0):
+def nms(boxes: np.ndarray, overlapThresh: int = 0):
     """Non maximum suppression
 
     Args:
@@ -101,9 +101,9 @@ def nms(boxes: np.ndarray, overlap_thresh: int = 0):
 
     indices = np.arange(len(boxes))
     rr = box_iou(boxes[:, :4], boxes[:, :4])
-    for i, _box in enumerate(boxes):
+    for i, box in enumerate(boxes):
         temp_indices = indices[indices != i]
-        if np.any(rr[i, temp_indices] > overlap_thresh):
+        if np.any(rr[i, temp_indices] > overlapThresh):
             indices = indices[indices != i]
 
     return boxes[indices]
