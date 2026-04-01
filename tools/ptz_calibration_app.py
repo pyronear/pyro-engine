@@ -1169,16 +1169,31 @@ with tab_calib:
                         stop_ph.error("Patrol is still active after 8s.")
                 st.rerun()
 
-            zoom_calib = st.slider(
-                "Zoom (0 = wide angle - set before starting)",
-                0, 64, st.session_state["calib_zoom"], key="zoom_calib_slider"
+            zoom_mode = st.radio(
+                "Zoom mode", ["Single zoom", "Zoom sweep"],
+                horizontal=True, key="zoom_mode_sel",
             )
-            if st.button("Apply and lock zoom"):
-                client.zoom(zoom_calib)
-                time.sleep(2)
-                st.session_state["calib_zoom"] = zoom_calib
-                h_fov_z, v_fov_z = fov_at_zoom(zoom_calib, cam_model)
-                st.success(f"Zoom={zoom_calib} → FOV H={h_fov_z:.1f}° V={v_fov_z:.1f}°")
+            if zoom_mode == "Single zoom":
+                zoom_calib = st.slider(
+                    "Zoom (0 = wide angle)",
+                    0, 41, st.session_state["calib_zoom"], key="zoom_calib_slider"
+                )
+                if st.button("Apply and lock zoom"):
+                    client.zoom(zoom_calib)
+                    time.sleep(2)
+                    st.session_state["calib_zoom"] = zoom_calib
+                    h_fov_z, v_fov_z = fov_at_zoom(zoom_calib, cam_model)
+                    st.success(f"Zoom={zoom_calib} → FOV H={h_fov_z:.1f}° V={v_fov_z:.1f}°")
+                st.session_state["zoom_sweep_levels"] = [st.session_state["calib_zoom"]]
+            else:
+                zc1, zc2 = st.columns(2)
+                z_start = zc1.number_input("From zoom", 0, 41, 0, key="zsweep_start")
+                z_end = zc2.number_input("To zoom", 0, 41, 41, key="zsweep_end")
+                z_step = st.number_input("Step", 1, 20, 5, key="zsweep_step")
+                sweep_levels = list(range(int(z_start), int(z_end) + 1, int(z_step)))
+                st.session_state["zoom_sweep_levels"] = sweep_levels
+                total_sweeps = len(sweep_levels)
+                st.info(f"**{total_sweeps} zoom levels:** {sweep_levels}")
 
             st.divider()
             st.write("**Home preset (recommended)**")
@@ -1255,9 +1270,10 @@ with tab_calib:
                 "Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="settle_time"
             )
 
-            total_pairs = len(speeds_to_calib) * len(impulse_durations)
+            n_zooms = len(st.session_state.get("zoom_sweep_levels", [0]))
+            total_pairs = len(speeds_to_calib) * len(impulse_durations) * n_zooms
             st.info(
-                f"**{total_pairs} pairs** to capture and annotate "
+                f"**{total_pairs} pairs** across {n_zooms} zoom level(s) "
                 f"(axis={axis}, speeds={speeds_to_calib})"
             )
 
@@ -1266,8 +1282,9 @@ with tab_calib:
         if not speeds_to_calib or len(impulse_durations) < 2:
             st.warning("Select at least 1 speed and 2 durations.")
         else:
+            zoom_levels = st.session_state.get("zoom_sweep_levels", [0])
             if st.button(
-                "🚀 Start captures",
+                f"🚀 Start captures ({len(zoom_levels)} zoom level(s))",
                 type="primary",
                 key="btn_start_calib",
                 disabled=patrol_running_setup,
@@ -1279,120 +1296,162 @@ with tab_calib:
                     st.stop()
 
                 durations_sorted = sorted(impulse_durations)
-                pairs: List[Dict] = []
+                all_pairs: List[Dict] = []
+                all_annotations: List[Dict] = []
 
-                # Use the fixed zoom set in setup (no adaptive zoom —
-                # Reolink cameras limit PTZ speed at high zoom levels)
-                calib_z = st.session_state["calib_zoom"]
-                h_fov_c, v_fov_c = fov_at_zoom(calib_z, cam_model)
+                pairs_per_zoom = len(speeds_to_calib) * len(durations_sorted)
+                total_c = pairs_per_zoom * len(zoom_levels)
+                done_c = 0
 
                 pb = st.progress(0.0)
                 ph = st.empty()
-                total_c = len(speeds_to_calib) * len(durations_sorted)
-                done_c = 0
+                log_area = st.empty()
+                log_lines: List[str] = []
+                save_path = f"/tmp/ptz_sweep_{cam_model}.json"
 
-                for speed_c in speeds_to_calib:
-                    for T_c in durations_sorted:
-                        done_c += 1
-                        pb.progress(done_c / total_c)
+                for z_idx, calib_z in enumerate(zoom_levels):
+                    h_fov_c, v_fov_c = fov_at_zoom(calib_z, cam_model)
+                    zoom_pairs: List[Dict] = []
 
-                        ph.markdown(
-                            f"Capture **speed={speed_c}** T={T_c}s "
-                            f"zoom={calib_z} FOV={h_fov_c:.1f}° ({done_c}/{total_c})..."
-                        )
+                    ph.markdown(f"### Zoom {calib_z} ({z_idx+1}/{len(zoom_levels)}) — FOV {h_fov_c:.1f}°")
 
-                        # Go to home preset first
-                        if home_preset_id is not None:
-                            client.goto_preset(home_preset_id, speed=50)
-                            time.sleep(2.5)
+                    for speed_c in speeds_to_calib:
+                        for T_c in durations_sorted:
+                            done_c += 1
+                            pb.progress(done_c / total_c)
 
-                        # Re-apply calibration zoom after preset (preset resets zoom)
-                        client.zoom(calib_z)
-                        time.sleep(3.5)
+                            log_lines.append(
+                                f"z={calib_z} speed={speed_c} T={T_c}s ..."
+                            )
+                            log_area.text("\n".join(log_lines[-8:]))
 
-                        img_b = client.capture()
-                        if img_b is None:
-                            ph.warning(f"Before capture failed (speed={speed_c}, T={T_c}s) - skipped")
+                            # Go to home preset
+                            if home_preset_id is not None:
+                                client.goto_preset(home_preset_id, speed=50)
+                                time.sleep(2.5)
+
+                            # Apply zoom after preset (preset resets zoom)
+                            client.zoom(calib_z)
+                            time.sleep(3.5)
+
+                            img_b = client.capture()
+                            if img_b is None:
+                                log_lines[-1] += " SKIP (capture before failed)"
+                                continue
+
+                            client.move(direction_fwd, speed=speed_c, duration=T_c)
+                            time.sleep(settle_time)
+
+                            img_a = client.capture()
+                            if img_a is None:
+                                log_lines[-1] += " SKIP (capture after failed)"
+                                continue
+
+                            # Auto-compute displacement via keypoint matching
+                            deg_kp, n_matches, median_px = estimate_displacement_keypoints(
+                                img_b, img_a, axis, h_fov_c, v_fov_c
+                            )
+
+                            if n_matches < 5:
+                                log_lines[-1] += f" SKIP ({n_matches} matches)"
+                                log_area.text("\n".join(log_lines[-8:]))
+                                continue
+
+                            log_lines[-1] = (
+                                f"z={calib_z} speed={speed_c} T={T_c}s → "
+                                f"{deg_kp:.3f}° ({n_matches} matches, {median_px:.0f}px)"
+                            )
+                            log_area.text("\n".join(log_lines[-8:]))
+
+                            pair_data = {
+                                "speed": speed_c,
+                                "T": T_c,
+                                "axis": axis,
+                                "direction": direction_fwd,
+                                "img_before": img_b,
+                                "img_after": img_a,
+                                "h_fov": h_fov_c,
+                                "v_fov": v_fov_c,
+                                "zoom": calib_z,
+                                "auto_deg_kp": round(deg_kp, 4),
+                                "auto_n_matches": n_matches,
+                                "auto_px_delta": round(median_px, 1),
+                            }
+                            zoom_pairs.append(pair_data)
+                            all_pairs.append(pair_data)
+                            all_annotations.append({
+                                "speed": speed_c,
+                                "T": T_c,
+                                "axis": axis,
+                                "px_delta": round(median_px, 1),
+                                "disp_deg": round(deg_kp, 4),
+                                "zoom": calib_z,
+                                "h_fov": round(h_fov_c, 3),
+                                "v_fov": round(v_fov_c, 3),
+                                "method": "keypoints",
+                                "n_matches": n_matches,
+                            })
+
+                    # Fit model per speed for this zoom level
+                    from collections import defaultdict as _defaultdict
+                    z_groups: Dict[int, List[Dict]] = _defaultdict(list)
+                    for p in zoom_pairs:
+                        z_groups[p["speed"]].append(p)
+                    zoom_results: Dict[str, Dict] = {}
+                    zoom_raw: Dict[str, List] = {}
+                    for spd, grp in sorted(z_groups.items()):
+                        if len(grp) < 2:
                             continue
-
-                        client.move(direction_fwd, speed=speed_c, duration=T_c)
-                        time.sleep(settle_time)
-
-                        img_a = client.capture()
-                        if img_a is None:
-                            ph.warning(f"After capture failed (speed={speed_c}, T={T_c}s) - skipped")
-                            continue
-
-                        # Auto-compute displacement via keypoint matching
-                        deg_kp, n_matches, median_px = estimate_displacement_keypoints(
-                            img_b, img_a, axis, h_fov_c, v_fov_c
-                        )
-                        # Also compute via optical flow for comparison
-                        deg_of = abs(estimate_displacement_deg(
-                            img_b, img_a, axis, h_fov_c, v_fov_c
-                        ))
-
-                        ph.markdown(
-                            f"speed={speed_c} T={T_c}s → "
-                            f"**keypoints: {deg_kp:.3f}°** ({n_matches} matches, {median_px:.0f}px) | "
-                            f"optical flow: {deg_of:.3f}° ({done_c}/{total_c})"
-                        )
-
-                        if n_matches < 5:
-                            ph.warning(f"Too few keypoint matches ({n_matches}) for speed={speed_c} T={T_c}s - keeping for manual review")
-
-                        pairs.append({
-                            "speed": speed_c,
-                            "T": T_c,
+                        ts = [g["T"] for g in grp]
+                        ds = [g["auto_deg_kp"] for g in grp]
+                        m = fit_model(ts, ds)
+                        key_n = f"z{calib_z}_{axis}_speed{spd}"
+                        zoom_results[key_n] = {
                             "axis": axis,
-                            "direction": direction_fwd,
-                            "img_before": img_b,
-                            "img_after": img_a,
-                            "h_fov": h_fov_c,
-                            "v_fov": v_fov_c,
+                            "speed": spd,
+                            "omega": round(m["omega"], 4),
+                            "bias": round(m["bias"], 4),
+                            "r2": round(m["r2"], 4),
                             "zoom": calib_z,
-                            "auto_deg_kp": round(deg_kp, 4),
-                            "auto_deg_of": round(deg_of, 4),
-                            "auto_n_matches": n_matches,
-                            "auto_px_delta": round(median_px, 1),
-                        })
+                            "h_fov": round(h_fov_c, 3),
+                            "v_fov": round(v_fov_c, 3),
+                        }
+                        zoom_raw[key_n] = [
+                            {"duration": g["T"], "displacement_deg": g["auto_deg_kp"],
+                             "px_delta": g["auto_px_delta"], "n_matches": g["auto_n_matches"]}
+                            for g in grp
+                        ]
+                        log_lines.append(
+                            f"  → zoom={calib_z} speed={spd}: "
+                            f"ω={m['omega']:.3f} b={m['bias']:.3f} R²={m['r2']:.3f}"
+                        )
+                    log_area.text("\n".join(log_lines[-12:]))
 
-                if not pairs:
-                    st.error("No pair captured - check the connection.")
+                    # Save incrementally — accumulate results and write after each zoom
+                    st.session_state["calib_results"].update(zoom_results)
+                    st.session_state["calib_raw_data"].update(zoom_raw)
+                    _incremental = {
+                        "model": cam_model,
+                        "calibrated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "results": dict(st.session_state["calib_results"]),
+                        "raw_data": dict(st.session_state["calib_raw_data"]),
+                    }
+                    with open(save_path, "w") as _f:
+                        json.dump(_incremental, _f, indent=2)
+                    log_lines.append(f"  Saved → {save_path} ({len(_incremental['results'])} entries)")
+                    log_area.text("\n".join(log_lines[-12:]))
+
+                if not all_annotations:
+                    st.error("No valid measurements captured.")
                 else:
                     pb.progress(1.0)
-                    # Auto-populate annotations from keypoint results
-                    auto_annotations = [
-                        {
-                            "speed": p["speed"],
-                            "T": p["T"],
-                            "axis": p["axis"],
-                            "px_delta": p["auto_px_delta"],
-                            "disp_deg": p["auto_deg_kp"],
-                            "zoom": p["zoom"],
-                            "h_fov": p["h_fov"],
-                            "v_fov": p["v_fov"],
-                            "method": "keypoints",
-                            "n_matches": p["auto_n_matches"],
-                        }
-                        for p in pairs
-                        if p["auto_n_matches"] >= 5
-                    ]
-                    skipped = len(pairs) - len(auto_annotations)
                     ph.success(
-                        f"✅ {len(pairs)} pairs captured — "
-                        f"{len(auto_annotations)} auto-measured, {skipped} need manual review"
+                        f"✅ Done — {len(all_annotations)} measurements "
+                        f"across {len(zoom_levels)} zoom levels"
                     )
-                    st.session_state["calib_pairs"] = pairs
-                    st.session_state["calib_annotations"] = auto_annotations
-                    if skipped > 0:
-                        # Go to manual annotation for failed ones
-                        st.session_state["calib_anno_idx"] = 0
-                        st.session_state["calib_click_before"] = None
-                        st.session_state["calib_click_after"] = None
-                        st.session_state["calib_phase"] = "annotating"
-                    else:
-                        st.session_state["calib_phase"] = "complete"
+                    st.session_state["calib_pairs"] = all_pairs
+                    st.session_state["calib_annotations"] = all_annotations
+                    st.session_state["calib_phase"] = "complete"
                     st.rerun()
 
     # ── Phase ANNOTATING ─────────────────────────────────────────────────────
@@ -1540,59 +1599,56 @@ with tab_calib:
         if not annotations:
             st.warning("No annotation - restart calibration.")
         else:
-            st.success(f"✅ {len(annotations)} annotated measurements - model fitted")
+            st.success(f"✅ {len(annotations)} measurements - model fitted")
 
-            # Group by (axis, speed) and fit
+            # Group by (zoom, axis, speed) and fit
             from collections import defaultdict
             groups: Dict[str, List[Dict]] = defaultdict(list)
             for ann in annotations:
-                groups[f"{ann['axis']}_speed{ann['speed']}"].append(ann)
+                z = ann.get("zoom", 0)
+                groups[f"z{z}_{ann['axis']}_speed{ann['speed']}"].append(ann)
 
-            for key_n, anns in groups.items():
-                if len(anns) < 2:
-                    continue
-                ts = [a["T"] for a in anns]
-                ds = [a["disp_deg"] for a in anns]
-                model_r = fit_model(ts, ds)
-                # Retrieve FOV from captured pairs
-                pair_match = next(
-                    (p for p in st.session_state["calib_pairs"]
-                     if f"{p['axis']}_speed{p['speed']}" == key_n), None
-                )
-                h_fov_r = pair_match["h_fov"] if pair_match else H_FOV_WIDE
-                v_fov_r = pair_match["v_fov"] if pair_match else V_FOV_WIDE
-                zoom_r = pair_match["zoom"] if pair_match else 0
-                axis_r = anns[0]["axis"]
+            # Display as table grouped by zoom
+            zoom_set = sorted({a.get("zoom", 0) for a in annotations})
+            for z_val in zoom_set:
+                st.markdown(f"#### Zoom {z_val}")
+                z_keys = [k for k in sorted(groups.keys()) if k.startswith(f"z{z_val}_")]
+                for key_n in z_keys:
+                    anns = groups[key_n]
+                    if len(anns) < 2:
+                        continue
+                    ts = [a["T"] for a in anns]
+                    ds = [a["disp_deg"] for a in anns]
+                    model_r = fit_model(ts, ds)
+                    axis_r = anns[0]["axis"]
 
-                st.session_state["calib_results"][key_n] = {
-                    "axis": axis_r,
-                    "speed": anns[0]["speed"],
-                    "omega": round(model_r["omega"], 4),
-                    "bias": round(model_r["bias"], 4),
-                    "r2": round(model_r["r2"], 4),
-                    "zoom": zoom_r,
-                    "h_fov": h_fov_r,
-                    "v_fov": v_fov_r,
-                }
-                st.session_state["calib_raw_data"][key_n] = [
-                    {
-                        "duration": a["T"],
-                        "displacement_deg": a["disp_deg"],
-                        "px_delta": a.get("px_delta"),
-                        "zoom": a.get("zoom"),
-                        "h_fov": a.get("h_fov"),
-                        "v_fov": a.get("v_fov"),
-                        "pt_before": a.get("pt_before"),
-                        "pt_after": a.get("pt_after"),
+                    st.session_state["calib_results"][key_n] = {
+                        "axis": axis_r,
+                        "speed": anns[0]["speed"],
+                        "omega": round(model_r["omega"], 4),
+                        "bias": round(model_r["bias"], 4),
+                        "r2": round(model_r["r2"], 4),
+                        "zoom": z_val,
+                        "h_fov": anns[0].get("h_fov", H_FOV_WIDE),
+                        "v_fov": anns[0].get("v_fov", V_FOV_WIDE),
                     }
-                    for a in anns
-                ]
-                td = -model_r["bias"] / model_r["omega"] if model_r["omega"] != 0 else 0
-                st.write(
-                    f"**{key_n}** : ω = {model_r['omega']:.4f} °/s | "
-                    f"b = {model_r['bias']:.4f}° | "
-                    f"delay td = {td:.3f}s | R² = {model_r['r2']:.3f}"
-                )
+                    st.session_state["calib_raw_data"][key_n] = [
+                        {
+                            "duration": a["T"],
+                            "displacement_deg": a["disp_deg"],
+                            "px_delta": a.get("px_delta"),
+                            "zoom": a.get("zoom"),
+                            "h_fov": a.get("h_fov"),
+                            "v_fov": a.get("v_fov"),
+                        }
+                        for a in anns
+                    ]
+                    # Short display name without zoom prefix
+                    short_name = key_n.split("_", 1)[1]
+                    st.write(
+                        f"**{short_name}** : ω = {model_r['omega']:.4f} °/s | "
+                        f"b = {model_r['bias']:.4f}° | R² = {model_r['r2']:.3f}"
+                    )
 
             st.info("See the **Results & Export** tab for plots and export.")
 
