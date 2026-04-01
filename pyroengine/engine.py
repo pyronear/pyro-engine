@@ -97,7 +97,7 @@ class Engine(Predictor):
         cache_folder: str = "data/",
         backup_size: int = 30,
         jpeg_quality: int = 80,
-        avif_quality: int = 50,
+        multires_quality: int = 50,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         save_detections_frames: Optional[bool] = False,
@@ -134,7 +134,7 @@ class Engine(Predictor):
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
         self.jpeg_quality = jpeg_quality
-        self.avif_quality = avif_quality
+        self.multires_quality = multires_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
@@ -499,9 +499,9 @@ class Engine(Predictor):
                 # Upload multi-resolution AVIF
                 multires = self._multi_resolution_frame(original, frame_info["frame"], bboxes)
                 multires_buf = io.BytesIO()
-                multires.save(multires_buf, format="AVIF", quality=self.avif_quality)
+                multires.save(multires_buf, format="WEBP", quality=self.multires_quality)
                 multires_buf.seek(0)
-                multires_key = f"{prefix}_multires.avif"
+                multires_key = f"{prefix}_multires.webp"
                 self._s3_client.upload_fileobj(multires_buf, self.s3_bucket, multires_key)
                 logger.info(f"S3: uploaded {multires_key}")
         except Exception:
