@@ -75,6 +75,7 @@ GPIO.setup(RELAY_CAMS, GPIO.OUT, initial=GPIO.HIGH)
 
 # ================ IO HELPERS ==============
 
+
 def read_int(path: Path, default: int = 0) -> int:
     try:
         return int(path.read_text().strip())
@@ -96,7 +97,9 @@ def read_text(path: Path, default: str = "") -> str:
 def write_text(path: Path, value: str) -> None:
     path.write_text(value)
 
+
 # ================ CHECKS ==================
+
 
 def ping_host(ip: str, count: int = PING_COUNT, timeout: int = TIMEOUT) -> bool:
     try:
@@ -124,6 +127,7 @@ def http_health_ok(url: str) -> bool:
 
 # ================ FAIL COUNTERS ===========
 
+
 def update_fail_counter(ok: bool, fail_file: Path, label: str, log_result: bool = True) -> int:
     if ok:
         if log_result:
@@ -137,7 +141,9 @@ def update_fail_counter(ok: bool, fail_file: Path, label: str, log_result: bool 
     write_int(fail_file, fails)
     return fails
 
+
 # ================ REBOOT GUARD ============
+
 
 @dataclass(frozen=True)
 class RebootGuard:
@@ -197,6 +203,7 @@ class RebootGuard:
         count += 1
         write_text(daily_file, f"{day} {count}")
 
+
 def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> None:
     now_ts = int(time.time())
 
@@ -211,7 +218,9 @@ def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, 
 
     guard.record_reboot(now_ts, last_file, daily_file)
 
+
 # ================= MAIN ===================
+
 
 def main() -> None:
     guard = RebootGuard(
@@ -268,6 +277,7 @@ def main() -> None:
         for ip in CAM_IPS:
             write_int(FAIL_CAM_FILES[ip], 0)
         write_int(FAIL_INTERNET_FILE, 0)
+
 
 if __name__ == "__main__":
     try:
