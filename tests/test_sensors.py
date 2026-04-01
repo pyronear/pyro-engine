@@ -91,7 +91,7 @@ def test_set_ptz_preset_no_slots():
 
     with patch("requests.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
-        with pytest.raises(ValueError, match="No available slots for new presets."):
+        with pytest.raises(ValueError, match=r"No available slots for new presets\."):
             camera.set_ptz_preset()
 
 
@@ -223,7 +223,8 @@ def test_focus_finder_success():
 
     def mock_capture():
         # Dummy image, content doesn't matter because we mock sharpness
-        return Image.fromarray((np.random.rand(100, 100) * 255).astype(np.uint8))
+        rng = np.random.default_rng()
+        return Image.fromarray((rng.random((100, 100)) * 255).astype(np.uint8))
 
     def mock_sharpness(image):
         pos = called_positions[-1]
