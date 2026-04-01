@@ -139,6 +139,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "S404", "S603", "S405", "S314", "E402", "RUF029"]
 "pyroengine/core.py" = ["BLE001"]
 "pyroengine/sensors.py" = ["S113", "S501", "ANN"]
+"watchdog/**.py" = ["CPY001", "S108", "S310", "S404", "S603", "S607", "BLE001", "LOG015"]
 
 [tool.ruff.format]
 quote-style = "double"

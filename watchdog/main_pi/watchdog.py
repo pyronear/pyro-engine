@@ -59,6 +59,7 @@ GPIO.setup(RELAY_PIZERO, GPIO.OUT, initial=GPIO.HIGH)
 
 # ================ IO HELPERS ==============
 
+
 def read_int(path: Path, default: int = 0) -> int:
     try:
         return int(path.read_text().strip())
@@ -80,7 +81,9 @@ def read_text(path: Path, default: str = "") -> str:
 def write_text(path: Path, value: str) -> None:
     path.write_text(value)
 
+
 # ================ CHECKS ==================
+
 
 def ping_host(ip: str) -> bool:
     try:
@@ -92,7 +95,9 @@ def ping_host(ip: str) -> bool:
     except subprocess.CalledProcessError:
         return False
 
+
 # ================ FAIL COUNTERS ===========
+
 
 def update_fail_counter(ok: bool, fail_file: Path, label: str) -> int:
     if ok:
@@ -105,7 +110,9 @@ def update_fail_counter(ok: bool, fail_file: Path, label: str) -> int:
     write_int(fail_file, fails)
     return fails
 
+
 # ================ REBOOT GUARD ============
+
 
 @dataclass(frozen=True)
 class RebootGuard:
@@ -165,6 +172,7 @@ class RebootGuard:
         count += 1
         write_text(daily_file, f"{day} {count}")
 
+
 def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> None:
     now_ts = int(time.time())
 
@@ -179,7 +187,9 @@ def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, 
 
     guard.record_reboot(now_ts, last_file, daily_file)
 
+
 # ================= MAIN ===================
+
 
 def main() -> None:
     guard = RebootGuard(
@@ -191,6 +201,7 @@ def main() -> None:
     if fails >= MAX_FAILS:
         power_cycle(RELAY_PIZERO, "Pi Zero", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard)
         write_int(FAIL_PIZERO_FILE, 0)
+
 
 if __name__ == "__main__":
     try:
