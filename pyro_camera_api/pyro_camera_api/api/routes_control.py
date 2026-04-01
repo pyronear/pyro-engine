@@ -202,7 +202,10 @@ def click_to_move(
                 cam.move_camera("Stop")
                 result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": pan_speed, "duration": round(duration, 2)})
             elif pan_speeds:
-                # Angle too small for calibrated model — micro-impulse: move+stop back-to-back
+                # Angle too small for calibrated model — micro-impulse: move+stop back-to-back.
+                # Calibrated displacement at zoom 41 (server-side, no VPN delay):
+                #   reolink-823A16: pan ~1.66° ± 0.09°, tilt ~2.19° ± 0.02°
+                #   reolink-823S2:  pan ~1.05° ± 0.11°
                 logger.info("[%s] click_to_move pan %s %.2f° micro-impulse speed=1", camera_ip, pan_direction, abs(pan_deg))
                 cam.move_camera(pan_direction, speed=1)
                 cam.move_camera("Stop")

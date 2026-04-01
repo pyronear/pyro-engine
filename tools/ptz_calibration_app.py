@@ -174,6 +174,58 @@ def estimate_displacement_deg(
         return pixel_disp * v_fov / h
 
 
+def estimate_displacement_keypoints(
+    before: Image.Image,
+    after: Image.Image,
+    axis: str,
+    h_fov: float,
+    v_fov: float,
+) -> Tuple[float, int, float]:
+    """
+    Estimate angular displacement using ORB keypoint matching.
+
+    Returns (displacement_deg, n_matches, median_px_delta).
+    More robust than optical flow for large displacements.
+    """
+    g1 = np.array(before.convert("L"))
+    g2 = np.array(after.convert("L"))
+    h, w = g1.shape
+
+    orb = cv2.ORB_create(nfeatures=2000)
+    kp1, des1 = orb.detectAndCompute(g1, None)
+    kp2, des2 = orb.detectAndCompute(g2, None)
+
+    if des1 is None or des2 is None or len(kp1) < 10 or len(kp2) < 10:
+        return 0.0, 0, 0.0
+
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+    raw_matches = bf.knnMatch(des1, des2, k=2)
+
+    # Lowe's ratio test
+    good = []
+    for m, n in raw_matches:
+        if m.distance < 0.75 * n.distance:
+            good.append(m)
+
+    if len(good) < 5:
+        return 0.0, 0, 0.0
+
+    # Compute pixel displacements for good matches
+    if axis == "pan":
+        deltas = [kp1[m.queryIdx].pt[0] - kp2[m.trainIdx].pt[0] for m in good]
+        fov = h_fov
+        size = w
+    else:
+        deltas = [kp2[m.trainIdx].pt[1] - kp1[m.queryIdx].pt[1] for m in good]
+        fov = v_fov
+        size = h
+
+    # Use median to reject outliers (moving objects, mismatches)
+    median_px = float(np.median(deltas))
+    deg = abs(median_px) * fov / size
+    return deg, len(good), median_px
+
+
 def fit_model(durations: List[float], displacements: List[float]) -> Dict:
     """
     Affine fit: displacement = omega * duration + bias.
@@ -1226,10 +1278,13 @@ with tab_calib:
                     st.error("Patrol is active. Stop it first, then start captures.")
                     st.stop()
 
-                calib_zoom = st.session_state["calib_zoom"]
-                h_fov_c, v_fov_c = fov_at_zoom(calib_zoom, cam_model)
                 durations_sorted = sorted(impulse_durations)
                 pairs: List[Dict] = []
+
+                # Use the fixed zoom set in setup (no adaptive zoom —
+                # Reolink cameras limit PTZ speed at high zoom levels)
+                calib_z = st.session_state["calib_zoom"]
+                h_fov_c, v_fov_c = fov_at_zoom(calib_z, cam_model)
 
                 pb = st.progress(0.0)
                 ph = st.empty()
@@ -1240,11 +1295,20 @@ with tab_calib:
                     for T_c in durations_sorted:
                         done_c += 1
                         pb.progress(done_c / total_c)
-                        ph.markdown(f"Capture **speed={speed_c}** T={T_c}s ({done_c}/{total_c})...")
 
+                        ph.markdown(
+                            f"Capture **speed={speed_c}** T={T_c}s "
+                            f"zoom={calib_z} FOV={h_fov_c:.1f}° ({done_c}/{total_c})..."
+                        )
+
+                        # Go to home preset first
                         if home_preset_id is not None:
                             client.goto_preset(home_preset_id, speed=50)
                             time.sleep(2.5)
+
+                        # Re-apply calibration zoom after preset (preset resets zoom)
+                        client.zoom(calib_z)
+                        time.sleep(3.5)
 
                         img_b = client.capture()
                         if img_b is None:
@@ -1259,6 +1323,24 @@ with tab_calib:
                             ph.warning(f"After capture failed (speed={speed_c}, T={T_c}s) - skipped")
                             continue
 
+                        # Auto-compute displacement via keypoint matching
+                        deg_kp, n_matches, median_px = estimate_displacement_keypoints(
+                            img_b, img_a, axis, h_fov_c, v_fov_c
+                        )
+                        # Also compute via optical flow for comparison
+                        deg_of = abs(estimate_displacement_deg(
+                            img_b, img_a, axis, h_fov_c, v_fov_c
+                        ))
+
+                        ph.markdown(
+                            f"speed={speed_c} T={T_c}s → "
+                            f"**keypoints: {deg_kp:.3f}°** ({n_matches} matches, {median_px:.0f}px) | "
+                            f"optical flow: {deg_of:.3f}° ({done_c}/{total_c})"
+                        )
+
+                        if n_matches < 5:
+                            ph.warning(f"Too few keypoint matches ({n_matches}) for speed={speed_c} T={T_c}s - keeping for manual review")
+
                         pairs.append({
                             "speed": speed_c,
                             "T": T_c,
@@ -1268,33 +1350,68 @@ with tab_calib:
                             "img_after": img_a,
                             "h_fov": h_fov_c,
                             "v_fov": v_fov_c,
-                            "zoom": calib_zoom,
+                            "zoom": calib_z,
+                            "auto_deg_kp": round(deg_kp, 4),
+                            "auto_deg_of": round(deg_of, 4),
+                            "auto_n_matches": n_matches,
+                            "auto_px_delta": round(median_px, 1),
                         })
 
                 if not pairs:
                     st.error("No pair captured - check the connection.")
                 else:
                     pb.progress(1.0)
-                    ph.success(f"✅ {len(pairs)} pairs captured - starting annotation...")
+                    # Auto-populate annotations from keypoint results
+                    auto_annotations = [
+                        {
+                            "speed": p["speed"],
+                            "T": p["T"],
+                            "axis": p["axis"],
+                            "px_delta": p["auto_px_delta"],
+                            "disp_deg": p["auto_deg_kp"],
+                            "zoom": p["zoom"],
+                            "h_fov": p["h_fov"],
+                            "v_fov": p["v_fov"],
+                            "method": "keypoints",
+                            "n_matches": p["auto_n_matches"],
+                        }
+                        for p in pairs
+                        if p["auto_n_matches"] >= 5
+                    ]
+                    skipped = len(pairs) - len(auto_annotations)
+                    ph.success(
+                        f"✅ {len(pairs)} pairs captured — "
+                        f"{len(auto_annotations)} auto-measured, {skipped} need manual review"
+                    )
                     st.session_state["calib_pairs"] = pairs
-                    st.session_state["calib_anno_idx"] = 0
-                    st.session_state["calib_click_before"] = None
-                    st.session_state["calib_click_after"] = None
-                    st.session_state["calib_annotations"] = []
-                    st.session_state["calib_phase"] = "annotating"
+                    st.session_state["calib_annotations"] = auto_annotations
+                    if skipped > 0:
+                        # Go to manual annotation for failed ones
+                        st.session_state["calib_anno_idx"] = 0
+                        st.session_state["calib_click_before"] = None
+                        st.session_state["calib_click_after"] = None
+                        st.session_state["calib_phase"] = "annotating"
+                    else:
+                        st.session_state["calib_phase"] = "complete"
                     st.rerun()
 
     # ── Phase ANNOTATING ─────────────────────────────────────────────────────
     elif phase == "annotating":
         pairs = st.session_state["calib_pairs"]
+        # Filter to only pairs that need manual annotation (low keypoint matches)
+        manual_pairs = [
+            (i, p) for i, p in enumerate(pairs)
+            if p.get("auto_n_matches", 0) < 5
+        ]
         idx = st.session_state["calib_anno_idx"]
-        total_p = len(pairs)
+        total_p = len(manual_pairs)
 
         if idx >= total_p:
             st.session_state["calib_phase"] = "complete"
             st.rerun()
 
-        pair = pairs[idx]
+        _orig_idx, pair = manual_pairs[idx]
+        st.info(f"Manual annotation needed for {total_p} pairs (auto-detection had too few matches)")
         img_b: Image.Image = pair["img_before"]
         img_a: Image.Image = pair["img_after"]
         ax_p = pair["axis"]
@@ -1308,8 +1425,10 @@ with tab_calib:
             f"direction={pair['direction']}"
         )
         st.caption(
-            "Click the **same landmark** (pylon, building corner, tree) "
-            "in both images. The point should be far and static."
+            f"zoom={pair.get('zoom', '?')} | "
+            f"H_FOV={h_fov_p:.3f}° | V_FOV={v_fov_p:.3f}° | "
+            f"image {W}×{H}px | "
+            f"pixel scale: {h_fov_p/W*1000:.3f} mrad/px"
         )
         st.progress((idx) / total_p)
 
@@ -1366,11 +1485,12 @@ with tab_calib:
             ref_bias = ref_bias_map.get(cam_model, {}).get(pair["speed"], 0.0)
             ref_deg = ((ref_omega or 0) * pair["T"] + ref_bias) if ref_omega else 0.0
 
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Δ pixels", f"{px_delta} px")
             c2.metric("Measured displacement", f"{deg:.3f}°")
-            c3.metric("Expected (reference ω,b)", f"{ref_deg:.3f}°" if ref_omega else "—")
+            c3.metric("Expected (ref)", f"{ref_deg:.3f}°" if ref_omega else "—")
             c4.metric("Ratio", f"{deg/ref_deg:.2f}" if ref_deg else "—")
+            c5.metric("Zoom / FOV", f"z{pair.get('zoom', '?')} / {h_fov_p:.1f}°")
 
             if abs(deg) < 0.05:
                 st.warning(
@@ -1386,6 +1506,11 @@ with tab_calib:
                     "axis": ax_p,
                     "px_delta": px_delta,
                     "disp_deg": round(deg, 4),
+                    "zoom": pair.get("zoom"),
+                    "h_fov": round(h_fov_p, 3),
+                    "v_fov": round(v_fov_p, 3),
+                    "pt_before": list(pt_b),
+                    "pt_after": list(pt_a),
                 })
                 st.session_state["calib_anno_idx"] = idx + 1
                 st.session_state["calib_click_before"] = None
@@ -1450,7 +1575,17 @@ with tab_calib:
                     "v_fov": v_fov_r,
                 }
                 st.session_state["calib_raw_data"][key_n] = [
-                    {"duration": a["T"], "displacement_deg": a["disp_deg"]} for a in anns
+                    {
+                        "duration": a["T"],
+                        "displacement_deg": a["disp_deg"],
+                        "px_delta": a.get("px_delta"),
+                        "zoom": a.get("zoom"),
+                        "h_fov": a.get("h_fov"),
+                        "v_fov": a.get("v_fov"),
+                        "pt_before": a.get("pt_before"),
+                        "pt_after": a.get("pt_after"),
+                    }
+                    for a in anns
                 ]
                 td = -model_r["bias"] / model_r["omega"] if model_r["omega"] != 0 else 0
                 st.write(
@@ -1623,10 +1758,12 @@ with tab_calib:
         if m_pt_b and m_pt_a:
             st.divider()
             if m_ax == "pan":
+                # Camera right → landmark moves left → before_x > after_x
                 m_px_delta = m_pt_b[0] - m_pt_a[0]
                 m_deg = abs(m_px_delta * m_h_fov / m_W)
             else:
-                m_px_delta = m_pt_a[1] - m_pt_b[1]
+                # Camera down → landmark moves up → before_y > after_y
+                m_px_delta = m_pt_b[1] - m_pt_a[1]
                 m_deg = abs(m_px_delta * m_v_fov / m_H)
 
             mc1, mc2 = st.columns(2)
@@ -1839,6 +1976,7 @@ with tab_results:
                 "model": cam_model,
                 "calibrated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "results": results,
+                "raw_data": raw_data,
             }
             st.download_button(
                 "⬇️ Download JSON",
