@@ -418,6 +418,13 @@ for _k, _v in [
     ("calib_click_before", None),   # (x, y) or None
     ("calib_click_after", None),    # (x, y) or None
     ("calib_annotations", []),      # [{speed, T, axis, px_delta, disp_deg}]
+    # Micro-pulse calibration state machine
+    ("micro_phase", "idle"),        # "idle" | "annotating" | "complete"
+    ("micro_pairs", []),            # [{img_before, img_after, h_fov, v_fov, axis, direction, rep}]
+    ("micro_anno_idx", 0),
+    ("micro_click_before", None),
+    ("micro_click_after", None),
+    ("micro_annotations", []),      # [{disp_deg, axis}]
     # Click-to-move state machine
     ("ctm_phase", "idle"),          # "idle" | "verify"
     ("ctm_img_before", None),       # image before move
@@ -1125,9 +1132,14 @@ with tab_calib:
                 f"[{p['id']}] {p.get('name', '')}".strip(): p["id"]
                 for p in presets_live
             }
+            home_options = ["(none)"] + list(preset_opts.keys())
+            # _home_default stores the label to auto-select after saving a new preset
+            _home_default = st.session_state.get("_home_default")
+            _home_index = home_options.index(_home_default) if _home_default in home_options else 0
             home_label = st.selectbox(
                 "Preset home",
-                ["(none)"] + list(preset_opts.keys()),
+                home_options,
+                index=_home_index,
                 key="home_preset_sel",
             )
             home_preset_id: Optional[int] = preset_opts.get(home_label)
@@ -1137,9 +1149,24 @@ with tab_calib:
                 used_ids = {p["id"] for p in presets_live}
                 new_id = next((i for i in range(1, 65) if i not in used_ids), None)
                 if new_id is not None:
-                    client.set_preset(new_id, "calib_home")
-                    st.success(f"Home → preset {new_id}")
+                    ok = client.set_preset(new_id, "calib_home")
+                    if ok:
+                        refreshed = client.get_presets()
+                        st.session_state["presets_list"] = refreshed
+                        # Find the label that matches the new preset ID
+                        new_label = next(
+                            (f"[{p['id']}] {p.get('name', '')}".strip()
+                             for p in refreshed if p["id"] == new_id),
+                            None,
+                        )
+                        if new_label:
+                            st.session_state["_home_default"] = new_label
+                        st.toast(f"Home → preset {new_id} saved ✓")
+                    else:
+                        st.toast("Failed to save preset", icon="❌")
                     st.rerun()
+                else:
+                    st.error("No free preset slot (all 64 are used)")
             if home_preset_id is not None and c2.button("📍 Go to home"):
                 client.goto_preset(home_preset_id, speed=50)
                 time.sleep(2)
@@ -1437,6 +1464,252 @@ with tab_calib:
             st.session_state["calib_anno_idx"] = 0
             st.session_state["calib_click_before"] = None
             st.session_state["calib_click_after"] = None
+            st.rerun()
+
+    # ── Micro-pulse calibration ─────────────────────────────────────────────
+    st.divider()
+    st.subheader("⚡ Micro-pulse calibration")
+    st.markdown(
+        "Measure the minimum displacement from a brief impulse at **speed 1**. "
+        "At high zoom, small angles fall below the calibrated bias — "
+        "this tells you the actual nudge distance of a micro-impulse."
+    )
+
+    micro_phase = st.session_state["micro_phase"]
+
+    if micro_phase == "idle":
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        micro_axis = mc1.radio("Axis", ["pan", "tilt"], horizontal=True, key="micro_axis")
+        micro_reps = mc2.number_input("Repetitions", 3, 20, 5, 1, key="micro_reps")
+        micro_dur = mc3.number_input("Impulse duration (s)", 0.01, 0.5, 0.05, 0.01, key="micro_dur", format="%.2f")
+        micro_zoom = mc4.number_input("Zoom (max=better precision)", 0, 64, 41, 1, key="micro_zoom")
+
+        micro_settle = st.slider("Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="micro_settle")
+
+        h_fov_preview, v_fov_preview = fov_at_zoom(micro_zoom, cam_model)
+        st.caption(
+            f"At zoom {micro_zoom}: FOV H={h_fov_preview:.2f}° V={v_fov_preview:.2f}° — "
+            f"pixel precision ~{h_fov_preview / 3840 * 1000:.2f} mrad/px (4K)"
+        )
+
+        # Reuse home preset from main calibration
+        micro_home_label = st.session_state.get("home_preset_sel", "(none)")
+        presets_micro = st.session_state.get("presets_list", [])
+        micro_preset_map = {f"[{p['id']}] {p.get('name', '')}".strip(): p["id"] for p in presets_micro}
+        micro_home_id: Optional[int] = micro_preset_map.get(micro_home_label)
+
+        if micro_home_id is None:
+            st.warning("Select a home preset in the calibration setup above before starting.")
+
+        if st.button("🚀 Start micro-pulse captures", type="primary", key="btn_micro_start",
+                      disabled=micro_home_id is None):
+            # Apply zoom and wait for focus settle
+            client.zoom(micro_zoom)
+            st.session_state["calib_zoom"] = micro_zoom
+            time.sleep(3.0)
+
+            h_fov_m, v_fov_m = fov_at_zoom(micro_zoom, cam_model)
+            direction_m = "Right" if micro_axis == "pan" else "Down"
+
+            pairs_m: List[Dict] = []
+            pb_m = st.progress(0.0)
+            ph_m = st.empty()
+
+            for rep in range(int(micro_reps)):
+                pb_m.progress((rep) / int(micro_reps))
+                ph_m.markdown(f"Micro-pulse **{rep + 1}/{int(micro_reps)}** …")
+
+                if micro_home_id is not None:
+                    client.goto_preset(micro_home_id, speed=50)
+                    time.sleep(2.5)
+
+                img_bm = client.capture()
+                if img_bm is None:
+                    ph_m.warning(f"Before capture failed (rep {rep + 1}) — skipped")
+                    continue
+
+                client.move(direction_m, speed=1)
+                time.sleep(micro_dur)
+                client.stop()
+                time.sleep(micro_settle)
+
+                img_am = client.capture()
+                if img_am is None:
+                    ph_m.warning(f"After capture failed (rep {rep + 1}) — skipped")
+                    continue
+
+                pairs_m.append({
+                    "img_before": img_bm,
+                    "img_after": img_am,
+                    "h_fov": h_fov_m,
+                    "v_fov": v_fov_m,
+                    "axis": micro_axis,
+                    "direction": direction_m,
+                    "rep": rep + 1,
+                    "impulse_dur": micro_dur,
+                    "zoom": micro_zoom,
+                })
+
+            if not pairs_m:
+                st.error("No pair captured.")
+            else:
+                pb_m.progress(1.0)
+                ph_m.success(f"✅ {len(pairs_m)} micro-pulse pairs — starting annotation…")
+                st.session_state["micro_pairs"] = pairs_m
+                st.session_state["micro_anno_idx"] = 0
+                st.session_state["micro_click_before"] = None
+                st.session_state["micro_click_after"] = None
+                st.session_state["micro_annotations"] = []
+                st.session_state["micro_phase"] = "annotating"
+                st.rerun()
+
+    elif micro_phase == "annotating":
+        m_pairs = st.session_state["micro_pairs"]
+        m_idx = st.session_state["micro_anno_idx"]
+        m_total = len(m_pairs)
+
+        if m_idx >= m_total:
+            st.session_state["micro_phase"] = "complete"
+            st.rerun()
+
+        mp = m_pairs[m_idx]
+        m_img_b: Image.Image = mp["img_before"]
+        m_img_a: Image.Image = mp["img_after"]
+        m_ax = mp["axis"]
+        m_h_fov = mp["h_fov"]
+        m_v_fov = mp["v_fov"]
+        m_W, m_H = m_img_b.size
+
+        st.markdown(
+            f"### Micro-pulse {m_idx + 1} / {m_total} — "
+            f"**{m_ax.upper()}** rep={mp['rep']} dur={mp['impulse_dur']}s"
+        )
+        st.progress(m_idx / m_total)
+
+        m_pt_b: Optional[Tuple[int, int]] = st.session_state["micro_click_before"]
+        m_pt_a: Optional[Tuple[int, int]] = st.session_state["micro_click_after"]
+
+        _M_DISP_W = 900
+        _m_scale = _M_DISP_W / m_W
+
+        st.markdown("**BEFORE — click a landmark**")
+        m_disp_b = draw_cross(m_img_b, m_pt_b[0], m_pt_b[1]) if m_pt_b else m_img_b
+        m_disp_b_s = m_disp_b.resize((_M_DISP_W, int(m_H * _m_scale)), Image.LANCZOS)
+        m_coord_b = streamlit_image_coordinates(m_disp_b_s, key=f"micro_b_{m_idx}")
+        if m_coord_b is not None:
+            m_new_b = (int(m_coord_b["x"] / _m_scale), int(m_coord_b["y"] / _m_scale))
+            if m_new_b != m_pt_b:
+                st.session_state["micro_click_before"] = m_new_b
+                st.rerun()
+        if m_pt_b:
+            st.success(f"Selected: ({m_pt_b[0]}, {m_pt_b[1]})")
+
+        st.markdown("**AFTER — click the same landmark**")
+        m_W_a, m_H_a = m_img_a.size
+        _m_scale_a = _M_DISP_W / m_W_a
+        m_disp_a = draw_cross(m_img_a, m_pt_a[0], m_pt_a[1], color="blue") if m_pt_a else m_img_a
+        m_disp_a_s = m_disp_a.resize((_M_DISP_W, int(m_H_a * _m_scale_a)), Image.LANCZOS)
+        m_coord_a = streamlit_image_coordinates(m_disp_a_s, key=f"micro_a_{m_idx}")
+        if m_coord_a is not None:
+            m_new_a = (int(m_coord_a["x"] / _m_scale_a), int(m_coord_a["y"] / _m_scale_a))
+            if m_new_a != m_pt_a:
+                st.session_state["micro_click_after"] = m_new_a
+                st.rerun()
+        if m_pt_a:
+            st.success(f"Selected: ({m_pt_a[0]}, {m_pt_a[1]})")
+
+        if m_pt_b and m_pt_a:
+            st.divider()
+            if m_ax == "pan":
+                m_px_delta = m_pt_b[0] - m_pt_a[0]
+                m_deg = abs(m_px_delta * m_h_fov / m_W)
+            else:
+                m_px_delta = m_pt_a[1] - m_pt_b[1]
+                m_deg = abs(m_px_delta * m_v_fov / m_H)
+
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Δ pixels", f"{m_px_delta} px")
+            mc2.metric("Displacement", f"{m_deg:.3f}°")
+
+            mcv, mcs, mcr = st.columns([2, 1, 1])
+            if mcv.button("✅ Validate", type="primary", key=f"micro_val_{m_idx}"):
+                st.session_state["micro_annotations"].append({
+                    "disp_deg": round(m_deg, 4),
+                    "axis": m_ax,
+                })
+                st.session_state["micro_anno_idx"] = m_idx + 1
+                st.session_state["micro_click_before"] = None
+                st.session_state["micro_click_after"] = None
+                if m_idx + 1 >= m_total:
+                    st.session_state["micro_phase"] = "complete"
+                st.rerun()
+            if mcs.button("⏭️ Skip", key=f"micro_skip_{m_idx}"):
+                st.session_state["micro_anno_idx"] = m_idx + 1
+                st.session_state["micro_click_before"] = None
+                st.session_state["micro_click_after"] = None
+                if m_idx + 1 >= m_total:
+                    st.session_state["micro_phase"] = "complete"
+                st.rerun()
+            if mcr.button("🔄 Reset", key=f"micro_reset_{m_idx}"):
+                st.session_state["micro_click_before"] = None
+                st.session_state["micro_click_after"] = None
+                st.rerun()
+
+    elif micro_phase == "complete":
+        m_anns = st.session_state["micro_annotations"]
+        if not m_anns:
+            st.warning("No measurements — restart.")
+        else:
+            m_vals = [a["disp_deg"] for a in m_anns]
+            m_mean = float(np.mean(m_vals))
+            m_std = float(np.std(m_vals))
+            m_axis_label = m_anns[0]["axis"]
+
+            st.success(f"✅ {len(m_vals)} micro-pulse measurements")
+
+            r1, r2, r3 = st.columns(3)
+            r1.metric("Mean displacement", f"{m_mean:.3f}°")
+            r2.metric("Std deviation", f"{m_std:.3f}°")
+            r3.metric("Range", f"{min(m_vals):.3f}° — {max(m_vals):.3f}°")
+
+            # Store in calib_results for export
+            micro_key = f"{m_axis_label}_micro"
+            micro_pairs_done = st.session_state["micro_pairs"]
+            micro_zoom_used = micro_pairs_done[0].get("zoom", st.session_state["calib_zoom"]) if micro_pairs_done else st.session_state["calib_zoom"]
+            micro_h_fov = micro_pairs_done[0]["h_fov"] if micro_pairs_done else 0
+            micro_v_fov = micro_pairs_done[0]["v_fov"] if micro_pairs_done else 0
+            st.session_state["calib_results"][micro_key] = {
+                "axis": m_axis_label,
+                "speed": 1,
+                "omega": 0.0,
+                "bias": round(m_mean, 4),
+                "r2": 0.0,
+                "zoom": micro_zoom_used,
+                "h_fov": micro_h_fov,
+                "v_fov": micro_v_fov,
+                "micro_pulse": True,
+                "micro_mean_deg": round(m_mean, 4),
+                "micro_std_deg": round(m_std, 4),
+                "micro_n": len(m_vals),
+            }
+
+            # Individual measurements
+            with st.expander("Individual measurements"):
+                for i, v in enumerate(m_vals):
+                    st.write(f"Rep {i + 1}: {v:.4f}°")
+
+            st.caption(
+                f"**Update `routes_control.py`:** set `_MICRO_IMPULSE_DUR` and expect "
+                f"~{m_mean:.2f}° ± {m_std:.2f}° per micro-pulse at speed 1 for {cam_model}."
+            )
+
+        if st.button("🔄 New micro-pulse calibration", key="btn_micro_restart"):
+            st.session_state["micro_phase"] = "idle"
+            st.session_state["micro_pairs"] = []
+            st.session_state["micro_annotations"] = []
+            st.session_state["micro_anno_idx"] = 0
+            st.session_state["micro_click_before"] = None
+            st.session_state["micro_click_after"] = None
             st.rerun()
 
 # ─── Tab 3: Results ───────────────────────────────────────────────────────────
