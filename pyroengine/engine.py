@@ -5,6 +5,7 @@
 
 import io
 import logging
+import os
 import shutil
 import signal
 import time
@@ -19,6 +20,13 @@ from pyro_predictor import Predictor
 from pyroclient import client
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.models import Response
+
+try:
+    import boto3
+
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
 
 __all__ = ["Engine"]
 
@@ -89,9 +97,15 @@ class Engine(Predictor):
         cache_folder: str = "data/",
         backup_size: int = 30,
         jpeg_quality: int = 80,
+        avif_quality: int = 50,
         day_time_strategy: Optional[str] = None,
         save_captured_frames: Optional[bool] = False,
         save_detections_frames: Optional[bool] = False,
+        cam_names: Optional[Dict[str, str]] = None,
+        save_detections_to_s3: bool = False,
+        s3_bucket: str = "test-engine-capture",
+        s3_prefix: str = "detections",
+        force_detections: bool = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,  # noqa: ANN401
@@ -120,10 +134,37 @@ class Engine(Predictor):
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
         self.jpeg_quality = jpeg_quality
+        self.avif_quality = avif_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
         self.save_captured_frames = save_captured_frames
         self.save_detections_frames = save_detections_frames
+        # S3 uploads (R&D): auto-enable if AWS credentials are in env
+        env_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        if env_key and not save_detections_to_s3:
+            save_detections_to_s3 = True
+            logger.info(f"S3: auto-enabled, bucket={s3_bucket}, prefix={s3_prefix}")
+        else:
+            logger.info(f"S3: disabled (AWS_ACCESS_KEY_ID present={bool(env_key)}, boto3={BOTO3_AVAILABLE})")
+        self.save_detections_to_s3 = save_detections_to_s3
+        self.s3_bucket = s3_bucket
+        self.s3_prefix = s3_prefix
+        self._s3_client: Any = None
+        if save_detections_to_s3:
+            if not BOTO3_AVAILABLE:
+                raise ImportError("boto3 is required for S3 uploads. Install it with: pip install boto3")
+            self._s3_client = boto3.client(
+                "s3",  # type: ignore[union-attr]
+                aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                region_name="eu-west-3",
+            )
+            logger.info("S3: client initialized")
+        self._original_frames: Dict[str, deque] = {}
+        self.force_detections = force_detections
+        if force_detections:
+            logger.warning("force_detections=True: injecting fake bbox on every frame (TEST MODE)")
+        self.cam_names: Dict[str, str] = cam_names or {}
         self.cam_creds = cam_creds
         self.send_last_image_period = send_last_image_period
         self.last_bbox_mask_fetch_period = last_bbox_mask_fetch_period
@@ -185,6 +226,9 @@ class Engine(Predictor):
         if cam_key not in self._states:
             self._states[cam_key] = self._new_state()
 
+        # Keep original frame for S3 4K crop before resize
+        original_frame = frame if not isinstance(self.frame_size, tuple) else frame.copy()
+
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
@@ -238,8 +282,17 @@ class Engine(Predictor):
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
 
+        # TEST MODE: override preds with a fake high-confidence detection
+        if self.force_detections:
+            preds = np.array([[0.45, 0.45, 0.55, 0.55, 0.95]])
+
         logger.info(f"pred for {cam_key} : {preds}")
         conf = self._update_states(frame, preds, cam_key)
+
+        # Track original frames in sync with last_predictions for S3 4K crops
+        if cam_key not in self._original_frames:
+            self._original_frames[cam_key] = deque(maxlen=self.nb_consecutive_frames)
+        self._original_frames[cam_key].append(original_frame)
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False)
@@ -252,9 +305,11 @@ class Engine(Predictor):
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
+            originals = self._original_frames.get(cam_key, deque())
             for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, bboxes)
+                    orig = originals[idx] if idx < len(originals) else None
+                    self._stage_alert(frame, cam_id, ts, bboxes, original_frame=orig)
                     self._states[cam_key]["last_predictions"][idx] = (
                         frame,
                         preds,
@@ -265,7 +320,14 @@ class Engine(Predictor):
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
+    def _stage_alert(
+        self,
+        frame: Image.Image,
+        cam_id: str,
+        ts: int,
+        bboxes: list,
+        original_frame: Optional[Image.Image] = None,
+    ) -> None:
         # Store information in the queue
         self._alerts.append({
             "frame": frame,
@@ -274,6 +336,7 @@ class Engine(Predictor):
             "media_id": None,
             "alert_id": None,
             "bboxes": bboxes,
+            "original_frame": original_frame,
         })
 
     def fill_empty_bboxes(self) -> None:
@@ -325,6 +388,10 @@ class Engine(Predictor):
                         logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
                         raise
 
+                    # Upload to S3 (R&D): inference frame + 4K crops
+                    if self.save_detections_to_s3:
+                        self._upload_to_s3(frame_info)
+
                     # Clear
                     self._alerts.popleft()
                     logger.info(f"Camera '{cam_id}' - alert sent")
@@ -334,6 +401,111 @@ class Engine(Predictor):
                     logger.warning(f"Camera '{cam_id}' - unable to upload cache")
                     logger.warning(e)
                     break
+
+    @staticmethod
+    def _crop_detection(
+        image: Image.Image, bbox: tuple, padding: float = 0.2, min_size: int = 112
+    ) -> Image.Image:
+        """Crop around a detection bbox with padding, enforcing a minimum crop size.
+
+        Args:
+            image: source image (typically the original 4K frame)
+            bbox: normalized (x1, y1, x2, y2, conf) bounding box
+            padding: fractional padding to add around the bbox (0.2 = 20%)
+            min_size: minimum crop dimension in pixels
+        """
+        w, h = image.size
+        x1, y1, x2, y2 = bbox[0] * w, bbox[1] * h, bbox[2] * w, bbox[3] * h
+
+        bw, bh = x2 - x1, y2 - y1
+        pad_w, pad_h = bw * padding, bh * padding
+        x1 -= pad_w
+        y1 -= pad_h
+        x2 += pad_w
+        y2 += pad_h
+
+        # Enforce minimum crop size
+        crop_w, crop_h = x2 - x1, y2 - y1
+        if crop_w < min_size:
+            diff = min_size - crop_w
+            x1 -= diff / 2
+            x2 += diff / 2
+        if crop_h < min_size:
+            diff = min_size - crop_h
+            y1 -= diff / 2
+            y2 += diff / 2
+
+        # Clamp to image bounds
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w, int(x2)), min(h, int(y2))
+
+        return image.crop((x1, y1, x2, y2))
+
+    @staticmethod
+    def _multi_resolution_frame(
+        high_resolution_frame: Image.Image, low_resolution_frame: Image.Image, bboxes: list
+    ) -> Image.Image:
+        """Creates an image at high-res size where only bbox regions are sharp, the rest is upscaled low-res.
+
+        Args:
+            high_resolution_frame: the original 4K frame
+            low_resolution_frame: the resized inference frame
+            bboxes: list of normalized [xmin, ymin, xmax, ymax, conf] bounding boxes
+        """
+        high_res_width, high_res_height = high_resolution_frame.size
+        result_frame = low_resolution_frame.resize((high_res_width, high_res_height), Image.BILINEAR)
+
+        for bbox in bboxes:
+            high_res_bbox = (
+                round(bbox[0] * high_res_width),
+                round(bbox[1] * high_res_height),
+                round(bbox[2] * high_res_width),
+                round(bbox[3] * high_res_height),
+            )
+            result_frame.paste(high_resolution_frame.crop(high_res_bbox), (high_res_bbox[0], high_res_bbox[1]))
+        return result_frame
+
+    def _upload_to_s3(self, frame_info: dict) -> None:
+        """Upload inference frame, 4K crops, and multi-resolution AVIF to S3 (R&D)."""
+        cam_id = frame_info["cam_id"]
+        cam_name = self.cam_names.get(cam_id, cam_id)
+        ts = frame_info["ts"]
+        date_str = time.strftime("%Y%m%d")
+        ts_str = ts if isinstance(ts, str) else time.strftime("%Y%m%d-%H%M%S")
+        prefix = f"{self.s3_prefix}/{cam_name}/{cam_id}/{date_str}/{ts_str}"
+
+        try:
+            # Upload inference frame
+            buf = io.BytesIO()
+            frame_info["frame"].save(buf, format="JPEG", quality=self.jpeg_quality)
+            buf.seek(0)
+            key = f"{prefix}_frame.jpg"
+            self._s3_client.upload_fileobj(buf, self.s3_bucket, key)
+            logger.info(f"S3: uploaded {key}")
+
+            original = frame_info.get("original_frame")
+            bboxes = frame_info.get("bboxes", [])
+            if original is not None and bboxes:
+                # Upload 4K crops
+                for i, bbox in enumerate(bboxes):
+                    crop = self._crop_detection(original, bbox)
+                    crop_buf = io.BytesIO()
+                    crop.save(crop_buf, format="JPEG", quality=self.jpeg_quality)
+                    crop_buf.seek(0)
+                    crop_key = f"{prefix}_crop_{i}.jpg"
+                    self._s3_client.upload_fileobj(crop_buf, self.s3_bucket, crop_key)
+                    logger.info(f"S3: uploaded {crop_key}")
+
+                # Upload multi-resolution AVIF
+                multires = self._multi_resolution_frame(original, frame_info["frame"], bboxes)
+                multires_buf = io.BytesIO()
+                multires.save(multires_buf, format="AVIF", quality=self.avif_quality)
+                multires_buf.seek(0)
+                multires_key = f"{prefix}_multires.avif"
+                self._s3_client.upload_fileobj(multires_buf, self.s3_bucket, multires_key)
+                logger.info(f"S3: uploaded {multires_key}")
+        except Exception:
+            logger.warning(f"S3: failed to upload for cam {cam_id}", exc_info=True)
 
     def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
         """Save image on device

@@ -37,20 +37,25 @@ def main(args):
         camera_data = json.load(json_file)
 
     splitted_cam_creds = {}
+    cam_names = {}
     for ip, cam_data in camera_data.items():
         bbox_mask_url = None
         if "bbox_mask_url" in cam_data:
             bbox_mask_url = cam_data["bbox_mask_url"]
 
+        cam_name = cam_data.get("name", ip)
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_azimuths = cam_data["azimuths"]
             for pos_id, cam_azimuth in zip(cam_poses, cam_azimuths, strict=False):
-                splitted_cam_creds[ip + "_" + str(pos_id)] = (cam_data["token"], cam_azimuth, bbox_mask_url)
+                cam_id = ip + "_" + str(pos_id)
+                splitted_cam_creds[cam_id] = (cam_data["token"], cam_azimuth, bbox_mask_url)
+                cam_names[cam_id] = cam_name
         else:
             cam_poses = []
             cam_azimuths = [cam_data["azimuth"]]
             splitted_cam_creds[ip] = cam_data["token"], cam_data["azimuth"], bbox_mask_url
+            cam_names[ip] = cam_name
 
     engine = Engine(
         model_path=args.model_path,
@@ -68,6 +73,8 @@ def main(args):
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
+        cam_names=cam_names,
+        force_detections=args.force_detections,
     )
 
     sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
@@ -142,6 +149,12 @@ if __name__ == "__main__":
         type=bool,
         default=False,
         help="Save all locally detection frames locally",
+    )
+    parser.add_argument(
+        "--force_detections",
+        type=bool,
+        default=False,
+        help="TEST MODE: inject fake bbox (0.95 conf) on every frame to trigger alerts",
     )
     parser.add_argument(
         "--send_alerts",
