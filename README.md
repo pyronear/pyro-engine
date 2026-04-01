@@ -104,13 +104,17 @@ pip install -e pyro-engine/.
 
 ### Environment variables
 
-Deployments usually rely on a `.env` file with information such as:
+Deployments usually rely on a `.env` file. A `.env.example` is provided at the root of the repository as a reference:
 
 ```text
 API_URL=https://api.pyronear.org
 CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
+MEDIAMTX_SERVER_IP=1.2.3.4
+PYRO_ENGINE_VERSION=latest
 ```
+
+`PYRO_ENGINE_VERSION` controls which Docker image tag is pulled for both services (defaults to `latest` if unset).
 
 ### Data directory
 
