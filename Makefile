@@ -43,10 +43,10 @@ build-optional-lib:
 	pip install -e .[docs]
 	pip install -e .[dev]
 
-# Build both images and run the stack
+# Pull latest images and run the stack
 run:
-	docker build . -t pyronear/pyro-engine:latest
-	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
+	docker pull pyronear/pyro-engine:latest
+	docker pull pyronear/pyro-camera-api:latest
 	docker compose up -d
 
 # Get log from engine wrapper
