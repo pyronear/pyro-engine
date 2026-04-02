@@ -444,6 +444,12 @@ class APIClient:
             pass
         return None
 
+    def get_speed_tables(self) -> Optional[Dict]:
+        r = self._get("control/speed_tables", camera_ip=self.ip)
+        if r is not None:
+            return r.json()
+        return None
+
     @staticmethod
     def list_cameras(base_url: str) -> List[str]:
         try:
@@ -557,7 +563,11 @@ with st.sidebar:
                 if adapter:
                     st.session_state["cam_model"] = adapter
                     st.session_state["sel_model"] = adapter
-                    st.success(f"Connected through API ({selected_cam}) - adapter: {adapter}")
+                # Fetch speed tables from API (single source of truth)
+                tables = c.get_speed_tables()
+                if tables:
+                    st.session_state["api_speed_tables"] = tables
+                    st.success(f"Connected through API ({selected_cam}) - adapter: {tables.get('adapter', '?')}")
                 else:
                     st.success(f"Connected through API ({selected_cam})")
             else:
@@ -589,6 +599,19 @@ if st.session_state["client"] is None:
 
 client = st.session_state["client"]
 cam_model: str = st.session_state["cam_model"]
+
+# Override reference tables from API if available (avoids hardcoded duplicates)
+_api_tables = st.session_state.get("api_speed_tables")
+if _api_tables:
+    _api_adapter = _api_tables.get("adapter", cam_model)
+    if _api_tables.get("pan_speeds"):
+        REFERENCE_PAN_SPEEDS[_api_adapter] = {int(k): v for k, v in _api_tables["pan_speeds"].items()}
+    if _api_tables.get("pan_bias"):
+        REFERENCE_PAN_BIAS[_api_adapter] = {int(k): v for k, v in _api_tables["pan_bias"].items()}
+    if _api_tables.get("tilt_speeds"):
+        REFERENCE_TILT_SPEEDS[_api_adapter] = {int(k): v for k, v in _api_tables["tilt_speeds"].items()}
+    if _api_tables.get("tilt_bias"):
+        REFERENCE_TILT_BIAS[_api_adapter] = {int(k): v for k, v in _api_tables["tilt_bias"].items()}
 
 tab_view, tab_ctm, tab_zfov, tab_calib, tab_results, tab_presets = st.tabs([
     "👁️ Live View", "🎯 Click-to-Move", "🔭 Zoom FOV", "🔬 Calibration", "📈 Results & Export", "📌 Presets"
@@ -661,36 +684,25 @@ with tab_view:
 
 # ─── Tab 1 : Click-to-Move ───────────────────────────────────────────────────
 
-# Speed tables mirroring routes_control.py (used for local speed selection)
-_CTM_PAN_SPEEDS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.5988, 2: 2.7877, 3: 4.5222, 4: 5.7913, 5: 6.3122},
-    "reolink-823A16": {1: 1.3748, 2: 2.8895, 3: 4.5352, 4: 6.6175, 5: 7.3933},
-}
-_CTM_PAN_BIAS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 0.6312, 2: 1.4915, 3: 1.748, 4: 2.9926, 5: 4.393},
-    "reolink-823A16": {1: 2.0047, 2: 3.6327, 3: 5.5697, 4: 7.5964, 5: 10.176},
-}
-_CTM_TILT_SPEEDS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.583, 2: 4.0438, 3: 6.9627},
-    "reolink-823A16": {1: 2.0749, 2: 4.0741, 3: 5.5923},
-}
-_CTM_TILT_BIAS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.462, 2: 2.1954, 3: 2.6174},
-    "reolink-823A16": {1: 2.2971, 2: 4.5217, 3: 7.0047},
-}
+# Click-to-move uses the same reference tables as calibration
+_CTM_PAN_SPEEDS = REFERENCE_PAN_SPEEDS
+_CTM_PAN_BIAS = REFERENCE_PAN_BIAS
+_CTM_TILT_SPEEDS = REFERENCE_TILT_SPEEDS
+_CTM_TILT_BIAS = REFERENCE_TILT_BIAS
 
 
-def _pick_speed(target_deg: float, speeds: Dict[int, float], bias: Dict[int, float]) -> Optional[int]:
-    """Pick the highest speed level where T = (target - b) / ω is in [0.3, 4.0]s."""
+def _pick_speed(target_deg: float, speeds: Dict[int, float], bias: Dict[int, float], zoom: int = 0) -> Optional[int]:
+    """Pick the highest speed level where T = (target - b) / ω is in [0.3, 4.0]s.
+    When zoom > 0, only speed 1 is allowed (Reolink caps higher speeds when zoomed)."""
     best: Optional[int] = None
-    for level in sorted(speeds.keys()):
+    allowed = {1: speeds[1]} if (zoom > 0 and 1 in speeds) else speeds
+    for level in sorted(allowed.keys()):
         b = bias.get(level, 0.0)
-        omega = speeds[level]
         if target_deg <= b:
-            continue  # can't execute: coast alone overshoots
-        duration = (target_deg - b) / omega
+            continue
+        duration = (target_deg - b) / allowed[level]
         if 0.3 <= duration <= 4.0:
-            best = level  # keep highest valid level
+            best = level
     return best
 
 
@@ -700,20 +712,29 @@ def _ctm_move_axis(
     direction_neg: str,
     speeds: Dict[int, float],
     bias: Dict[int, float],
+    zoom: int = 0,
 ) -> Optional[Dict]:
-    """Execute a single-axis move and return move metadata, or None if skipped."""
-    if abs(axis_deg) < 0.5:
+    """Execute a single-axis move via DirectClient. Returns move metadata or None."""
+    min_deg = bias.get(1, 1.0) / 2
+    if abs(axis_deg) < min_deg:
         return None
     direction = direction_pos if axis_deg > 0 else direction_neg
-    speed = _pick_speed(abs(axis_deg), speeds, bias)
-    if speed is None:
-        st.warning(f"No valid speed level for {abs(axis_deg):.1f}° on axis {direction_pos}/{direction_neg}")
-        return None
-    b = bias.get(speed, 0.0)
-    omega = speeds[speed]
-    duration = (abs(axis_deg) - b) / omega
-    client.move(direction, speed=speed, duration=duration)
-    return {"deg": axis_deg, "direction": direction, "speed": speed, "duration": round(duration, 2), "bias": b, "omega": omega}
+    speed = _pick_speed(abs(axis_deg), speeds, bias, zoom=zoom)
+    if speed is not None:
+        b = bias.get(speed, 0.0)
+        omega = speeds[speed]
+        duration = (abs(axis_deg) - b) / omega
+        client.move(direction, speed=speed, duration=duration)
+        return {"deg": axis_deg, "direction": direction, "speed": speed, "duration": round(duration, 2), "micro": False}
+    elif speeds:
+        # Micro-pulse: angle below bias, zoom to 41 for precision
+        client.zoom(41)
+        time.sleep(3.5)
+        client.move(direction, speed=1, duration=0.0)
+        client.zoom(zoom)
+        return {"deg": axis_deg, "direction": direction, "speed": 1, "duration": 0, "micro": True}
+    st.warning(f"No speed table for axis {direction_pos}/{direction_neg}")
+    return None
 
 
 with tab_ctm:
@@ -727,10 +748,12 @@ with tab_ctm:
     col_zoom, col_zoom_btn = st.columns([3, 1])
     ctm_zoom = col_zoom.number_input("Zoom level (0=wide, 41=tele)", 0, 41, int(st.session_state["calib_zoom"]), 1, key="ctm_zoom")
     if col_zoom_btn.button("Apply zoom", key="ctm_apply_zoom"):
+        prev_ctm_zoom = st.session_state["calib_zoom"]
         client.zoom(ctm_zoom)
         st.session_state["calib_zoom"] = ctm_zoom
-        with st.spinner(f"Zoom {ctm_zoom} — waiting for camera…"):
-            time.sleep(2.0)
+        zoom_settle = max(2.0, abs(ctm_zoom - prev_ctm_zoom) * 0.2 + 2.0)
+        with st.spinner(f"Zoom {ctm_zoom} — waiting {zoom_settle:.0f}s for focus…"):
+            time.sleep(zoom_settle)
             img_z = client.capture()
         if img_z:
             st.session_state["ctm_img_before"] = img_z
@@ -785,12 +808,24 @@ with tab_ctm:
                 tilt_speeds_ctm = _CTM_TILT_SPEEDS.get(cam_model, {})
                 tilt_bias_ctm = _CTM_TILT_BIAS.get(cam_model, {})
 
-                pan_speed_sel = _pick_speed(abs(pan_deg), pan_speeds_ctm, pan_bias_ctm)
-                tilt_speed_sel = _pick_speed(abs(tilt_deg), tilt_speeds_ctm, tilt_bias_ctm)
+                pan_speed_sel = _pick_speed(abs(pan_deg), pan_speeds_ctm, pan_bias_ctm, zoom=ctm_zoom)
+                tilt_speed_sel = _pick_speed(abs(tilt_deg), tilt_speeds_ctm, tilt_bias_ctm, zoom=ctm_zoom)
 
                 cs1, cs2 = st.columns(2)
-                cs1.info(f"Pan -> speed {pan_speed_sel}" if pan_speed_sel else "Pan -> too small (<0.5°), skipped")
-                cs2.info(f"Tilt -> speed {tilt_speed_sel}" if tilt_speed_sel else "Tilt -> too small (<0.5°), skipped")
+                pan_min = pan_bias_ctm.get(1, 1.0) / 2
+                tilt_min = tilt_bias_ctm.get(1, 1.0) / 2
+                if abs(pan_deg) < pan_min:
+                    cs1.info(f"Pan -> skip (<{pan_min:.1f}°)")
+                elif pan_speed_sel:
+                    cs1.info(f"Pan -> speed {pan_speed_sel}")
+                else:
+                    cs1.info("Pan -> micro-pulse (zoom→41)")
+                if abs(tilt_deg) < tilt_min:
+                    cs2.info(f"Tilt -> skip (<{tilt_min:.1f}°)")
+                elif tilt_speed_sel:
+                    cs2.info(f"Tilt -> speed {tilt_speed_sel}")
+                else:
+                    cs2.info("Tilt -> micro-pulse (zoom→41)")
 
                 if st.button("🚀 Move to this point", type="primary", key="ctm_go"):
                     move_log = {}
@@ -807,15 +842,18 @@ with tab_ctm:
                                     move_log[mv["axis"]] = mv
                     else:
                         with st.spinner("Pan movement..."):
-                            r = _ctm_move_axis(pan_deg, "Right", "Left", pan_speeds_ctm, pan_bias_ctm)
+                            r = _ctm_move_axis(pan_deg, "Right", "Left", pan_speeds_ctm, pan_bias_ctm, zoom=ctm_zoom)
                             if r:
                                 move_log["pan"] = r
                         with st.spinner("Tilt movement..."):
-                            r = _ctm_move_axis(tilt_deg, "Down", "Up", tilt_speeds_ctm, tilt_bias_ctm)
+                            r = _ctm_move_axis(tilt_deg, "Down", "Up", tilt_speeds_ctm, tilt_bias_ctm, zoom=ctm_zoom)
                             if r:
                                 move_log["tilt"] = r
-                    with st.spinner("Capturing after movement..."):
-                        time.sleep(0.5)
+                    # Wait for camera to settle + refocus after move (longer if micro-pulse zoomed)
+                    any_micro = any(m.get("micro") for m in move_log.values())
+                    settle = 5.0 if any_micro else 2.0
+                    with st.spinner(f"Settling {settle:.0f}s..."):
+                        time.sleep(settle)
                         img_after = client.capture()
                     if img_after:
                         st.session_state["ctm_img_after"] = img_after

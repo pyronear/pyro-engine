@@ -21,29 +21,37 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# reolink-823A16 and reolink-823S2 pan+tilt calibrated 2026-03-31 via semi-manual impulse method (zoom=0, settle=3s, R²>0.928).
+# Calibrated 2026-04-02 via automated ORB keypoint matching, server-side timing (no VPN latency).
 # Model: δ = ω·T + b  →  T_command = (target_deg - b) / ω
-# Bias b represents coast distance after Stop (~1.2s of deceleration at speed ω).
+# Bias b represents coast distance after Stop (mechanical inertia).
+#
+# IMPORTANT: Reolink cameras internally limit PTZ speed at zoom > 0.
+# At zoom > 0, all speed levels are capped to ~1.5 °/s (same as speed 1).
+# Multi-speed tables are only valid at zoom 0. For zoom > 0, always use speed 1.
+# See tools/ptz_zoom_speed_calibration_report.md for full research data.
+
+# Pan speed ω (°/s) at zoom 0
 PAN_SPEEDS = {
-    "reolink-823S2": {1: 1.5988, 2: 2.7877, 3: 4.5222, 4: 5.7913, 5: 6.3122},
-    "reolink-823A16": {1: 1.3748, 2: 2.8895, 3: 4.5352, 4: 6.6175, 5: 7.3933},
+    "reolink-823S2": {1: 1.4034, 2: 2.5692, 3: 4.1081, 4: 5.7028, 5: 7.1806},
+    "reolink-823A16": {1: 1.4782, 2: 2.9035, 3: 4.5721, 4: 6.1209, 5: 7.8310},
 }
 
-# Coast bias b (degrees) per speed level — distance added by deceleration after Stop.
-# Add to target before dividing by ω: T = (target - PAN_BIAS[adapter][speed]) / ω
+# Pan bias b (°) at zoom 0
 PAN_BIAS = {
-    "reolink-823S2": {1: 0.6312, 2: 1.4915, 3: 1.748, 4: 2.9926, 5: 4.393},
-    "reolink-823A16": {1: 2.0047, 2: 3.6327, 3: 5.5697, 4: 7.5964, 5: 10.176},
+    "reolink-823S2": {1: 0.6098, 2: 1.3402, 3: 1.6064, 4: 1.8333, 5: 2.4465},
+    "reolink-823A16": {1: 1.5604, 2: 3.1656, 3: 4.8206, 4: 6.5182, 5: 8.4503},
 }
 
+# Tilt speed ω (°/s) at zoom 0
 TILT_SPEEDS = {
-    "reolink-823S2": {1: 1.583, 2: 4.0438, 3: 6.9627},
-    "reolink-823A16": {1: 2.0749, 2: 4.0741, 3: 5.5923},
+    "reolink-823S2": {1: 2.0094, 2: 3.7474, 3: 5.2022},
+    "reolink-823A16": {1: 1.9432, 2: 3.7885, 3: 5.7655},
 }
 
+# Tilt bias b (°) at zoom 0
 TILT_BIAS = {
-    "reolink-823S2": {1: 1.462, 2: 2.1954, 3: 2.6174},
-    "reolink-823A16": {1: 2.2971, 2: 4.5217, 3: 7.0047},
+    "reolink-823S2": {1: 0.8354, 2: 1.7726, 3: 2.9208},
+    "reolink-823A16": {1: 2.1793, 2: 4.2829, 3: 6.3717},
 }
 
 
@@ -120,16 +128,22 @@ def _pick_speed(
     target_deg: float,
     speeds: dict,
     bias: dict,
+    zoom: int = 0,
     min_duration: float = 0.3,
     max_duration: float = 4.0,
 ) -> Optional[int]:
-    """Return the highest speed level where T = (target - b) / ω is within [min_duration, max_duration]."""
+    """Return the highest speed level where T = (target - b) / ω is within [min_duration, max_duration].
+
+    When zoom > 0, only speed 1 is considered because Reolink cameras
+    internally cap all speed levels to ~1.5 °/s at higher zoom.
+    """
     best: Optional[int] = None
-    for level in sorted(speeds.keys()):
+    allowed = {1: speeds[1]} if (zoom > 0 and 1 in speeds) else speeds
+    for level in sorted(allowed.keys()):
         b = bias.get(level, 0.0)
         if target_deg <= b:
             continue
-        duration = (target_deg - b) / speeds[level]
+        duration = (target_deg - b) / allowed[level]
         if min_duration <= duration <= max_duration:
             best = level
     return best
@@ -188,50 +202,39 @@ def click_to_move(
         "moves": [],
     }
 
-    try:
-        # Pan
-        if abs(pan_deg) >= 0.5:
-            pan_direction = "Right" if pan_deg > 0 else "Left"
-            pan_speed = _pick_speed(abs(pan_deg), pan_speeds, pan_bias)
-            if pan_speed is not None:
-                b = pan_bias.get(pan_speed, 0.0)
-                duration = (abs(pan_deg) - b) / pan_speeds[pan_speed]
-                logger.info("[%s] click_to_move pan %s %.2f° speed=%s dur=%.2fs", camera_ip, pan_direction, abs(pan_deg), pan_speed, duration)
-                cam.move_camera(pan_direction, speed=pan_speed)
-                time.sleep(duration)
-                cam.move_camera("Stop")
-                result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": pan_speed, "duration": round(duration, 2)})
-            elif pan_speeds:
-                # Angle too small for calibrated model — micro-impulse: move+stop back-to-back.
-                # Calibrated displacement at zoom 41 (server-side, no VPN delay):
-                #   reolink-823A16: pan ~1.66° ± 0.09°, tilt ~2.19° ± 0.02°
-                #   reolink-823S2:  pan ~1.05° ± 0.11°
-                logger.info("[%s] click_to_move pan %s %.2f° micro-impulse speed=1", camera_ip, pan_direction, abs(pan_deg))
-                cam.move_camera(pan_direction, speed=1)
-                cam.move_camera("Stop")
-                result["moves"].append({"axis": "pan", "direction": pan_direction, "deg": round(abs(pan_deg), 3), "speed": 1, "duration": 0, "micro": True})
-            else:
-                result["moves"].append({"axis": "pan", "skipped": True, "reason": "no speed table for adapter"})
+    def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> None:
+        """Execute a single-axis move: calibrated duration, or micro-pulse if below bias."""
+        speed_level = _pick_speed(abs(deg), speeds, bias, zoom=zoom)
+        if speed_level is not None:
+            b = bias.get(speed_level, 0.0)
+            dur = (abs(deg) - b) / speeds[speed_level]
+            logger.info("[%s] click_to_move %s %s %.2f° speed=%s dur=%.2fs", camera_ip, axis, direction, abs(deg), speed_level, dur)
+            cam.move_camera(direction, speed=speed_level)
+            time.sleep(dur)
+            cam.move_camera("Stop")
+            result["moves"].append({"axis": axis, "direction": direction, "deg": round(abs(deg), 3), "speed": speed_level, "duration": round(dur, 2)})
+        elif speeds:
+            # Angle below bias — micro-impulse at zoom 41 for precision
+            logger.info("[%s] click_to_move %s %s %.2f° micro-impulse speed=1 (zoom→41)", camera_ip, axis, direction, abs(deg))
+            if hasattr(cam, "start_zoom_focus"):
+                cam.start_zoom_focus(41)
+                time.sleep(3.5)
+            cam.move_camera(direction, speed=1)
+            cam.move_camera("Stop")
+            if hasattr(cam, "start_zoom_focus"):
+                cam.start_zoom_focus(zoom)
+            result["moves"].append({"axis": axis, "direction": direction, "deg": round(abs(deg), 3), "speed": 1, "duration": 0, "micro": True})
+        else:
+            result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
 
-        # Tilt
-        if abs(tilt_deg) >= 0.5:
-            tilt_direction = "Down" if tilt_deg > 0 else "Up"
-            tilt_speed = _pick_speed(abs(tilt_deg), tilt_speeds, tilt_bias)
-            if tilt_speed is not None:
-                b = tilt_bias.get(tilt_speed, 0.0)
-                duration = (abs(tilt_deg) - b) / tilt_speeds[tilt_speed]
-                logger.info("[%s] click_to_move tilt %s %.2f° speed=%s dur=%.2fs", camera_ip, tilt_direction, abs(tilt_deg), tilt_speed, duration)
-                cam.move_camera(tilt_direction, speed=tilt_speed)
-                time.sleep(duration)
-                cam.move_camera("Stop")
-                result["moves"].append({"axis": "tilt", "direction": tilt_direction, "deg": round(abs(tilt_deg), 3), "speed": tilt_speed, "duration": round(duration, 2)})
-            elif tilt_speeds:
-                logger.info("[%s] click_to_move tilt %s %.2f° micro-impulse speed=1", camera_ip, tilt_direction, abs(tilt_deg))
-                cam.move_camera(tilt_direction, speed=1)
-                cam.move_camera("Stop")
-                result["moves"].append({"axis": "tilt", "direction": tilt_direction, "deg": round(abs(tilt_deg), 3), "speed": 1, "duration": 0, "micro": True})
-            else:
-                result["moves"].append({"axis": "tilt", "skipped": True, "reason": "no speed table for adapter"})
+    try:
+        # Skip if angle < half the micro-pulse displacement (bias at speed 1)
+        pan_min = pan_bias.get(1, 1.0) / 2
+        tilt_min = tilt_bias.get(1, 1.0) / 2
+        if abs(pan_deg) >= pan_min:
+            _execute_axis("pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias)
+        if abs(tilt_deg) >= tilt_min:
+            _execute_axis("tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias)
 
     except Exception as exc:
         logger.error("[%s] click_to_move error: %s", camera_ip, exc)
@@ -322,12 +325,17 @@ def move_camera(
                 bias = get_tilt_bias(adapter, speed)
             duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
 
-            # Micro-impulse fallback: requested angle is below bias at this speed
+            # Micro-impulse: angle below bias → T=0 move at zoom 41 for precision
             micro = duration_sec == 0.0 and abs(degrees) > 0
             if micro:
-                logger.info("[%s] Moving %s %.2f° micro-impulse speed=1 (adapter=%s)", camera_ip, direction, abs(degrees), adapter)
+                logger.info("[%s] Moving %s %.2f° micro-impulse speed=1 (zoom→41, adapter=%s)", camera_ip, direction, abs(degrees), adapter)
+                if hasattr(cam, "start_zoom_focus"):
+                    cam.start_zoom_focus(41)
+                    time.sleep(3.5)
                 cam.move_camera(direction, speed=1)
                 cam.move_camera("Stop")
+                if hasattr(cam, "start_zoom_focus"):
+                    cam.start_zoom_focus(0)
             else:
                 logger.info(
                     "[%s] Moving %s for %.2fs at speed %s (adapter=%s)",
@@ -340,8 +348,6 @@ def move_camera(
                 cam.move_camera(direction, speed=speed)
                 time.sleep(duration_sec)
                 cam.move_camera("Stop")
-
-            logger.info("[%s] Movement %s stopped after ~%.2fs", camera_ip, direction, 0.0 if micro else duration_sec)
 
             return {
                 "status": "ok",
@@ -396,6 +402,20 @@ def stop_camera(camera_ip: str):
     except Exception as exc:
         logger.error("[%s] Failed to stop movement: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/speed_tables")
+def get_speed_tables(camera_ip: str):
+    """Return the calibrated speed and bias tables for the given camera's adapter."""
+    conf = RAW_CONFIG.get(camera_ip, {})
+    adapter = conf.get("adapter", "unknown")
+    return {
+        "adapter": adapter,
+        "pan_speeds": PAN_SPEEDS.get(adapter, {}),
+        "pan_bias": PAN_BIAS.get(adapter, {}),
+        "tilt_speeds": TILT_SPEEDS.get(adapter, {}),
+        "tilt_bias": TILT_BIAS.get(adapter, {}),
+    }
 
 
 @router.get("/preset/list")
