@@ -174,6 +174,7 @@ class PyroCameraAPIClient:
         speed: int = 10,
         pose_id: Optional[int] = None,
         degrees: Optional[float] = None,
+        duration: Optional[float] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, Any] = {
             "camera_ip": camera_ip,
@@ -185,8 +186,42 @@ class PyroCameraAPIClient:
             params["pose_id"] = pose_id
         if degrees is not None:
             params["degrees"] = degrees
+        if duration is not None:
+            params["duration"] = duration
 
         resp = self._request("POST", "/control/move", params=params)
+        return resp.json()
+
+    def click_to_move(
+        self,
+        camera_ip: str,
+        click_x: int,
+        click_y: int,
+        image_width: int,
+        image_height: int,
+        zoom: int = 0,
+        h_fov: Optional[float] = None,
+        v_fov: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        params: Dict[str, Any] = {
+            "camera_ip": camera_ip,
+            "click_x": click_x,
+            "click_y": click_y,
+            "image_width": image_width,
+            "image_height": image_height,
+            "zoom": zoom,
+        }
+        if h_fov is not None:
+            params["h_fov"] = h_fov
+        if v_fov is not None:
+            params["v_fov"] = v_fov
+
+        resp = self._request("POST", "/control/click_to_move", params=params, timeout=30.0)
+        return resp.json()
+
+    def get_speed_tables(self, camera_ip: str) -> Dict[str, Any]:
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/control/speed_tables", params=params)
         return resp.json()
 
     def stop_camera(self, camera_ip: str) -> Dict[str, Any]:
