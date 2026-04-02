@@ -85,22 +85,22 @@ _DEFAULT_ADAPTER = "reolink-823S2"
 H_FOV_WIDE = 54.2
 V_FOV_WIDE = 41.7
 
-# Reference tables (existing measurements in routes_control.py)
+# Reference tables — must match routes_control.py (calibrated 2026-04-02)
 REFERENCE_PAN_SPEEDS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.5988, 2: 2.7877, 3: 4.5222, 4: 5.7913, 5: 6.3122},
-    "reolink-823A16": {1: 1.3748, 2: 2.8895, 3: 4.5352, 4: 6.6175, 5: 7.3933},
+    "reolink-823S2": {1: 1.4034, 2: 2.5692, 3: 4.1081, 4: 5.7028, 5: 7.1806},
+    "reolink-823A16": {1: 1.4782, 2: 2.9035, 3: 4.5721, 4: 6.1209, 5: 7.8310},
 }
 REFERENCE_PAN_BIAS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 0.6312, 2: 1.4915, 3: 1.748, 4: 2.9926, 5: 4.393},
-    "reolink-823A16": {1: 2.0047, 2: 3.6327, 3: 5.5697, 4: 7.5964, 5: 10.176},
+    "reolink-823S2": {1: 0.6098, 2: 1.3402, 3: 1.6064, 4: 1.8333, 5: 2.4465},
+    "reolink-823A16": {1: 1.5604, 2: 3.1656, 3: 4.8206, 4: 6.5182, 5: 8.4503},
 }
 REFERENCE_TILT_SPEEDS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.583, 2: 4.0438, 3: 6.9627},
-    "reolink-823A16": {1: 2.0749, 2: 4.0741, 3: 5.5923},
+    "reolink-823S2": {1: 2.0094, 2: 3.7474, 3: 5.2022},
+    "reolink-823A16": {1: 1.9432, 2: 3.7885, 3: 5.7655},
 }
 REFERENCE_TILT_BIAS: Dict[str, Dict[int, float]] = {
-    "reolink-823S2": {1: 1.462, 2: 2.1954, 3: 2.6174},
-    "reolink-823A16": {1: 2.2971, 2: 4.5217, 3: 7.0047},
+    "reolink-823S2": {1: 0.8354, 2: 1.7726, 3: 2.9208},
+    "reolink-823A16": {1: 2.1793, 2: 4.2829, 3: 6.3717},
 }
 
 DEFAULT_IMPULSE_DURATIONS = [0.25, 0.4, 0.7, 1.2, 2.0]
@@ -610,10 +610,13 @@ with tab_view:
 
         st.divider()
         st.write("**Zoom**")
-        zoom_val = st.slider("Zoom position", 0, 64, st.session_state["calib_zoom"], key="zoom_live")
+        zoom_val = st.slider("Zoom position", 0, 41, st.session_state["calib_zoom"], key="zoom_live")
         if st.button("Apply zoom"):
+            prev_zoom = st.session_state["calib_zoom"]
             client.zoom(zoom_val)
-            time.sleep(2)
+            zoom_delta = abs(zoom_val - prev_zoom)
+            settle = max(2.0, zoom_delta * 0.2 + 2.0)
+            time.sleep(settle)
             st.session_state["calib_zoom"] = zoom_val
             h_fov, v_fov = fov_at_zoom(zoom_val, cam_model)
             st.success(f"Zoom {zoom_val} → FOV H={h_fov:.1f}° V={v_fov:.1f}°")
@@ -722,7 +725,7 @@ with tab_ctm:
 
     ctm_phase = st.session_state["ctm_phase"]
     col_zoom, col_zoom_btn = st.columns([3, 1])
-    ctm_zoom = col_zoom.number_input("Zoom level (0=wide, 64=tele)", 0, 64, int(st.session_state["calib_zoom"]), 1, key="ctm_zoom")
+    ctm_zoom = col_zoom.number_input("Zoom level (0=wide, 41=tele)", 0, 41, int(st.session_state["calib_zoom"]), 1, key="ctm_zoom")
     if col_zoom_btn.button("Apply zoom", key="ctm_apply_zoom"):
         client.zoom(ctm_zoom)
         st.session_state["calib_zoom"] = ctm_zoom
@@ -1330,9 +1333,15 @@ with tab_calib:
                                 client.goto_preset(home_preset_id, speed=50)
                                 time.sleep(2.5)
 
-                            # Apply zoom after preset (preset resets zoom)
-                            client.zoom(calib_z)
-                            time.sleep(3.5)
+                            # Apply zoom with autofocus settle + retry on blur
+                            def _zoom_and_settle():
+                                if calib_z >= 3:
+                                    client.zoom(calib_z - 3)
+                                    time.sleep(2)
+                                client.zoom(calib_z)
+                                time.sleep(4)
+
+                            _zoom_and_settle()
 
                             img_b = client.capture()
                             if img_b is None:
@@ -1352,8 +1361,36 @@ with tab_calib:
                                 img_b, img_a, axis, h_fov_c, v_fov_c
                             )
 
+                            # Retry once: re-zoom to force autofocus, then redo capture
                             if n_matches < 5:
-                                log_lines[-1] += f" SKIP ({n_matches} matches)"
+                                log_lines[-1] += f" blur? ({n_matches} matches), retrying..."
+                                log_area.text("\n".join(log_lines[-8:]))
+
+                                if home_preset_id is not None:
+                                    client.goto_preset(home_preset_id, speed=50)
+                                    time.sleep(2.5)
+
+                                _zoom_and_settle()
+
+                                img_b = client.capture()
+                                if img_b is None:
+                                    log_lines[-1] += " SKIP (retry capture failed)"
+                                    continue
+
+                                client.move(direction_fwd, speed=speed_c, duration=T_c)
+                                time.sleep(settle_time)
+
+                                img_a = client.capture()
+                                if img_a is None:
+                                    log_lines[-1] += " SKIP (retry capture failed)"
+                                    continue
+
+                                deg_kp, n_matches, median_px = estimate_displacement_keypoints(
+                                    img_b, img_a, axis, h_fov_c, v_fov_c
+                                )
+
+                            if n_matches < 5:
+                                log_lines[-1] += f" SKIP ({n_matches} matches after retry)"
                                 log_area.text("\n".join(log_lines[-8:]))
                                 continue
 
@@ -1469,7 +1506,7 @@ with tab_calib:
             st.session_state["calib_phase"] = "complete"
             st.rerun()
 
-        _orig_idx, pair = manual_pairs[idx]
+        _, pair = manual_pairs[idx]
         st.info(f"Manual annotation needed for {total_p} pairs (auto-detection had too few matches)")
         img_b: Image.Image = pair["img_before"]
         img_a: Image.Image = pair["img_after"]
@@ -1677,7 +1714,7 @@ with tab_calib:
         micro_axis = mc1.radio("Axis", ["pan", "tilt"], horizontal=True, key="micro_axis")
         micro_reps = mc2.number_input("Repetitions", 3, 20, 5, 1, key="micro_reps")
         micro_dur = mc3.number_input("Impulse duration (s)", 0.0, 0.5, 0.0, 0.01, key="micro_dur", format="%.2f")
-        micro_zoom = mc4.number_input("Zoom (max=better precision)", 0, 64, 41, 1, key="micro_zoom")
+        micro_zoom = mc4.number_input("Zoom (max=better precision)", 0, 41, 41, 1, key="micro_zoom")
 
         micro_settle = st.slider("Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="micro_settle")
 
@@ -1718,6 +1755,10 @@ with tab_calib:
                     client.goto_preset(micro_home_id, speed=50)
                     time.sleep(2.5)
 
+                # Re-apply zoom after preset (preset resets zoom)
+                client.zoom(micro_zoom)
+                time.sleep(3.5)
+
                 img_bm = client.capture()
                 if img_bm is None:
                     ph_m.warning(f"Before capture failed (rep {rep + 1}) — skipped")
@@ -1731,6 +1772,21 @@ with tab_calib:
                     ph_m.warning(f"After capture failed (rep {rep + 1}) — skipped")
                     continue
 
+                # Auto-compute displacement via keypoint matching
+                deg_kp, n_matches, median_px = estimate_displacement_keypoints(
+                    img_bm, img_am, micro_axis, h_fov_m, v_fov_m
+                )
+                # Also compute via optical flow for comparison
+                deg_of = abs(estimate_displacement_deg(
+                    img_bm, img_am, micro_axis, h_fov_m, v_fov_m
+                ))
+
+                ph_m.markdown(
+                    f"Micro-pulse **{rep + 1}/{int(micro_reps)}** → "
+                    f"keypoints: **{deg_kp:.3f}°** ({n_matches} matches, {median_px:.0f}px) | "
+                    f"optical flow: **{deg_of:.3f}°**"
+                )
+
                 pairs_m.append({
                     "img_before": img_bm,
                     "img_after": img_am,
@@ -1741,18 +1797,22 @@ with tab_calib:
                     "rep": rep + 1,
                     "impulse_dur": micro_dur,
                     "zoom": micro_zoom,
+                    "auto_deg_kp": round(deg_kp, 4),
+                    "auto_deg_of": round(deg_of, 4),
+                    "auto_n_matches": n_matches,
+                    "auto_px_delta": round(median_px, 1),
                 })
 
             if not pairs_m:
                 st.error("No pair captured.")
             else:
                 pb_m.progress(1.0)
-                ph_m.success(f"✅ {len(pairs_m)} micro-pulse pairs — starting annotation…")
+                ph_m.success(f"✅ {len(pairs_m)} micro-pulse pairs — manual annotation")
                 st.session_state["micro_pairs"] = pairs_m
+                st.session_state["micro_annotations"] = []
                 st.session_state["micro_anno_idx"] = 0
                 st.session_state["micro_click_before"] = None
                 st.session_state["micro_click_after"] = None
-                st.session_state["micro_annotations"] = []
                 st.session_state["micro_phase"] = "annotating"
                 st.rerun()
 
@@ -1822,9 +1882,14 @@ with tab_calib:
                 m_px_delta = m_pt_b[1] - m_pt_a[1]
                 m_deg = abs(m_px_delta * m_v_fov / m_H)
 
-            mc1, mc2 = st.columns(2)
-            mc1.metric("Δ pixels", f"{m_px_delta} px")
-            mc2.metric("Displacement", f"{m_deg:.3f}°")
+            auto_kp = mp.get("auto_deg_kp", "—")
+            auto_of = mp.get("auto_deg_of", "—")
+            auto_n = mp.get("auto_n_matches", 0)
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1.metric("Manual Δpx", f"{m_px_delta} px")
+            mc2.metric("Manual °", f"{m_deg:.3f}°")
+            mc3.metric("Auto keypoints", f"{auto_kp:.3f}° ({auto_n}m)" if isinstance(auto_kp, float) else "—")
+            mc4.metric("Auto opt.flow", f"{auto_of:.3f}°" if isinstance(auto_of, float) else "—")
 
             mcv, mcs, mcr = st.columns([2, 1, 1])
             if mcv.button("✅ Validate", type="primary", key=f"micro_val_{m_idx}"):
@@ -1888,10 +1953,20 @@ with tab_calib:
                 "micro_n": len(m_vals),
             }
 
-            # Individual measurements
-            with st.expander("Individual measurements"):
-                for i, v in enumerate(m_vals):
-                    st.write(f"Rep {i + 1}: {v:.4f}°")
+            # Individual measurements with both methods
+            m_pairs_done = st.session_state["micro_pairs"]
+            with st.expander("Individual measurements (keypoints vs optical flow)"):
+                for i, p in enumerate(m_pairs_done):
+                    kp_deg = p.get("auto_deg_kp", "—")
+                    of_deg = p.get("auto_deg_of", "—")
+                    n_m = p.get("auto_n_matches", 0)
+                    px = p.get("auto_px_delta", "—")
+                    kp_str = f"{kp_deg:.4f}°" if isinstance(kp_deg, float) else kp_deg
+                    of_str = f"{of_deg:.4f}°" if isinstance(of_deg, float) else of_deg
+                    st.write(
+                        f"Rep {i + 1}: keypoints={kp_str} ({n_m} matches, {px}px) | "
+                        f"optical_flow={of_str}"
+                    )
 
             st.caption(
                 f"**Update `routes_control.py`:** set `_MICRO_IMPULSE_DUR` and expect "
