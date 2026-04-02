@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import pathlib
 import time
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
@@ -51,34 +52,182 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Calibrated via QR-code chained-ratio method. Plateau at zoom 41 (optical max).
 H_FOV_TABLE: Dict[str, List[float]] = {
     "reolink-823S2": [
-        54.2, 52.206, 50.405, 48.356, 46.167, 44.183, 42.63, 41.058, 39.117, 37.523,
-        35.393, 33.804, 32.341, 30.742, 29.446, 27.829, 26.394, 24.992, 23.604, 22.136,
-        20.948, 19.675, 18.652, 17.794, 16.352, 15.273, 14.278, 13.287, 12.577, 11.681,
-        10.832, 9.992, 9.298, 8.644, 8.022, 7.411, 6.84, 6.323, 5.793, 5.303,
-        4.787, 4.183,
+        54.2,
+        52.206,
+        50.405,
+        48.356,
+        46.167,
+        44.183,
+        42.63,
+        41.058,
+        39.117,
+        37.523,
+        35.393,
+        33.804,
+        32.341,
+        30.742,
+        29.446,
+        27.829,
+        26.394,
+        24.992,
+        23.604,
+        22.136,
+        20.948,
+        19.675,
+        18.652,
+        17.794,
+        16.352,
+        15.273,
+        14.278,
+        13.287,
+        12.577,
+        11.681,
+        10.832,
+        9.992,
+        9.298,
+        8.644,
+        8.022,
+        7.411,
+        6.84,
+        6.323,
+        5.793,
+        5.303,
+        4.787,
+        4.183,
     ],
     "reolink-823A16": [
-        54.2, 52.029, 50.146, 47.986, 46.384, 44.431, 42.376, 40.915, 38.623, 37.135,
-        35.303, 33.894, 32.273, 30.703, 29.167, 27.67, 26.181, 24.921, 23.489, 22.138,
-        20.887, 19.701, 18.467, 17.618, 16.244, 15.203, 14.174, 13.242, 12.332, 11.606,
-        10.771, 9.993, 9.283, 8.558, 7.914, 7.321, 6.777, 6.241, 5.744, 5.229,
-        4.704, 4.118,
+        54.2,
+        52.029,
+        50.146,
+        47.986,
+        46.384,
+        44.431,
+        42.376,
+        40.915,
+        38.623,
+        37.135,
+        35.303,
+        33.894,
+        32.273,
+        30.703,
+        29.167,
+        27.67,
+        26.181,
+        24.921,
+        23.489,
+        22.138,
+        20.887,
+        19.701,
+        18.467,
+        17.618,
+        16.244,
+        15.203,
+        14.174,
+        13.242,
+        12.332,
+        11.606,
+        10.771,
+        9.993,
+        9.283,
+        8.558,
+        7.914,
+        7.321,
+        6.777,
+        6.241,
+        5.744,
+        5.229,
+        4.704,
+        4.118,
     ],
 }
 V_FOV_TABLE: Dict[str, List[float]] = {
     "reolink-823S2": [
-        41.7, 40.166, 38.78, 37.204, 35.52, 33.993, 32.799, 31.589, 30.096, 28.869,
-        27.23, 26.008, 24.882, 23.652, 22.655, 21.411, 20.307, 19.229, 18.16, 17.031,
-        16.117, 15.138, 14.351, 13.69, 12.581, 11.751, 10.985, 10.223, 9.676, 8.987,
-        8.334, 7.687, 7.154, 6.651, 6.172, 5.702, 5.263, 4.865, 4.457, 4.08,
-        3.683, 3.219,
+        41.7,
+        40.166,
+        38.78,
+        37.204,
+        35.52,
+        33.993,
+        32.799,
+        31.589,
+        30.096,
+        28.869,
+        27.23,
+        26.008,
+        24.882,
+        23.652,
+        22.655,
+        21.411,
+        20.307,
+        19.229,
+        18.16,
+        17.031,
+        16.117,
+        15.138,
+        14.351,
+        13.69,
+        12.581,
+        11.751,
+        10.985,
+        10.223,
+        9.676,
+        8.987,
+        8.334,
+        7.687,
+        7.154,
+        6.651,
+        6.172,
+        5.702,
+        5.263,
+        4.865,
+        4.457,
+        4.08,
+        3.683,
+        3.219,
     ],
     "reolink-823A16": [
-        41.7, 40.03, 38.581, 36.919, 35.686, 34.184, 32.603, 31.479, 29.716, 28.571,
-        27.161, 26.077, 24.83, 23.622, 22.44, 21.289, 20.143, 19.174, 18.072, 17.032,
-        16.07, 15.157, 14.208, 13.555, 12.498, 11.697, 10.905, 10.188, 9.488, 8.929,
-        8.287, 7.688, 7.142, 6.584, 6.089, 5.633, 5.214, 4.802, 4.42, 4.023,
-        3.619, 3.169,
+        41.7,
+        40.03,
+        38.581,
+        36.919,
+        35.686,
+        34.184,
+        32.603,
+        31.479,
+        29.716,
+        28.571,
+        27.161,
+        26.077,
+        24.83,
+        23.622,
+        22.44,
+        21.289,
+        20.143,
+        19.174,
+        18.072,
+        17.032,
+        16.07,
+        15.157,
+        14.208,
+        13.555,
+        12.498,
+        11.697,
+        10.905,
+        10.188,
+        9.488,
+        8.929,
+        8.287,
+        7.688,
+        7.142,
+        6.584,
+        6.089,
+        5.633,
+        5.214,
+        4.802,
+        4.42,
+        4.023,
+        3.619,
+        3.169,
     ],
 }
 _DEFAULT_ADAPTER = "reolink-823S2"
@@ -116,7 +265,6 @@ def draw_cross(img: Image.Image, x: int, y: int, color: str = "red", size: int =
     d.line([(x, y - size), (x, y + size)], fill=color, width=4)
     d.ellipse([(x - 6, y - 6), (x + 6, y + 6)], fill=color)
     return out
-
 
 
 def fov_at_zoom(zoom_pos: int, adapter: Optional[str] = None) -> Tuple[float, float]:
@@ -159,19 +307,25 @@ def estimate_displacement_deg(
         h, w = new_h, new_w
 
     flow = cv2.calcOpticalFlowFarneback(
-        g1, g2, None,
-        pyr_scale=0.5, levels=3, winsize=15,
-        iterations=3, poly_n=5, poly_sigma=1.2, flags=0,
+        g1,
+        g2,
+        None,
+        pyr_scale=0.5,
+        levels=3,
+        winsize=15,
+        iterations=3,
+        poly_n=5,
+        poly_sigma=1.2,
+        flags=0,
     )
 
     if axis == "pan":
         # Background moves left -> flow[...,0] negative -> camera goes right
         pixel_disp = float(-np.median(flow[..., 0]))
         return pixel_disp * h_fov / w
-    else:
-        # Background moves down -> flow[...,1] positive -> camera goes up
-        pixel_disp = float(-np.median(flow[..., 1]))
-        return pixel_disp * v_fov / h
+    # Background moves down -> flow[...,1] positive -> camera goes up
+    pixel_disp = float(-np.median(flow[..., 1]))
+    return pixel_disp * v_fov / h
 
 
 def estimate_displacement_keypoints(
@@ -234,7 +388,11 @@ def fit_model(durations: List[float], displacements: List[float]) -> Dict:
     x = np.array(durations)
     y = np.array(displacements)
     if len(x) < 2:
-        return {"omega": float(np.mean(y) / np.mean(x)) if (len(x) == 1 and np.mean(x) != 0) else 0.0, "bias": 0.0, "r2": 0.0}
+        return {
+            "omega": float(np.mean(y) / np.mean(x)) if (len(x) == 1 and np.mean(x) != 0) else 0.0,
+            "bias": 0.0,
+            "r2": 0.0,
+        }
     p = np.polyfit(x, y, 1)
     omega, bias = float(p[0]), float(p[1])
     y_pred = np.polyval(p, x)
@@ -257,10 +415,7 @@ class DirectClient:
         self.protocol = protocol
 
     def _url(self, cmd: str) -> str:
-        return (
-            f"{self.protocol}://{self.ip}/cgi-bin/api.cgi"
-            f"?cmd={cmd}&user={self.user}&password={self.pwd}&channel=0"
-        )
+        return f"{self.protocol}://{self.ip}/cgi-bin/api.cgi?cmd={cmd}&user={self.user}&password={self.pwd}&channel=0"
 
     def capture(self) -> Optional[Image.Image]:
         try:
@@ -295,8 +450,13 @@ class DirectClient:
         return self._ptz("ToPos", speed, idx)
 
     def zoom(self, level: int):
-        data = [{"cmd": "StartZoomFocus", "action": 0,
-                 "param": {"ZoomFocus": {"channel": 0, "pos": level, "op": "ZoomPos"}}}]
+        data = [
+            {
+                "cmd": "StartZoomFocus",
+                "action": 0,
+                "param": {"ZoomFocus": {"channel": 0, "pos": level, "op": "ZoomPos"}},
+            }
+        ]
         try:
             requests.post(self._url("StartZoomFocus"), json=data, verify=False, timeout=5)  # nosec: B501
         except Exception as exc:
@@ -326,8 +486,13 @@ class DirectClient:
 
     def set_preset(self, idx: int, name: str = "") -> bool:
         n = name or f"pos{idx}"
-        data = [{"cmd": "SetPtzPreset", "action": 0,
-                 "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": n}}}]
+        data = [
+            {
+                "cmd": "SetPtzPreset",
+                "action": 0,
+                "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": n}},
+            }
+        ]
         try:
             r = requests.post(self._url("SetPtzPreset"), json=data, verify=False, timeout=5)  # nosec: B501
             return r.status_code == 200
@@ -418,7 +583,9 @@ class APIClient:
             pass
         return None
 
-    def click_to_move(self, click_x: int, click_y: int, image_width: int, image_height: int, zoom: int = 0) -> Optional[Dict]:
+    def click_to_move(
+        self, click_x: int, click_y: int, image_width: int, image_height: int, zoom: int = 0
+    ) -> Optional[Dict]:
         r = self._post(
             "control/click_to_move",
             camera_ip=self.ip,
@@ -478,35 +645,35 @@ for _k, _v in [
     ("presets_list", []),
     ("api_camera_list", []),
     # Semi-manual calibration state machine
-    ("calib_phase", "setup"),       # "setup" | "annotating" | "complete"
-    ("calib_pairs", []),            # [{speed, T, axis, direction, img_before, img_after, h_fov, v_fov, zoom}]
-    ("calib_anno_idx", 0),          # index of pair being annotated
-    ("calib_click_before", None),   # (x, y) or None
-    ("calib_click_after", None),    # (x, y) or None
-    ("calib_annotations", []),      # [{speed, T, axis, px_delta, disp_deg}]
+    ("calib_phase", "setup"),  # "setup" | "annotating" | "complete"
+    ("calib_pairs", []),  # [{speed, T, axis, direction, img_before, img_after, h_fov, v_fov, zoom}]
+    ("calib_anno_idx", 0),  # index of pair being annotated
+    ("calib_click_before", None),  # (x, y) or None
+    ("calib_click_after", None),  # (x, y) or None
+    ("calib_annotations", []),  # [{speed, T, axis, px_delta, disp_deg}]
     # Micro-pulse calibration state machine
-    ("micro_phase", "idle"),        # "idle" | "annotating" | "complete"
-    ("micro_pairs", []),            # [{img_before, img_after, h_fov, v_fov, axis, direction, rep}]
+    ("micro_phase", "idle"),  # "idle" | "annotating" | "complete"
+    ("micro_pairs", []),  # [{img_before, img_after, h_fov, v_fov, axis, direction, rep}]
     ("micro_anno_idx", 0),
     ("micro_click_before", None),
     ("micro_click_after", None),
-    ("micro_annotations", []),      # [{disp_deg, axis}]
+    ("micro_annotations", []),  # [{disp_deg, axis}]
     # Click-to-move state machine
-    ("ctm_phase", "idle"),          # "idle" | "verify"
-    ("ctm_img_before", None),       # image before move
-    ("ctm_img_after", None),        # image after move
-    ("ctm_target_click", None),     # (x, y) user clicked on before image
-    ("ctm_verify_click", None),     # (x, y) user clicked on after image
-    ("ctm_last_move", {}),          # {pan_deg, tilt_deg, pan_speed, tilt_speed, pan_dur, tilt_dur}
+    ("ctm_phase", "idle"),  # "idle" | "verify"
+    ("ctm_img_before", None),  # image before move
+    ("ctm_img_after", None),  # image after move
+    ("ctm_target_click", None),  # (x, y) user clicked on before image
+    ("ctm_verify_click", None),  # (x, y) user clicked on after image
+    ("ctm_last_move", {}),  # {pan_deg, tilt_deg, pan_speed, tilt_speed, pan_dur, tilt_dur}
     # Zoom FOV calibration state machine
-    ("zfov_phase", "idle"),         # "idle" | "calibrating" | "complete"
-    ("zfov_levels", []),            # list of zoom levels to visit
-    ("zfov_idx", 0),                # current index in zfov_levels
-    ("zfov_measurements", []),       # [{zoom, px_size, fov_h, fov_v}]
-    ("zfov_last_ref", None),        # {px, fov_h, fov_v} — reference for next ratio
-    ("zfov_img", None),             # current captured image
-    ("zfov_corners", None),         # detected QR corners (np.ndarray or None)
-    ("zfov_auto_capture", False),   # trigger capture automatically on next render
+    ("zfov_phase", "idle"),  # "idle" | "calibrating" | "complete"
+    ("zfov_levels", []),  # list of zoom levels to visit
+    ("zfov_idx", 0),  # current index in zfov_levels
+    ("zfov_measurements", []),  # [{zoom, px_size, fov_h, fov_v}]
+    ("zfov_last_ref", None),  # {px, fov_h, fov_v} — reference for next ratio
+    ("zfov_img", None),  # current captured image
+    ("zfov_corners", None),  # detected QR corners (np.ndarray or None)
+    ("zfov_auto_capture", False),  # trigger capture automatically on next render
 ]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -580,9 +747,7 @@ with st.sidebar:
     # Always ensure the detected adapter is selectable
     if current_model not in known_adapters:
         known_adapters = [current_model] + known_adapters
-    st.session_state["cam_model"] = st.selectbox(
-        "Adapter (auto-detected via API)", known_adapters, key="sel_model"
-    )
+    st.session_state["cam_model"] = st.selectbox("Adapter (auto-detected via API)", known_adapters, key="sel_model")
 
     # Summary of ongoing calibrations
     if st.session_state["calib_results"]:
@@ -614,7 +779,12 @@ if _api_tables:
         REFERENCE_TILT_BIAS[_api_adapter] = {int(k): v for k, v in _api_tables["tilt_bias"].items()}
 
 tab_view, tab_ctm, tab_zfov, tab_calib, tab_results, tab_presets = st.tabs([
-    "👁️ Live View", "🎯 Click-to-Move", "🔭 Zoom FOV", "🔬 Calibration", "📈 Results & Export", "📌 Presets"
+    "👁️ Live View",
+    "🎯 Click-to-Move",
+    "🔭 Zoom FOV",
+    "🔬 Calibration",
+    "📈 Results & Export",
+    "📌 Presets",
 ])
 
 # ─── Tab 0 : Live View ────────────────────────────────────────────────────────
@@ -676,7 +846,7 @@ with tab_view:
             h_fov, v_fov = fov_at_zoom(calib_zoom, cam_model)
             st.caption(
                 f"Resolution: {w}×{h}px | Zoom: {calib_zoom} | "
-                f"FOV H={h_fov:.1f}° ({h_fov/w*1000:.2f} mrad/px) | "
+                f"FOV H={h_fov:.1f}° ({h_fov / w * 1000:.2f} mrad/px) | "
                 f"FOV V={v_fov:.1f}°"
             )
         else:
@@ -726,7 +896,7 @@ def _ctm_move_axis(
         duration = (abs(axis_deg) - b) / omega
         client.move(direction, speed=speed, duration=duration)
         return {"deg": axis_deg, "direction": direction, "speed": speed, "duration": round(duration, 2), "micro": False}
-    elif speeds:
+    if speeds:
         # Micro-pulse: angle below bias, zoom to 41 for precision
         client.zoom(41)
         time.sleep(3.5)
@@ -746,7 +916,9 @@ with tab_ctm:
 
     ctm_phase = st.session_state["ctm_phase"]
     col_zoom, col_zoom_btn = st.columns([3, 1])
-    ctm_zoom = col_zoom.number_input("Zoom level (0=wide, 41=tele)", 0, 41, int(st.session_state["calib_zoom"]), 1, key="ctm_zoom")
+    ctm_zoom = col_zoom.number_input(
+        "Zoom level (0=wide, 41=tele)", 0, 41, int(st.session_state["calib_zoom"]), 1, key="ctm_zoom"
+    )
     if col_zoom_btn.button("Apply zoom", key="ctm_apply_zoom"):
         prev_ctm_zoom = st.session_state["calib_zoom"]
         client.zoom(ctm_zoom)
@@ -832,8 +1004,10 @@ with tab_ctm:
                     if isinstance(client, APIClient):
                         with st.spinner("click_to_move via API…"):
                             api_result = client.click_to_move(
-                                target_click[0], target_click[1],
-                                W_ctm, H_ctm,
+                                target_click[0],
+                                target_click[1],
+                                W_ctm,
+                                H_ctm,
                                 zoom=ctm_zoom,
                             )
                         if api_result:
@@ -891,14 +1065,18 @@ with tab_ctm:
             if img_before_v is not None:
                 W_b, H_b = img_before_v.size
                 scale_b = _CTM_DISP_W / W_b
-                bef_img = draw_cross(img_before_v, target_click_v[0], target_click_v[1]) if target_click_v else img_before_v
+                bef_img = (
+                    draw_cross(img_before_v, target_click_v[0], target_click_v[1]) if target_click_v else img_before_v
+                )
                 bef_small = bef_img.resize((_CTM_DISP_W, int(H_b * scale_b)), Image.LANCZOS)
                 st.image(bef_small, width="stretch")
 
             st.markdown("**AFTER image** — click the same landmark")
             scale_v = _CTM_DISP_W / W_v
             # Draw annotations at full res, then resize for display
-            display_v = draw_cross(img_after_v, verify_click[0], verify_click[1], color="blue") if verify_click else img_after_v
+            display_v = (
+                draw_cross(img_after_v, verify_click[0], verify_click[1], color="blue") if verify_click else img_after_v
+            )
             center_img = display_v.copy()
             d = ImageDraw.Draw(center_img)
             d.line([(cx - 30, cy), (cx + 30, cy)], fill="yellow", width=2)
@@ -945,6 +1123,7 @@ with tab_ctm:
                 st.rerun()
 
 # ─── Tab 2 : Zoom FOV Calibration (QR code) ──────────────────────────────────
+
 
 def _detect_qr(img: Image.Image) -> Optional[Tuple[float, np.ndarray]]:
     """Detect QR code and return (avg_side_px, corners). None if not found."""
@@ -1086,8 +1265,12 @@ with tab_zfov:
                 col_v, col_b = st.columns(2)
 
                 if col_v.button("✅ Validate & next", type="primary", key=f"zfov_val_{idx}"):
-                    measurements.append({"zoom": current_zoom, "px_size": round(px_size, 1),
-                                         "fov_h": round(fov_h_est, 3), "fov_v": round(fov_v_est, 3)})
+                    measurements.append({
+                        "zoom": current_zoom,
+                        "px_size": round(px_size, 1),
+                        "fov_h": round(fov_h_est, 3),
+                        "fov_v": round(fov_v_est, 3),
+                    })
                     st.session_state["zfov_measurements"] = measurements
                     st.session_state["zfov_last_ref"] = {"px": px_size, "fov_h": fov_h_est, "fov_v": fov_v_est}
                     st.session_state["zfov_idx"] = idx + 1
@@ -1117,7 +1300,9 @@ with tab_zfov:
         if len(measurements_list) < 2:
             st.error("Need at least 2 measurements. Go back and retry.")
         else:
-            df_fov = pd.DataFrame(measurements_list).rename(columns={"px_size": "qr_px", "fov_h": "h_fov", "fov_v": "v_fov"})
+            df_fov = pd.DataFrame(measurements_list).rename(
+                columns={"px_size": "qr_px", "fov_h": "h_fov", "fov_v": "v_fov"}
+            )
             st.dataframe(df_fov, hide_index=True, width="stretch")
 
             fig_fov, ax_fov = plt.subplots(figsize=(10, 4))
@@ -1151,7 +1336,6 @@ with tab_zfov:
 # ─── Tab 3: Calibration (semi-manual) ─────────────────────────────────────────
 
 with tab_calib:
-
     phase = st.session_state["calib_phase"]
 
     # ── Phase SETUP ──────────────────────────────────────────────────────────
@@ -1164,8 +1348,7 @@ with tab_calib:
             st.info("Patrol status is not exposed in direct mode. Make sure patrol is disabled before calibration.")
         elif patrol_running_setup:
             st.error(
-                f"⚠️ Patrol is ACTIVE ({patrol_status_setup.get('loop_type', '?')}). "
-                "Stop it before starting captures."
+                f"⚠️ Patrol is ACTIVE ({patrol_status_setup.get('loop_type', '?')}). Stop it before starting captures."
             )
         else:
             st.success("Patrol is stopped ✓")
@@ -1203,21 +1386,22 @@ with tab_calib:
                         time.sleep(1)
                         st_now = client.get_patrol_status()
                         if st_now is None or not st_now.get("patrol_running", False):
-                            stop_ph.success(f"Patrol stopped after {i+1}s ✓")
+                            stop_ph.success(f"Patrol stopped after {i + 1}s ✓")
                             break
-                        stop_ph.warning(f"Waiting for patrol to stop... {i+1}s")
+                        stop_ph.warning(f"Waiting for patrol to stop... {i + 1}s")
                     else:
                         stop_ph.error("Patrol is still active after 8s.")
                 st.rerun()
 
             zoom_mode = st.radio(
-                "Zoom mode", ["Single zoom", "Zoom sweep"],
-                horizontal=True, key="zoom_mode_sel",
+                "Zoom mode",
+                ["Single zoom", "Zoom sweep"],
+                horizontal=True,
+                key="zoom_mode_sel",
             )
             if zoom_mode == "Single zoom":
                 zoom_calib = st.slider(
-                    "Zoom (0 = wide angle)",
-                    0, 41, st.session_state["calib_zoom"], key="zoom_calib_slider"
+                    "Zoom (0 = wide angle)", 0, 41, st.session_state["calib_zoom"], key="zoom_calib_slider"
                 )
                 if st.button("Apply and lock zoom"):
                     client.zoom(zoom_calib)
@@ -1242,10 +1426,7 @@ with tab_calib:
 
             presets_live = client.get_presets()
             st.session_state["presets_list"] = presets_live
-            preset_opts: Dict[str, int] = {
-                f"[{p['id']}] {p.get('name', '')}".strip(): p["id"]
-                for p in presets_live
-            }
+            preset_opts: Dict[str, int] = {f"[{p['id']}] {p.get('name', '')}".strip(): p["id"] for p in presets_live}
             home_options = ["(none)"] + list(preset_opts.keys())
             # _home_default stores the label to auto-select after saving a new preset
             _home_default = st.session_state.get("_home_default")
@@ -1269,8 +1450,7 @@ with tab_calib:
                         st.session_state["presets_list"] = refreshed
                         # Find the label that matches the new preset ID
                         new_label = next(
-                            (f"[{p['id']}] {p.get('name', '')}".strip()
-                             for p in refreshed if p["id"] == new_id),
+                            (f"[{p['id']}] {p.get('name', '')}".strip() for p in refreshed if p["id"] == new_id),
                             None,
                         )
                         if new_label:
@@ -1307,16 +1487,11 @@ with tab_calib:
                 default=DEFAULT_IMPULSE_DURATIONS,
                 key="calib_durations_sel",
             )
-            settle_time = st.slider(
-                "Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="settle_time"
-            )
+            settle_time = st.slider("Settle time after Stop (s)", 0.5, 5.0, 3.0, 0.5, key="settle_time")
 
             n_zooms = len(st.session_state.get("zoom_sweep_levels", [0]))
             total_pairs = len(speeds_to_calib) * len(impulse_durations) * n_zooms
-            st.info(
-                f"**{total_pairs} pairs** across {n_zooms} zoom level(s) "
-                f"(axis={axis}, speeds={speeds_to_calib})"
-            )
+            st.info(f"**{total_pairs} pairs** across {n_zooms} zoom level(s) (axis={axis}, speeds={speeds_to_calib})")
 
         st.divider()
 
@@ -1354,16 +1529,14 @@ with tab_calib:
                     h_fov_c, v_fov_c = fov_at_zoom(calib_z, cam_model)
                     zoom_pairs: List[Dict] = []
 
-                    ph.markdown(f"### Zoom {calib_z} ({z_idx+1}/{len(zoom_levels)}) — FOV {h_fov_c:.1f}°")
+                    ph.markdown(f"### Zoom {calib_z} ({z_idx + 1}/{len(zoom_levels)}) — FOV {h_fov_c:.1f}°")
 
                     for speed_c in speeds_to_calib:
                         for T_c in durations_sorted:
                             done_c += 1
                             pb.progress(done_c / total_c)
 
-                            log_lines.append(
-                                f"z={calib_z} speed={speed_c} T={T_c}s ..."
-                            )
+                            log_lines.append(f"z={calib_z} speed={speed_c} T={T_c}s ...")
                             log_area.text("\n".join(log_lines[-8:]))
 
                             # Go to home preset
@@ -1469,6 +1642,7 @@ with tab_calib:
 
                     # Fit model per speed for this zoom level
                     from collections import defaultdict as _defaultdict
+
                     z_groups: Dict[int, List[Dict]] = _defaultdict(list)
                     for p in zoom_pairs:
                         z_groups[p["speed"]].append(p)
@@ -1492,13 +1666,16 @@ with tab_calib:
                             "v_fov": round(v_fov_c, 3),
                         }
                         zoom_raw[key_n] = [
-                            {"duration": g["T"], "displacement_deg": g["auto_deg_kp"],
-                             "px_delta": g["auto_px_delta"], "n_matches": g["auto_n_matches"]}
+                            {
+                                "duration": g["T"],
+                                "displacement_deg": g["auto_deg_kp"],
+                                "px_delta": g["auto_px_delta"],
+                                "n_matches": g["auto_n_matches"],
+                            }
                             for g in grp
                         ]
                         log_lines.append(
-                            f"  → zoom={calib_z} speed={spd}: "
-                            f"ω={m['omega']:.3f} b={m['bias']:.3f} R²={m['r2']:.3f}"
+                            f"  → zoom={calib_z} speed={spd}: ω={m['omega']:.3f} b={m['bias']:.3f} R²={m['r2']:.3f}"
                         )
                     log_area.text("\n".join(log_lines[-12:]))
 
@@ -1511,7 +1688,7 @@ with tab_calib:
                         "results": dict(st.session_state["calib_results"]),
                         "raw_data": dict(st.session_state["calib_raw_data"]),
                     }
-                    with open(save_path, "w") as _f:
+                    with pathlib.Path(save_path).open("w") as _f:
                         json.dump(_incremental, _f, indent=2)
                     log_lines.append(f"  Saved → {save_path} ({len(_incremental['results'])} entries)")
                     log_area.text("\n".join(log_lines[-12:]))
@@ -1520,10 +1697,7 @@ with tab_calib:
                     st.error("No valid measurements captured.")
                 else:
                     pb.progress(1.0)
-                    ph.success(
-                        f"✅ Done — {len(all_annotations)} measurements "
-                        f"across {len(zoom_levels)} zoom levels"
-                    )
+                    ph.success(f"✅ Done — {len(all_annotations)} measurements across {len(zoom_levels)} zoom levels")
                     st.session_state["calib_pairs"] = all_pairs
                     st.session_state["calib_annotations"] = all_annotations
                     st.session_state["calib_phase"] = "complete"
@@ -1533,10 +1707,7 @@ with tab_calib:
     elif phase == "annotating":
         pairs = st.session_state["calib_pairs"]
         # Filter to only pairs that need manual annotation (low keypoint matches)
-        manual_pairs = [
-            (i, p) for i, p in enumerate(pairs)
-            if p.get("auto_n_matches", 0) < 5
-        ]
+        manual_pairs = [(i, p) for i, p in enumerate(pairs) if p.get("auto_n_matches", 0) < 5]
         idx = st.session_state["calib_anno_idx"]
         total_p = len(manual_pairs)
 
@@ -1562,7 +1733,7 @@ with tab_calib:
             f"zoom={pair.get('zoom', '?')} | "
             f"H_FOV={h_fov_p:.3f}° | V_FOV={v_fov_p:.3f}° | "
             f"image {W}×{H}px | "
-            f"pixel scale: {h_fov_p/W*1000:.3f} mrad/px"
+            f"pixel scale: {h_fov_p / W * 1000:.3f} mrad/px"
         )
         st.progress((idx) / total_p)
 
@@ -1623,14 +1794,11 @@ with tab_calib:
             c1.metric("Δ pixels", f"{px_delta} px")
             c2.metric("Measured displacement", f"{deg:.3f}°")
             c3.metric("Expected (ref)", f"{ref_deg:.3f}°" if ref_omega else "—")
-            c4.metric("Ratio", f"{deg/ref_deg:.2f}" if ref_deg else "—")
+            c4.metric("Ratio", f"{deg / ref_deg:.2f}" if ref_deg else "—")
             c5.metric("Zoom / FOV", f"z{pair.get('zoom', '?')} / {h_fov_p:.1f}°")
 
             if abs(deg) < 0.05:
-                st.warning(
-                    "⚠️ Very small displacement - verify the camera did move "
-                    "or choose a more precise landmark."
-                )
+                st.warning("⚠️ Very small displacement - verify the camera did move or choose a more precise landmark.")
 
             col_val, col_skip, col_redo = st.columns([2, 1, 1])
             if col_val.button("✅ Validate and next", type="primary", key=f"btn_val_{idx}"):
@@ -1678,6 +1846,7 @@ with tab_calib:
 
             # Group by (zoom, axis, speed) and fit
             from collections import defaultdict
+
             groups: Dict[str, List[Dict]] = defaultdict(list)
             for ann in annotations:
                 z = ann.get("zoom", 0)
@@ -1771,8 +1940,9 @@ with tab_calib:
         if micro_home_id is None:
             st.warning("Select a home preset in the calibration setup above before starting.")
 
-        if st.button("🚀 Start micro-pulse captures", type="primary", key="btn_micro_start",
-                      disabled=micro_home_id is None):
+        if st.button(
+            "🚀 Start micro-pulse captures", type="primary", key="btn_micro_start", disabled=micro_home_id is None
+        ):
             # Apply zoom and wait for focus settle
             client.zoom(micro_zoom)
             st.session_state["calib_zoom"] = micro_zoom
@@ -1815,9 +1985,7 @@ with tab_calib:
                     img_bm, img_am, micro_axis, h_fov_m, v_fov_m
                 )
                 # Also compute via optical flow for comparison
-                deg_of = abs(estimate_displacement_deg(
-                    img_bm, img_am, micro_axis, h_fov_m, v_fov_m
-                ))
+                deg_of = abs(estimate_displacement_deg(img_bm, img_am, micro_axis, h_fov_m, v_fov_m))
 
                 ph_m.markdown(
                     f"Micro-pulse **{rep + 1}/{int(micro_reps)}** → "
@@ -1872,8 +2040,7 @@ with tab_calib:
         m_W, m_H = m_img_b.size
 
         st.markdown(
-            f"### Micro-pulse {m_idx + 1} / {m_total} — "
-            f"**{m_ax.upper()}** rep={mp['rep']} dur={mp['impulse_dur']}s"
+            f"### Micro-pulse {m_idx + 1} / {m_total} — **{m_ax.upper()}** rep={mp['rep']} dur={mp['impulse_dur']}s"
         )
         st.progress(m_idx / m_total)
 
@@ -1973,7 +2140,11 @@ with tab_calib:
             # Store in calib_results for export
             micro_key = f"{m_axis_label}_micro"
             micro_pairs_done = st.session_state["micro_pairs"]
-            micro_zoom_used = micro_pairs_done[0].get("zoom", st.session_state["calib_zoom"]) if micro_pairs_done else st.session_state["calib_zoom"]
+            micro_zoom_used = (
+                micro_pairs_done[0].get("zoom", st.session_state["calib_zoom"])
+                if micro_pairs_done
+                else st.session_state["calib_zoom"]
+            )
             micro_h_fov = micro_pairs_done[0]["h_fov"] if micro_pairs_done else 0
             micro_v_fov = micro_pairs_done[0]["v_fov"] if micro_pairs_done else 0
             st.session_state["calib_results"][micro_key] = {
@@ -2001,10 +2172,7 @@ with tab_calib:
                     px = p.get("auto_px_delta", "—")
                     kp_str = f"{kp_deg:.4f}°" if isinstance(kp_deg, float) else kp_deg
                     of_str = f"{of_deg:.4f}°" if isinstance(of_deg, float) else of_deg
-                    st.write(
-                        f"Rep {i + 1}: keypoints={kp_str} ({n_m} matches, {px}px) | "
-                        f"optical_flow={of_str}"
-                    )
+                    st.write(f"Rep {i + 1}: keypoints={kp_str} ({n_m} matches, {px}px) | optical_flow={of_str}")
 
             st.caption(
                 f"**Update `routes_control.py`:** set `_MICRO_IMPULSE_DUR` and expect "
@@ -2071,8 +2239,9 @@ with tab_results:
 
             t_fit = np.linspace(0, max(ts) * 1.15, 200)
             d_fit = r["omega"] * t_fit + r["bias"]
-            ax.plot(t_fit, d_fit, "r-", lw=2,
-                    label=f"Model: δ = {r['omega']:.4f}·T + {r['bias']:.4f}°   (R²={r['r2']:.3f})")
+            ax.plot(
+                t_fit, d_fit, "r-", lw=2, label=f"Model: δ = {r['omega']:.4f}·T + {r['bias']:.4f}°   (R²={r['r2']:.3f})"
+            )
 
             ref_map = REFERENCE_PAN_SPEEDS if r["axis"] == "pan" else REFERENCE_TILT_SPEEDS
             ref_bias_map = REFERENCE_PAN_BIAS if r["axis"] == "pan" else REFERENCE_TILT_BIAS
@@ -2080,8 +2249,14 @@ with tab_results:
             ref_bias = ref_bias_map.get(cam_model, {}).get(r["speed"], 0.0)
             if ref_omega:
                 d_ref = ref_omega * t_fit + ref_bias
-                ax.plot(t_fit, d_ref, "g--", lw=1.5, alpha=0.7,
-                        label=f"Current reference: δ = {ref_omega}·T + {ref_bias:.4f}°")
+                ax.plot(
+                    t_fit,
+                    d_ref,
+                    "g--",
+                    lw=1.5,
+                    alpha=0.7,
+                    label=f"Current reference: δ = {ref_omega}·T + {ref_bias:.4f}°",
+                )
 
             ax.axhline(0, color="gray", lw=0.5)
             ax.set_xlabel("Duration T (s)")
@@ -2126,8 +2301,11 @@ with tab_results:
                     if img_before_t and img_after_t:
                         h_fov_t, v_fov_t = fov_at_zoom(r_t["zoom"], cam_model)
                         actual = estimate_displacement_deg(img_before_t, img_after_t, test_axis, h_fov_t, v_fov_t)
-                        st.metric("Measured real displacement (°)", f"{actual:.3f}°",
-                                  delta=f"{actual - test_deg:+.3f}° vs target")
+                        st.metric(
+                            "Measured real displacement (°)",
+                            f"{actual:.3f}°",
+                            delta=f"{actual - test_deg:+.3f}° vs target",
+                        )
                         col_b1, col_b2 = st.columns(2)
                         col_b1.image(img_before_t, caption="Before", width="stretch")
                         col_b2.image(img_after_t, caption="After", width="stretch")
@@ -2155,17 +2333,12 @@ with tab_results:
             )
 
         with col_e2:
-            pan_speeds_new = {
-                r["speed"]: r["omega"]
-                for r in results.values() if r["axis"] == "pan"
-            }
-            tilt_speeds_new = {
-                r["speed"]: r["omega"]
-                for r in results.values() if r["axis"] == "tilt"
-            }
+            pan_speeds_new = {r["speed"]: r["omega"] for r in results.values() if r["axis"] == "pan"}
+            tilt_speeds_new = {r["speed"]: r["omega"] for r in results.values() if r["axis"] == "tilt"}
             bias_notes = "\n".join(
-                f'# {k}: b={r["bias"]:.4f}° (effective delay ≈ {-r["bias"]/r["omega"]:.3f}s)'
-                for k, r in results.items() if r["omega"] != 0
+                f"# {k}: b={r['bias']:.4f}° (effective delay ≈ {-r['bias'] / r['omega']:.3f}s)"
+                for k, r in results.items()
+                if r["omega"] != 0
             )
             snippet = (
                 f"# ── Update routes_control.py ──────────────────────────────────\n"
@@ -2175,10 +2348,7 @@ with tab_results:
                 f"{bias_notes}\n"
             )
             st.code(snippet, language="python")
-            st.caption(
-                "Copy/paste into "
-                "`pyro_camera_api/pyro_camera_api/api/routes_control.py`"
-            )
+            st.caption("Copy/paste into `pyro_camera_api/pyro_camera_api/api/routes_control.py`")
 
 # ─── Tab 4 : Presets ─────────────────────────────────────────────────────────
 
