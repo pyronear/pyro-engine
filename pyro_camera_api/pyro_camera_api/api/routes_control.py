@@ -204,17 +204,12 @@ def click_to_move(
                 "duration": round(dur, 2),
             })
         elif speeds:
-            # Angle below bias — micro-impulse at zoom 41 for precision
+            # Angle below bias — micro-impulse at speed 1
             logger.info(
-                "[%s] click_to_move %s %s %.2f° micro-impulse speed=1 (zoom→41)", camera_ip, axis, direction, abs(deg)
+                "[%s] click_to_move %s %s %.2f° micro-impulse speed=1", camera_ip, axis, direction, abs(deg)
             )
-            if hasattr(cam, "start_zoom_focus"):
-                cam.start_zoom_focus(41)
-                time.sleep(3.5)
             cam.move_camera(direction, speed=1)
             cam.move_camera("Stop")
-            if hasattr(cam, "start_zoom_focus"):
-                cam.start_zoom_focus(zoom)
             result["moves"].append({
                 "axis": axis,
                 "direction": direction,
