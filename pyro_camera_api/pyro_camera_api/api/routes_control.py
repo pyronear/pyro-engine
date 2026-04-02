@@ -169,6 +169,9 @@ def click_to_move(
     tilt_speeds = TILT_SPEEDS.get(adapter, {})
     tilt_bias = TILT_BIAS.get(adapter, {})
 
+    if zoom > 0:
+        logger.warning("[%s] click_to_move: zoom=%s > 0, speed limited to 1", camera_ip, zoom)
+
     result: dict = {
         "status": "ok",
         "camera_ip": camera_ip,
@@ -177,6 +180,8 @@ def click_to_move(
         "tilt_deg": round(tilt_deg, 3),
         "moves": [],
     }
+    if zoom > 0:
+        result["warning"] = f"speed limited to 1 (zoom={zoom} > 0)"
 
     def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> None:
         """Execute a single-axis move: calibrated duration, or micro-pulse if below bias."""
@@ -245,6 +250,7 @@ def move_camera(
     pose_id: Optional[int] = None,
     degrees: Optional[float] = None,
     duration: Optional[float] = None,
+    zoom: int = 0,
 ):
     """
     Move a PTZ camera for a short action.
@@ -258,7 +264,7 @@ def move_camera(
     a micro-impulse (move+stop back-to-back).
     If degrees and direction are provided the camera moves for the
     duration needed to cover the requested angle using a model specific
-    speed table.
+    speed table. When zoom > 0, speed is forced to 1.
     If only direction is provided the camera starts moving in that
     direction at the requested speed without a fixed duration.
     """
@@ -298,66 +304,74 @@ def move_camera(
             }
 
         if degrees is not None and direction:
+            # Reolink cameras cap all speed levels to ~1.5 °/s at zoom > 0
+            speed_limited = zoom > 0 and speed != 1
+            effective_speed = 1 if zoom > 0 else speed
+            if speed_limited:
+                logger.warning("[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, zoom, speed)
+
             if direction in ["Left", "Right"]:
-                deg_per_sec = get_pan_speed_per_sec(adapter, speed)
+                deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
             elif direction in ["Up", "Down"]:
-                deg_per_sec = get_tilt_speed_per_sec(adapter, speed)
+                deg_per_sec = get_tilt_speed_per_sec(adapter, effective_speed)
             else:
                 raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
 
             if deg_per_sec is None:
                 # Fallback for adapters without calibrated speed tables (e.g., linovision)
                 try:
-                    deg_per_sec = max(0.1, float(speed))
+                    deg_per_sec = max(0.1, float(effective_speed))
                 except Exception:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Unsupported adapter '{adapter}' or speed level {speed}",
+                        detail=f"Unsupported adapter '{adapter}' or speed level {effective_speed}",
                     )
 
-            bias = get_pan_bias(adapter, speed) if direction in ["Left", "Right"] else get_tilt_bias(adapter, speed)
+            bias = (
+                get_pan_bias(adapter, effective_speed)
+                if direction in ["Left", "Right"]
+                else get_tilt_bias(adapter, effective_speed)
+            )
             duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
 
-            # Micro-impulse: angle below bias → T=0 move at zoom 41 for precision
+            # Micro-impulse: angle below bias → move+stop at speed 1
             micro = duration_sec == 0.0 and abs(degrees) > 0
             if micro:
                 logger.info(
-                    "[%s] Moving %s %.2f° micro-impulse speed=1 (zoom→41, adapter=%s)",
+                    "[%s] Moving %s %.2f° micro-impulse speed=1 (adapter=%s)",
                     camera_ip,
                     direction,
                     abs(degrees),
                     adapter,
                 )
-                if hasattr(cam, "start_zoom_focus"):
-                    cam.start_zoom_focus(41)
-                    time.sleep(3.5)
                 cam.move_camera(direction, speed=1)
                 cam.move_camera("Stop")
-                if hasattr(cam, "start_zoom_focus"):
-                    cam.start_zoom_focus(0)
             else:
                 logger.info(
                     "[%s] Moving %s for %.2fs at speed %s (adapter=%s)",
                     camera_ip,
                     direction,
                     duration_sec,
-                    speed,
+                    effective_speed,
                     adapter,
                 )
-                cam.move_camera(direction, speed=speed)
+                cam.move_camera(direction, speed=effective_speed)
                 time.sleep(duration_sec)
                 cam.move_camera("Stop")
 
-            return {
+            resp: dict = {
                 "status": "ok",
                 "camera_ip": camera_ip,
                 "direction": direction,
                 "degrees": degrees,
                 "duration": 0 if micro else round(duration_sec, 2),
-                "speed": 1 if micro else speed,
+                "speed": 1 if micro else effective_speed,
                 "adapter": adapter,
                 "micro": micro,
             }
+            if speed_limited:
+                resp["warning"] = f"speed forced to 1 (zoom={zoom} > 0, requested speed={speed})"
+            return resp
 
         if direction:
             logger.info("[%s] Moving %s at speed %s", camera_ip, direction, speed)

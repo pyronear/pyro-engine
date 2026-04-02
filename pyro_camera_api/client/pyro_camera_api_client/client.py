@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import io
+import logging
 from typing import Any, Dict, List, Optional
 
 import requests
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 class PyroCameraAPIClient:
@@ -175,10 +178,14 @@ class PyroCameraAPIClient:
         pose_id: Optional[int] = None,
         degrees: Optional[float] = None,
         duration: Optional[float] = None,
+        zoom: int = 0,
     ) -> Dict[str, Any]:
+        if zoom > 0 and speed != 1:
+            logger.warning("zoom=%s > 0: speed will be forced to 1 server-side (requested %s)", zoom, speed)
         params: Dict[str, Any] = {
             "camera_ip": camera_ip,
             "speed": speed,
+            "zoom": zoom,
         }
         if direction is not None:
             params["direction"] = direction
@@ -203,6 +210,8 @@ class PyroCameraAPIClient:
         h_fov: Optional[float] = None,
         v_fov: Optional[float] = None,
     ) -> Dict[str, Any]:
+        if zoom > 0:
+            logger.warning("click_to_move: zoom=%s > 0, speed will be limited to 1 server-side", zoom)
         params: Dict[str, Any] = {
             "camera_ip": camera_ip,
             "click_x": click_x,
