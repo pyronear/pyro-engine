@@ -7,7 +7,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements-git.txt /tmp/requirements-git.txt
-RUN pip install --no-cache-dir --default-timeout=500 -r /tmp/requirements-git.txt
+RUN pip install --no-cache-dir --default-timeout=500 --target=/tmp/git-packages -r /tmp/requirements-git.txt
 
 # ---- Runtime ----
 FROM python:3.11.13-slim-bullseye
@@ -34,10 +34,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     rm -f /tmp/requirements.txt
 
 # Layer 3: Git-based deps (~5MB, changes when API clients are updated)
-COPY --from=git-deps /usr/local/lib/python3.11/site-packages/pyroclient /usr/local/lib/python3.11/site-packages/pyroclient
-COPY --from=git-deps /usr/local/lib/python3.11/site-packages/pyroclient-*.dist-info /usr/local/lib/python3.11/site-packages/
-COPY --from=git-deps /usr/local/lib/python3.11/site-packages/pyro_camera_api_client /usr/local/lib/python3.11/site-packages/pyro_camera_api_client
-COPY --from=git-deps /usr/local/lib/python3.11/site-packages/pyro_camera_api_client-*.dist-info /usr/local/lib/python3.11/site-packages/
+COPY --from=git-deps /tmp/git-packages /usr/local/lib/python3.11/site-packages/
 
 # Layer 4: Local packages (~1MB, changes on every deploy)
 WORKDIR /opt/pyroengine_src
