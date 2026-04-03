@@ -20,7 +20,10 @@ single-docs:
 # Update requirements.txt for the main project
 lock:
 	poetry lock
-	poetry export -f requirements.txt --without-hashes --output requirements.txt
+	poetry export -f requirements.txt --without-hashes --output requirements-all.txt
+	grep 'git+' requirements-all.txt > requirements-git.txt || true
+	grep -v 'git+' requirements-all.txt > requirements.txt
+	rm requirements-all.txt
 
 # Generate requirements and build camera API Docker image
 build-api:
@@ -40,10 +43,10 @@ build-optional-lib:
 	pip install -e .[docs]
 	pip install -e .[dev]
 
-# Build both images and run the stack
+# Pull latest images and run the stack
 run:
-	docker build . -t pyronear/pyro-engine:latest
-	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
+	docker pull pyronear/pyro-engine:latest
+	docker pull pyronear/pyro-camera-api:latest
 	docker compose up -d
 
 # Get log from engine wrapper
