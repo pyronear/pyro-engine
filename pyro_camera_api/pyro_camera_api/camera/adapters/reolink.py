@@ -74,12 +74,12 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         logger.error("Failed operation: %s, %s", response.status_code, response.text)
         return None
 
-    def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
+    def capture(self, patrol_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
         Captures an image from the camera. Optionally moves the camera to a preset position before capturing.
         """
-        if pos_id is not None:
-            self.move_camera("ToPos", idx=int(pos_id), speed=50)
+        if patrol_id is not None:
+            self.move_camera("ToPos", idx=int(patrol_id), speed=50)
             time.sleep(1)
         url = self._build_url("Snap")
         logger.debug("Start capture for %s", self.ip_address)

@@ -104,13 +104,17 @@ pip install -e pyro-engine/.
 
 ### Environment variables
 
-Deployments usually rely on a `.env` file with information such as:
+Deployments usually rely on a `.env` file. A `.env.example` is provided at the root of the repository as a reference:
 
 ```text
 API_URL=https://api.pyronear.org
 CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
+MEDIAMTX_SERVER_IP=1.2.3.4
+PYRO_ENGINE_VERSION=latest
 ```
+
+`PYRO_ENGINE_VERSION` controls which Docker image tag is pulled for both services (defaults to `latest` if unset).
 
 ### Data directory
 
@@ -130,7 +134,9 @@ The important field for the camera API is:
 
 * `adapter` which selects the camera implementation
 
-Other fields such as `type`, `azimuth`, `poses`, or `bbox_mask_url` are used by the engine and the API.
+Other fields such as `type`, `pose_ids`, `poses`, or `bbox_mask_url` are used by the engine and the API.
+
+`pose_ids` contains the pose IDs from the pyro-api database. For static cameras it is a list with a single element; for PTZ cameras each entry corresponds positionally to the matching physical preset in `poses`. If `bbox_mask_url` is set, occlusion mask files are fetched at `{bbox_mask_url}_{pose_id}.json`.
 
 Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, `reolink` PTZ and `mock`.
 ```json
@@ -139,7 +145,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "name": "url_camera_1",
     "adapter": "url",
     "url": "http://user:password@camera-host:1234/cgi-bin/snapshot.cgi",
-    "azimuth": 0,
+    "pose_ids": [10],
     "id": "10",
     "bbox_mask_url": "",
     "poses": [],
@@ -151,7 +157,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "name": "rtsp_camera_1",
     "adapter": "rtsp",
     "rtsp_url": "rtsp://user:password@camera-host:554/live/STREAM_ID",
-    "azimuth": 0,
+    "pose_ids": [11],
     "id": "11",
     "bbox_mask_url": "https://example.com/occlusion-masks/rtsp_camera_1",
     "poses": [],
@@ -163,7 +169,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "name": "reolink_static_1",
     "adapter": "reolink",
     "type": "static",
-    "azimuth": 45,
+    "pose_ids": [12],
     "id": "12",
     "poses": [],
     "bbox_mask_url": "https://example.com/occlusion-masks/reolink_static_1",
@@ -176,7 +182,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "type": "ptz",
     "id": "13",
     "poses": [0, 1, 2, 3],
-    "azimuths": [0, 90, 180, 270],
+    "pose_ids": [20, 21, 22, 23],
     "bbox_mask_url": "https://example.com/occlusion-masks/reolink_ptz_1",
     "token": "JWT_TOKEN_HERE"
   },
@@ -186,7 +192,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "adapter": "linovision",
     "type": "ptz",
     "poses": [0, 1, 2, 3],
-    "azimuths": [0, 90, 180, 270],
+    "pose_ids": [30, 31, 32, 33],
     "azimuth_offset_deg": 90,
     "bbox_mask_url": "https://example.com/occlusion-masks/linovision_ptz_1",
     "token": "JWT_TOKEN_HERE"
@@ -196,7 +202,7 @@ Below is one generic example for each adapter: `url`, `rtsp`, `reolink` static, 
     "name": "mock_camera_1",
     "adapter": "mock",
     "type": "static",
-    "azimuth": 0,
+    "pose_ids": [0],
     "id": "14",
     "poses": [],
     "bbox_mask_url": "",
