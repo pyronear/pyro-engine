@@ -313,11 +313,7 @@ class Engine(Predictor):
                     # Detection creation
                     bboxes = self._alerts[0]["bboxes"]
                     if not bboxes:
-<<<<<<< HEAD
-                        logging.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
-=======
                         logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
->>>>>>> develop
                         self._alerts.popleft()
                         continue
                     stream = io.BytesIO()
