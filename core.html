@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Changelog" href="changelog.html" /><link rel="prev" title="Installation" href="installing.html" />
 
-    <!-- Generated with Sphinx 7.3.7 and Furo 2024.08.06 -->
+    <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
         <title>pyroengine.core - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=354aac6f" />
@@ -262,16 +262,8 @@
 <p>This module abtracts the sensor management and the detection workflow into controllable units.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="pyroengine.core.SystemController">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.core.</span></span><span class="sig-name descname"><span class="pre">SystemController</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="engine.html#pyroengine.engine.Engine" title="pyroengine.engine.Engine"><span class="pre">Engine</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">cameras</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="sensors.html#pyroengine.sensors.ReolinkCamera" title="pyroengine.sensors.ReolinkCamera"><span class="pre">ReolinkCamera</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/core.html#SystemController"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.core.SystemController" title="Link to this definition">¶</a></dt>
-<dd><p>Controls the system for capturing and analyzing camera streams.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Variables<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>engine</strong> (<a class="reference internal" href="engine.html#pyroengine.engine.Engine" title="pyroengine.engine.Engine"><em>Engine</em></a>) – The image analyzer engine.</p></li>
-<li><p><strong>cameras</strong> (<em>List</em><em>[</em><a class="reference internal" href="sensors.html#pyroengine.sensors.ReolinkCamera" title="pyroengine.sensors.ReolinkCamera"><em>ReolinkCamera</em></a><em>]</em>) – List of cameras to capture streams from.</p></li>
-</ul>
-</dd>
-</dl>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">pyroengine.core.</span></span><span class="sig-name descname"><span class="pre">SystemController</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">engine</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="engine.html#pyroengine.engine.Engine" title="pyroengine.engine.Engine"><span class="pre">Engine</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">camera_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pyro_camera_api_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/pyroengine/core.html#SystemController"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pyroengine.core.SystemController" title="Link to this definition">¶</a></dt>
+<dd><p>Controller to manage multiple cameras, capture images, and perform detection.</p>
 </dd></dl>
 
 </section>
@@ -305,7 +297,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2025, Pyronear
+                Copyright &#169; 2022-2026, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -351,7 +343,7 @@
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=5e09a967"></script>
+</div><script src="_static/documentation_options.js?v=2745280b"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=5fa4622c"></script>
