@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
 
-    <!-- Generated with Sphinx 7.3.7 and Furo 2024.08.06 -->
+    <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
         <title>pyroengine.sensors - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d75fae25" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=354aac6f" />
@@ -247,16 +247,19 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pyroengine.sensors</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (C) 2022-2025, Pyronear.</span>
+<span></span><span class="c1"># Copyright (C) 2022-2026, Pyronear.</span>
 
 <span class="c1"># This program is licensed under the Apache License 2.0.</span>
 <span class="c1"># See LICENSE or go to &lt;https://opensource.org/licenses/Apache-2.0&gt; for full license details.</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">io</span><span class="w"> </span><span class="kn">import</span> <span class="n">BytesIO</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib3</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
@@ -266,6 +269,7 @@
 <span class="n">urllib3</span><span class="o">.</span><span class="n">disable_warnings</span><span class="p">(</span><span class="n">urllib3</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">InsecureRequestWarning</span><span class="p">)</span>
 <span class="c1"># Configure logging</span>
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ReolinkCamera">
@@ -283,7 +287,7 @@
 <span class="sd">        protocol (str): Protocol used for communication, defaults to &#39;https&#39;.</span>
 
 <span class="sd">    Methods:</span>
-<span class="sd">        capture(pos_id): Captures an image from the camera. Moves to position `pos_id` if provided.</span>
+<span class="sd">        capture(patrol_id): Captures an image from the camera. Moves to position `patrol_id` if provided.</span>
 <span class="sd">        move_camera(operation, speed, idx): Moves the camera based on the operation type and speed.</span>
 <span class="sd">        move_in_seconds(s, operation, speed): Moves the camera for a specific duration and then stops.</span>
 <span class="sd">        get_ptz_preset(): Retrieves preset positions for a PTZ camera.</span>
@@ -300,7 +304,7 @@
         <span class="n">cam_azimuths</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">protocol</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;https&quot;</span><span class="p">,</span>
         <span class="n">focus_position</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span> <span class="o">=</span> <span class="n">ip_address</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">username</span> <span class="o">=</span> <span class="n">username</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">password</span> <span class="o">=</span> <span class="n">password</span>
@@ -308,6 +312,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cam_poses</span> <span class="o">=</span> <span class="n">cam_poses</span> <span class="k">if</span> <span class="n">cam_poses</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cam_azimuths</span> <span class="o">=</span> <span class="n">cam_azimuths</span> <span class="k">if</span> <span class="n">cam_azimuths</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">protocol</span> <span class="o">=</span> <span class="n">protocol</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="o">=</span> <span class="n">focus_position</span>
 
         <span class="c1"># Initialisation de position de caméra (si définie)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">:</span>
@@ -327,53 +332,50 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_handle_response</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">success_message</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Handles HTTP responses, logging success or errors based on response data.&quot;&quot;&quot;</span>
-        <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="c1"># logger.info(f&quot;{response.status_code}&quot;)</span>
         <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
             <span class="n">response_data</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
             <span class="k">if</span> <span class="n">response_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;code&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">success_message</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">success_message</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">response_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error: </span><span class="si">{</span><span class="n">response_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">response_data</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed operation: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed operation: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="ReolinkCamera.capture">
 <a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.capture">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">capture</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">capture</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">patrol_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Captures an image from the camera. Optionally moves the camera to a preset position before capturing.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            pos_id (Optional[int]): The preset position ID to move to before capturing.</span>
+<span class="sd">            patrol_id (Optional[int]): The preset position ID to move to before capturing.</span>
 <span class="sd">            timeout (int): Timeout for the HTTP request.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            Image.Image: An image captured from the camera, or None if there was an error.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">pos_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;ToPos&quot;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">pos_id</span><span class="p">),</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">patrol_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;ToPos&quot;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">patrol_id</span><span class="p">),</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
             <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;Snap&quot;</span><span class="p">)</span>
-        <span class="n">logging</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Start capture&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Start capture&quot;</span><span class="p">)</span>
 
         <span class="k">try</span><span class="p">:</span>
             <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>  <span class="c1"># nosec: B501</span>
             <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span><span class="p">:</span>
                 <span class="n">image_data</span> <span class="o">=</span> <span class="n">BytesIO</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
-                <span class="n">image</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">image_data</span><span class="p">)</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;RGB&quot;</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">image</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to capture image: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">image_data</span><span class="p">)</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;RGB&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to capture image: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Request failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Request failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="ReolinkCamera.move_camera">
 <a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_camera">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">move_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Sends a command to move the camera.</span>
 
@@ -383,14 +385,26 @@
 <span class="sd">            idx (int): The ID of the position to move to (relevant for PTZ cameras).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;PtzCtrl&quot;</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;PtzCtrl&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="n">operation</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;speed&quot;</span><span class="p">:</span> <span class="n">speed</span><span class="p">}}]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;PtzCtrl&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="n">operation</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span> <span class="s2">&quot;speed&quot;</span><span class="p">:</span> <span class="n">speed</span><span class="p">},</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># nosec: B501</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;PTZ operation successful.&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="ReolinkCamera.move_in_seconds">
 <a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.move_in_seconds">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">move_in_seconds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Right&quot;</span><span class="p">,</span> <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;im.jpg&quot;</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">move_in_seconds</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Right&quot;</span><span class="p">,</span>
+        <span class="n">speed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">save_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;im.jpg&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Moves the camera in a specified direction for a specified number of seconds.</span>
 
@@ -424,13 +438,12 @@
         <span class="n">response_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Presets retrieved successfully.&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">response_data</span> <span class="ow">and</span> <span class="n">response_data</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;code&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">response_data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;PtzPreset&quot;</span><span class="p">,</span> <span class="p">[])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span></div>
+        <span class="k">return</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="ReolinkCamera.set_ptz_preset">
 <a class="viewcode-back" href="../../sensors.html#pyroengine.sensors.ReolinkCamera.set_ptz_preset">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">set_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">set_ptz_preset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Sets a PTZ preset position. If no ID is provided, finds the next available slot.</span>
 
@@ -477,21 +490,29 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set_auto_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">disable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
         <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;SetAutoFocus&quot;</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;SetAutoFocus&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;AutoFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">disable</span><span class="p">)}}}]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;SetAutoFocus&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;AutoFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">disable</span><span class="p">)}},</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Set AutoFocus settings successfully.&quot;</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">start_zoom_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-                <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;ZoomFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="n">position</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;ZoomPos&quot;</span><span class="p">}},</span>
-            <span class="p">}</span>
-        <span class="p">]</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Started ZoomFocus successfully.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_type</span> <span class="o">!=</span> <span class="s2">&quot;static&quot;</span><span class="p">:</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;ZoomFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="n">position</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;ZoomPos&quot;</span><span class="p">}},</span>
+                <span class="p">}</span>
+            <span class="p">]</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Started ZoomFocus successfully.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">set_manual_focus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -500,16 +521,18 @@
 <span class="sd">        Args:</span>
 <span class="sd">            position (int): Focus position (e.g., between 0 and 1000).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">)</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">{</span>
-                <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
-                <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;ZoomFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="n">position</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;FocusPos&quot;</span><span class="p">}},</span>
-            <span class="p">}</span>
-        <span class="p">]</span>
-        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Manual focus set at position </span><span class="si">{</span><span class="n">position</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_type</span> <span class="o">!=</span> <span class="s2">&quot;static&quot;</span><span class="p">:</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_url</span><span class="p">(</span><span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;cmd&quot;</span><span class="p">:</span> <span class="s2">&quot;StartZoomFocus&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s2">&quot;param&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;ZoomFocus&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;channel&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;pos&quot;</span><span class="p">:</span> <span class="n">position</span><span class="p">,</span> <span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;FocusPos&quot;</span><span class="p">}},</span>
+                <span class="p">}</span>
+            <span class="p">]</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">verify</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_response</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Manual focus set at position </span><span class="si">{</span><span class="n">position</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">get_focus_level</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve the current manual focus and zoom positions.&quot;&quot;&quot;</span>
@@ -522,7 +545,101 @@
             <span class="n">focus</span> <span class="o">=</span> <span class="n">zoom_focus</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;focus&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pos&quot;</span><span class="p">)</span>
             <span class="n">zoom</span> <span class="o">=</span> <span class="n">zoom_focus</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;zoom&quot;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pos&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;focus&quot;</span><span class="p">:</span> <span class="n">focus</span><span class="p">,</span> <span class="s2">&quot;zoom&quot;</span><span class="p">:</span> <span class="n">zoom</span><span class="p">}</span>
-        <span class="k">return</span> <span class="kc">None</span></div>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_measure_sharpness</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pil_image</span><span class="p">):</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">pil_image</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;L&quot;</span><span class="p">)</span>
+        <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+        <span class="n">laplacian</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">Laplacian</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">CV_64F</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">laplacian</span><span class="o">.</span><span class="n">var</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">focus_finder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">save_images</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">retry_depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform greedy focus optimization to find the sharpest focus position,</span>
+<span class="sd">        starting from self.focus_position or 720 and sweeping ±50.</span>
+<span class="sd">        Includes recheck at ±15 to avoid local maxima and a max retry depth.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            save_images (bool): If True, save each captured image to disk.</span>
+<span class="sd">            retry_depth (int): Internal counter to prevent infinite recursion.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            int: Best focus position found.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">max_retries</span> <span class="o">=</span> <span class="mi">10</span>
+        <span class="n">abs_min</span> <span class="o">=</span> <span class="mi">600</span>
+        <span class="n">abs_max</span> <span class="o">=</span> <span class="mi">900</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">capture_and_score</span><span class="p">(</span><span class="n">pos</span><span class="p">):</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">abs_min</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">abs_max</span><span class="p">,</span> <span class="n">pos</span><span class="p">))</span>  <span class="c1"># Clamp to global bounds</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_manual_focus</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+            <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
+            <span class="n">duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span>
+            <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mi">0</span>
+            <span class="n">score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_measure_sharpness</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">] Focus </span><span class="si">{</span><span class="n">pos</span><span class="si">}</span><span class="s2">: Sharpness = </span><span class="si">{</span><span class="n">score</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, Time = </span><span class="si">{</span><span class="n">duration</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">save_images</span><span class="p">:</span>
+                <span class="n">folder</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;focus_debug/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;_&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">image</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">folder</span><span class="si">}</span><span class="s2">/focus_</span><span class="si">{</span><span class="n">pos</span><span class="si">}</span><span class="s2">.jpg&quot;</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">score</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_type</span> <span class="o">!=</span> <span class="s2">&quot;static&quot;</span><span class="p">:</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">720</span>
+            <span class="n">min_focus</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">abs_min</span><span class="p">,</span> <span class="n">current</span> <span class="o">-</span> <span class="mi">50</span><span class="p">)</span>
+            <span class="n">max_focus</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">abs_max</span><span class="p">,</span> <span class="n">current</span> <span class="o">+</span> <span class="mi">50</span><span class="p">)</span>
+
+            <span class="n">sharp_current</span> <span class="o">=</span> <span class="n">capture_and_score</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+            <span class="n">sharp_prev</span> <span class="o">=</span> <span class="n">capture_and_score</span><span class="p">(</span><span class="n">current</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">sharp_next</span> <span class="o">=</span> <span class="n">capture_and_score</span><span class="p">(</span><span class="n">current</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">sharp_prev</span> <span class="o">&gt;</span> <span class="n">sharp_current</span> <span class="ow">and</span> <span class="n">sharp_prev</span> <span class="o">&gt;=</span> <span class="n">sharp_next</span><span class="p">:</span>
+                <span class="n">direction</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="k">elif</span> <span class="n">sharp_next</span> <span class="o">&gt;</span> <span class="n">sharp_current</span><span class="p">:</span>
+                <span class="n">direction</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">] Best focus already at </span><span class="si">{</span><span class="n">current</span><span class="si">}</span><span class="s2"> with sharpness </span><span class="si">{</span><span class="n">sharp_current</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="o">=</span> <span class="n">current</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">set_manual_focus</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">current</span>
+
+            <span class="n">best_pos</span> <span class="o">=</span> <span class="n">current</span> <span class="o">+</span> <span class="n">direction</span>
+            <span class="n">best_score</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">sharp_prev</span><span class="p">,</span> <span class="n">sharp_next</span><span class="p">)</span>
+
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">next_pos</span> <span class="o">=</span> <span class="n">best_pos</span> <span class="o">+</span> <span class="n">direction</span>
+                <span class="k">if</span> <span class="n">next_pos</span> <span class="o">&lt;</span> <span class="n">min_focus</span> <span class="ow">or</span> <span class="n">next_pos</span> <span class="o">&gt;</span> <span class="n">max_focus</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="n">score</span> <span class="o">=</span> <span class="n">capture_and_score</span><span class="p">(</span><span class="n">next_pos</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">score</span> <span class="o">&gt;</span> <span class="n">best_score</span><span class="p">:</span>
+                    <span class="n">best_pos</span> <span class="o">=</span> <span class="n">next_pos</span>
+                    <span class="n">best_score</span> <span class="o">=</span> <span class="n">score</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+            <span class="c1"># Check ±15 around the greedy result</span>
+            <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="p">[</span><span class="o">-</span><span class="mi">15</span><span class="p">,</span> <span class="mi">15</span><span class="p">]:</span>
+                <span class="n">probe_pos</span> <span class="o">=</span> <span class="n">best_pos</span> <span class="o">+</span> <span class="n">offset</span>
+                <span class="k">if</span> <span class="n">abs_min</span> <span class="o">&lt;=</span> <span class="n">probe_pos</span> <span class="o">&lt;=</span> <span class="n">abs_max</span><span class="p">:</span>
+                    <span class="n">probe_score</span> <span class="o">=</span> <span class="n">capture_and_score</span><span class="p">(</span><span class="n">probe_pos</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">probe_score</span> <span class="o">&gt;</span> <span class="n">best_score</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">] Found better focus at offset </span><span class="si">{</span><span class="n">offset</span><span class="si">}</span><span class="s2"> → retrying from </span><span class="si">{</span><span class="n">probe_pos</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="p">)</span>
+                        <span class="k">if</span> <span class="n">retry_depth</span> <span class="o">&lt;</span> <span class="n">max_retries</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="o">=</span> <span class="n">probe_pos</span>
+                            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">focus_finder</span><span class="p">(</span><span class="n">save_images</span><span class="o">=</span><span class="n">save_images</span><span class="p">,</span> <span class="n">retry_depth</span><span class="o">=</span><span class="n">retry_depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">] Best focus position: </span><span class="si">{</span><span class="n">best_pos</span><span class="si">}</span><span class="s2"> with sharpness </span><span class="si">{</span><span class="n">best_score</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span> <span class="o">=</span> <span class="n">best_pos</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_manual_focus</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">focus_position</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">best_pos</span>
+
+        <span class="k">return</span> <span class="mi">720</span></div>
 
 </pre></div>
         </article>
@@ -536,7 +653,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2025, Pyronear
+                Copyright &#169; 2022-2026, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -563,7 +680,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=5e09a967"></script>
+</div><script src="../../_static/documentation_options.js?v=2745280b"></script>
     <script src="../../_static/doctools.js?v=9a2dae69"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=5fa4622c"></script>

@@ -4,7 +4,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" />
 
-    <!-- Generated with Sphinx 7.3.7 and Furo 2024.08.06 -->
+    <!-- Generated with Sphinx 7.4.7 and Furo 2024.08.06 -->
         <title>pyroengine.core - PyroEngine</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d75fae25" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=354aac6f" />
@@ -247,51 +247,55 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for pyroengine.core</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (C) 2022-2025, Pyronear.</span>
+<span></span><span class="c1"># Copyright (C) 2022-2026, Pyronear.</span>
 
 <span class="c1"># This program is licensed under the Apache License 2.0.</span>
 <span class="c1"># See LICENSE or go to &lt;https://opensource.org/licenses/Apache-2.0&gt; for full license details.</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">urllib3</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span><span class="p">,</span> <span class="n">UnidentifiedImageError</span>
+
+<span class="c1"># Add the parent folder of pyro_camera_api to the import path</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;pyro_camera_api&quot;</span><span class="p">))</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">pyro_camera_api_client.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyroCameraAPIClient</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Engine</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.sensors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReolinkCamera</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SystemController&quot;</span><span class="p">,</span> <span class="s2">&quot;is_day_time&quot;</span><span class="p">]</span>
 
 <span class="n">urllib3</span><span class="o">.</span><span class="n">disable_warnings</span><span class="p">(</span><span class="n">urllib3</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">InsecureRequestWarning</span><span class="p">)</span>
 
-<span class="c1"># Configure logging</span>
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> | </span><span class="si">%(levelname)s</span><span class="s2">: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">is_day_time</span><span class="p">(</span><span class="n">cache</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">strategy</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_day_time</span><span class="p">(</span><span class="n">cache</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">],</span> <span class="n">frame</span><span class="p">:</span> <span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">,</span> <span class="n">strategy</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">delta</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Determines if it is daytime using specified strategies.</span>
-
-<span class="sd">    Strategies:</span>
-<span class="sd">    1. Time-based: Compares the current time with sunrise and sunset times.</span>
-<span class="sd">    2. IR-based: Analyzes the color of the image; IR cameras produce black and white images at night.</span>
+<span class="sd">    Determine whether it is daytime based on the selected strategy.</span>
 
 <span class="sd">    Args:</span>
-<span class="sd">        cache (Path): Cache folder where `sunset_sunrise.txt` is located.</span>
-<span class="sd">        frame (PIL.Image): Frame to analyze with the IR strategy.</span>
-<span class="sd">        strategy (str): Strategy to define daytime (&quot;time&quot;, &quot;ir&quot;, or &quot;both&quot;).</span>
-<span class="sd">        delta (int): Time delta in seconds before and after sunrise/sunset.</span>
+<span class="sd">        cache (Path): Cache folder containing the `sunset_sunrise.txt` file (for time based strategy).</span>
+<span class="sd">        frame (PIL.Image): Image frame to analyze (for IR based strategy).</span>
+<span class="sd">        strategy (str): Strategy to determine daytime, one of &quot;time&quot;, &quot;ir&quot;, or &quot;both&quot;.</span>
+<span class="sd">        delta (int, optional): Tolerance in seconds around sunrise or sunset for day and night transition.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">        bool: True if it is daytime, False otherwise.</span>
+<span class="sd">        bool: True if it is considered daytime, False otherwise.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">is_day</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="k">if</span> <span class="n">strategy</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;both&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">]:</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">cache</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;sunset_sunrise.txt&quot;</span><span class="p">))</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">cache</span> <span class="ow">and</span> <span class="n">strategy</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;both&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">]:</span>
+        <span class="k">with</span> <span class="n">Path</span><span class="p">(</span><span class="n">cache</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;sunset_sunrise.txt&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">open</span><span class="p">()</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
             <span class="n">lines</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
         <span class="n">sunrise</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="s2">&quot;%H:%M&quot;</span><span class="p">)</span>
         <span class="n">sunset</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">lines</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span> <span class="s2">&quot;%H:%M&quot;</span><span class="p">)</span>
@@ -300,208 +304,261 @@
             <span class="n">is_day</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">if</span> <span class="n">strategy</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;both&quot;</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">]:</span>
-        <span class="n">frame</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">frame</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">frame</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">frame_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">frame_arr</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">frame_arr</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="n">is_day</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">return</span> <span class="n">is_day</span>
-
-
-<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">capture_camera_image</span><span class="p">(</span><span class="n">camera</span><span class="p">:</span> <span class="n">ReolinkCamera</span><span class="p">,</span> <span class="n">image_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Captures an image from the camera and puts it into a queue. Returns whether it is daytime for this camera.</span>
-
-<span class="sd">    Args:</span>
-<span class="sd">        camera (ReolinkCamera): The camera instance.</span>
-<span class="sd">        image_queue (asyncio.Queue): The queue to put the captured image.</span>
-
-<span class="sd">    Returns:</span>
-<span class="sd">        bool: True if it is daytime according to this camera, False otherwise.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">cam_id</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">ip_address</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">camera</span><span class="o">.</span><span class="n">cam_type</span> <span class="o">==</span> <span class="s2">&quot;ptz&quot;</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">pose_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">):</span>
-                <span class="n">cam_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">camera</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pose_id</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="n">frame</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-                <span class="c1"># Move camera to the next pose to avoid waiting</span>
-                <span class="n">next_pos_id</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">[(</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">)]</span>
-                <span class="n">camera</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;ToPos&quot;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">next_pos_id</span><span class="p">),</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">await</span> <span class="n">image_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">cam_id</span><span class="p">,</span> <span class="n">frame</span><span class="p">))</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Yield control</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">):</span>
-                        <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">await</span> <span class="n">image_queue</span><span class="o">.</span><span class="n">put</span><span class="p">((</span><span class="n">cam_id</span><span class="p">,</span> <span class="n">frame</span><span class="p">))</span>
-                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Yield control</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">):</span>
-                    <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">logging</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during image capture from camera </span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="kc">True</span>
 
 
 <div class="viewcode-block" id="SystemController">
 <a class="viewcode-back" href="../../core.html#pyroengine.core.SystemController">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">SystemController</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Controls the system for capturing and analyzing camera streams.</span>
-
-<span class="sd">    Attributes:</span>
-<span class="sd">        engine (Engine): The image analyzer engine.</span>
-<span class="sd">        cameras (List[ReolinkCamera]): List of cameras to capture streams from.</span>
+<span class="sd">    Controller to manage multiple cameras, capture images, and perform detection.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">cameras</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ReolinkCamera</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Initializes the SystemController.</span>
+    <span class="n">API_INITIAL_WAIT</span> <span class="o">=</span> <span class="mi">30</span>
+    <span class="n">API_RETRY_DELAY</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">POST_READY_WAIT</span> <span class="o">=</span> <span class="mi">10</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            engine (Engine): The image analyzer engine.</span>
-<span class="sd">            cameras (List[ReolinkCamera]): List of cameras to capture streams from.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span>
+        <span class="n">camera_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+        <span class="n">pyro_camera_api_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="n">engine</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cameras</span> <span class="o">=</span> <span class="n">cameras</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span> <span class="o">=</span> <span class="n">camera_data</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">capture_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Captures images from all cameras using asyncio.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            image_queue (asyncio.Queue): The queue to put the captured images.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            bool: True if it is daytime according to all cameras, False otherwise.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">tasks</span> <span class="o">=</span> <span class="p">[</span><span class="n">capture_camera_image</span><span class="p">(</span><span class="n">camera</span><span class="p">,</span> <span class="n">image_queue</span><span class="p">)</span> <span class="k">for</span> <span class="n">camera</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cameras</span><span class="p">]</span>
-        <span class="n">day_times</span> <span class="o">=</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="o">*</span><span class="n">tasks</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">day_times</span><span class="p">)</span>
-
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">analyze_stream</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Analyzes the image stream from the queue.</span>
-
-<span class="sd">        Args:</span>
-<span class="sd">            image_queue (asyncio.Queue): The queue with images to analyze.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Wait for the camera API to be available</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_INITIAL_WAIT</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="n">item</span> <span class="o">=</span> <span class="k">await</span> <span class="n">image_queue</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">item</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for Pyro Camera API&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span> <span class="o">=</span> <span class="n">PyroCameraAPIClient</span><span class="p">(</span><span class="n">pyro_camera_api_url</span><span class="p">)</span>
+                <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_stream_status</span><span class="p">()</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Pyro Camera API client ready&quot;</span><span class="p">)</span>
                 <span class="k">break</span>
-            <span class="n">cam_id</span><span class="p">,</span> <span class="n">frame</span> <span class="o">=</span> <span class="n">item</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error running prediction: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">finally</span><span class="p">:</span>
-                <span class="n">image_queue</span><span class="o">.</span><span class="n">task_done</span><span class="p">()</span>  <span class="c1"># Mark the task as done</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;API not ready: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">night_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># Optional startup actions, do not fail hard</span>
+        <span class="k">for</span> <span class="n">ip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not start patrol on </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> at startup, continuing: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Wait and then loop until inference passes once</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">POST_READY_WAIT</span><span class="p">)</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for cameras&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">inference_loop</span><span class="p">()</span>
+                <span class="k">break</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inference failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">focus_finder</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Checks if it is nighttime for any camera.</span>
+<span class="sd">        Run hourly autofocus on non static cameras when it is daytime.</span>
 
-<span class="sd">        Returns:</span>
-<span class="sd">            bool: True if it is daytime for all cameras, False otherwise.</span>
+<span class="sd">        This stops patrol, runs the server side focus optimization, then restarts patrol.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">camera</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cameras</span><span class="p">:</span>
-            <span class="n">cam_id</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">ip_address</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">camera</span><span class="o">.</span><span class="n">cam_type</span> <span class="o">==</span> <span class="s2">&quot;ptz&quot;</span><span class="p">:</span>
-                    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">pose_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">):</span>
-                        <span class="n">cam_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">camera</span><span class="o">.</span><span class="n">ip_address</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pose_id</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="n">frame</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-                        <span class="c1"># Move camera to the next pose to avoid waiting</span>
-                        <span class="n">next_pos_id</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">[(</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">camera</span><span class="o">.</span><span class="n">cam_poses</span><span class="p">)]</span>
-                        <span class="n">camera</span><span class="o">.</span><span class="n">move_camera</span><span class="p">(</span><span class="s2">&quot;ToPos&quot;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">next_pos_id</span><span class="p">),</span> <span class="n">speed</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
-                        <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                            <span class="k">if</span> <span class="ow">not</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">):</span>
-                                <span class="k">return</span> <span class="kc">False</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">frame</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">capture</span><span class="p">()</span>
-                    <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="ow">not</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">):</span>
-                            <span class="k">return</span> <span class="kc">False</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during image capture from camera </span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="kc">True</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="n">now</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">3600</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Hourly autofocus triggered after idle period&quot;</span><span class="p">)</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span> <span class="n">send_alerts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">ip</span><span class="p">,</span> <span class="n">cam</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;static&quot;</span><span class="p">:</span>
+                    <span class="n">poses</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;poses&quot;</span><span class="p">,</span> <span class="p">[])</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">poses</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="n">pose</span> <span class="o">=</span> <span class="n">poses</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">try</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">stop_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">run_focus_optimization</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Autofocus completed for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span> <span class="o">=</span> <span class="n">now</span>
+                        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Failed to run hourly focus finder on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_any_stream_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Captures and analyzes all camera streams, then processes alerts.</span>
+<span class="sd">        Return True if any stream is active.</span>
 
-<span class="sd">        Args:</span>
-<span class="sd">            period (int): The time period between captures in seconds.</span>
-<span class="sd">            send_alerts (bool): Boolean to activate / deactivate alert sending.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            bool: True if it is daytime according to all cameras, False otherwise.</span>
+<span class="sd">        Supports both the new keys active_pipelines and active_ffmpeg</span>
+<span class="sd">        and the legacy key active_streams used in older APIs and tests.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">image_queue</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_stream_status</span><span class="p">()</span>
 
-            <span class="c1"># Start the image processor task</span>
-            <span class="n">processor_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">analyze_stream</span><span class="p">(</span><span class="n">image_queue</span><span class="p">))</span>
+            <span class="c1"># New format with explicit lists</span>
+            <span class="n">active_pipelines</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_pipelines&quot;</span><span class="p">)</span>
+            <span class="n">active_ffmpeg</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_ffmpeg&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">active_pipelines</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">active_ffmpeg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">active_pipelines</span> <span class="ow">or</span> <span class="n">active_ffmpeg</span><span class="p">)</span>
 
-            <span class="c1"># Capture images concurrently</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">capture_images</span><span class="p">(</span><span class="n">image_queue</span><span class="p">)</span>
-
-            <span class="c1"># Wait for the image processor to finish processing</span>
-            <span class="k">await</span> <span class="n">image_queue</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>  <span class="c1"># Ensure all tasks are marked as done</span>
-
-            <span class="c1"># Signal the image processor to stop processing</span>
-            <span class="k">await</span> <span class="n">image_queue</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
-            <span class="k">await</span> <span class="n">processor_task</span>  <span class="c1"># Ensure the processor task completes</span>
-
-            <span class="c1"># Process alerts</span>
-            <span class="k">if</span> <span class="n">send_alerts</span><span class="p">:</span>
+            <span class="c1"># Backward compatible support for legacy field</span>
+            <span class="n">active_streams</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_streams&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">active_streams</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_process_alerts</span><span class="p">()</span>
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error processing alerts: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">active_streams</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+                    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">active_streams</span><span class="p">)</span>
 
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span>
-
+            <span class="k">return</span> <span class="kc">False</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Analyze stream error: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">True</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not fetch stream status: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
 
-    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">send_alerts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_safe_get_latest_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ip</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">pose</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">UnidentifiedImageError</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error getting image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">inference_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Main loop to capture and process images at regular intervals.</span>
+<span class="sd">        Run one inference pass on all cameras and poses.</span>
+
+<span class="sd">        This skips processing entirely if a stream is currently active.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream detected, skipping inference on all cameras&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">ip</span><span class="p">,</span> <span class="n">cam</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">camera_name</span> <span class="o">=</span> <span class="n">cam</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;ptz&quot;</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">pose</span> <span class="ow">in</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;poses&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream turned on during loop, stopping inference immediately&quot;</span><span class="p">)</span>
+                        <span class="k">return</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">cam_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">&quot;</span>
+                        <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Captured image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;HTTP error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream turned on during loop, stopping inference immediately&quot;</span><span class="p">)</span>
+                    <span class="k">return</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">cam_id</span> <span class="o">=</span> <span class="n">ip</span>
+                    <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Captured image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">)</span>
+                <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;HTTP error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_and_restart_patrol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Check stream activity and ensure patrol is running when no stream is active.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">stream_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_stream_status</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not check if stream is running: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">active_pipelines</span> <span class="o">=</span> <span class="n">stream_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_pipelines&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="n">active_ffmpeg</span> <span class="o">=</span> <span class="n">stream_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_ffmpeg&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">active_pipelines</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">active_ffmpeg</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">ip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">patrol_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_patrol_status</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">patrol_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;patrol_running&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Patrol restarted on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not check or restart patrol on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">send_alerts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run the main control loop.</span>
+
+<span class="sd">        This loop handles:</span>
+<span class="sd">        detection alerts,</span>
+<span class="sd">        autofocus,</span>
+<span class="sd">        patrol management,</span>
+<span class="sd">        image inference for all cameras.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            period (int): The time period between captures in seconds.</span>
-<span class="sd">            send_alerts (bool): Boolean to activate / deactivate alert sending.</span>
+<span class="sd">            period (int): Interval between analysis loops in seconds.</span>
+<span class="sd">            send_alerts (bool, optional): Whether to process detection alerts.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="n">start_ts</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
-            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">period</span><span class="p">,</span> <span class="n">send_alerts</span><span class="p">)</span>
+
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="p">:</span>
-                <span class="k">while</span> <span class="ow">not</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">night_mode</span><span class="p">():</span>
-                    <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Nighttime detected by at least one camera, sleeping for 1 hour.&quot;</span><span class="p">)</span>
-                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3600</span><span class="p">)</span>  <span class="c1"># Sleep for 1 hour</span>
+                <span class="k">for</span> <span class="n">ip</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">patrol_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_patrol_status</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">patrol_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;patrol_running&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">stop_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stopped patrol for camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> due to night&quot;</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to stop patrol on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Nighttime detected by at least one camera, sleeping for 1 hour&quot;</span><span class="p">)</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3600</span><span class="p">)</span>
+
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">ip</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+                    <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">capture_image</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Re checked day and night using camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">, result is_day=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Day detected, restarting patrols&quot;</span><span class="p">)</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">check_and_restart_patrol</span><span class="p">()</span>
+                        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Patrols restarted successfully, waiting 30 seconds before next check&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to check day and night after sleep: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="kc">False</span>
+
             <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># Sleep only once all images are processed</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_alerts</span><span class="p">)</span> <span class="ow">and</span> <span class="n">send_alerts</span><span class="p">:</span>
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_process_alerts</span><span class="p">()</span>
+                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error processing alerts: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Run focus finder&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">focus_finder</span><span class="p">()</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">check_and_restart_patrol</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">inference_loop</span><span class="p">()</span>
+
                 <span class="n">loop_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_ts</span>
-                <span class="n">sleep_time</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">period</span> <span class="o">-</span> <span class="p">(</span><span class="n">loop_time</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
-                <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loop run under </span><span class="si">{</span><span class="n">loop_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds, sleeping for </span><span class="si">{</span><span class="n">sleep_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_time</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns a string representation of the SystemController.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            str: A string representation of the SystemController.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">repr_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(&quot;</span>
-        <span class="k">for</span> <span class="n">cam</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cameras</span><span class="p">:</span>
-            <span class="n">repr_str</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="si">{</span><span class="nb">repr</span><span class="p">(</span><span class="n">cam</span><span class="p">)</span><span class="si">}</span><span class="s2">,&quot;</span>
-        <span class="k">return</span> <span class="n">repr_str</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">)&quot;</span></div>
+                <span class="n">sleep_time</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">period</span> <span class="o">-</span> <span class="n">loop_time</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loop run under </span><span class="si">{</span><span class="n">loop_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds, sleeping for </span><span class="si">{</span><span class="n">sleep_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_time</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -515,7 +572,7 @@
         <div class="bottom-of-page">
           <div class="left-details">
             <div class="copyright">
-                Copyright &#169; 2020-2025, Pyronear
+                Copyright &#169; 2022-2026, Pyronear
             </div>
             Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
             
@@ -542,7 +599,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=5e09a967"></script>
+</div><script src="../../_static/documentation_options.js?v=2745280b"></script>
     <script src="../../_static/doctools.js?v=9a2dae69"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=5fa4622c"></script>
