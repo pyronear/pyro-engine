@@ -11,8 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build docker image
+      - name: Build engine image
         run: make build-app
       - name: Verify engine starts successfully
         run: |
           docker run --rm pyronear/pyro-engine:latest python -c "from pyroengine import SystemController; print('OK')"
+      - name: Build camera API image
+        run: docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
+      - name: Verify camera API starts successfully
+        run: |
+          docker run --rm pyronear/pyro-camera-api:latest python -c "from pyro_camera_api.main import app; print('OK')"
