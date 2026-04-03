@@ -28,7 +28,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-test
+          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-test
 
       - name: Install Poetry
         run: |
@@ -93,7 +93,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-docs
+          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-docs
       - name: Install Poetry
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
@@ -127,5 +127,5 @@ jobs:
           license: 'Apache-2.0'
           owner: 'Pyronear'
           starting-year: 2022
-          folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api'
+          folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api,pyro-predictor/pyro_predictor'
           ignore-files: 'version.py,__init__.py'

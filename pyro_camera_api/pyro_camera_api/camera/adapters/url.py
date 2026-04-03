@@ -47,8 +47,7 @@ class URLCamera(BaseCamera):
         redacted = urlunparse(cleaned)
         # Mask query credentials
         redacted = re.sub(r"(usr|user|username)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
-        redacted = re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
-        return redacted
+        return re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
 
     @staticmethod
     def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:
@@ -153,11 +152,11 @@ class URLCamera(BaseCamera):
             logger.info("URL capture OK from %s (HTTPDigestAuth), size=%s", redacted, img.size)
         return img
 
-    def capture(self, pos_id: Optional[int] = None) -> Optional[Image.Image]:
+    def capture(self, patrol_id: Optional[int] = None) -> Optional[Image.Image]:
         """
         Fetch a single snapshot from the configured URL and return it as a Pillow Image.
 
-        For URL cameras pos_id is ignored but kept for API compatibility.
+        For URL cameras patrol_id is ignored but kept for API compatibility.
 
         Current behavior with your configuration:
         - If the URL contains 'CGIProxy.fcgi' it uses the URL as is,
@@ -166,7 +165,7 @@ class URLCamera(BaseCamera):
           against the cleaned URL without embedded credentials, which is the case
           for adf_1231, adf_1200, adf_1320, adf_5559, adf_5995.
         """
-        _ = pos_id
+        _ = patrol_id
 
         if "CGIProxy.fcgi" in self.url:
             return self._capture_foscam_style()

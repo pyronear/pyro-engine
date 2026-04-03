@@ -20,17 +20,19 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     engine = Engine(cache_folder=folder)
 
     # Cache saving
-    _ts = datetime.now().isoformat()
+    ts = datetime.now().isoformat()
     engine._stage_alert(mock_wildfire_image, 0, datetime.now().isoformat(), bboxes="dummy")
     assert len(engine._alerts) == 1
-    assert engine._alerts[0]["ts"] < datetime.now().isoformat() and _ts < engine._alerts[0]["ts"]
+    assert engine._alerts[0]["ts"] < datetime.now().isoformat()
+    assert ts < engine._alerts[0]["ts"]
     assert engine._alerts[0]["media_id"] is None
     assert engine._alerts[0]["alert_id"] is None
 
     # inference
     engine = Engine(nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True)
     out = engine.predict(mock_forest_image)
-    assert isinstance(out, float) and 0 <= out <= 1
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 1
     assert engine._states["-1"]["ongoing"] is False
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
@@ -40,7 +42,8 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][0][4] is False
 
     out = engine.predict(mock_wildfire_image)
-    assert isinstance(out, float) and 0 <= out <= 1
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 2
     assert engine._states["-1"]["ongoing"] is False
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
@@ -50,15 +53,27 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._states["-1"]["last_predictions"][1][4] is False
 
     out = engine.predict(mock_wildfire_image)
-    assert isinstance(out, float) and 0 <= out <= 1
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
-    assert engine._states["-1"]["ongoing"] == True
+    assert not engine._states["-1"]["ongoing"]
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
-    assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
     assert engine._states["-1"]["last_predictions"][2][3] < datetime.now().isoformat()
     assert engine._states["-1"]["last_predictions"][2][4] is False
+
+    out = engine.predict(mock_wildfire_image)
+    assert isinstance(out, float)
+    assert 0 <= out <= 1
+    assert len(engine._states["-1"]["last_predictions"]) == 4
+    assert engine._states["-1"]["ongoing"]
+    assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
+    assert engine._states["-1"]["last_predictions"][3][1].shape[0] > 0
+    assert engine._states["-1"]["last_predictions"][3][1].shape[1] == 5
+    assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
+    assert engine._states["-1"]["last_predictions"][3][3] < datetime.now().isoformat()
+    assert engine._states["-1"]["last_predictions"][3][4] is False
 
 
 def create_dummy_onnx_model(model_path):
@@ -93,8 +108,7 @@ def test_valid_model_path(dummy_onnx_file):
 def invalid_onnx_file():
     """Fixture to create a temporary invalid ONNX file."""
     with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as tmpfile:
-        with open(tmpfile.name, "wb") as f:
-            f.write(b"Invalid content")
+        Path(tmpfile.name).write_bytes(b"Invalid content")
         yield tmpfile.name  # returns file path
 
 
@@ -131,7 +145,11 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
+<<<<<<< HEAD
     cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 1, None)}
+=======
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 62, None)}
+>>>>>>> develop
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
@@ -164,10 +182,43 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
 
-        assert engine._states["dummy_cam"]["ongoing"] == True
+        assert engine._states["dummy_cam"]["ongoing"]
         # Check that a media and an alert have been registered
         engine._process_alerts()
         assert len(engine._alerts) == 0
+
+
+@pytest.mark.parametrize(("save_detections_frames", "expected_backup_calls"), [(True, 1), (False, 0)])
+def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_frames, expected_backup_calls):
+    api_url = os.environ.get("API_URL")
+    api_token = os.environ.get("API_TOKEN")
+
+    if not api_url or not api_token:
+        pytest.skip("API_URL and API_TOKEN must be set to run this test against the real API")
+
+    cam_creds = {"dummy_cam": (api_token, 0, None)}
+    engine = Engine(
+        api_url=api_url,
+        cache_folder=str(tmp_path),
+        cam_creds=cam_creds,
+        save_detections_frames=save_detections_frames,
+    )
+
+    # Provide a non-empty bbox list so the API accepts the payload
+    engine._stage_alert(
+        Image.new("RGB", (8, 8)),
+        "dummy_cam",
+        int(time.time()),
+        bboxes=[(0.1, 0.1, 0.2, 0.2, 0.9)],
+    )
+
+    with patch.object(engine, "_local_backup") as mock_backup:
+        engine._process_alerts()
+
+    assert mock_backup.call_count == expected_backup_calls
+    if len(engine._alerts) > 0:
+        pytest.skip("Detection upload failed, alert left in cache")
+    assert len(engine._alerts) == 0
 
 
 def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):

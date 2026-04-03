@@ -34,7 +34,7 @@ def main():
             python src/control_reolink_cam.py capture --ip 192.168.1.12
 
         - Move the camera to a preset position:
-            python src/control_reolink_cam.py move_camera --ip 192.168.1.11 --operation ToPos --pos_id 3
+            python src/control_reolink_cam.py move_camera --ip 192.168.1.11 --operation ToPos --patrol_id 3
 
         - Move the camera to the right for 3 seconds:
             python src/control_reolink_cam.py move_in_seconds --ip 192.168.1.12 --operation Right --duration 3
@@ -43,7 +43,7 @@ def main():
             python src/control_reolink_cam.py get_ptz_preset --ip 192.168.1.12
 
         - Set a PTZ preset at position 1:
-            python src/control_reolink_cam.py set_ptz_preset --ip 192.168.1.12 --pos_id 1
+            python src/control_reolink_cam.py set_ptz_preset --ip 192.168.1.12 --patrol_id 1
 
         - Reboot the camera:
             python src/control_reolink_cam.py reboot_camera --ip 192.168.1.12
@@ -99,7 +99,7 @@ def main():
     parser.add_argument("--password", help="Password for camera access", default=cam_pwd)
     parser.add_argument("--protocol", help="Protocol (http or https)", default="http")
     parser.add_argument(
-        "--pos_id",
+        "--patrol_id",
         type=int,
         help="Position ID for moving the camera or capturing at a specific position",
         default=None,
@@ -136,7 +136,7 @@ def main():
 
     # Handling different actions
     if args.action == "capture":
-        image = camera_controller.capture(pos_id=args.pos_id)
+        image = camera_controller.capture(patrol_id=args.patrol_id)
         if image is not None:
             image.resize((1280, 720)).save("im.jpg")
             print("Image captured and saved as im.jpg")
@@ -144,7 +144,7 @@ def main():
             print("Failed to capture image.")
     elif args.action == "move_camera":
         if args.operation:
-            camera_controller.move_camera(operation=args.operation, speed=args.speed, idx=args.pos_id)
+            camera_controller.move_camera(operation=args.operation, speed=args.speed, idx=args.patrol_id)
         else:
             print("Operation type must be specified for moving the camera.")
     elif args.action == "move_in_seconds":
@@ -156,8 +156,8 @@ def main():
         presets = camera_controller.get_ptz_preset()
         print("PTZ Presets:", presets)
     elif args.action == "set_ptz_preset":
-        if args.pos_id is not None:
-            camera_controller.set_ptz_preset(idx=args.pos_id)
+        if args.patrol_id is not None:
+            camera_controller.set_ptz_preset(idx=args.patrol_id)
         else:
             print("Position ID must be provided for setting a PTZ preset.")
     elif args.action == "reboot_camera":
@@ -181,7 +181,7 @@ def main():
             camera_controller.set_auto_focus(disable=True)
             camera_controller.start_zoom_focus(position=args.zoom_position)
             print(f"Manual focus set at position {args.zoom_position}")
-            image = camera_controller.capture(pos_id=args.pos_id)
+            image = camera_controller.capture(patrol_id=args.patrol_id)
             if image is not None:
                 image.resize((1280, 720)).save("manual_focus.jpg")
                 print("Captured image with manual focus and saved as manual_focus.jpg.")

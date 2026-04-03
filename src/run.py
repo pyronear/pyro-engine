@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import pathlib
 
 import urllib3
 from dotenv import load_dotenv
@@ -24,35 +25,36 @@ def main(args):
 
     # .env loading
     load_dotenv(".env")
-    API_URL = os.environ.get("API_URL")
-    assert isinstance(API_URL, str)
-    CAM_USER = os.environ.get("CAM_USER")
-    CAM_PWD = os.environ.get("CAM_PWD")
-    assert isinstance(CAM_USER, str) and isinstance(CAM_PWD, str)
+    api_url = os.environ.get("API_URL")
+    assert isinstance(api_url, str)
+    cam_user = os.environ.get("CAM_USER")
+    cam_pwd = os.environ.get("CAM_PWD")
+    assert isinstance(cam_user, str)
+    assert isinstance(cam_pwd, str)
 
     # Loading camera creds
-    with open(args.creds, "rb") as json_file:
+    with pathlib.Path(args.creds).open("rb") as json_file:
         camera_data = json.load(json_file)
 
     splitted_cam_creds = {}
-    for _ip, cam_data in camera_data.items():
+    for ip, cam_data in camera_data.items():
         bbox_mask_url = None
-        if "bbox_mask_url" in cam_data.keys():
+        if "bbox_mask_url" in cam_data:
             bbox_mask_url = cam_data["bbox_mask_url"]
 
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_pose_ids = cam_data["pose_ids"]
-            for pos_id, pose_id in zip(cam_poses, cam_pose_ids, strict=False):
-                splitted_cam_creds[_ip + "_" + str(pos_id)] = (cam_data["token"], pose_id, bbox_mask_url)
+            for patrol_id, pose_id in zip(cam_poses, cam_pose_ids, strict=False):
+                splitted_cam_creds[ip + "_" + str(patrol_id)] = (cam_data["token"], pose_id, bbox_mask_url)
         else:
-            splitted_cam_creds[_ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
+            splitted_cam_creds[ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
 
     engine = Engine(
         model_path=args.model_path,
         conf_thresh=args.thresh,
         max_bbox_size=args.max_bbox_size,
-        api_url=API_URL,
+        api_url=api_url,
         cam_creds=splitted_cam_creds,
         cache_folder=args.cache,
         backup_size=args.backup_size,
@@ -63,6 +65,7 @@ def main(args):
         jpeg_quality=args.jpeg_quality,
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
+        save_detections_frames=args.save_detections_frames,
     )
 
     sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
@@ -77,7 +80,7 @@ if __name__ == "__main__":
     )
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
-    parser.add_argument("--thresh", type=float, default=0.15, help="Confidence threshold")
+    parser.add_argument("--thresh", type=float, default=0.35, help="Confidence threshold")
     parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
 
     # Camera & cache
@@ -101,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nb-consecutive_frames",
         type=int,
-        default=6,
+        default=7,
         help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
@@ -131,6 +134,12 @@ if __name__ == "__main__":
         type=bool,
         default=False,
         help="Save all captured frames locally",
+    )
+    parser.add_argument(
+        "--save_detections_frames",
+        type=bool,
+        default=False,
+        help="Save all locally detection frames locally",
     )
     parser.add_argument(
         "--send_alerts",

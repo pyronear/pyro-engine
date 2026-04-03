@@ -110,7 +110,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
     @staticmethod
     def _azimuth_deg_to_raw(azimuth_deg: float) -> int:
-        raw = int(round((float(azimuth_deg) % 360.0) * 10.0))
+        raw = round((float(azimuth_deg) % 360.0) * 10.0)
         if raw == 3600:
             raw = 0
         return raw
@@ -141,9 +141,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         i = self.cam_poses.index(pose_id)
         return float(self.cam_azimuths_camera[i]) % 360.0
 
-    def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
-        if pos_id is not None:
-            self.move_camera("ToPos", idx=int(pos_id), speed=0)
+    def capture(self, patrol_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
+        if patrol_id is not None:
+            self.move_camera("ToPos", idx=int(patrol_id), speed=0)
             time.sleep(1)
 
         old_timeout = self.timeout
@@ -404,7 +404,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         pan, tilt, zoom = 0, 0, 0
         # Accept Reolink-style speed (1-64) and map to ISAPI expected 1-100 range
-        v = int(round(self._map_range(speed, 1.0, 64.0, 1.0, 100.0)))
+        v = round(self._map_range(speed, 1.0, 64.0, 1.0, 100.0))
 
         if op == "Left":
             pan = -v

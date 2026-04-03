@@ -137,15 +137,9 @@ def get_os(run_lambda):
 def get_env_info():
     run_lambda = run
 
-    if ENGINE_AVAILABLE:
-        pyroengine_str = pyroengine.__version__
-    else:
-        pyroengine_str = "N/A"
+    pyroengine_str = pyroengine.__version__ if ENGINE_AVAILABLE else "N/A"
 
-    if ONNX_AVAILABLE:
-        onnxruntime_str = onnxruntime.__version__
-    else:
-        onnxruntime_str = "N/A"
+    onnxruntime_str = onnxruntime.__version__ if ONNX_AVAILABLE else "N/A"
 
     return SystemEnv(
         pyroengine_version=pyroengine_str,
@@ -167,14 +161,14 @@ Python version: {python_version}
 
 def pretty_str(envinfo):
     def replace_nones(dct, replacement="Could not collect"):
-        for key in dct.keys():
+        for key in dct:
             if dct[key] is not None:
                 continue
             dct[key] = replacement
         return dct
 
     def replace_bools(dct, true="Yes", false="No"):
-        for key in dct.keys():
+        for key in dct:
             if dct[key] is True:
                 dct[key] = true
             elif dct[key] is False:

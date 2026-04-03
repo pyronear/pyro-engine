@@ -103,10 +103,7 @@ def log_ffmpeg_output(proc: subprocess.Popen, camera_id: str) -> None:
     for line in iter(proc.stderr.readline, b""):
         if not line:
             break
-        try:
-            logger.info("[ffmpeg %s] %s", camera_id, line.decode(errors="ignore").rstrip())
-        except Exception:
-            pass
+        logger.info("[ffmpeg %s] %s", camera_id, line.decode(errors="ignore").rstrip())
 
 
 def build_ffmpeg_restream_cmd(input_url: str, output_url: str) -> list[str]:
