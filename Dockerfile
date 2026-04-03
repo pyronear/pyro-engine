@@ -2,8 +2,9 @@
 FROM python:3.11.13-slim-bullseye AS git-deps
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
-    apt-get clean && \
+    apt-get install -y --no-install-recommends git \
+    || { apt-get update && apt-get install -y --no-install-recommends --fix-missing git; } \
+    && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY ./requirements-git.txt /tmp/requirements-git.txt
@@ -24,6 +25,8 @@ RUN apt-get update && \
         libxext6 \
         libglib2.0-0 \
         libgl1 \
+    || { apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+        ffmpeg libsm6 libxext6 libglib2.0-0 libgl1; } \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
