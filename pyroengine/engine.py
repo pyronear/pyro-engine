@@ -137,10 +137,10 @@ class Engine(Predictor):
             state["last_bbox_mask_fetch"] = None
 
         # Occlusion masks
-        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
+        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], str]] = {"-1": (None, {}, "0")}
         if isinstance(cam_creds, dict):
-            for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
-                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, int(azimuth))
+            for cam_id, (_, pose_id, bbox_mask_url) in cam_creds.items():
+                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, pose_id)
 
         # Restore pending alerts cache
         self._alerts: deque = deque(maxlen=cache_size)
@@ -213,16 +213,17 @@ class Engine(Predictor):
         ):
             logger.info(f"Update occlusion masks for cam {cam_key}")
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
-            bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_key]
+            bbox_mask_url, bbox_mask_dict, pose_id = self.occlusion_masks[cam_key]
             if bbox_mask_url is not None:
-                full_url = f"{bbox_mask_url}_{azimuth}.json"
+                full_url = f"{bbox_mask_url}_{pose_id}.json"
                 try:
                     response = requests.get(full_url, timeout=5)
+                    response.raise_for_status()
                     bbox_mask_dict = response.json()
-                    self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
+                    self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, pose_id)
                     logger.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
                 except requests.exceptions.RequestException:
-                    logger.info(f"No occluson available for: {cam_key}")
+                    logger.info(f"No occlusion masks available for: {cam_key}")
 
         # Inference with ONNX
         if fake_pred is None:
@@ -293,7 +294,7 @@ class Engine(Predictor):
                         continue
                     filled = src.copy()
                     filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
-                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled]
+                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled.tolist()]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
@@ -310,19 +311,25 @@ class Engine(Predictor):
 
                 try:
                     # Detection creation
+                    bboxes = self._alerts[0]["bboxes"]
+                    if not bboxes:
+                        logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
+                        self._alerts.popleft()
+                        continue
                     stream = io.BytesIO()
                     frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                    bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    _, cam_azimuth, _ = self.cam_creds[cam_id]
+                    _, pose_id, _ = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
+                    response = self.api_client[ip].create_detection(stream.getvalue(), bboxes, pose_id)
 
                     try:
-                        # Force a KeyError if the request failed
                         response.json()["id"]
                     except ValueError:
                         logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
+                        raise
+                    except KeyError:
+                        logger.error(f"Camera '{cam_id}' - unexpected API response: {response.text}")
                         raise
 
                     # Clear
