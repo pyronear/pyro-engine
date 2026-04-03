@@ -7,11 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Layer 1: System libs (~100MB, almost never changes)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-<<<<<<< HEAD
-=======
         curl \
-        git \
->>>>>>> develop
         ffmpeg \
         libsm6 \
         libxext6 \
