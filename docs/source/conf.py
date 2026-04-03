@@ -22,7 +22,7 @@ from datetime import datetime
 sys.path.insert(0, pathlib.Path("../..").resolve())
 from unittest.mock import MagicMock
 
-for mod_name in ("ncnn", "onnxruntime"):
+for mod_name in ("ncnn", "onnxruntime", "cv2"):
     sys.modules[mod_name] = MagicMock()
 
 import pyroengine
@@ -55,7 +55,7 @@ extensions = [
 
 napoleon_use_ivar = True
 
-autodoc_mock_imports = ["ncnn", "onnxruntime"]
+autodoc_mock_imports = ["ncnn", "onnxruntime", "cv2"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
