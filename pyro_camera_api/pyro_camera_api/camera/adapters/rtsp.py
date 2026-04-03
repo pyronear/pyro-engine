@@ -86,15 +86,15 @@ class RTSPCamera(BaseCamera):
 
     def capture(
         self,
-        pos_id: Optional[int] = None,
+        patrol_id: Optional[int] = None,
         timeout_s: Optional[float] = None,
     ) -> Optional[Image.Image]:
         """
         Grab one frame through ffmpeg, convert to RGB, return as Pillow Image.
 
-        pos_id is accepted for API compatibility but ignored for RTSP cameras.
+        patrol_id is accepted for API compatibility but ignored for RTSP cameras.
         """
-        _ = pos_id  # unused but keeps the same signature as Reolink in the routes
+        _ = patrol_id  # unused but keeps the same signature as Reolink in the routes
 
         timeout = self.default_timeout_s if timeout_s is None else timeout_s
         frame = self._grab_frame_ffmpeg(timeout)

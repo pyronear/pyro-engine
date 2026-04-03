@@ -39,7 +39,7 @@ class BaseCamera(ABC):
         Capture a frame and return it as a PIL Image or None on failure.
 
         Keyword arguments are adapter specific:
-        Reolink may accept pos_id,
+        Reolink may accept patrol_id,
         RTSP may accept timeout,
         URL snapshot usually no arguments.
         """

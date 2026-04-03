@@ -66,7 +66,7 @@ def get_camera_infos():
 def _capture_impl(
     request: Request,
     camera_ip: str,
-    pos_id: Optional[int],
+    patrol_id: Optional[int],
     anonymize: bool,
     max_age_ms: Optional[int],
     strict: bool,
@@ -89,7 +89,7 @@ def _capture_impl(
     camera_ip:
         Identifier of the camera, usually the IP address used as key
         in CAMERA_REGISTRY and RAW_CONFIG.
-    pos_id:
+    patrol_id:
         Optional preset pose to use before capturing, if supported by
         the camera implementation.
     anonymize:
@@ -119,7 +119,7 @@ def _capture_impl(
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")
 
-    img: Optional[Image.Image] = cam.capture(pos_id=pos_id)
+    img: Optional[Image.Image] = cam.capture(patrol_id=patrol_id)
     if img is None:
         raise HTTPException(status_code=500, detail="Failed to capture image")
 
@@ -183,7 +183,7 @@ def _capture_impl(
 def capture(
     request: Request,
     camera_ip: str,
-    pos_id: Optional[int] = Query(default=None),
+    patrol_id: Optional[int] = Query(default=None),
     anonymize: bool = Query(default=True, description="Apply anonymization using latest boxes"),
     max_age_ms: Optional[int] = Query(
         default=None,
@@ -219,7 +219,7 @@ def capture(
     return _capture_impl(
         request=request,
         camera_ip=camera_ip,
-        pos_id=pos_id,
+        patrol_id=patrol_id,
         anonymize=anonymize,
         max_age_ms=max_age_ms,
         strict=strict,

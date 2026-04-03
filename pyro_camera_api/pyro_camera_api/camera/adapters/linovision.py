@@ -141,9 +141,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         i = self.cam_poses.index(pose_id)
         return float(self.cam_azimuths_camera[i]) % 360.0
 
-    def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
-        if pos_id is not None:
-            self.move_camera("ToPos", idx=int(pos_id), speed=0)
+    def capture(self, patrol_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
+        if patrol_id is not None:
+            self.move_camera("ToPos", idx=int(patrol_id), speed=0)
             time.sleep(1)
 
         old_timeout = self.timeout

@@ -36,7 +36,7 @@ class ReolinkCamera:
         protocol (str): Protocol used for communication, defaults to 'https'.
 
     Methods:
-        capture(pos_id): Captures an image from the camera. Moves to position `pos_id` if provided.
+        capture(patrol_id): Captures an image from the camera. Moves to position `patrol_id` if provided.
         move_camera(operation, speed, idx): Moves the camera based on the operation type and speed.
         move_in_seconds(s, operation, speed): Moves the camera for a specific duration and then stops.
         get_ptz_preset(): Retrieves preset positions for a PTZ camera.
@@ -92,19 +92,19 @@ class ReolinkCamera:
         logger.error(f"Failed operation: {response.status_code}, {response.text}")
         return None
 
-    def capture(self, pos_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
+    def capture(self, patrol_id: Optional[int] = None, timeout: int = 2) -> Optional[Image.Image]:
         """
         Captures an image from the camera. Optionally moves the camera to a preset position before capturing.
 
         Args:
-            pos_id (Optional[int]): The preset position ID to move to before capturing.
+            patrol_id (Optional[int]): The preset position ID to move to before capturing.
             timeout (int): Timeout for the HTTP request.
 
         Returns:
             Image.Image: An image captured from the camera, or None if there was an error.
         """
-        if pos_id is not None:
-            self.move_camera("ToPos", idx=int(pos_id), speed=50)
+        if patrol_id is not None:
+            self.move_camera("ToPos", idx=int(patrol_id), speed=50)
             time.sleep(1)
         url = self._build_url("Snap")
         logger.debug("Start capture")

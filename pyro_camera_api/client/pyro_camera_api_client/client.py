@@ -81,7 +81,7 @@ class PyroCameraAPIClient:
     def capture_jpeg(
         self,
         camera_ip: str,
-        pos_id: Optional[int] = None,
+        patrol_id: Optional[int] = None,
         anonymize: bool = True,
         max_age_ms: Optional[int] = None,
         strict: bool = False,
@@ -95,7 +95,7 @@ class PyroCameraAPIClient:
         ----------
         camera_ip:
             Camera identifier
-        pos_id:
+        patrol_id:
             Optional preset
         anonymize:
             Apply anonymization
@@ -113,8 +113,8 @@ class PyroCameraAPIClient:
             "anonymize": anonymize,
             "strict": strict,
         }
-        if pos_id is not None:
-            params["pos_id"] = pos_id
+        if patrol_id is not None:
+            params["patrol_id"] = patrol_id
         if max_age_ms is not None:
             params["max_age_ms"] = max_age_ms
         if width is not None:
@@ -128,7 +128,7 @@ class PyroCameraAPIClient:
     def capture_image(
         self,
         camera_ip: str,
-        pos_id: Optional[int] = None,
+        patrol_id: Optional[int] = None,
         anonymize: bool = True,
         max_age_ms: Optional[int] = None,
         strict: bool = False,
@@ -137,7 +137,7 @@ class PyroCameraAPIClient:
     ) -> Image.Image:
         data = self.capture_jpeg(
             camera_ip=camera_ip,
-            pos_id=pos_id,
+            patrol_id=patrol_id,
             anonymize=anonymize,
             max_age_ms=max_age_ms,
             strict=strict,
