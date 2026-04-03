@@ -328,9 +328,6 @@ class Engine(Predictor):
                     except ValueError:
                         logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
                         raise
-                    except KeyError:
-                        logger.error(f"Camera '{cam_id}' - unexpected API response: {response.text}")
-                        raise
 
                     # Clear
                     self._alerts.popleft()
