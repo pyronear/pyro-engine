@@ -38,7 +38,7 @@ jobs:
           poetry install --with docs
         
       - name: Build documentation
-        run: sphinx-build docs/source docs/build -a -v
+        run: poetry run sphinx-build docs/source docs/build -a -v
 
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit
