@@ -145,7 +145,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 62, None)}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 66, None)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
@@ -215,6 +215,55 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
     if len(engine._alerts) > 0:
         pytest.skip("Detection upload failed, alert left in cache")
     assert len(engine._alerts) == 0
+
+
+def test_fill_empty_bboxes(tmp_path):
+    """fill_empty_bboxes should replace empty-bbox alerts with the closest non-empty
+    sibling from the same cam_id, with confidence forced to 0."""
+    engine = Engine(cache_folder=str(tmp_path))
+
+    img = Image.new("RGB", (8, 8))
+    cam_id = "169.254.7.3_3"
+    bboxes_seq = [
+        [(0.436, 0.609, 0.44, 0.62, 0.089)],
+        [(0.436, 0.609, 0.44, 0.62, 0.589)],
+        [(0.436, 0.609, 0.44, 0.62, 0.489)],
+        [],  # empty middle frame
+        [(0.436, 0.609, 0.44, 0.62, 0.689)],
+        [(0.436, 0.609, 0.44, 0.62, 0.389)],
+    ]
+    for i, bboxes in enumerate(bboxes_seq):
+        engine._stage_alert(img, cam_id, i, bboxes=bboxes)
+
+    engine.fill_empty_bboxes()
+
+    # Every alert is now non-empty
+    assert all(alert["bboxes"] for alert in engine._alerts)
+    # The previously-empty frame (index 3) was filled from the closest sibling
+    # (index 2 or 4 — both equidistant; min() picks the lower index)
+    filled = engine._alerts[3]["bboxes"]
+    assert len(filled) == 1
+    # Geometry copied from the source
+    assert filled[0][:4] == pytest.approx((0.436, 0.609, 0.44, 0.62))
+    # Confidence forced to 0
+    assert filled[0][4] == 0.0
+    # Other frames are untouched
+    assert engine._alerts[0]["bboxes"][0][4] == pytest.approx(0.089)
+    assert engine._alerts[5]["bboxes"][0][4] == pytest.approx(0.389)
+
+
+def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
+    """If a cam_id has only empty-bbox alerts, fill_empty_bboxes leaves them empty
+    so the upload guard in _process_alerts can drop them."""
+    engine = Engine(cache_folder=str(tmp_path))
+
+    img = Image.new("RGB", (8, 8))
+    for i in range(3):
+        engine._stage_alert(img, "169.254.7.3_3", i, bboxes=[])
+
+    engine.fill_empty_bboxes()
+
+    assert all(not alert["bboxes"] for alert in engine._alerts)
 
 
 def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image):
