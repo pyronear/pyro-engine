@@ -335,8 +335,8 @@ class Engine(Predictor):
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
                 except (KeyError, RequestsConnectionError, ValueError) as e:
-                    logger.warning(f"Camera '{cam_id}' - unable to upload cache")
-                    logger.warning(e)
+                    logger.error(f"Camera '{cam_id}' - unable to upload cache")
+                    logger.error(e)
                     break
 
     def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
