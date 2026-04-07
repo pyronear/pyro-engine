@@ -22,7 +22,7 @@ lock:
 	poetry lock
 	poetry export -f requirements.txt --without-hashes --output requirements-all.txt
 	grep 'git+' requirements-all.txt > requirements-git.txt || true
-	grep -v 'git+' requirements-all.txt > requirements.txt
+	grep -v 'git+' requirements-all.txt | grep -v 'file://' > requirements.txt
 	rm requirements-all.txt
 
 # Generate requirements and build camera API Docker image
