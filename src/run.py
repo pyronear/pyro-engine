@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import pathlib
+import sys
 
 import urllib3
 from dotenv import load_dotenv
@@ -19,6 +20,7 @@ from pyroengine.engine import Engine
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
+logger = logging.getLogger(__name__)
 
 
 def main(args):
@@ -46,8 +48,12 @@ def main(args):
         local_pose_ids = set(cam_data.get("pose_ids", []))
         missing = local_pose_ids - api_pose_ids
         if missing:
-            raise ValueError(f"Camera {ip} ({cam_data.get('name', '')}): pose_ids {missing} not found in API")
-        logging.info(f"Camera {ip}: all pose_ids {local_pose_ids} verified in API")
+            logger.error(
+                f"Camera {ip} ({cam_data.get('name', '')}): pose_ids {missing} not found in API. "
+                f"Available pose_ids: {sorted(api_pose_ids)}"
+            )
+            sys.exit(1)
+        logger.info(f"Camera {ip} ({cam_data.get('name', '')}): all pose_ids {sorted(local_pose_ids)} verified in API")
 
     splitted_cam_creds = {}
     for ip, cam_data in camera_data.items():
