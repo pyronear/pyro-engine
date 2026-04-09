@@ -12,6 +12,7 @@ import pathlib
 import urllib3
 from dotenv import load_dotenv
 
+from pyroclient import client
 from pyroengine import SystemController
 from pyroengine.engine import Engine
 
@@ -35,6 +36,18 @@ def main(args):
     # Loading camera creds
     with pathlib.Path(args.creds).open("rb") as json_file:
         camera_data = json.load(json_file)
+
+    # Validate that pose_ids from credentials exist in the API
+    for ip, cam_data in camera_data.items():
+        api_client = client.Client(cam_data["token"], api_url)
+        response = api_client.get_current_poses()
+        response.raise_for_status()
+        api_pose_ids = {pose["id"] for pose in response.json()}
+        local_pose_ids = set(cam_data.get("pose_ids", []))
+        missing = local_pose_ids - api_pose_ids
+        if missing:
+            raise ValueError(f"Camera {ip} ({cam_data.get('name', '')}): pose_ids {missing} not found in API")
+        logging.info(f"Camera {ip}: all pose_ids {local_pose_ids} verified in API")
 
     splitted_cam_creds = {}
     for ip, cam_data in camera_data.items():
