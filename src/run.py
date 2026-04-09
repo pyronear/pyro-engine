@@ -11,8 +11,8 @@ import pathlib
 
 import urllib3
 from dotenv import load_dotenv
-
 from pyroclient import client
+
 from pyroengine import SystemController
 from pyroengine.engine import Engine
 
