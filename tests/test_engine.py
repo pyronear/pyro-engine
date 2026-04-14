@@ -272,7 +272,8 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0)}
+    # Use pose 356 which has an occlusion mask "(0.0,0.5,0.05,0.65)" covering the model's prediction area
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 356)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
@@ -284,9 +285,6 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
             frame_saving_period=3,
             cache_folder=folder,
         )
-        # Inject an occlusion mask covering the model's prediction area
-        engine.occlusion_masks["dummy_cam"] = {"1": (0.0, 0.5, 0.05, 0.65)}
-
         # Heartbeat
         start_ts = datetime.now(timezone.utc).isoformat()
         response = engine.heartbeat("dummy_cam")
@@ -296,8 +294,13 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
         ts = datetime.now(timezone.utc).isoformat()
 
         assert start_ts < json_respone["last_active_at"] < ts
-        # Send an alert
+
+        # First predict triggers the occlusion mask fetch from the API
         engine.predict(mock_wildfire_image, "dummy_cam")
+        # Verify masks were fetched and parsed correctly
+        assert "dummy_cam" in engine.occlusion_masks
+        assert len(engine.occlusion_masks["dummy_cam"]) > 0
+
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 1
         assert len(engine._alerts) == 0
         assert engine._states["dummy_cam"]["ongoing"] is False
@@ -308,4 +311,5 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
         engine.predict(mock_wildfire_image, "dummy_cam")
         assert len(engine._states["dummy_cam"]["last_predictions"]) == 3
 
+        # Predictions are filtered by the occlusion mask, so no wildfire is detected
         assert engine._states["dummy_cam"]["ongoing"] is False
