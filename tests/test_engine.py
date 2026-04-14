@@ -284,6 +284,9 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
             frame_saving_period=3,
             cache_folder=folder,
         )
+        # Inject an occlusion mask covering the model's prediction area
+        engine.occlusion_masks["dummy_cam"] = {"1": (0.0, 0.5, 0.05, 0.65)}
+
         # Heartbeat
         start_ts = datetime.now(timezone.utc).isoformat()
         response = engine.heartbeat("dummy_cam")
