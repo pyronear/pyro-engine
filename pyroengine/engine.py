@@ -210,7 +210,7 @@ class Engine(Predictor):
         ):
             logger.info(f"Update occlusion masks for cam {cam_key}")
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
-            if isinstance(cam_id, str) and cam_id in self.cam_creds:
+            if isinstance(cam_id, str) and isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
                 _, pose_id = self.cam_creds[cam_id]
                 ip = cam_id.split("_")[0]
                 if ip in self.api_client:
