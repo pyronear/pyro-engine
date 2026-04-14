@@ -57,17 +57,13 @@ def main(args):
 
     splitted_cam_creds = {}
     for ip, cam_data in camera_data.items():
-        bbox_mask_url = None
-        if "bbox_mask_url" in cam_data:
-            bbox_mask_url = cam_data["bbox_mask_url"]
-
         if cam_data["type"] == "ptz":
             cam_poses = cam_data["poses"]
             cam_pose_ids = cam_data["pose_ids"]
             for patrol_id, pose_id in zip(cam_poses, cam_pose_ids, strict=False):
-                splitted_cam_creds[ip + "_" + str(patrol_id)] = (cam_data["token"], pose_id, bbox_mask_url)
+                splitted_cam_creds[ip + "_" + str(patrol_id)] = (cam_data["token"], pose_id)
         else:
-            splitted_cam_creds[ip] = cam_data["token"], cam_data["pose_ids"][0], bbox_mask_url
+            splitted_cam_creds[ip] = (cam_data["token"], cam_data["pose_ids"][0])
 
     engine = Engine(
         model_path=args.model_path,

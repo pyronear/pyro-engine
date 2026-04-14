@@ -145,7 +145,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 66, None)}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 66)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
@@ -192,7 +192,7 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
     if not api_url or not api_token:
         pytest.skip("API_URL and API_TOKEN must be set to run this test against the real API")
 
-    cam_creds = {"dummy_cam": (api_token, 0, None)}
+    cam_creds = {"dummy_cam": (api_token, 0)}
     engine = Engine(
         api_url=api_url,
         cache_folder=str(tmp_path),
@@ -272,8 +272,7 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
     # With API
     load_dotenv(Path(__file__).parent.parent.joinpath(".env").absolute())
     api_url = os.environ.get("API_URL")
-    bbox_mask_url = "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/test_occlusion_bboxes"
-    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0, bbox_mask_url)}
+    cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 0)}
     # Skip the API-related tests if the URL is not specified
 
     if isinstance(api_url, str):
