@@ -225,8 +225,8 @@ class Engine(Predictor):
                             bbox_mask_dict[str(mask_entry["id"])] = coords
                         self.occlusion_masks[cam_key] = bbox_mask_dict
                         logger.info(f"Downloaded occlusion masks for cam {cam_key}: {bbox_mask_dict}")
-                    except RequestException:
-                        logger.info(f"No occlusion masks available for: {cam_key}")
+                    except RequestException as e:
+                        logger.warning(f"Failed to fetch occlusion masks for cam {cam_key} (pose {pose_id}): {e}")
 
         # Inference with ONNX
         if fake_pred is None:
