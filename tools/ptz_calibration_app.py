@@ -583,17 +583,12 @@ class APIClient:
             pass
         return None
 
-    def click_to_move(
-        self, click_x: int, click_y: int, image_width: int, image_height: int, zoom: int = 0
-    ) -> Optional[Dict]:
+    def click_to_move(self, click_x: float, click_y: float) -> Optional[Dict]:
         r = self._post(
             "control/click_to_move",
             camera_ip=self.ip,
             click_x=click_x,
             click_y=click_y,
-            image_width=image_width,
-            image_height=image_height,
-            zoom=zoom,
         )
         if r is not None and r.status_code == 200:
             return r.json()
@@ -1004,11 +999,8 @@ with tab_ctm:
                     if isinstance(client, APIClient):
                         with st.spinner("click_to_move via API…"):
                             api_result = client.click_to_move(
-                                target_click[0],
-                                target_click[1],
-                                W_ctm,
-                                H_ctm,
-                                zoom=ctm_zoom,
+                                target_click[0] / W_ctm,
+                                target_click[1] / H_ctm,
                             )
                         if api_result:
                             for mv in api_result.get("moves", []):

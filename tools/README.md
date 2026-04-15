@@ -12,8 +12,17 @@ The PTZ calibration app measures the relationship between movement commands and 
 
 ## Prerequisites
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't already have it:
+
 ```bash
-pip install streamlit opencv-python-headless pillow requests pandas matplotlib streamlit-image-coordinates
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Install dependencies and run the app (uv reads `tools/pyproject.toml`):
+
+```bash
+cd tools
+uv sync
 ```
 
 The camera must be accessible either directly (HTTP) or via the Camera API service.
@@ -21,12 +30,13 @@ The camera must be accessible either directly (HTTP) or via the Camera API servi
 ## Launch
 
 ```bash
-streamlit run tools/ptz_calibration_app.py
+cd tools
+uv run streamlit run ptz_calibration_app.py
 ```
 
 Open a second instance on a different port to calibrate another camera in parallel:
 ```bash
-streamlit run tools/ptz_calibration_app.py --server.port 8502
+uv run streamlit run ptz_calibration_app.py --server.port 8502
 ```
 
 ## Step-by-step Calibration

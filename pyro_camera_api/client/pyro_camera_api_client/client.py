@@ -202,29 +202,15 @@ class PyroCameraAPIClient:
     def click_to_move(
         self,
         camera_ip: str,
-        click_x: int,
-        click_y: int,
-        image_width: int,
-        image_height: int,
-        zoom: int = 0,
-        h_fov: Optional[float] = None,
-        v_fov: Optional[float] = None,
+        click_x: float,
+        click_y: float,
     ) -> Dict[str, Any]:
-        if zoom > 0:
-            logger.warning("click_to_move: zoom=%s > 0, speed will be limited to 1 server-side", zoom)
+        """click_x and click_y are normalized coordinates in [0, 1]."""
         params: Dict[str, Any] = {
             "camera_ip": camera_ip,
             "click_x": click_x,
             "click_y": click_y,
-            "image_width": image_width,
-            "image_height": image_height,
-            "zoom": zoom,
         }
-        if h_fov is not None:
-            params["h_fov"] = h_fov
-        if v_fov is not None:
-            params["v_fov"] = v_fov
-
         resp = self._request("POST", "/control/click_to_move", params=params, timeout=30.0)
         return resp.json()
 

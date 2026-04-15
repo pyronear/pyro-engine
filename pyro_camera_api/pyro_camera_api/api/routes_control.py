@@ -140,23 +140,15 @@ def _pick_speed(
 @router.post("/click_to_move")
 def click_to_move(
     camera_ip: str,
-    click_x: int,
-    click_y: int,
-    image_width: int,
-    image_height: int,
-    zoom: int = 0,
-    h_fov: Optional[float] = None,
-    v_fov: Optional[float] = None,
+    click_x: float,
+    click_y: float,
 ):
     """
-    Move a PTZ camera to center on a pixel coordinate clicked in the image.
+    Move a PTZ camera to center on a click in the image.
 
-    Computes the pan/tilt angles from the click offset relative to image center,
-    selects the best speed level using calibrated tables, and executes the move.
-
-    click_x / click_y are pixel coordinates in the full-resolution image.
-    h_fov / v_fov are optional — if omitted they are derived from zoom using
-    the built-in FOV table (Reolink RLC-823 series, linear interpolation).
+    click_x / click_y are normalized coordinates in [0, 1] (0 = left/top,
+    1 = right/bottom). The current zoom level is read from the camera and
+    the FOV is looked up from the calibrated table for the camera's adapter.
     """
     update_command_time()
 
@@ -170,11 +162,24 @@ def click_to_move(
     conf = RAW_CONFIG.get(camera_ip, {})
     adapter = conf.get("adapter", "unknown")
 
-    if h_fov is None or v_fov is None:
-        h_fov, v_fov = fov_at_zoom(zoom, adapter)
+    zoom = 0
+    if hasattr(cam, "get_focus_level"):
+        try:
+            info = cam.get_focus_level() or {}
+            z = info.get("zoom")
+            if z is not None:
+                zoom = int(z)
+        except Exception as exc:
+            logger.warning("[%s] click_to_move: failed to read zoom, assuming 0: %s", camera_ip, exc)
 
-    pan_deg = (click_x - image_width / 2) * h_fov / image_width
-    tilt_deg = (click_y - image_height / 2) * v_fov / image_height
+    h_fov, v_fov = fov_at_zoom(zoom, adapter)
+    logger.info(
+        "[%s] click_to_move: click=(%.3f,%.3f) zoom=%s adapter=%s h_fov=%.2f v_fov=%.2f",
+        camera_ip, click_x, click_y, zoom, adapter, h_fov, v_fov,
+    )
+
+    pan_deg = (click_x - 0.5) * h_fov
+    tilt_deg = (click_y - 0.5) * v_fov
 
     pan_speeds = PAN_SPEEDS.get(adapter, {})
     pan_bias = PAN_BIAS.get(adapter, {})
@@ -188,6 +193,9 @@ def click_to_move(
         "status": "ok",
         "camera_ip": camera_ip,
         "adapter": adapter,
+        "zoom": zoom,
+        "h_fov": round(h_fov, 3),
+        "v_fov": round(v_fov, 3),
         "pan_deg": round(pan_deg, 3),
         "tilt_deg": round(tilt_deg, 3),
         "moves": [],
