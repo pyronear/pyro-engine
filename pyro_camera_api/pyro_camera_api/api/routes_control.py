@@ -110,18 +110,30 @@ def _pick_speed(
 ) -> Optional[int]:
     """Return the highest speed level where T = (target - b) / ω is within [min_duration, max_duration].
 
+    For moves longer than max_duration at the highest available speed, that highest
+    speed is still returned (we accept a longer duration rather than falling back to
+    a micro-impulse on a large angle).
+
     When zoom > 0, only speed 1 is considered because Reolink cameras
     internally cap all speed levels to ~1.5 °/s at higher zoom.
     """
     best: Optional[int] = None
     allowed = {1: speeds[1]} if (zoom > 0 and 1 in speeds) else speeds
-    for level in sorted(allowed.keys()):
+    sorted_levels = sorted(allowed.keys())
+    for level in sorted_levels:
         b = bias.get(level, 0.0)
         if target_deg <= b:
             continue
         duration = (target_deg - b) / allowed[level]
         if min_duration <= duration <= max_duration:
             best = level
+
+    # Large angle: no level fits under max_duration → use the top speed anyway.
+    if best is None and sorted_levels:
+        top = sorted_levels[-1]
+        b = bias.get(top, 0.0)
+        if target_deg > b and (target_deg - b) / allowed[top] > max_duration:
+            best = top
     return best
 
 
