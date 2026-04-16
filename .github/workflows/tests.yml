@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  UV_VERSION: "0.5.13"
+
 jobs:
   pytest:
     runs-on: ${{ matrix.os }}
@@ -19,44 +22,34 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
 
-      - name: Cache python modules
-        uses: actions/cache@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-test
+          version: ${{ env.UV_VERSION }}
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Stub version.py
+        run: echo "__version__ = '0.0.0'" > pyroengine/version.py
 
-      - name: Generate version.py from pyproject.toml
-        run: |
-          version=$(poetry version -s)
-          echo "__version__ = '${version}'" > pyroengine/version.py
-          
-        
       - name: Install test dependencies
-        run: poetry install --with dev
+        run: uv sync --group dev
 
       - name: Run unittests
         env:
           API_URL: ${{ secrets.API_URL }}
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: |
-          poetry run coverage run -m pytest tests/
-          poetry run coverage xml
+          uv run coverage run -m pytest tests/
+          uv run coverage xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-main
           path: coverage.xml
-      
+
 
   codecov-upload:
     runs-on: ubuntu-latest
@@ -85,30 +78,22 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
-      - name: Cache python modules
-        uses: actions/cache@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-docs
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          version: ${{ env.UV_VERSION }}
 
-      - name: Generate version.py from pyproject.toml
-        run: |
-          version=$(poetry version -s)
-          echo "__version__ = '${version}'" > pyroengine/version.py
-      
+      - name: Stub version.py
+        run: echo "__version__ = '0.0.0'" > pyroengine/version.py
+
       - name: Install documentation dependencies
-        run: poetry install --with docs
-        
+        run: uv sync --group docs
+
       - name: Build documentation
-        run: poetry run sphinx-build docs/source docs/build -a
+        run: uv run sphinx-build docs/source docs/build -a
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit
 

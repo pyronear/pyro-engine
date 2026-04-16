@@ -9,7 +9,6 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   UV_VERSION: "0.5.13"
-  POETRY_VERSION: "2.1.0"
 
 jobs:
   ruff:
@@ -20,23 +19,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: ${{ env.POETRY_VERSION }}
       - uses: astral-sh/setup-uv@v5
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Add poetry export plugin
-        run: poetry self add poetry-plugin-export
       - name: Install quality dependencies
-        run: |
-          poetry export -f requirements.txt --without-hashes --only quality --output requirements.txt
-          uv pip install --system -r requirements.txt
+        run: uv sync --only-group quality
       - name: Run ruff
         run: |
-          ruff --version
-          ruff format --check --diff .
-          ruff check --diff .
+          uv run ruff --version
+          uv run ruff format --check --diff .
+          uv run ruff check --diff .
 
   mypy:
     runs-on: ubuntu-latest
@@ -46,19 +38,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - uses: abatilo/actions-poetry@v4
-        with:
-          poetry-version: ${{ env.POETRY_VERSION }}
       - uses: astral-sh/setup-uv@v5
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Add poetry export plugin
-        run: poetry self add poetry-plugin-export
       - name: Install quality dependencies
-        run: |
-          poetry export -f requirements.txt --without-hashes --with quality --output requirements.txt
-          uv pip install --system -r requirements.txt
+        run: uv sync --group quality
       - name: Run mypy
         run: |
-          mypy --version
-          mypy
+          uv run mypy --version
+          uv run mypy

@@ -93,13 +93,14 @@ image_bytes = client.snapshot("url_camera_1")
 
 ## Setup
 
-Python 3.11 or higher and `pip` or `conda` are required.
+Python 3.11 or higher and [uv](https://docs.astral.sh/uv/) are required.
 
 ### Developer installation
 
 ```bash
 git clone https://github.com/pyronear/pyro-engine.git
-pip install -e pyro-engine/.
+cd pyro-engine
+uv sync
 ```
 
 ### Environment variables
