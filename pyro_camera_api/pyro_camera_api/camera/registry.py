@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import defaultdict
 from typing import Dict, Optional
 
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
@@ -27,6 +28,10 @@ CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 # Patrol threading state, later managed in camera.patrol
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
+
+# Per-camera locks to serialize blocking PTZ operations (click_to_move, zoom).
+# Non-blocking acquire → endpoints return 409 if the camera is already busy.
+MOVE_LOCKS: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:

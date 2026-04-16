@@ -978,6 +978,26 @@ wheels = [
 ]
 
 [[package]]
+name = "pyro-camera-api-client"
+version = "0.1.0"
+source = { editable = "../pyro_camera_api/client" }
+dependencies = [
+    { name = "pillow" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", marker = "extra == 'dev'" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "pillow" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "requests" },
+    { name = "ruff", marker = "extra == 'dev'" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "pyro-ptz-calibration"
 version = "0.1.0"
 source = { virtual = "." }
@@ -987,6 +1007,7 @@ dependencies = [
     { name = "opencv-python-headless" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "pyro-camera-api-client" },
     { name = "requests" },
     { name = "streamlit" },
     { name = "streamlit-image-coordinates" },
@@ -1000,6 +1021,7 @@ requires-dist = [
     { name = "opencv-python-headless", specifier = ">=4.8" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pillow", specifier = ">=10.0" },
+    { name = "pyro-camera-api-client", editable = "../pyro_camera_api/client" },
     { name = "requests", specifier = ">=2.31" },
     { name = "streamlit", specifier = ">=1.30" },
     { name = "streamlit-image-coordinates", specifier = ">=0.1.6" },

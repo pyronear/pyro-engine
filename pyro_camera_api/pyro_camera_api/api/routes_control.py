@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import PTZMixin
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.utils.time_utils import update_command_time
 
@@ -149,6 +149,7 @@ def click_to_move(
     click_x / click_y are normalized coordinates in [0, 1] (0 = left/top,
     1 = right/bottom). The current zoom level is read from the camera and
     the FOV is looked up from the calibrated table for the camera's adapter.
+    Returns 409 if another blocking PTZ command is already running on this camera.
     """
     update_command_time()
 
@@ -159,107 +160,114 @@ def click_to_move(
     if not isinstance(cam, PTZMixin):
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
-    conf = RAW_CONFIG.get(camera_ip, {})
-    adapter = conf.get("adapter", "unknown")
-
-    zoom = 0
-    if hasattr(cam, "get_focus_level"):
-        try:
-            info = cam.get_focus_level() or {}
-            z = info.get("zoom")
-            if z is not None:
-                zoom = int(z)
-        except Exception as exc:
-            logger.warning("[%s] click_to_move: failed to read zoom, assuming 0: %s", camera_ip, exc)
-
-    h_fov, v_fov = fov_at_zoom(zoom, adapter)
-    logger.info(
-        "[%s] click_to_move: click=(%.3f,%.3f) zoom=%s adapter=%s h_fov=%.2f v_fov=%.2f",
-        camera_ip, click_x, click_y, zoom, adapter, h_fov, v_fov,
-    )
-
-    pan_deg = (click_x - 0.5) * h_fov
-    tilt_deg = (click_y - 0.5) * v_fov
-
-    pan_speeds = PAN_SPEEDS.get(adapter, {})
-    pan_bias = PAN_BIAS.get(adapter, {})
-    tilt_speeds = TILT_SPEEDS.get(adapter, {})
-    tilt_bias = TILT_BIAS.get(adapter, {})
-
-    if zoom > 0:
-        logger.warning("[%s] click_to_move: zoom=%s > 0, speed limited to 1", camera_ip, zoom)
-
-    result: dict = {
-        "status": "ok",
-        "camera_ip": camera_ip,
-        "adapter": adapter,
-        "zoom": zoom,
-        "h_fov": round(h_fov, 3),
-        "v_fov": round(v_fov, 3),
-        "pan_deg": round(pan_deg, 3),
-        "tilt_deg": round(tilt_deg, 3),
-        "moves": [],
-    }
-    if zoom > 0:
-        result["warning"] = f"speed limited to 1 (zoom={zoom} > 0)"
-
-    def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> None:
-        """Execute a single-axis move: calibrated duration, or micro-pulse if below bias."""
-        speed_level = _pick_speed(abs(deg), speeds, bias, zoom=zoom)
-        if speed_level is not None:
-            b = bias.get(speed_level, 0.0)
-            dur = (abs(deg) - b) / speeds[speed_level]
-            logger.info(
-                "[%s] click_to_move %s %s %.2f° speed=%s dur=%.2fs",
-                camera_ip,
-                axis,
-                direction,
-                abs(deg),
-                speed_level,
-                dur,
-            )
-            cam.move_camera(direction, speed=speed_level)
-            time.sleep(dur)
-            cam.move_camera("Stop")
-            result["moves"].append({
-                "axis": axis,
-                "direction": direction,
-                "deg": round(abs(deg), 3),
-                "speed": speed_level,
-                "duration": round(dur, 2),
-            })
-        elif speeds:
-            # Angle below bias — micro-impulse at speed 1
-            logger.info(
-                "[%s] click_to_move %s %s %.2f° micro-impulse speed=1", camera_ip, axis, direction, abs(deg)
-            )
-            cam.move_camera(direction, speed=1)
-            cam.move_camera("Stop")
-            result["moves"].append({
-                "axis": axis,
-                "direction": direction,
-                "deg": round(abs(deg), 3),
-                "speed": 1,
-                "duration": 0,
-                "micro": True,
-            })
-        else:
-            result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
+    lock = MOVE_LOCKS[camera_ip]
+    if not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
 
     try:
-        # Skip if angle < half the micro-pulse displacement (bias at speed 1)
-        pan_min = pan_bias.get(1, 1.0) / 2
-        tilt_min = tilt_bias.get(1, 1.0) / 2
-        if abs(pan_deg) >= pan_min:
-            _execute_axis("pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias)
-        if abs(tilt_deg) >= tilt_min:
-            _execute_axis("tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias)
+        conf = RAW_CONFIG.get(camera_ip, {})
+        adapter = conf.get("adapter", "unknown")
 
-    except Exception as exc:
-        logger.error("[%s] click_to_move error: %s", camera_ip, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        zoom = 0
+        if hasattr(cam, "get_focus_level"):
+            try:
+                info = cam.get_focus_level() or {}
+                z = info.get("zoom")
+                if z is not None:
+                    zoom = int(z)
+            except Exception as exc:
+                logger.warning("[%s] click_to_move: failed to read zoom, assuming 0: %s", camera_ip, exc)
 
-    return result
+        h_fov, v_fov = fov_at_zoom(zoom, adapter)
+        logger.info(
+            "[%s] click_to_move: click=(%.3f,%.3f) zoom=%s adapter=%s h_fov=%.2f v_fov=%.2f",
+            camera_ip, click_x, click_y, zoom, adapter, h_fov, v_fov,
+        )
+
+        pan_deg = (click_x - 0.5) * h_fov
+        tilt_deg = (click_y - 0.5) * v_fov
+
+        pan_speeds = PAN_SPEEDS.get(adapter, {})
+        pan_bias = PAN_BIAS.get(adapter, {})
+        tilt_speeds = TILT_SPEEDS.get(adapter, {})
+        tilt_bias = TILT_BIAS.get(adapter, {})
+
+        if zoom > 0:
+            logger.warning("[%s] click_to_move: zoom=%s > 0, speed limited to 1", camera_ip, zoom)
+
+        result: dict = {
+            "status": "ok",
+            "camera_ip": camera_ip,
+            "adapter": adapter,
+            "zoom": zoom,
+            "h_fov": round(h_fov, 3),
+            "v_fov": round(v_fov, 3),
+            "pan_deg": round(pan_deg, 3),
+            "tilt_deg": round(tilt_deg, 3),
+            "moves": [],
+        }
+        if zoom > 0:
+            result["warning"] = f"speed limited to 1 (zoom={zoom} > 0)"
+
+        def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> None:
+            """Execute a single-axis move: calibrated duration, or micro-pulse if below bias."""
+            speed_level = _pick_speed(abs(deg), speeds, bias, zoom=zoom)
+            if speed_level is not None:
+                b = bias.get(speed_level, 0.0)
+                dur = (abs(deg) - b) / speeds[speed_level]
+                logger.info(
+                    "[%s] click_to_move %s %s %.2f° speed=%s dur=%.2fs",
+                    camera_ip,
+                    axis,
+                    direction,
+                    abs(deg),
+                    speed_level,
+                    dur,
+                )
+                cam.move_camera(direction, speed=speed_level)
+                time.sleep(dur)
+                cam.move_camera("Stop")
+                result["moves"].append({
+                    "axis": axis,
+                    "direction": direction,
+                    "deg": round(abs(deg), 3),
+                    "speed": speed_level,
+                    "duration": round(dur, 2),
+                })
+            elif speeds:
+                # Angle below bias — micro-impulse at speed 1
+                logger.info(
+                    "[%s] click_to_move %s %s %.2f° micro-impulse speed=1", camera_ip, axis, direction, abs(deg)
+                )
+                cam.move_camera(direction, speed=1)
+                cam.move_camera("Stop")
+                result["moves"].append({
+                    "axis": axis,
+                    "direction": direction,
+                    "deg": round(abs(deg), 3),
+                    "speed": 1,
+                    "duration": 0,
+                    "micro": True,
+                })
+            else:
+                result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
+
+        try:
+            # Skip if angle < half the micro-pulse displacement (bias at speed 1)
+            pan_min = pan_bias.get(1, 1.0) / 2
+            tilt_min = tilt_bias.get(1, 1.0) / 2
+            if abs(pan_deg) >= pan_min:
+                _execute_axis("pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias)
+            if abs(tilt_deg) >= tilt_min:
+                _execute_axis("tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias)
+
+        except Exception as exc:
+            logger.error("[%s] click_to_move error: %s", camera_ip, exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        return result
+    finally:
+        lock.release()
 
 
 @router.post("/move")
@@ -499,6 +507,8 @@ def zoom_camera(camera_ip: str, level: int):
     The camera must implement a start_zoom_focus method.
     Level represents the target zoom position accepted by the camera
     which is usually an integer range specific to the adapter.
+    Holds a per-camera lock for an estimated settle duration (~2 s base +
+    0.2 s per zoom step) so concurrent PTZ commands get a 409.
     """
     update_command_time()
 
@@ -512,10 +522,32 @@ def zoom_camera(camera_ip: str, level: int):
     if not hasattr(cam, "start_zoom_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support zoom control")
 
+    lock = MOVE_LOCKS[camera_ip]
+    if not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+
     try:
+        # Read current zoom to estimate travel time; fall back to a generous delta.
+        current = None
+        if hasattr(cam, "get_focus_level"):
+            try:
+                info = cam.get_focus_level() or {}
+                z = info.get("zoom")
+                if z is not None:
+                    current = int(z)
+            except Exception as exc:
+                logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
+        delta = abs(level - current) if current is not None else 41
+        settle = 2.0 + 0.2 * delta
+
         cam.start_zoom_focus(level)
-        logger.info("[%s] Zoom set to %s", camera_ip, level)
-        return {"message": f"Zoom set to {level}", "camera_ip": camera_ip}
+        logger.info("[%s] Zoom %s→%s, holding lock %.1fs", camera_ip, current, level, settle)
+        time.sleep(settle)
+        return {"message": f"Zoom set to {level}", "camera_ip": camera_ip, "settle": round(settle, 2)}
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("[%s] Failed to set zoom: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
