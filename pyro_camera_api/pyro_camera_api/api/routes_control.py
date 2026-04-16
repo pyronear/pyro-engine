@@ -308,6 +308,13 @@ def move_camera(
     conf = RAW_CONFIG.get(camera_ip, {})
     adapter = conf.get("adapter", "unknown")
 
+    # Only the blocking modes (duration, degrees) hold the per-camera lock.
+    # pose_id returns immediately; bare direction is started here and stopped by /stop.
+    blocking = pose_id is None and direction is not None and (duration is not None or degrees is not None)
+    lock = MOVE_LOCKS[camera_ip] if blocking else None
+    if lock is not None and not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+
     try:
         if pose_id is not None:
             logger.info("[%s] Moving to preset pose %s at speed %s", camera_ip, pose_id, speed)
@@ -416,6 +423,9 @@ def move_camera(
     except Exception as exc:
         logger.error("[%s] Movement error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if lock is not None:
+            lock.release()
 
 
 @router.post("/stop/{camera_ip}")
