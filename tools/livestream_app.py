@@ -46,9 +46,7 @@ with st.sidebar:
 
     cam_list = st.session_state.get("cam_list", [])
     camera_ip = (
-        st.selectbox("Camera", cam_list, key="cam_sel")
-        if cam_list
-        else st.text_input("Camera IP (manual)", value="")
+        st.selectbox("Camera", cam_list, key="cam_sel") if cam_list else st.text_input("Camera IP (manual)", value="")
     )
 
 if not camera_ip:
