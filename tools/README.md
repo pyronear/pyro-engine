@@ -99,21 +99,42 @@ Go to the **Results & Export** tab:
 
 ### 7. Update routes_control.py
 
-Update the speed tables in `pyro_camera_api/pyro_camera_api/api/routes_control.py`:
+Update the speed/bias tables in `pyro_camera_api/pyro_camera_api/api/routes_control.py`. Both adapter keys (`reolink-823S2` and `reolink-823A16`) and both axes (pan + tilt) must be kept in sync:
 
 ```python
 PAN_SPEEDS = {
+    "reolink-823S2":  {1: <omega>, 2: <omega>, 3: <omega>, 4: <omega>, 5: <omega>},
     "reolink-823A16": {1: <omega>, 2: <omega>, 3: <omega>, 4: <omega>, 5: <omega>},
 }
 PAN_BIAS = {
+    "reolink-823S2":  {1: <bias>, 2: <bias>, 3: <bias>, 4: <bias>, 5: <bias>},
     "reolink-823A16": {1: <bias>, 2: <bias>, 3: <bias>, 4: <bias>, 5: <bias>},
+}
+TILT_SPEEDS = {
+    "reolink-823S2":  {1: <omega>, 2: <omega>, 3: <omega>},
+    "reolink-823A16": {1: <omega>, 2: <omega>, 3: <omega>},
+}
+TILT_BIAS = {
+    "reolink-823S2":  {1: <bias>, 2: <bias>, 3: <bias>},
+    "reolink-823A16": {1: <bias>, 2: <bias>, 3: <bias>},
 }
 ```
 
 All values come from zoom 0 calibration. The `_pick_speed()` function automatically restricts to speed 1 when zoom > 0.
 
-### 8. Test with click-to-move
+### 8. Calibrate the FOV table (Zoom FOV tab)
 
+The camera API interprets click-to-move clicks using a per-zoom FOV lookup. Recalibrate whenever a new camera model is added or optics change.
+
+- Place a QR code at a fixed distance in front of the camera
+- Open the **Zoom FOV Calibration** tab
+- Set zoom range (default 0–64, step 1) and click **Start FOV calibration**
+- For each zoom level the app captures a snapshot, detects the QR, and computes FOV by chained ratio from zoom 0 (anchored by `H_FOV_WIDE` / `V_FOV_WIDE`)
+- Export the resulting `h_fov` / `v_fov` arrays (42 values each) into `pyro_camera_api/pyro_camera_api/api/fov_tables.json` under the right adapter key
+
+### 9. Test with click-to-move
+
+- Use `livestream_app.py` (see below) or any client that calls `/control/click_to_move`
 - Click on different points in the image at zoom 0 and zoomed in
 - Verify the camera centers on the clicked point
 - At zoom 0, higher speeds should be used for large moves
@@ -131,7 +152,24 @@ Reolink cameras internally cap PTZ speed when zoomed in. All speeds collapse to 
 
 All move commands use the `duration` parameter which executes move+sleep+stop on the Pi's local network. This eliminates VPN latency from measurements.
 
+## Livestream / click-to-move app
+
+`livestream_app.py` is a small Streamlit companion tool for operators:
+
+- stops the current patrol
+- starts the public RTSP→HLS live stream and embeds it as an iframe
+- on a fresh snapshot, click anywhere to recenter the camera via `/control/click_to_move`
+
+```bash
+cd tools
+uv run streamlit run livestream_app.py
+```
+
+It talks to the Camera API only (no direct HTTP to the camera) and uses the same calibrated speed + FOV tables the PTZ routes rely on.
+
 ## Files
 
-- `ptz_calibration_app.py` — Streamlit calibration app
+- `ptz_calibration_app.py` — Streamlit app for PTZ speed/bias and zoom-FOV calibration
+- `livestream_app.py` — Streamlit livestream + click-to-move operator tool
 - `ptz_zoom_speed_calibration_report.md` — Calibration results and zoom-speed research
+- `pyproject.toml` / `uv.lock` — `uv sync` dependency spec for the tools
