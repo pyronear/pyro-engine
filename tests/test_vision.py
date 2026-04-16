@@ -4,7 +4,16 @@ import shutil
 
 import numpy as np
 
-from pyroengine.vision import Classifier
+# Canonical import — Classifier lives in pyro_predictor
+from pyro_predictor import Classifier
+
+# pyroengine.vision shim must re-export the same class
+from pyroengine.vision import Classifier as ClassifierShim
+
+
+def test_shim_is_same_class():
+    """pyroengine.vision.Classifier must be the same object as pyro_predictor.Classifier."""
+    assert ClassifierShim is Classifier
 
 
 def test_classifier(tmpdir_factory, mock_wildfire_image):
@@ -37,8 +46,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
 
 def sha256sum(path):
-    with pathlib.Path(path).open("rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
 def test_download(tmpdir_factory):

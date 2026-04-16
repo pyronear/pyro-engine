@@ -28,11 +28,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml') }}-build
+          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-build
 
       - name: Install dependencies
         run: pip install --no-cache-dir -r requirements.txt
       
+      - name: Install pyro-predictor
+        run: pip install -e pyro-predictor/
+
       - name: Install local package
         run: pip install -e . --upgrade
       

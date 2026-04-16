@@ -3,28 +3,22 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-import glob
 import io
 import logging
 import shutil
 import signal
 import time
 from collections import deque
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Never, Optional, Tuple
 
 import numpy as np
-import numpy.typing as npt
-import requests
 from PIL import Image
+from pyro_predictor import Predictor
 from pyroclient import client
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 from requests.models import Response
-
-from pyroengine.utils import box_iou, nms
-
-from .vision import Classifier
 
 __all__ = ["Engine"]
 
@@ -32,31 +26,33 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 logger = logging.getLogger(__name__)
 
 
-def handler(signum, frame) -> Never:
+def handler(_signum: int, _frame: object) -> Never:
     raise TimeoutError("Heartbeat check timed out")
 
 
-def heartbeat_with_timeout(api_instance, cam_id, timeout=1) -> None:
+def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 1) -> None:  # noqa: ANN401
     signal.signal(signal.SIGALRM, handler)
     signal.alarm(timeout)
     try:
         api_instance.heartbeat(cam_id)
     except TimeoutError:
         logger.warning(f"Heartbeat check timed out for {cam_id}")
-    except ConnectionError:
+    except RequestsConnectionError:
         logger.warning(f"Unable to reach the pyro-api with {cam_id}")
     finally:
         signal.alarm(0)
 
 
-class Engine:
-    """This implements an object to manage predictions and API interactions for wildfire alerts.
+class Engine(Predictor):
+    """Manages predictions and API interactions for wildfire alerts.
+
+    Extends Predictor with pyroclient API integration: heartbeats, image uploads, alert staging and caching.
 
     Args:
         hub_repo: repository on HF Hub to load the ONNX model from
         conf_thresh: confidence threshold to send an alert
         api_url: url of the pyronear API
-        cam_creds: api credectials for each camera, the dictionary should be as the one in the example
+        cam_creds: api credentials for each camera, the dictionary should be as the one in the example
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
             the number of consecutive negative detections before stopping the alert
         frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
@@ -98,29 +94,31 @@ class Engine:
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
-        """Init engine"""
-        # Engine Setup
-
-        self.model = Classifier(model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size)
-        self.conf_thresh = conf_thresh
-        self.model_conf_thresh = model_conf_thresh
-        self.max_bbox_size = max_bbox_size
+        cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
+        super().__init__(
+            model_path=model_path,
+            conf_thresh=conf_thresh,
+            model_conf_thresh=model_conf_thresh,
+            max_bbox_size=max_bbox_size,
+            nb_consecutive_frames=nb_consecutive_frames,
+            frame_size=frame_size,
+            cam_ids=cam_ids,
+            **kwargs,
+        )
 
         # API Setup
         self.api_client: dict[str, Any] = {}
         if isinstance(api_url, str) and isinstance(cam_creds, dict):
             # Instantiate clients for each camera
-            for id_, (camera_token, _, _) in cam_creds.items():
+            for id_, (camera_token, _) in cam_creds.items():
                 ip = id_.split("_")[0]
                 if ip not in self.api_client:
                     self.api_client[ip] = client.Client(camera_token, api_url)
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
-        self.nb_consecutive_frames = nb_consecutive_frames
-        self.frame_size = frame_size
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
@@ -133,139 +131,44 @@ class Engine:
         # Local backup
         self._backup_size = backup_size
 
-        # Var initialization
-        self._states: Dict[str, Dict[str, Any]] = {
-            "-1": {
-                "last_predictions": deque(maxlen=self.nb_consecutive_frames),
-                "ongoing": False,
-                "last_image_sent": None,
-                "last_bbox_mask_fetch": None,
-                "anchor_bbox": None,
-                "anchor_ts": None,
-                "miss_count": 0,
-            },
-        }
-        if isinstance(cam_creds, dict):
-            for cam_id in cam_creds:
-                self._states[cam_id] = {
-                    "last_predictions": deque(maxlen=self.nb_consecutive_frames),
-                    "ongoing": False,
-                    "last_image_sent": None,
-                    "last_bbox_mask_fetch": None,
-                    "anchor_bbox": None,
-                    "anchor_ts": None,
-                    "miss_count": 0,
-                }
+        # Augment states with API-specific fields
+        for state in self._states.values():
+            state["last_image_sent"] = None
+            state["last_bbox_mask_fetch"] = None
 
-        self.occlusion_masks: Dict[str, Tuple[Optional[str], Dict[Any, Any], int]] = {"-1": (None, {}, 0)}
-        if isinstance(cam_creds, dict):
-            for cam_id, (_, azimuth, bbox_mask_url) in cam_creds.items():
-                self.occlusion_masks[cam_id] = (bbox_mask_url, {}, int(azimuth))
+        # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
+        self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
 
         # Restore pending alerts cache
         self._alerts: deque = deque(maxlen=cache_size)
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
-        assert self._cache.is_dir()
+        if not self._cache.is_dir():
+            raise ValueError(f"Cache folder does not exist: {self._cache}")
+
+    def _new_state(self) -> Dict[str, Any]:
+        state = super()._new_state()
+        state["last_image_sent"] = None
+        state["last_bbox_mask_fetch"] = None
+        return state
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
-    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float:
-        prev_ongoing = self._states[cam_key]["ongoing"]
-
-        conf_th = self.conf_thresh * self.nb_consecutive_frames
-        if prev_ongoing:
-            conf_th *= 0.8
-
-        boxes = np.zeros((0, 5), dtype=np.float64)
-        boxes = np.concatenate([boxes, preds])
-        for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
-            if box.shape[0] > 0:
-                boxes = np.concatenate([boxes, box])
-
-        conf = 0.0
-        output_predictions: npt.NDArray[np.float64] = np.zeros((0, 5), dtype=np.float64)
-
-        if boxes.shape[0]:
-            best_boxes = nms(boxes)
-            detections = boxes[boxes[:, -1] > self.conf_thresh, :]
-            ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
-            strong_detection = np.sum(ious_detections > 0, axis=0) >= int(self.nb_consecutive_frames / 2)
-            best_boxes = best_boxes[strong_detection, :]
-
-            if best_boxes.shape[0]:
-                ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-                best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
-                combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-                if len(best_boxes_scores) > 0:
-                    conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)
-
-                if combine_predictions.shape[0] > 0:
-                    ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                    iou_match = np.array([np.max(iou) > 0 for iou in ious], dtype=bool)
-                    matched_preds = preds[iou_match, :]
-                    if matched_preds.ndim == 1:
-                        matched_preds = matched_preds[np.newaxis, :]
-                    output_predictions = matched_preds.astype(np.float64)
-
-        # no zero confidence fabrication before ongoing
-        # if empty and we were already ongoing, reuse anchor but set conf to 0
-        if output_predictions.shape[0] == 0:
-            anchor = self._states[cam_key]["anchor_bbox"]
-            if prev_ongoing and anchor is not None:
-                output_predictions = anchor.copy()
-                output_predictions[:, -1] = 0.0  # filled during ongoing, confidence forced to 0
-            else:
-                output_predictions = np.empty((0, 5), dtype=np.float64)  # stays empty for backfill later
-        else:
-            # refresh anchor during ongoing with light smoothing
-            if prev_ongoing:
-                best_idx = int(np.argmax(output_predictions[:, 4]))
-                best = output_predictions[best_idx : best_idx + 1]
-                anchor = self._states[cam_key]["anchor_bbox"]
-                if anchor is None:
-                    self._states[cam_key]["anchor_bbox"] = best.copy()
-                else:
-                    alpha = 0.3
-                    self._states[cam_key]["anchor_bbox"] = alpha * best + (1.0 - alpha) * anchor
-                self._states[cam_key]["miss_count"] = 0
-
-        output_predictions = np.round(output_predictions, 3)
-        output_predictions = output_predictions[:5, :]
-        if output_predictions.size > 0:
-            output_predictions = np.atleast_2d(output_predictions)
-
-        self._states[cam_key]["last_predictions"].append((
-            frame,
-            preds,
-            output_predictions.tolist(),  # [] if empty
-            datetime.now(timezone.utc).isoformat(),
-            False,
-        ))
-
-        new_ongoing = conf > self.conf_thresh
-        if prev_ongoing and not new_ongoing:
-            self._states[cam_key]["anchor_bbox"] = None
-            self._states[cam_key]["anchor_ts"] = None
-            self._states[cam_key]["miss_count"] = 0
-        elif not prev_ongoing and new_ongoing:
-            if output_predictions.size > 0:
-                self._states[cam_key]["anchor_bbox"] = output_predictions.copy()
-                self._states[cam_key]["miss_count"] = 0
-
-        self._states[cam_key]["ongoing"] = new_ongoing
-        return conf
-
     def predict(
-        self, frame: Image.Image, cam_id: Optional[str] = None, fake_pred: Optional[np.ndarray] = None
+        self,
+        frame: Image.Image,
+        cam_id: Optional[str] = None,
+        occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # noqa: ARG002
+        fake_pred: Optional[np.ndarray] = None,
     ) -> float:
         """Computes the confidence that the image contains wildfire cues
 
         Args:
             frame: a PIL image
             cam_id: the name of the camera that sent this image
+            occlusion_bboxes: ignored — Engine manages occlusion masks internally via URL fetch
             fake_pred: replace model prediction by another one for evaluation purposes, need to be given in onnx format:
                 fake_pred = [[x1, x2]
                             [y1, y2]
@@ -276,6 +179,9 @@ class Engine:
             the predicted confidence
         """
         cam_key = cam_id or "-1"
+        if cam_key not in self._states:
+            self._states[cam_key] = self._new_state()
+
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
             frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
@@ -297,27 +203,34 @@ class Engine:
                     response = self.api_client[ip].update_last_image(stream.getvalue())
                     logger.info(response.text)
 
-        # Update occlusion masks
+        # Update occlusion masks from API
         if (
             self._states[cam_key]["last_bbox_mask_fetch"] is None
             or time.time() - self._states[cam_key]["last_bbox_mask_fetch"] > self.last_bbox_mask_fetch_period
         ):
             logger.info(f"Update occlusion masks for cam {cam_key}")
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
-            bbox_mask_url, bbox_mask_dict, azimuth = self.occlusion_masks[cam_key]
-            if bbox_mask_url is not None:
-                full_url = f"{bbox_mask_url}_{azimuth}.json"
-                try:
-                    response = requests.get(full_url)
-                    bbox_mask_dict = response.json()
-                    self.occlusion_masks[cam_key] = (bbox_mask_url, bbox_mask_dict, azimuth)
-                    logger.info(f"Downloaded occlusion masks for cam {cam_key} at {bbox_mask_url} :{bbox_mask_dict}")
-                except requests.exceptions.RequestException:
-                    logger.info(f"No occluson available for: {cam_key}")
+            if isinstance(cam_id, str) and isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
+                _, pose_id = self.cam_creds[cam_id]
+                ip = cam_id.split("_")[0]
+                if ip in self.api_client:
+                    try:
+                        response = self.api_client[ip].list_pose_masks(pose_id)
+                        response.raise_for_status()
+                        masks_data = response.json()
+                        bbox_mask_dict: Dict[Any, Any] = {}
+                        for mask_entry in masks_data:
+                            mask_str = mask_entry["mask"].strip("()")
+                            coords = tuple(float(c) for c in mask_str.split(","))
+                            bbox_mask_dict[str(mask_entry["id"])] = coords
+                        self.occlusion_masks[cam_key] = bbox_mask_dict
+                        logger.info(f"Downloaded occlusion masks for cam {cam_key}: {bbox_mask_dict}")
+                    except RequestException as e:
+                        logger.warning(f"Failed to fetch occlusion masks for cam {cam_key} (pose {pose_id}): {e}")
 
         # Inference with ONNX
         if fake_pred is None:
-            _, bbox_mask_dict, _ = self.occlusion_masks[cam_key]
+            bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
             preds = self.model(frame.convert("RGB"), bbox_mask_dict)
         else:
             if fake_pred.size == 0:
@@ -384,7 +297,7 @@ class Engine:
                         continue
                     filled = src.copy()
                     filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
-                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled]
+                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled.tolist()]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
@@ -401,16 +314,19 @@ class Engine:
 
                 try:
                     # Detection creation
+                    bboxes = self._alerts[0]["bboxes"]
+                    if not bboxes:
+                        logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
+                        self._alerts.popleft()
+                        continue
                     stream = io.BytesIO()
                     frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                    bboxes = self._alerts[0]["bboxes"]
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    _, cam_azimuth, _ = self.cam_creds[cam_id]
+                    _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(stream.getvalue(), cam_azimuth, bboxes)
+                    response = self.api_client[ip].create_detection(stream.getvalue(), bboxes, pose_id)
 
                     try:
-                        # Force a KeyError if the request failed
                         response.json()["id"]
                     except ValueError:
                         logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
@@ -421,9 +337,9 @@ class Engine:
                     logger.info(f"Camera '{cam_id}' - alert sent")
                     stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
-                except (KeyError, ConnectionError, ValueError) as e:
-                    logger.warning(f"Camera '{cam_id}' - unable to upload cache")
-                    logger.warning(e)
+                except (KeyError, RequestsConnectionError, ValueError) as e:
+                    logger.error(f"Camera '{cam_id}' - unable to upload cache")
+                    logger.error(e)
                     break
 
     def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
@@ -442,7 +358,7 @@ class Engine:
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         img.save(file)
 
-    def _clean_local_backup(self, backup_cache) -> None:
+    def _clean_local_backup(self, backup_cache: Path) -> None:
         """Clean local backup when it's bigger than _backup_size MB
 
         Args:
@@ -451,14 +367,7 @@ class Engine:
         backup_by_days = list(backup_cache.glob("*"))
         backup_by_days.sort()
         for folder in backup_by_days:
-            s = (
-                sum(
-                    Path(f).stat().st_size
-                    for f in glob.glob(str(backup_cache) + "/**/*", recursive=True)
-                    if Path(f).is_file()
-                )
-                // 1024**2
-            )
+            s = sum(f.stat().st_size for f in backup_cache.rglob("*") if f.is_file()) // 1024**2
             if s > self._backup_size:
                 shutil.rmtree(folder)
             else:
