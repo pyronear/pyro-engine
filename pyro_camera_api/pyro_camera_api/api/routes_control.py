@@ -617,11 +617,23 @@ def move_for_duration(camera_ip: str, direction: str, duration: float, speed: in
 
 
 @router.post("/move_by_degrees")
-def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int = 10):
-    """Move by an approximate angle using the calibrated speed table. Current
-    zoom is read from the camera; when zoom > 0, speed is forced to 1 (Reolink
-    cameras cap all speeds at that point). Holds the per-camera lock; returns
-    409 if busy."""
+def move_by_degrees(
+    camera_ip: str,
+    direction: str,
+    degrees: float,
+    speed: Optional[int] = None,
+):
+    """Move by an approximate angle using the calibrated speed table.
+
+    Current zoom is read from the camera; when zoom > 0, speed is forced to 1
+    (Reolink cameras cap all speeds at that point). If ``speed`` is omitted the
+    server picks the best calibrated level for the target angle via
+    ``_pick_speed`` — the same routine click_to_move uses. Passing ``speed``
+    explicitly is only an override for callers that already know the speed
+    table; a value outside the calibrated range silently falls through to the
+    uncalibrated path and is discouraged. Holds the per-camera lock; returns
+    409 if busy.
+    """
     update_command_time()
     cam = _require_ptz(camera_ip)
 
@@ -643,10 +655,41 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
             except Exception as exc:
                 logger.warning("[%s] move_by_degrees: failed to read zoom, assuming 0: %s", camera_ip, exc)
 
-        speed_limited = zoom > 0 and speed != 1
-        effective_speed = 1 if zoom > 0 else speed
-        if speed_limited:
-            logger.warning("[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, zoom, speed)
+        axis_speeds = PAN_SPEEDS.get(adapter, {}) if direction in ("Left", "Right") else TILT_SPEEDS.get(adapter, {})
+        axis_bias = PAN_BIAS.get(adapter, {}) if direction in ("Left", "Right") else TILT_BIAS.get(adapter, {})
+
+        # Reject out-of-range explicit speeds up-front rather than silently
+        # downgrading them later. The server enforces the rule that matches
+        # physical reality: at zoom 0 only calibrated levels are valid, and
+        # at zoom > 0 only speed 1 is honored by Reolink hardware.
+        if speed is not None:
+            if zoom > 0 and speed != 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"speed={speed} invalid at zoom={zoom}: Reolink caps all speeds "
+                        f"to speed 1 (~1.5 °/s) above zoom 0. Pass speed=1 or omit 'speed' "
+                        f"to auto-pick."
+                    ),
+                )
+            if axis_speeds and speed not in axis_speeds:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"speed={speed} not in calibrated table for adapter '{adapter}' "
+                        f"(levels: {sorted(axis_speeds)}). Omit 'speed' to auto-pick."
+                    ),
+                )
+
+        # Auto-pick the calibrated speed level when caller didn't specify one.
+        # _pick_speed restricts to speed 1 at zoom > 0, and may return None
+        # for angles below bias[1] — those become a micro-impulse below.
+        auto_speed = speed is None
+        if auto_speed:
+            picked = _pick_speed(abs(degrees), axis_speeds, axis_bias, zoom=zoom) if axis_speeds else None
+            speed = picked if picked is not None else 1
+
+        effective_speed = speed
 
         if direction in ("Left", "Right"):
             deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
@@ -656,7 +699,10 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
             bias = get_tilt_bias(adapter, effective_speed)
 
         if deg_per_sec is None:
-            # Fallback for adapters without calibrated speed tables
+            # Uncalibrated adapter (e.g. linovision): rough "speed≈°/s" proxy.
+            # Calibrated adapters can't reach this branch because the caller's
+            # speed was already validated against the table above, and
+            # auto-pick on an empty table yields speed=1 which also falls here.
             try:
                 deg_per_sec = max(0.1, float(effective_speed))
             except Exception:
@@ -698,8 +744,6 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
         }
         if interrupted:
             resp["interrupted"] = True
-        if speed_limited:
-            resp["warning"] = f"speed forced to 1 (zoom={zoom} > 0, requested speed={speed})"
         return resp
     except HTTPException:
         raise

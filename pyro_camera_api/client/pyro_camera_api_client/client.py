@@ -248,17 +248,20 @@ class PyroCameraAPIClient:
         camera_ip: str,
         direction: str,
         degrees: float,
-        speed: int = 10,
+        speed: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Move by an approximate angle using the server's calibrated speed
-        table. Server reads current zoom and force-limits speed to 1 at
-        zoom > 0. Raises on 409 if the camera is busy."""
-        params = {
+        table. When ``speed`` is omitted the server auto-picks the best
+        calibrated level for the target angle (preferred). Server reads
+        current zoom and force-limits speed to 1 at zoom > 0. Raises on
+        409 if the camera is busy."""
+        params: Dict[str, Any] = {
             "camera_ip": camera_ip,
             "direction": direction,
             "degrees": degrees,
-            "speed": speed,
         }
+        if speed is not None:
+            params["speed"] = speed
         resp = self._request("POST", "/control/move_by_degrees", params=params, timeout=30.0)
         return resp.json()
 
