@@ -83,7 +83,8 @@ def _resolve_adapter(adapter: str) -> str:
         logger.warning(
             "adapter %r is not calibrated; using %s. "
             "Set 'adapter' to 'reolink-823S2' or 'reolink-823A16' in credentials.json.",
-            adapter, _DEFAULT_ADAPTER,
+            adapter,
+            _DEFAULT_ADAPTER,
         )
         return _DEFAULT_ADAPTER
     return adapter
@@ -194,7 +195,13 @@ def click_to_move(
         h_fov, v_fov = fov_at_zoom(zoom, adapter)
         logger.info(
             "[%s] click_to_move: click=(%.3f,%.3f) zoom=%s adapter=%s h_fov=%.2f v_fov=%.2f",
-            camera_ip, click_x, click_y, zoom, adapter, h_fov, v_fov,
+            camera_ip,
+            click_x,
+            click_y,
+            zoom,
+            adapter,
+            h_fov,
+            v_fov,
         )
 
         pan_deg = (click_x - 0.5) * h_fov
@@ -252,7 +259,7 @@ def click_to_move(
                     entry["interrupted"] = True
                 result["moves"].append(entry)
                 return interrupted
-            elif speeds:
+            if speeds:
                 # Angle below bias — micro-impulse at speed 1
                 logger.info(
                     "[%s] click_to_move %s %s %.2f° micro-impulse speed=1", camera_ip, axis, direction, abs(deg)
@@ -268,9 +275,8 @@ def click_to_move(
                     "micro": True,
                 })
                 return False
-            else:
-                result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
-                return False
+            result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
+            return False
 
         try:
             # Skip if angle < half the micro-pulse displacement (bias at speed 1)
@@ -278,13 +284,9 @@ def click_to_move(
             tilt_min = tilt_bias.get(1, 1.0) / 2
             interrupted = False
             if abs(pan_deg) >= pan_min:
-                interrupted = _execute_axis(
-                    "pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias
-                )
+                interrupted = _execute_axis("pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias)
             if not interrupted and abs(tilt_deg) >= tilt_min:
-                interrupted = _execute_axis(
-                    "tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias
-                )
+                interrupted = _execute_axis("tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias)
             if interrupted:
                 result["interrupted"] = True
 
@@ -378,14 +380,14 @@ def move_camera(
                 except Exception as exc:
                     logger.warning(
                         "[%s] /move: failed to read zoom, using query param %s: %s",
-                        camera_ip, zoom, exc,
+                        camera_ip,
+                        zoom,
+                        exc,
                     )
             speed_limited = effective_zoom > 0 and speed != 1
             effective_speed = 1 if effective_zoom > 0 else speed
             if speed_limited:
-                logger.warning(
-                    "[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, effective_zoom, speed
-                )
+                logger.warning("[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, effective_zoom, speed)
 
             if direction in ["Left", "Right"]:
                 deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
@@ -437,7 +439,7 @@ def move_camera(
                 interrupted = _interruptible_sleep(camera_ip, duration_sec)
                 cam.move_camera("Stop")
 
-            resp: dict = {
+            resp = {
                 "status": "ok",
                 "camera_ip": camera_ip,
                 "direction": direction,
@@ -451,9 +453,7 @@ def move_camera(
             if interrupted:
                 resp["interrupted"] = True
             if speed_limited:
-                resp["warning"] = (
-                    f"speed forced to 1 (zoom={effective_zoom} > 0, requested speed={speed})"
-                )
+                resp["warning"] = f"speed forced to 1 (zoom={effective_zoom} > 0, requested speed={speed})"
             return resp
 
         if direction:
@@ -625,14 +625,21 @@ def move_by_degrees(
 ):
     """Move by an approximate angle using the calibrated speed table.
 
-    Current zoom is read from the camera; when zoom > 0, speed is forced to 1
-    (Reolink cameras cap all speeds at that point). If ``speed`` is omitted the
-    server picks the best calibrated level for the target angle via
-    ``_pick_speed`` — the same routine click_to_move uses. Passing ``speed``
-    explicitly is only an override for callers that already know the speed
-    table; a value outside the calibrated range silently falls through to the
-    uncalibrated path and is discouraged. Holds the per-camera lock; returns
-    409 if busy.
+    Current zoom is read from the camera. If ``speed`` is omitted (recommended)
+    the server picks the best calibrated level for the target angle via
+    ``_pick_speed`` — the same routine click_to_move uses — which already
+    restricts to speed 1 when zoom > 0.
+
+    An explicit ``speed`` is only allowed when it matches the current state:
+    - at zoom > 0 it must be 1 (Reolink caps all speeds to ~1.5 °/s above zoom 0);
+    - at zoom = 0 it must be a level present in the calibrated table for the
+      camera's adapter.
+
+    Invalid explicit speeds return 400 rather than silently downgrading to the
+    uncalibrated path. Uncalibrated adapters (e.g. linovision) keep the rough
+    ``speed ≈ °/s`` proxy.
+
+    Holds the per-camera lock; returns 409 if busy.
     """
     update_command_time()
     cam = _require_ptz(camera_ip)
@@ -689,7 +696,10 @@ def move_by_degrees(
             picked = _pick_speed(abs(degrees), axis_speeds, axis_bias, zoom=zoom) if axis_speeds else None
             speed = picked if picked is not None else 1
 
-        effective_speed = speed
+        # speed is guaranteed non-None here: either the caller passed one (and
+        # the early-return validation above rejected bad values) or the auto
+        # branch assigned a fallback of 1.
+        effective_speed: int = speed  # type: ignore[assignment]
 
         if direction in ("Left", "Right"):
             deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
@@ -718,14 +728,22 @@ def move_by_degrees(
         if micro:
             logger.info(
                 "[%s] move_by_degrees %s %.2f° micro-impulse speed=1 (adapter=%s)",
-                camera_ip, direction, abs(degrees), adapter,
+                camera_ip,
+                direction,
+                abs(degrees),
+                adapter,
             )
             cam.move_camera(direction, speed=1)
             cam.move_camera("Stop")
         else:
             logger.info(
                 "[%s] move_by_degrees %s %.2f° dur=%.2fs speed=%s (adapter=%s)",
-                camera_ip, direction, abs(degrees), duration_sec, effective_speed, adapter,
+                camera_ip,
+                direction,
+                abs(degrees),
+                duration_sec,
+                effective_speed,
+                adapter,
             )
             cam.move_camera(direction, speed=effective_speed)
             interrupted = _interruptible_sleep(camera_ip, duration_sec)
