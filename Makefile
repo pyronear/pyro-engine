@@ -49,6 +49,10 @@ run:
 	docker pull pyronear/pyro-camera-api:latest
 	docker compose up -d
 
+# Build images locally (no Docker Hub) and run the stack
+run-local: build-api build-app
+	docker compose up -d
+
 # Get log from engine wrapper
 log:
 	docker logs -f --tail 50 engine

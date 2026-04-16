@@ -146,21 +146,21 @@ if __name__ == "__main__":
     # Debug
     parser.add_argument(
         "--save_captured_frames",
-        type=bool,
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help="Save all captured frames locally",
     )
     parser.add_argument(
         "--save_detections_frames",
-        type=bool,
+        action=argparse.BooleanOptionalAction,
         default=False,
-        help="Save all locally detection frames locally",
+        help="Save all detection frames locally",
     )
     parser.add_argument(
         "--send_alerts",
-        type=bool,
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Save all captured frames locally",
+        help="Send alerts to the pyronear API",
     )
 
     # Time config
