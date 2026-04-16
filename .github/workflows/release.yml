@@ -5,7 +5,7 @@ on:
     types: [published]
 
 env:
-  UV_VERSION: "0.5.13"
+  UV_VERSION: "0.6.16"
 
 jobs:
   pypi-publish:

@@ -7,7 +7,7 @@ RUN apt-get update && \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:0.5.13 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.16 /uv /bin/uv
 COPY ./requirements-git.txt /tmp/requirements-git.txt
 RUN uv pip install --no-cache --target=/tmp/git-packages -r /tmp/requirements-git.txt
 
@@ -32,7 +32,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Layer 2: Stable deps (~400MB, changes only on version bumps)
-COPY --from=ghcr.io/astral-sh/uv:0.5.13 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.16 /uv /bin/uv
 COPY ./requirements.txt /tmp/requirements.txt
 RUN uv pip install --no-cache --system -r /tmp/requirements.txt && \
     rm -f /tmp/requirements.txt
