@@ -174,16 +174,8 @@ def click_to_move(
     """
     update_command_time()
 
-    cam = CAMERA_REGISTRY.get(camera_ip)
-    if cam is None:
-        raise HTTPException(status_code=404, detail=f"Camera with IP '{camera_ip}' not found")
-
-    if not isinstance(cam, PTZMixin):
-        raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
-
-    lock = MOVE_LOCKS[camera_ip]
-    if not lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+    cam = _require_ptz(camera_ip)
+    lock = _acquire_or_409(camera_ip)
 
     try:
         conf = RAW_CONFIG.get(camera_ip, {})
@@ -799,9 +791,7 @@ def zoom_camera(camera_ip: str, level: int):
     if not hasattr(cam, "start_zoom_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support zoom control")
 
-    lock = MOVE_LOCKS[camera_ip]
-    if not lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+    lock = _acquire_or_409(camera_ip)
 
     try:
         # Read current zoom to estimate travel time; fall back to a generous delta.
