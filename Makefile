@@ -50,7 +50,9 @@ run:
 	docker compose up -d
 
 # Build images locally (no Docker Hub) and run the stack
-run-local: build-api build-app
+run-local:
+	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
+	docker build . -t pyronear/pyro-engine:latest
 	docker compose up -d
 
 # Get log from engine wrapper
