@@ -19,7 +19,7 @@ from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_REPO_ID = "pyronear/yolo11s_nimble-narwhal_v6.0.0"
+MODEL_REPO_ID = "pyronear/yolo11s_orbital-owl_v7.0.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
