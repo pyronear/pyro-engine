@@ -180,6 +180,9 @@ class PyroCameraAPIClient:
         duration: Optional[float] = None,
         zoom: int = 0,
     ) -> Dict[str, Any]:
+        """Legacy overloaded move endpoint. Prefer goto_preset / start_move /
+        stop_move / move_for_duration / move_by_degrees, which are the
+        focused replacements."""
         if zoom > 0 and speed != 1:
             logger.warning("zoom=%s > 0: speed will be forced to 1 server-side (requested %s)", zoom, speed)
         params: Dict[str, Any] = {
@@ -197,6 +200,66 @@ class PyroCameraAPIClient:
             params["duration"] = duration
 
         resp = self._request("POST", "/control/move", params=params)
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Focused PTZ actions (preferred over move_camera)
+    # ------------------------------------------------------------------
+
+    def goto_preset(self, camera_ip: str, pose_id: int, speed: int = 50) -> Dict[str, Any]:
+        """Move to a configured preset pose. Returns immediately."""
+        params = {"camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+        resp = self._request("POST", "/control/goto_preset", params=params)
+        return resp.json()
+
+    def start_move(self, camera_ip: str, direction: str, speed: int = 10) -> Dict[str, Any]:
+        """Start a continuous move; caller must call stop_move to halt."""
+        params = {"camera_ip": camera_ip, "direction": direction, "speed": speed}
+        resp = self._request("POST", "/control/start_move", params=params)
+        return resp.json()
+
+    def stop_move(self, camera_ip: str) -> Dict[str, Any]:
+        """Halt any current movement."""
+        resp = self._request("POST", f"/control/stop_move/{camera_ip}")
+        return resp.json()
+
+    def move_for_duration(
+        self,
+        camera_ip: str,
+        direction: str,
+        duration: float,
+        speed: int = 10,
+    ) -> Dict[str, Any]:
+        """Move for a fixed wall-clock duration (seconds), then stop.
+        Server holds a per-camera lock; raises on 409 if busy."""
+        params = {
+            "camera_ip": camera_ip,
+            "direction": direction,
+            "duration": duration,
+            "speed": speed,
+        }
+        # Allow the server-side sleep + a small margin.
+        req_timeout = max(self.timeout, duration + 5.0) if duration else self.timeout
+        resp = self._request("POST", "/control/move_for_duration", params=params, timeout=req_timeout)
+        return resp.json()
+
+    def move_by_degrees(
+        self,
+        camera_ip: str,
+        direction: str,
+        degrees: float,
+        speed: int = 10,
+    ) -> Dict[str, Any]:
+        """Move by an approximate angle using the server's calibrated speed
+        table. Server reads current zoom and force-limits speed to 1 at
+        zoom > 0. Raises on 409 if the camera is busy."""
+        params = {
+            "camera_ip": camera_ip,
+            "direction": direction,
+            "degrees": degrees,
+            "speed": speed,
+        }
+        resp = self._request("POST", "/control/move_by_degrees", params=params, timeout=30.0)
         return resp.json()
 
     def click_to_move(

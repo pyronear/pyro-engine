@@ -455,6 +455,182 @@ def stop_camera(camera_ip: str):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ─── Focused PTZ routes (preferred over /move) ───────────────────────────────
+# These replace the overloaded /move endpoint. /move is kept for backwards
+# compatibility and will be removed once platform clients have migrated.
+
+
+def _require_ptz(camera_ip: str) -> PTZMixin:
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail=f"Camera with IP '{camera_ip}' not found")
+    if not isinstance(cam, PTZMixin):
+        raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
+    return cam
+
+
+def _acquire_or_409(camera_ip: str):
+    lock = MOVE_LOCKS[camera_ip]
+    if not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+    return lock
+
+
+@router.post("/goto_preset")
+def goto_preset(camera_ip: str, pose_id: int, speed: int = 50):
+    """Move a PTZ camera to a configured preset pose. Returns immediately;
+    the camera completes the move asynchronously."""
+    update_command_time()
+    cam = _require_ptz(camera_ip)
+    try:
+        logger.info("[%s] goto_preset %s speed=%s", camera_ip, pose_id, speed)
+        cam.move_camera("ToPos", speed=speed, idx=pose_id)
+        return {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+    except Exception as exc:
+        logger.error("[%s] goto_preset error: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/start_move")
+def start_move(camera_ip: str, direction: str, speed: int = 10):
+    """Start a continuous move in the given direction. Caller must send
+    /stop_move (or /stop) to halt; no server-side timeout and no lock."""
+    update_command_time()
+    cam = _require_ptz(camera_ip)
+    try:
+        logger.info("[%s] start_move %s speed=%s", camera_ip, direction, speed)
+        cam.move_camera(direction, speed=speed)
+        return {"status": "ok", "camera_ip": camera_ip, "direction": direction, "speed": speed}
+    except Exception as exc:
+        logger.error("[%s] start_move error: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/stop_move/{camera_ip}")
+def stop_move(camera_ip: str):
+    """Halt any current movement. Alias of /stop/{camera_ip}, unlocked."""
+    return stop_camera(camera_ip)
+
+
+@router.post("/move_for_duration")
+def move_for_duration(camera_ip: str, direction: str, duration: float, speed: int = 10):
+    """Move in direction for a fixed wall-clock duration (seconds), then stop.
+    Holds the per-camera lock; returns 409 if another blocking PTZ command
+    is already running."""
+    update_command_time()
+    cam = _require_ptz(camera_ip)
+    lock = _acquire_or_409(camera_ip)
+    try:
+        logger.info("[%s] move_for_duration %s %.3fs speed=%s", camera_ip, direction, duration, speed)
+        cam.move_camera(direction, speed=speed)
+        if duration > 0:
+            time.sleep(duration)
+        cam.move_camera("Stop")
+        return {
+            "status": "ok",
+            "camera_ip": camera_ip,
+            "direction": direction,
+            "duration": round(duration, 3),
+            "speed": speed,
+        }
+    except Exception as exc:
+        logger.error("[%s] move_for_duration error: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
+
+
+@router.post("/move_by_degrees")
+def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int = 10):
+    """Move by an approximate angle using the calibrated speed table. Current
+    zoom is read from the camera; when zoom > 0, speed is forced to 1 (Reolink
+    cameras cap all speeds at that point). Holds the per-camera lock; returns
+    409 if busy."""
+    update_command_time()
+    cam = _require_ptz(camera_ip)
+
+    if direction not in ("Left", "Right", "Up", "Down"):
+        raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
+
+    conf = RAW_CONFIG.get(camera_ip, {})
+    adapter = conf.get("adapter", "unknown")
+
+    lock = _acquire_or_409(camera_ip)
+    try:
+        zoom = 0
+        if hasattr(cam, "get_focus_level"):
+            try:
+                info = cam.get_focus_level() or {}
+                z = info.get("zoom")
+                if z is not None:
+                    zoom = int(z)
+            except Exception as exc:
+                logger.warning("[%s] move_by_degrees: failed to read zoom, assuming 0: %s", camera_ip, exc)
+
+        speed_limited = zoom > 0 and speed != 1
+        effective_speed = 1 if zoom > 0 else speed
+        if speed_limited:
+            logger.warning("[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, zoom, speed)
+
+        if direction in ("Left", "Right"):
+            deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
+            bias = get_pan_bias(adapter, effective_speed)
+        else:
+            deg_per_sec = get_tilt_speed_per_sec(adapter, effective_speed)
+            bias = get_tilt_bias(adapter, effective_speed)
+
+        if deg_per_sec is None:
+            # Fallback for adapters without calibrated speed tables
+            try:
+                deg_per_sec = max(0.1, float(effective_speed))
+            except Exception:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported adapter '{adapter}' or speed level {effective_speed}",
+                )
+
+        duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
+        micro = duration_sec == 0.0 and abs(degrees) > 0
+
+        if micro:
+            logger.info(
+                "[%s] move_by_degrees %s %.2f° micro-impulse speed=1 (adapter=%s)",
+                camera_ip, direction, abs(degrees), adapter,
+            )
+            cam.move_camera(direction, speed=1)
+            cam.move_camera("Stop")
+        else:
+            logger.info(
+                "[%s] move_by_degrees %s %.2f° dur=%.2fs speed=%s (adapter=%s)",
+                camera_ip, direction, abs(degrees), duration_sec, effective_speed, adapter,
+            )
+            cam.move_camera(direction, speed=effective_speed)
+            time.sleep(duration_sec)
+            cam.move_camera("Stop")
+
+        resp: dict = {
+            "status": "ok",
+            "camera_ip": camera_ip,
+            "direction": direction,
+            "degrees": degrees,
+            "duration": 0 if micro else round(duration_sec, 2),
+            "speed": 1 if micro else effective_speed,
+            "adapter": adapter,
+            "zoom": zoom,
+            "micro": micro,
+        }
+        if speed_limited:
+            resp["warning"] = f"speed forced to 1 (zoom={zoom} > 0, requested speed={speed})"
+        return resp
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[%s] move_by_degrees error: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
+
+
 @router.get("/speed_tables")
 def get_speed_tables(camera_ip: str):
     """Return the calibrated speed and bias tables for the given camera's adapter."""
