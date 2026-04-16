@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     cwd = Path(__file__).parent.absolute()
     with cwd.joinpath("pyro_camera_api_client", "version.py").open("w", encoding="utf-8") as f:
-        f.write(f"__version__ = '{VERSION}'\n")
+        f.write(f'__version__ = "{VERSION}"\n')
 
     setup(
         name=PKG_NAME,

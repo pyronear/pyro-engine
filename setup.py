@@ -15,6 +15,6 @@ VERSION = os.getenv("BUILD_VERSION", "3.0.0")
 cwd = Path(__file__).parent.absolute()
 pkg_dir = cwd.joinpath(PKG_NAME)
 
-Path(pkg_dir.joinpath("version.py")).write_text(f"__version__ = '{VERSION}'\n", encoding="utf-8")
+Path(pkg_dir.joinpath("version.py")).write_text(f'__version__ = "{VERSION}"\n', encoding="utf-8")
 
 setup(version=VERSION)
