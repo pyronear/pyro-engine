@@ -42,6 +42,7 @@ import requests
 import streamlit as st
 import urllib3
 from PIL import Image, ImageDraw
+from pyro_camera_api_client import PyroCameraAPIClient
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -508,119 +509,123 @@ class DirectClient:
 
 
 class APIClient:
-    """Controls the camera through the pyro_camera_api FastAPI service."""
+    """Thin wrapper around PyroCameraAPIClient that binds a camera_ip and
+    keeps the app-level interface (methods without camera_ip, Streamlit
+    warnings on failure) used by the calibration tool.
+    """
 
-    def __init__(self, base_url: str, camera_ip: str):
+    def __init__(self, base_url: str, camera_ip: str, timeout: float = 15.0):
         self.base = base_url.rstrip("/")
         self.ip = camera_ip
+        self._api = PyroCameraAPIClient(self.base, timeout=timeout)
 
-    def _get(self, path: str, **params) -> Optional[requests.Response]:
-        try:
-            r = requests.get(f"{self.base}/{path.lstrip('/')}", params=params, timeout=10)
-            r.raise_for_status()
-            return r
-        except Exception as exc:
-            st.warning(f"GET {path} failed: {exc}")
-            return None
-
-    def _post(self, path: str, **params) -> Optional[requests.Response]:
-        try:
-            r = requests.post(f"{self.base}/{path.lstrip('/')}", params=params, timeout=10)
-            return r
-        except Exception as exc:
-            st.warning(f"POST {path} failed: {exc}")
-            return None
+    def _warn(self, action: str, exc: Exception) -> None:
+        st.warning(f"{action} failed: {exc}")
 
     def capture(self) -> Optional[Image.Image]:
-        r = self._get("cameras/capture", camera_ip=self.ip, anonymize="false")
-        if r is not None:
-            return Image.open(BytesIO(r.content)).convert("RGB")
-        return None
+        try:
+            return self._api.capture_image(self.ip, anonymize=False)
+        except Exception as exc:
+            self._warn("capture", exc)
+            return None
 
     def move(self, direction: str, speed: int = 10, duration: Optional[float] = None) -> bool:
-        params: Dict = {"camera_ip": self.ip, "direction": direction, "speed": speed}
-        if duration is not None:
-            params["duration"] = duration
-        r = self._post("control/move", **params)
-        return r is not None and r.status_code == 200
+        try:
+            self._api.move_camera(self.ip, direction=direction, speed=speed, duration=duration)
+            return True
+        except Exception as exc:
+            self._warn("move", exc)
+            return False
 
     def stop(self) -> bool:
-        r = self._post(f"control/stop/{self.ip}")
-        return r is not None and r.status_code == 200
+        try:
+            self._api.stop_camera(self.ip)
+            return True
+        except Exception as exc:
+            self._warn("stop", exc)
+            return False
 
     def goto_preset(self, idx: int, speed: int = 50) -> bool:
-        r = self._post("control/move", camera_ip=self.ip, pose_id=idx, speed=speed)
-        return r is not None and r.status_code == 200
+        try:
+            self._api.move_camera(self.ip, pose_id=idx, speed=speed)
+            return True
+        except Exception as exc:
+            self._warn("goto_preset", exc)
+            return False
 
     def zoom(self, level: int):
-        self._post(f"control/zoom/{self.ip}/{level}")
+        try:
+            self._api.zoom(self.ip, level)
+        except Exception as exc:
+            self._warn("zoom", exc)
 
     def get_zoom(self) -> Optional[int]:
         return None  # Not exposed by the API
 
     def get_presets(self) -> List[Dict]:
-        r = self._get("control/preset/list", camera_ip=self.ip)
-        if r is not None:
-            return [p for p in r.json().get("presets", []) if p.get("enable") == 1]
-        return []
+        try:
+            data = self._api.list_presets(self.ip)
+            return [p for p in data.get("presets", []) if p.get("enable") == 1]
+        except Exception as exc:
+            self._warn("get_presets", exc)
+            return []
 
     def set_preset(self, idx: int, name: str = "") -> bool:
-        r = self._post("control/preset/set", camera_ip=self.ip, idx=idx)
-        return r is not None and r.status_code == 200
+        try:
+            self._api.set_preset(self.ip, idx=idx)
+            return True
+        except Exception as exc:
+            self._warn("set_preset", exc)
+            return False
 
     def stop_patrol(self):
         try:
-            requests.post(f"{self.base}/patrol/stop_patrol", params={"camera_ip": self.ip}, timeout=5)
+            self._api.stop_patrol(self.ip)
         except Exception:
             pass
 
     def get_patrol_status(self) -> Optional[Dict]:
         try:
-            r = requests.get(f"{self.base}/patrol/patrol_status", params={"camera_ip": self.ip}, timeout=5)
-            if r.status_code == 200:
-                return r.json()
+            return self._api.get_patrol_status(self.ip)
         except Exception:
-            pass
-        return None
+            return None
 
     def click_to_move(self, click_x: float, click_y: float) -> Optional[Dict]:
-        r = self._post(
-            "control/click_to_move",
-            camera_ip=self.ip,
-            click_x=click_x,
-            click_y=click_y,
-        )
-        if r is not None and r.status_code == 200:
-            return r.json()
-        return None
+        try:
+            return self._api.click_to_move(self.ip, click_x, click_y)
+        except Exception as exc:
+            self._warn("click_to_move", exc)
+            return None
 
     def get_adapter(self) -> Optional[str]:
         """Return the adapter name for this camera IP from /cameras/camera_infos."""
         try:
-            r = requests.get(f"{self.base}/cameras/camera_infos", timeout=5)
-            if r.status_code == 200:
-                for cam in r.json().get("cameras", []):
-                    if cam.get("ip") == self.ip or cam.get("camera_id") == self.ip:
-                        return cam.get("adapter")
+            infos = self._api.get_camera_infos()
+            cams = infos.get("cameras", []) if isinstance(infos, dict) else infos
+            for cam in cams:
+                if cam.get("ip") == self.ip or cam.get("camera_id") == self.ip:
+                    return cam.get("adapter")
         except Exception:
             pass
         return None
 
     def get_speed_tables(self) -> Optional[Dict]:
-        r = self._get("control/speed_tables", camera_ip=self.ip)
-        if r is not None:
-            return r.json()
-        return None
+        try:
+            return self._api.get_speed_tables(self.ip)
+        except Exception as exc:
+            self._warn("get_speed_tables", exc)
+            return None
 
     @staticmethod
     def list_cameras(base_url: str) -> List[str]:
         try:
-            r = requests.get(f"{base_url.rstrip('/')}/cameras/cameras_list", timeout=5)
-            if r.status_code == 200:
-                return r.json().get("camera_ids", [])
+            api = PyroCameraAPIClient(base_url, timeout=5.0)
+            data = api.list_cameras()
+            if isinstance(data, dict):
+                return data.get("camera_ids", [])
+            return list(data)
         except Exception:
-            pass
-        return []
+            return []
 
 
 # ─── Streamlit App ────────────────────────────────────────────────────────────

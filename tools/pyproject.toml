@@ -13,7 +13,11 @@ dependencies = [
     "numpy>=1.26",
     "streamlit-image-coordinates>=0.1.6",
     "urllib3>=2.0",
+    "pyro-camera-api-client",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+pyro-camera-api-client = { path = "../pyro_camera_api/client", editable = true }
