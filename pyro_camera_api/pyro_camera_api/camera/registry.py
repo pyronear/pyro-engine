@@ -39,7 +39,11 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      adapter:  "reolink", "linovision", "rtsp", "url", "mock"
+      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url", "mock".
+                Generic "reolink" is still accepted by the registry (it builds
+                a ReolinkCamera from any string containing "reolink"), but the
+                PTZ routes require a specific model for the calibrated speed
+                tables and will fall back to "reolink-823S2" with a warning.
       type:     "ptz" or "static"
       ip_address
       rtsp_url (if adapter=rtsp)

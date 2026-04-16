@@ -57,22 +57,6 @@ TILT_BIAS = {
 }
 
 
-def get_pan_speed_per_sec(adapter: str, level: int) -> Optional[float]:
-    return PAN_SPEEDS.get(adapter, {}).get(level)
-
-
-def get_pan_bias(adapter: str, level: int) -> float:
-    return PAN_BIAS.get(adapter, {}).get(level, 0.0)
-
-
-def get_tilt_speed_per_sec(adapter: str, level: int) -> Optional[float]:
-    return TILT_SPEEDS.get(adapter, {}).get(level)
-
-
-def get_tilt_bias(adapter: str, level: int) -> float:
-    return TILT_BIAS.get(adapter, {}).get(level, 0.0)
-
-
 # Measured FOV lookup tables (degrees), zoom levels 0-41.
 # Calibrated via QR-code chained-ratio method. Plateau at zoom 41 (optical max).
 # Loaded from fov_tables.json to keep this file concise.
@@ -86,9 +70,47 @@ _V_FOV_TABLE: dict[str, list[float]] = _FOV_DATA["v_fov"]
 _DEFAULT_ADAPTER = "reolink-823S2"
 
 
+def _resolve_adapter(adapter: str) -> str:
+    """Return an adapter key that exists in the calibrated tables.
+
+    Legacy configs use the generic ``"reolink"`` string; these fall back to the
+    default calibrated model so PTZ moves do not silently degrade to the
+    uncalibrated path. Truly unknown adapters are returned unchanged (they
+    will produce empty tables and hit the uncalibrated fallback).
+    """
+    if adapter in _H_FOV_TABLE:
+        return adapter
+    if isinstance(adapter, str) and adapter.lower().startswith("reolink"):
+        logger.warning(
+            "adapter %r is not calibrated; using %s. "
+            "Set 'adapter' to 'reolink-823S2' or 'reolink-823A16' in credentials.json.",
+            adapter, _DEFAULT_ADAPTER,
+        )
+        return _DEFAULT_ADAPTER
+    return adapter
+
+
+def get_pan_speed_per_sec(adapter: str, level: int) -> Optional[float]:
+    return PAN_SPEEDS.get(_resolve_adapter(adapter), {}).get(level)
+
+
+def get_pan_bias(adapter: str, level: int) -> float:
+    return PAN_BIAS.get(_resolve_adapter(adapter), {}).get(level, 0.0)
+
+
+def get_tilt_speed_per_sec(adapter: str, level: int) -> Optional[float]:
+    return TILT_SPEEDS.get(_resolve_adapter(adapter), {}).get(level)
+
+
+def get_tilt_bias(adapter: str, level: int) -> float:
+    return TILT_BIAS.get(_resolve_adapter(adapter), {}).get(level, 0.0)
+
+
 def fov_at_zoom(zoom: int, adapter: str | None = None) -> tuple[float, float]:
     """Return (h_fov, v_fov) in degrees using measured lookup table with linear interpolation."""
-    key = adapter if adapter in _H_FOV_TABLE else _DEFAULT_ADAPTER
+    key = _resolve_adapter(adapter) if adapter else _DEFAULT_ADAPTER
+    if key not in _H_FOV_TABLE:
+        key = _DEFAULT_ADAPTER
     h_table = _H_FOV_TABLE[key]
     v_table = _V_FOV_TABLE[key]
     z = max(0, min(zoom, 41))
@@ -166,7 +188,7 @@ def click_to_move(
 
     try:
         conf = RAW_CONFIG.get(camera_ip, {})
-        adapter = conf.get("adapter", "unknown")
+        adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
         zoom = 0
         if hasattr(cam, "get_focus_level"):
@@ -306,14 +328,11 @@ def move_camera(
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     conf = RAW_CONFIG.get(camera_ip, {})
-    adapter = conf.get("adapter", "unknown")
+    adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
-    # Only the blocking modes (duration, degrees) hold the per-camera lock.
-    # pose_id returns immediately; bare direction is started here and stopped by /stop.
-    blocking = pose_id is None and direction is not None and (duration is not None or degrees is not None)
-    lock = MOVE_LOCKS[camera_ip] if blocking else None
-    if lock is not None and not lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+    # All branches acquire the lock: blocking modes hold it during time.sleep;
+    # pose_id and bare direction just gate against interrupting a sleep in progress.
+    lock = _acquire_or_409(camera_ip)
 
     try:
         if pose_id is not None:
@@ -339,11 +358,27 @@ def move_camera(
             }
 
         if degrees is not None and direction:
-            # Reolink cameras cap all speed levels to ~1.5 °/s at zoom > 0
-            speed_limited = zoom > 0 and speed != 1
-            effective_speed = 1 if zoom > 0 else speed
+            # Prefer the camera's reported zoom over the client hint; fall back to the
+            # query param if the camera read fails. Reolink caps all speed levels to
+            # ~1.5 °/s at zoom > 0, so we force speed=1 there.
+            effective_zoom = zoom
+            if hasattr(cam, "get_focus_level"):
+                try:
+                    info = cam.get_focus_level() or {}
+                    z_read = info.get("zoom")
+                    if z_read is not None:
+                        effective_zoom = int(z_read)
+                except Exception as exc:
+                    logger.warning(
+                        "[%s] /move: failed to read zoom, using query param %s: %s",
+                        camera_ip, zoom, exc,
+                    )
+            speed_limited = effective_zoom > 0 and speed != 1
+            effective_speed = 1 if effective_zoom > 0 else speed
             if speed_limited:
-                logger.warning("[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, zoom, speed)
+                logger.warning(
+                    "[%s] zoom=%s > 0: speed forced to 1 (requested %s)", camera_ip, effective_zoom, speed
+                )
 
             if direction in ["Left", "Right"]:
                 deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
@@ -402,10 +437,13 @@ def move_camera(
                 "duration": 0 if micro else round(duration_sec, 2),
                 "speed": 1 if micro else effective_speed,
                 "adapter": adapter,
+                "zoom": effective_zoom,
                 "micro": micro,
             }
             if speed_limited:
-                resp["warning"] = f"speed forced to 1 (zoom={zoom} > 0, requested speed={speed})"
+                resp["warning"] = (
+                    f"speed forced to 1 (zoom={effective_zoom} > 0, requested speed={speed})"
+                )
             return resp
 
         if direction:
@@ -424,8 +462,7 @@ def move_camera(
         logger.error("[%s] Movement error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        if lock is not None:
-            lock.release()
+        lock.release()
 
 
 @router.post("/stop/{camera_ip}")
@@ -479,9 +516,11 @@ def _acquire_or_409(camera_ip: str):
 @router.post("/goto_preset")
 def goto_preset(camera_ip: str, pose_id: int, speed: int = 50):
     """Move a PTZ camera to a configured preset pose. Returns immediately;
-    the camera completes the move asynchronously."""
+    the camera completes the move asynchronously. Acquires the per-camera
+    lock to gate against interrupting an in-flight blocking PTZ op → 409 if busy."""
     update_command_time()
     cam = _require_ptz(camera_ip)
+    lock = _acquire_or_409(camera_ip)
     try:
         logger.info("[%s] goto_preset %s speed=%s", camera_ip, pose_id, speed)
         cam.move_camera("ToPos", speed=speed, idx=pose_id)
@@ -489,14 +528,19 @@ def goto_preset(camera_ip: str, pose_id: int, speed: int = 50):
     except Exception as exc:
         logger.error("[%s] goto_preset error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
 
 
 @router.post("/start_move")
 def start_move(camera_ip: str, direction: str, speed: int = 10):
     """Start a continuous move in the given direction. Caller must send
-    /stop_move (or /stop) to halt; no server-side timeout and no lock."""
+    /stop_move (or /stop) to halt. Acquires the per-camera lock to gate
+    against interrupting an in-flight blocking PTZ op → 409 if busy; the
+    lock is released immediately (the motion continues until /stop_move)."""
     update_command_time()
     cam = _require_ptz(camera_ip)
+    lock = _acquire_or_409(camera_ip)
     try:
         logger.info("[%s] start_move %s speed=%s", camera_ip, direction, speed)
         cam.move_camera(direction, speed=speed)
@@ -504,6 +548,8 @@ def start_move(camera_ip: str, direction: str, speed: int = 10):
     except Exception as exc:
         logger.error("[%s] start_move error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
 
 
 @router.post("/stop_move/{camera_ip}")
@@ -553,7 +599,7 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
         raise HTTPException(status_code=400, detail=f"Unsupported direction '{direction}'")
 
     conf = RAW_CONFIG.get(camera_ip, {})
-    adapter = conf.get("adapter", "unknown")
+    adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
     lock = _acquire_or_409(camera_ip)
     try:
@@ -633,9 +679,13 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
 
 @router.get("/speed_tables")
 def get_speed_tables(camera_ip: str):
-    """Return the calibrated speed and bias tables for the given camera's adapter."""
+    """Return the calibrated speed and bias tables for the given camera's adapter.
+
+    The returned adapter is the resolved key (generic "reolink" → default
+    calibrated model), so the tables match what the PTZ routes will use.
+    """
     conf = RAW_CONFIG.get(camera_ip, {})
-    adapter = conf.get("adapter", "unknown")
+    adapter = _resolve_adapter(conf.get("adapter", "unknown"))
     return {
         "adapter": adapter,
         "pan_speeds": PAN_SPEEDS.get(adapter, {}),
