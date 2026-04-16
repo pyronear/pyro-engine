@@ -33,6 +33,12 @@ PATROL_FLAGS: Dict[str, threading.Event] = {}
 # Non-blocking acquire → endpoints return 409 if the camera is already busy.
 MOVE_LOCKS: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 
+# Per-camera cancellation events. /stop sets the event so that any sleeping
+# blocking PTZ handler wakes up early, releases the lock, and the operator
+# can immediately issue a corrective command instead of waiting for 409 to
+# clear. Handlers clear the event when they start a new blocking op.
+STOP_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
+
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """

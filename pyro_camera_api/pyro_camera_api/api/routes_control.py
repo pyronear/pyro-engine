@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import PTZMixin
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS, STOP_EVENTS
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.utils.time_utils import update_command_time
 
@@ -231,8 +230,9 @@ def click_to_move(
         if zoom > 0:
             result["warning"] = f"speed limited to 1 (zoom={zoom} > 0)"
 
-        def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> None:
-            """Execute a single-axis move: calibrated duration, or micro-pulse if below bias."""
+        def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> bool:
+            """Execute a single-axis move: calibrated duration, or micro-pulse if below bias.
+            Returns True if the move was interrupted by /stop."""
             speed_level = _pick_speed(abs(deg), speeds, bias, zoom=zoom)
             if speed_level is not None:
                 b = bias.get(speed_level, 0.0)
@@ -247,15 +247,19 @@ def click_to_move(
                     dur,
                 )
                 cam.move_camera(direction, speed=speed_level)
-                time.sleep(dur)
+                interrupted = _interruptible_sleep(camera_ip, dur)
                 cam.move_camera("Stop")
-                result["moves"].append({
+                entry: dict = {
                     "axis": axis,
                     "direction": direction,
                     "deg": round(abs(deg), 3),
                     "speed": speed_level,
                     "duration": round(dur, 2),
-                })
+                }
+                if interrupted:
+                    entry["interrupted"] = True
+                result["moves"].append(entry)
+                return interrupted
             elif speeds:
                 # Angle below bias — micro-impulse at speed 1
                 logger.info(
@@ -271,17 +275,26 @@ def click_to_move(
                     "duration": 0,
                     "micro": True,
                 })
+                return False
             else:
                 result["moves"].append({"axis": axis, "skipped": True, "reason": "no speed table for adapter"})
+                return False
 
         try:
             # Skip if angle < half the micro-pulse displacement (bias at speed 1)
             pan_min = pan_bias.get(1, 1.0) / 2
             tilt_min = tilt_bias.get(1, 1.0) / 2
+            interrupted = False
             if abs(pan_deg) >= pan_min:
-                _execute_axis("pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias)
-            if abs(tilt_deg) >= tilt_min:
-                _execute_axis("tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias)
+                interrupted = _execute_axis(
+                    "pan", pan_deg, "Right" if pan_deg > 0 else "Left", pan_speeds, pan_bias
+                )
+            if not interrupted and abs(tilt_deg) >= tilt_min:
+                interrupted = _execute_axis(
+                    "tilt", tilt_deg, "Down" if tilt_deg > 0 else "Up", tilt_speeds, tilt_bias
+                )
+            if interrupted:
+                result["interrupted"] = True
 
         except Exception as exc:
             logger.error("[%s] click_to_move error: %s", camera_ip, exc)
@@ -345,10 +358,9 @@ def move_camera(
                 "[%s] Moving %s for %.3fs at speed %s (adapter=%s)", camera_ip, direction, duration, speed, adapter
             )
             cam.move_camera(direction, speed=speed)
-            if duration > 0:
-                time.sleep(duration)
+            interrupted = _interruptible_sleep(camera_ip, duration)
             cam.move_camera("Stop")
-            return {
+            resp: dict = {
                 "status": "ok",
                 "camera_ip": camera_ip,
                 "direction": direction,
@@ -356,6 +368,9 @@ def move_camera(
                 "speed": speed,
                 "adapter": adapter,
             }
+            if interrupted:
+                resp["interrupted"] = True
+            return resp
 
         if degrees is not None and direction:
             # Prefer the camera's reported zoom over the client hint; fall back to the
@@ -406,6 +421,7 @@ def move_camera(
 
             # Micro-impulse: angle below bias → move+stop at speed 1
             micro = duration_sec == 0.0 and abs(degrees) > 0
+            interrupted = False
             if micro:
                 logger.info(
                     "[%s] Moving %s %.2f° micro-impulse speed=1 (adapter=%s)",
@@ -426,7 +442,7 @@ def move_camera(
                     adapter,
                 )
                 cam.move_camera(direction, speed=effective_speed)
-                time.sleep(duration_sec)
+                interrupted = _interruptible_sleep(camera_ip, duration_sec)
                 cam.move_camera("Stop")
 
             resp: dict = {
@@ -440,6 +456,8 @@ def move_camera(
                 "zoom": effective_zoom,
                 "micro": micro,
             }
+            if interrupted:
+                resp["interrupted"] = True
             if speed_limited:
                 resp["warning"] = (
                     f"speed forced to 1 (zoom={effective_zoom} > 0, requested speed={speed})"
@@ -470,9 +488,10 @@ def stop_camera(camera_ip: str):
     """
     Stop the current movement of a PTZ camera.
 
-    This endpoint sends a Stop command to the camera PTZ control.
-    If the camera is not registered or does not support PTZ controls
-    an error is returned.
+    Sends a Stop command to the camera and signals any in-flight blocking
+    PTZ handler to wake up early. This lets an operator immediately issue
+    corrective commands instead of waiting for the interrupted handler's
+    sleep timer to expire (the handler then releases the per-camera lock).
     """
     update_command_time()
 
@@ -485,6 +504,8 @@ def stop_camera(camera_ip: str):
 
     try:
         cam.move_camera("Stop")
+        # Wake any blocking handler currently sleeping under the lock.
+        STOP_EVENTS[camera_ip].set()
         logger.info("[%s] Movement stopped", camera_ip)
         return {"message": f"Camera {camera_ip} stopped moving"}
     except Exception as exc:
@@ -510,7 +531,22 @@ def _acquire_or_409(camera_ip: str):
     lock = MOVE_LOCKS[camera_ip]
     if not lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail=f"Camera {camera_ip} busy")
+    # Clear any stale cancellation request so our sleeps aren't short-circuited
+    # by a /stop that happened before we started.
+    STOP_EVENTS[camera_ip].clear()
     return lock
+
+
+def _interruptible_sleep(camera_ip: str, duration: float) -> bool:
+    """Sleep for up to ``duration`` seconds, waking early if /stop fires.
+
+    Returns True if the sleep was interrupted by a stop request, False if the
+    full duration elapsed. Callers still hold the per-camera lock when this
+    returns, so they must release it in a ``finally`` as usual.
+    """
+    if duration <= 0:
+        return False
+    return STOP_EVENTS[camera_ip].wait(timeout=duration)
 
 
 @router.post("/goto_preset")
@@ -569,16 +605,18 @@ def move_for_duration(camera_ip: str, direction: str, duration: float, speed: in
     try:
         logger.info("[%s] move_for_duration %s %.3fs speed=%s", camera_ip, direction, duration, speed)
         cam.move_camera(direction, speed=speed)
-        if duration > 0:
-            time.sleep(duration)
+        interrupted = _interruptible_sleep(camera_ip, duration)
         cam.move_camera("Stop")
-        return {
+        resp: dict = {
             "status": "ok",
             "camera_ip": camera_ip,
             "direction": direction,
             "duration": round(duration, 3),
             "speed": speed,
         }
+        if interrupted:
+            resp["interrupted"] = True
+        return resp
     except Exception as exc:
         logger.error("[%s] move_for_duration error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -637,6 +675,7 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
 
         duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
         micro = duration_sec == 0.0 and abs(degrees) > 0
+        interrupted = False
 
         if micro:
             logger.info(
@@ -651,7 +690,7 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
                 camera_ip, direction, abs(degrees), duration_sec, effective_speed, adapter,
             )
             cam.move_camera(direction, speed=effective_speed)
-            time.sleep(duration_sec)
+            interrupted = _interruptible_sleep(camera_ip, duration_sec)
             cam.move_camera("Stop")
 
         resp: dict = {
@@ -665,6 +704,8 @@ def move_by_degrees(camera_ip: str, direction: str, degrees: float, speed: int =
             "zoom": zoom,
             "micro": micro,
         }
+        if interrupted:
+            resp["interrupted"] = True
         if speed_limited:
             resp["warning"] = f"speed forced to 1 (zoom={zoom} > 0, requested speed={speed})"
         return resp
@@ -778,8 +819,15 @@ def zoom_camera(camera_ip: str, level: int):
 
         cam.start_zoom_focus(level)
         logger.info("[%s] Zoom %s→%s, holding lock %.1fs", camera_ip, current, level, settle)
-        time.sleep(settle)
-        return {"message": f"Zoom set to {level}", "camera_ip": camera_ip, "settle": round(settle, 2)}
+        interrupted = _interruptible_sleep(camera_ip, settle)
+        resp: dict = {
+            "message": f"Zoom set to {level}",
+            "camera_ip": camera_ip,
+            "settle": round(settle, 2),
+        }
+        if interrupted:
+            resp["interrupted"] = True
+        return resp
     except HTTPException:
         raise
     except Exception as exc:
