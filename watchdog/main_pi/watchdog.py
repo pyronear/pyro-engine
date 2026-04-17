@@ -23,7 +23,27 @@ import RPi.GPIO as GPIO
 # ================= CONFIG =================
 
 RELAY_PIZERO = 16
-PIZERO_IP = "192.168.1.98"
+
+_ENV_FILE = Path("/home/pi/watchdog.env")
+
+
+def _load_env(path: Path) -> dict:
+    env: dict = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip()
+    except FileNotFoundError:
+        pass
+    return env
+
+
+_env = _load_env(_ENV_FILE)
+
+PIZERO_IP: str = _env.get("PIZERO_IP", "192.168.1.98")
 
 PING_COUNT = 2
 TIMEOUT = 2  # seconds, used for ping timeout
