@@ -5,6 +5,7 @@
 
 import io
 import logging
+import os
 import shutil
 import signal
 import time
@@ -19,6 +20,13 @@ from pyroclient import client
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.models import Response
+
+try:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+except ImportError:
+    boto3 = None  # type: ignore[assignment]
+    BotoCoreError = ClientError = Exception  # type: ignore[assignment,misc]
 
 __all__ = ["Engine"]
 
@@ -94,6 +102,7 @@ class Engine(Predictor):
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
+        s3_bucket: Optional[str] = "test-engine-capture",
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
@@ -144,6 +153,25 @@ class Engine(Predictor):
         self._cache = Path(cache_folder)  # with Docker, the path has to be a bind volume
         if not self._cache.is_dir():
             raise ValueError(f"Cache folder does not exist: {self._cache}")
+
+        # S3 client for uploading raw detection frames (for debugging compression artifacts)
+        self.s3_bucket = s3_bucket
+        self._s3_client: Any = None
+        if s3_bucket and boto3 is not None:
+            aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
+            aws_secret = os.environ.get("AWS_SECRET_ACCESS_KEY")
+            if aws_key and aws_secret:
+                try:
+                    self._s3_client = boto3.client(
+                        "s3",
+                        aws_access_key_id=aws_key,
+                        aws_secret_access_key=aws_secret,
+                    )
+                    logger.info(f"S3 client ready for bucket {s3_bucket}")
+                except Exception as e:
+                    logger.warning(f"Failed to initialize S3 client: {e}")
+            else:
+                logger.info("AWS credentials missing, S3 upload disabled")
 
     def _new_state(self) -> Dict[str, Any]:
         state = super()._new_state()
@@ -229,9 +257,10 @@ class Engine(Predictor):
                         logger.warning(f"Failed to fetch occlusion masks for cam {cam_key} (pose {pose_id}): {e}")
 
         # Inference with ONNX
+        model_frame = frame.convert("RGB")
         if fake_pred is None:
             bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
-            preds = self.model(frame.convert("RGB"), bbox_mask_dict)
+            preds = self.model(model_frame, bbox_mask_dict)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
@@ -254,6 +283,8 @@ class Engine(Predictor):
         logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
         # Alert
+        if conf > self.conf_thresh:
+            self._upload_frame_to_s3(model_frame, cam_id)
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
             for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
@@ -268,6 +299,20 @@ class Engine(Predictor):
                     )
 
         return float(conf)
+
+    def _upload_frame_to_s3(self, frame: Image.Image, cam_id: Optional[str]) -> None:
+        """Upload the exact PIL frame fed to the model as lossless PNG to S3 (debug use)."""
+        if self._s3_client is None or not self.s3_bucket:
+            return
+        try:
+            buffer = io.BytesIO()
+            frame.save(buffer, format="PNG", compress_level=0)
+            buffer.seek(0)
+            key = f"{cam_id or 'unknown'}/{time.strftime('%Y%m%d-%H%M%S')}.png"
+            self._s3_client.upload_fileobj(buffer, self.s3_bucket, key)
+            logger.info(f"Uploaded detection frame to s3://{self.s3_bucket}/{key}")
+        except (BotoCoreError, ClientError) as e:
+            logger.warning(f"S3 upload failed for {cam_id}: {e}")
 
     def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
         # Store information in the queue
