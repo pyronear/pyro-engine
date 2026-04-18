@@ -79,7 +79,13 @@ class Predictor:
             "miss_count": 0,
         }
 
-    def _update_states(self, frame: Image.Image, preds: np.ndarray, cam_key: str) -> float:
+    def _update_states(
+        self,
+        frame: Image.Image,
+        preds: np.ndarray,
+        cam_key: str,
+        encoded_bytes: Optional[bytes] = None,
+    ) -> float:
         prev_ongoing = self._states[cam_key]["ongoing"]
 
         conf_th = self.conf_thresh * self.nb_consecutive_frames
@@ -88,7 +94,7 @@ class Predictor:
 
         boxes = np.zeros((0, 5), dtype=np.float64)
         boxes = np.concatenate([boxes, preds])
-        for _, box, _, _, _ in self._states[cam_key]["last_predictions"]:
+        for _, box, _, _, _, _ in self._states[cam_key]["last_predictions"]:
             if box.shape[0] > 0:
                 boxes = np.concatenate([boxes, box])
 
@@ -150,6 +156,7 @@ class Predictor:
             output_predictions.tolist(),  # [] if empty
             datetime.now(timezone.utc).isoformat(),
             False,
+            encoded_bytes,
         ))
 
         new_ongoing = conf > self.conf_thresh
@@ -188,7 +195,9 @@ class Predictor:
             self._states[cam_key] = self._new_state()
 
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
+            target = (self.frame_size[1], self.frame_size[0])  # PIL expects (W, H)
+            if frame.size != target:
+                frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
 
         if fake_pred is None:
             preds = self.model(frame.convert("RGB"), occlusion_bboxes or {})
