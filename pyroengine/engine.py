@@ -81,7 +81,7 @@ class Engine(Predictor):
         max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        nb_consecutive_frames: int = 7,
+        nb_consecutive_frames: int = 5,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
         frame_saving_period: Optional[int] = None,

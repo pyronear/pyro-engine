@@ -119,7 +119,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nb-consecutive_frames",
         type=int,
-        default=7,
+        default=5,
         help="Number of consecutive frames to combine for prediction",
     )
     parser.add_argument(
