@@ -1,2 +1,1 @@
-pyro-camera-api-client @ git+https://github.com/pyronear/pyro-engine.git@0f3ff6836d226334847af63e365e8849c2bced22#subdirectory=pyro_camera_api/client ; python_version >= "3.11" and python_version < "4.0"
-pyroclient @ git+https://github.com/pyronear/pyro-api.git@b71cc17aae82472462a0909b51636fceed5e054a#subdirectory=client ; python_version >= "3.11" and python_version < "4.0"
+pyroclient @ git+https://github.com/pyronear/pyro-api.git@0790626447bab7c5be86322759975c33f0e54784#subdirectory=client

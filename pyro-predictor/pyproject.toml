@@ -2,14 +2,15 @@
 requires = ["setuptools>=67.0.0", "wheel>=0.40.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.poetry]
+[project]
 name = "pyro_predictor"
 version = "1.0.0"
 description = "Standalone wildfire detection predictor (YOLO inference + temporal state)"
-authors = ["Pyronear <contact@pyronear.org>"]
+authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
 readme = "README.md"
-license = "Apache-2.0"
+license = { text = "Apache-2.0" }
 keywords = ["deep learning", "vision", "yolo", "wildfire"]
+requires-python = ">=3.11,<4.0"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,18 +20,20 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.26,<3",
+    "pillow==11.0.0",
+    "opencv-python-headless>=4.9,<4.12",
+    "tqdm==4.67.1",
+    "onnxruntime==1.22.1",
+    "ncnn==1.0.20240410",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<4.0"
-numpy = ">=1.26,<3"
-pillow = "==11.0.0"
-opencv-python-headless = ">=4.9,<4.12"
-tqdm = "==4.67.1"
-onnxruntime = "==1.22.1"
-ncnn = "==1.0.20240410"
-
-[tool.poetry.urls]
+[project.urls]
 repository = "https://github.com/pyronear/pyro-engine"
 tracker = "https://github.com/pyronear/pyro-engine/issues"
+
+[tool.setuptools.packages.find]
+include = ["pyro_predictor*"]

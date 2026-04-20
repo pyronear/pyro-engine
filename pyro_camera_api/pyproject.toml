@@ -1,28 +1,28 @@
-[tool.poetry]
+[project]
 name = "pyro_camera_api"
 version = "0.1.0"
 description = "FastAPI service to control cameras"
-authors = ["Pyronear <contact@pyronear.org>"]
-packages = [{ include = "src" }]
+authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
 readme = "README.md"
+requires-python = ">=3.9,<4.0"
+dependencies = [
+    "fastapi>=0.110.0,<0.111",
+    "uvicorn[standard]>=0.30.0,<0.31",
+    "python-dotenv>=1.0.1,<2",
+    "opencv-python-headless>=4.9.0,<5",
+    "pillow>=10.2.0,<11",
+    "requests>=2.31.0,<3",
+    "numpy>=1.26.4,<2",
+    "urllib3>=2.2.1,<3",
+    "ncnn==1.0.20240410",
+    "onnxruntime==1.19.2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.9"
-fastapi = "^0.110.0"
-uvicorn = { extras = ["standard"], version = "^0.30.0" }
-python-dotenv = "^1.0.1"
-opencv-python-headless = "^4.9.0"
-pillow = "^10.2.0"
-requests = "^2.31.0"
-numpy = "^1.26.4"
-urllib3 = "^2.2.1"
-ncnn = "==1.0.20240410"
-onnxruntime = "==1.19.2"
+[dependency-groups]
+quality = [
+    "ruff==0.11.9",
+    "mypy==1.10.0",
+]
 
-[tool.poetry.group.quality.dependencies]
-ruff = "==0.11.9"
-mypy = "==1.10.0"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv]
+package = false

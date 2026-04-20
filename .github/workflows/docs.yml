@@ -3,6 +3,9 @@ on:
   push:
     branches: main
 
+env:
+  UV_VERSION: "0.6.16"
+
 jobs:
   docs-deploy:
     runs-on: ${{ matrix.os }}
@@ -15,30 +18,23 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
-      - name: Cache python modules
-        uses: actions/cache@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-docs
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          version: ${{ env.UV_VERSION }}
 
       - name: Stub version.py for docs
         run: |
           echo "__version__ = '0.0.0'" > pyroengine/version.py
-      
+
       - name: Install documentation dependencies
-        run: |
-          poetry install --with docs
-        
+        run: uv sync --locked --group docs
+
       - name: Build documentation
-        run: poetry run sphinx-build docs/source docs/build -a -v
+        run: uv run sphinx-build docs/source docs/build -a -v
 
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit

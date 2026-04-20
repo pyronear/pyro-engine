@@ -19,7 +19,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Layer 2: Pip deps (~400MB, changes only on version bumps)
-COPY --from=ghcr.io/astral-sh/uv:0.5.13 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.16 /uv /bin/uv
 COPY requirements.txt /tmp/requirements.txt
 RUN uv pip install --no-cache --system -r /tmp/requirements.txt && \
     rm /bin/uv /tmp/requirements.txt

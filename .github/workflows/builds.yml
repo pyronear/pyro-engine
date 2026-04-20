@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  UV_VERSION: "0.6.16"
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -14,31 +17,22 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python: ['3.11']
-    
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
 
-      - name: Cache python modules
-        uses: actions/cache@v4
+      - uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ matrix.python }}-${{ hashFiles('pyproject.toml', 'poetry.lock') }}-build
+          version: ${{ env.UV_VERSION }}
 
       - name: Install dependencies
-        run: pip install --no-cache-dir -r requirements.txt
-      
-      - name: Install pyro-predictor
-        run: pip install -e pyro-predictor/
+        run: uv sync --locked --no-default-groups
 
-      - name: Install local package
-        run: pip install -e . --upgrade
-      
       - name: Import package and check version
-        run: python -c "import pyroengine; print(pyroengine.__version__)"
-        
+        run: uv run python -c "import pyroengine; print(pyroengine.__version__)"
