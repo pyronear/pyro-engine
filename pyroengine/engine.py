@@ -9,6 +9,7 @@ import shutil
 import signal
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Never, Optional, Tuple
 
@@ -135,6 +136,7 @@ class Engine(Predictor):
         for state in self._states.values():
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
+            state["last_pose_image_sent"] = None
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -149,6 +151,7 @@ class Engine(Predictor):
         state = super()._new_state()
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
+        state["last_pose_image_sent"] = None
         return state
 
     def heartbeat(self, cam_id: str) -> Response:
@@ -210,6 +213,20 @@ class Engine(Predictor):
                 if ip in self.api_client:
                     response = self.api_client[ip].update_last_image(encoded_bytes)
                     logger.info(response.text)
+
+            # Send one pose image per day at 12:00
+            if isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
+                now = datetime.now()
+                today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+                last_pose_sent = self._states[cam_key]["last_pose_image_sent"]
+                if now >= today_noon and (last_pose_sent is None or last_pose_sent < today_noon):
+                    _, pose_id = self.cam_creds[cam_id]
+                    ip = cam_id.split("_")[0]
+                    if ip in self.api_client:
+                        logger.info(f"Uploading daily pose image for cam {cam_id} (pose {pose_id})")
+                        self._states[cam_key]["last_pose_image_sent"] = now
+                        response = self.api_client[ip].update_pose_image(pose_id, encoded_bytes)
+                        logger.info(response.text)
 
         # Update occlusion masks from API
         if (
