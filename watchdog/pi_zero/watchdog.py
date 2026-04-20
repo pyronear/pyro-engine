@@ -29,10 +29,33 @@ import RPi.GPIO as GPIO
 RELAY_MAIN = 16
 RELAY_CAMS = 26
 
-MAIN_PI_IP = "192.168.1.99"
+_ENV_FILE = Path("/home/pi/watchdog.env")
+
+
+def _load_env(path: Path) -> dict:
+    env: dict = {}
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, value = line.partition("=")
+            env[key.strip()] = value.strip()
+    except FileNotFoundError:
+        pass
+    return env
+
+
+_env = _load_env(_ENV_FILE)
+
+MAIN_PI_IP: str = _env.get("MAIN_PI_IP", "192.168.1.99")
 MAIN_HEALTH_URL = f"http://{MAIN_PI_IP}:8081/health"
 
-CAM_IPS = ["192.168.1.11", "192.168.1.12"]
+_cam_ips_raw = _env.get("CAM_IPS", "")
+CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()] or [
+    "192.168.1.11",
+    "192.168.1.12",
+]
 INTERNET_IP = "1.1.1.1"
 
 PING_COUNT = 2
