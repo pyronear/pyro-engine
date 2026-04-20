@@ -3,32 +3,12 @@
 Installation
 ************
 
-This library requires `Python <https://www.python.org/downloads/>`_ 3.6 or higher.
+This library requires `Python <https://www.python.org/downloads/>`_ 3.11 or higher.
 
-Via Python Package
-==================
-
-Install the last stable release of the package using `uv <https://docs.astral.sh/uv/>`_:
-
-.. code:: bash
-
-    uv pip install pyroengine
-
-
-Via Conda
-=========
-
-Install the last stable release of the package using `conda <https://docs.conda.io/en/latest/>`_:
-
-.. code:: bash
-
-    conda install -c pyronear pyroengine
-
-
-Via Git
-=======
-
-Install the library in developer mode:
+``pyroengine`` is not published to PyPI because it depends on two in-tree
+packages (``pyro_camera_api_client`` and ``pyro_predictor``) that live inside
+this repository. Install by cloning the repository and using
+`uv <https://docs.astral.sh/uv/>`_:
 
 .. code:: bash
 

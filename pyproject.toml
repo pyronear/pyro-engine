@@ -30,7 +30,7 @@ dependencies = [
     "requests==2.31.0",
     "huggingface_hub==0.23.1",
     "python-dotenv==1.1.0",
-    "pyroclient",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
 ]
@@ -44,7 +44,6 @@ tracker = "https://github.com/pyronear/pyro-engine/issues"
 include = ["pyroengine*"]
 
 [tool.uv.sources]
-pyroclient = { git = "https://github.com/pyronear/pyro-api.git", branch = "main", subdirectory = "client" }
 pyro_camera_api_client = { path = "pyro_camera_api/client", editable = true }
 pyro_predictor = { path = "pyro-predictor", editable = true }
 

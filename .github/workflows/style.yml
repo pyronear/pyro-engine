@@ -23,7 +23,7 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - name: Install quality dependencies
-        run: uv sync --only-group quality
+        run: uv sync --locked --only-group quality
       - name: Run ruff
         run: |
           uv run ruff --version
@@ -42,7 +42,7 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
       - name: Install quality dependencies
-        run: uv sync --group quality
+        run: uv sync --locked --group quality
       - name: Run mypy
         run: |
           uv run mypy --version

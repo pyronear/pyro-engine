@@ -35,7 +35,7 @@ jobs:
         run: echo "__version__ = '0.0.0'" > pyroengine/version.py
 
       - name: Install test dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       - name: Run unittests
         env:
@@ -90,7 +90,7 @@ jobs:
         run: echo "__version__ = '0.0.0'" > pyroengine/version.py
 
       - name: Install documentation dependencies
-        run: uv sync --group docs
+        run: uv sync --locked --group docs
 
       - name: Build documentation
         run: uv run sphinx-build docs/source docs/build -a

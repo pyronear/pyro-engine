@@ -29,7 +29,11 @@ lock:
 
 # Generate requirements and build camera API Docker image
 build-api:
-	cd pyro_camera_api && uv lock && uv export --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements.txt
+	cd pyro_camera_api && \
+		uv lock && \
+		uv export --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements-all.txt && \
+		grep -v '^opencv-python==' requirements-all.txt > requirements.txt && \
+		rm requirements-all.txt
 	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 
 # Build the engine Docker image

@@ -1158,7 +1158,7 @@ requires-dist = [
 [[package]]
 name = "pyroclient"
 version = "0.2.0.dev0"
-source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&branch=main#0790626447bab7c5be86322759975c33f0e54784" }
+source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#286f9d96d0b3aefe3f4a5f5f856abc9997731b8f" }
 dependencies = [
     { name = "requests" },
 ]
@@ -1208,7 +1208,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = "==0.23.1" },
     { name = "pyro-camera-api-client", editable = "pyro_camera_api/client" },
     { name = "pyro-predictor", editable = "pyro-predictor" },
-    { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&branch=main" },
+    { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main" },
     { name = "python-dotenv", specifier = "==1.1.0" },
     { name = "requests", specifier = "==2.31.0" },
 ]
