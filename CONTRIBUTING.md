@@ -19,7 +19,7 @@ Whatever the way you wish to contribute to the project, please respect the [code
 
 This project uses the following integrations to ensure proper codebase maintenance:
 
-- [Github Worklow](https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow) - run jobs for package build and coverage
+- [Github Worklow](https://docs.github.com/en/actions/using-workflows/about-workflows) - run jobs for package build and coverage
 - [Codacy](https://www.codacy.com/) - analyzes commits for code quality
 - [Codecov](https://codecov.io/) - reports back coverage results
 
