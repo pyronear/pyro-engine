@@ -6,6 +6,7 @@ import numpy as np
 
 # Canonical import — Classifier lives in pyro_predictor
 from pyro_predictor import Classifier
+from pyro_predictor.vision import MODEL_CACHE_SUBDIR, MODEL_SLUG
 
 # pyroengine.vision shim must re-export the same class
 from pyroengine.vision import Classifier as ClassifierShim
@@ -29,7 +30,7 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
 
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
-    model_path = str(pathlib.Path(folder) / "onnx_cpu" / "best.onnx")
+    model_path = str(pathlib.Path(folder) / MODEL_CACHE_SUBDIR / MODEL_SLUG / "onnx_cpu" / "best.onnx")
     assert pathlib.Path(model_path).is_file()
 
     # Test occlusion mask
@@ -49,12 +50,36 @@ def sha256sum(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
 
 
+def test_stale_cache_is_purged(tmpdir_factory):
+    folder = pathlib.Path(tmpdir_factory.mktemp("engine_cache"))
+    models_dir = folder / MODEL_CACHE_SUBDIR
+
+    # Seed a previous-version slug alongside the current one.
+    stale_slug = models_dir / "yolo11s_stale-slug_v0.0.0"
+    stale_slug.mkdir(parents=True)
+    (stale_slug / "marker.txt").write_text("stale")
+
+    # Seed the pre-slug flat layout (onnx variant, matching the format used below).
+    legacy_archive = folder / "onnx_cpu.tar.gz"
+    legacy_archive.write_bytes(b"legacy")
+    legacy_extract = folder / "onnx_cpu"
+    legacy_extract.mkdir()
+    (legacy_extract / "marker.txt").write_text("legacy")
+
+    _ = Classifier(model_folder=str(folder), format="onnx")
+
+    assert not stale_slug.exists(), "stale slug should have been purged"
+    assert not legacy_archive.exists(), "legacy archive should have been purged"
+    assert not legacy_extract.exists(), "legacy extract dir should have been purged"
+    assert (models_dir / MODEL_SLUG / "onnx_cpu" / "best.onnx").is_file()
+
+
 def test_download(tmpdir_factory):
     folder = str(tmpdir_factory.mktemp("engine_cache"))
 
     # First download
     _ = Classifier(model_folder=folder, format="onnx")
-    model_path = str(pathlib.Path(folder) / "onnx_cpu" / "best.onnx")
+    model_path = str(pathlib.Path(folder) / MODEL_CACHE_SUBDIR / MODEL_SLUG / "onnx_cpu" / "best.onnx")
     assert pathlib.Path(model_path).is_file()
 
     hash1 = sha256sum(model_path)
