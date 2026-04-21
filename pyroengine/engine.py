@@ -191,13 +191,10 @@ class Engine(Predictor):
             if frame.size != target:
                 frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
 
-        # Canonical bytes: encode once, decode for inference, reuse for every upload/backup.
-        # Guarantees model and stored media see byte-identical input.
+        # Encode once for API uploads and on-disk backup; feed the uncompressed frame to the model.
         buf = io.BytesIO()
         frame.save(buf, format="JPEG", quality=self.jpeg_quality)
         encoded_bytes = buf.getvalue()
-        buf.seek(0)
-        frame = Image.open(buf).convert("RGB")
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
