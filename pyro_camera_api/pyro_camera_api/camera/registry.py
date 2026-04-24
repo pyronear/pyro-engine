@@ -28,6 +28,10 @@ CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
 
+# Stuck-detector threading state, later managed in camera.stuck_detector
+STUCK_CHECK_THREADS: Dict[str, threading.Thread] = {}
+STUCK_CHECK_FLAGS: Dict[str, threading.Event] = {}
+
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """
