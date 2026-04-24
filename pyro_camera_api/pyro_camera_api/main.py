@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from contextlib import asynccontextmanager
 
@@ -73,7 +74,17 @@ async def lifespan(app: FastAPI):
         PATROL_FLAGS[cam_id] = stop_flag
         thread.start()
 
-        if getattr(cam, "cam_type", "static") == "ptz" and hasattr(cam, "reboot_camera"):
+        stuck_detector_enabled = os.getenv("ENABLE_STUCK_DETECTOR", "true").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if (
+            stuck_detector_enabled
+            and getattr(cam, "cam_type", "static") == "ptz"
+            and hasattr(cam, "reboot_camera")
+        ):
             stuck_flag = threading.Event()
             stuck_thread = threading.Thread(
                 target=stuck_check_loop, args=(cam_id, stuck_flag), daemon=True
@@ -82,6 +93,8 @@ async def lifespan(app: FastAPI):
             STUCK_CHECK_FLAGS[cam_id] = stuck_flag
             stuck_thread.start()
             logger.info("Starting stuck detector for PTZ camera %s", cam_id)
+        elif not stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz":
+            logger.info("Stuck detector disabled by ENABLE_STUCK_DETECTOR for %s", cam_id)
 
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
