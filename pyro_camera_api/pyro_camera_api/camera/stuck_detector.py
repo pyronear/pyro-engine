@@ -32,6 +32,7 @@ from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATRO
 logger = logging.getLogger(__name__)
 
 CHECK_INTERVAL = 30 * 60.0  # seconds between checks
+INITIAL_DELAY = 3 * 60.0  # delay before the first check, lets patrol populate last_images
 STUCK_MAX_HAMMING = 10  # max pairwise distance below which we suspect stuck
 CONSECUTIVE_HITS_BEFORE_REBOOT = 2
 MIN_POSES_FOR_CHECK = 3
@@ -74,16 +75,19 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         return
 
     logger.info(
-        "[%s] Stuck detector started (interval=%ds, threshold=%d, consecutive=%d)",
+        "[%s] Stuck detector started (initial=%ds, interval=%ds, threshold=%d, consecutive=%d)",
         camera_ip,
+        int(INITIAL_DELAY),
         int(CHECK_INTERVAL),
         STUCK_MAX_HAMMING,
         CONSECUTIVE_HITS_BEFORE_REBOOT,
     )
 
     CONSECUTIVE_HITS[camera_ip] = 0
+    next_delay = INITIAL_DELAY
 
-    while not stop_flag.wait(CHECK_INTERVAL):
+    while not stop_flag.wait(next_delay):
+        next_delay = CHECK_INTERVAL
         if not _patrol_is_running(camera_ip):
             logger.info("[%s] Stuck check skipped: patrol not running", camera_ip)
             CONSECUTIVE_HITS[camera_ip] = 0
