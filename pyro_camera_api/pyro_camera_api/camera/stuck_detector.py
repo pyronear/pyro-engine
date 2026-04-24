@@ -138,6 +138,9 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 except Exception as exc:
                     logger.error("[%s] Reboot failed: %s", camera_ip, exc)
                 CONSECUTIVE_HITS[camera_ip] = 0
+            else:
+                # confirm the hit quickly rather than waiting a full interval
+                next_delay = INITIAL_DELAY
         else:
             if CONSECUTIVE_HITS[camera_ip] > 0:
                 logger.info(
