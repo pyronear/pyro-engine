@@ -207,6 +207,35 @@ def set_preset(camera_ip: str, idx: Optional[int] = None):
     return {"status": "preset_set", "camera_ip": camera_ip, "id": idx}
 
 
+@router.post("/reboot/{camera_ip}")
+def reboot_camera(camera_ip: str):
+    """
+    Reboot a camera.
+
+    Supported for adapters that expose a reboot_camera method (Reolink,
+    Linovision). Used to recover cameras that occasionally get stuck
+    (e.g. PTZ stops responding during patrol). Returns 501 for adapters
+    that do not implement reboot.
+    """
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail=f"Camera with IP '{camera_ip}' not found")
+
+    if not hasattr(cam, "reboot_camera"):
+        raise HTTPException(
+            status_code=501,
+            detail="Reboot is not implemented for this camera adapter",
+        )
+
+    try:
+        logger.warning("[%s] Rebooting camera", camera_ip)
+        cam.reboot_camera()
+        return {"status": "rebooting", "camera_ip": camera_ip}
+    except Exception as exc:
+        logger.error("[%s] Failed to reboot camera: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.post("/zoom/{camera_ip}/{level}")
 def zoom_camera(camera_ip: str, level: int):
     """
