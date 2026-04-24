@@ -156,12 +156,22 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     camera_ip,
                     max_dist,
                 )
+                ok = False
                 try:
-                    cam.reboot_camera()
-                    cam.last_images.clear()
+                    ok = bool(cam.reboot_camera())
                 except Exception as exc:
-                    logger.error("[%s] Reboot failed: %s", camera_ip, exc)
-                CONSECUTIVE_HITS[camera_ip] = 0
+                    logger.error("[%s] Reboot raised: %s", camera_ip, exc)
+
+                if ok:
+                    cam.last_images.clear()
+                    CONSECUTIVE_HITS[camera_ip] = 0
+                else:
+                    logger.error(
+                        "[%s] Reboot command rejected by camera, will retry on next check",
+                        camera_ip,
+                    )
+                    # keep the hit counter so we retry, use fast-confirm cadence
+                    next_delay = INITIAL_DELAY
             else:
                 # confirm the hit quickly rather than waiting a full interval
                 next_delay = INITIAL_DELAY

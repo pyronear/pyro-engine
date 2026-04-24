@@ -229,11 +229,16 @@ def reboot_camera(camera_ip: str):
 
     try:
         logger.warning("[%s] Rebooting camera", camera_ip)
-        cam.reboot_camera()
-        return {"status": "rebooting", "camera_ip": camera_ip}
+        ok = cam.reboot_camera()
     except Exception as exc:
         logger.error("[%s] Failed to reboot camera: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+    if not ok:
+        logger.error("[%s] Camera rejected reboot command", camera_ip)
+        raise HTTPException(status_code=502, detail="Camera rejected reboot command")
+
+    return {"status": "rebooting", "camera_ip": camera_ip}
 
 
 @router.post("/zoom/{camera_ip}/{level}")
