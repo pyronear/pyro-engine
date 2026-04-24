@@ -85,13 +85,13 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
     while not stop_flag.wait(CHECK_INTERVAL):
         if not _patrol_is_running(camera_ip):
-            logger.debug("[%s] Stuck check skipped: patrol not running", camera_ip)
+            logger.info("[%s] Stuck check skipped: patrol not running", camera_ip)
             CONSECUTIVE_HITS[camera_ip] = 0
             continue
 
         images = [im for pose, im in cam.last_images.items() if pose != -1 and im is not None]
         if len(images) < MIN_POSES_FOR_CHECK:
-            logger.debug(
+            logger.info(
                 "[%s] Stuck check skipped: only %d pose images available",
                 camera_ip,
                 len(images),
@@ -103,6 +103,14 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         except Exception as exc:
             logger.warning("[%s] Stuck check failed: %s", camera_ip, exc)
             continue
+
+        logger.info(
+            "[%s] Stuck check: max pHash distance=%d across %d poses (threshold=%d)",
+            camera_ip,
+            max_dist,
+            len(images),
+            STUCK_MAX_HAMMING,
+        )
 
         if max_dist < STUCK_MAX_HAMMING:
             CONSECUTIVE_HITS[camera_ip] += 1
