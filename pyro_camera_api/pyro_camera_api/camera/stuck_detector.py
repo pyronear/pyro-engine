@@ -35,7 +35,11 @@ CHECK_INTERVAL = 30 * 60.0  # seconds between checks
 INITIAL_DELAY = 3 * 60.0  # delay before the first check, lets patrol populate last_images
 STUCK_MAX_HAMMING = 10  # max pairwise distance below which we suspect stuck
 CONSECUTIVE_HITS_BEFORE_REBOOT = 2
-MIN_POSES_FOR_CHECK = 3
+MIN_POSES_FOR_CHECK = 2
+# Fog / low-light scenes collapse to near-uniform gray and produce unstable pHashes.
+# Skip the check when the mean per-image gray variance falls below this threshold.
+# Calibrated on sun_test data: foggy rounds mean variance <= 332, stuck rounds mean >= 854.
+MIN_MEAN_VARIANCE_FOR_CHECK = 500.0
 
 CONSECUTIVE_HITS: Dict[str, int] = {}
 
@@ -53,6 +57,10 @@ def _phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> np
 
 def _hamming(a: np.ndarray, b: np.ndarray) -> int:
     return int(np.count_nonzero(a != b))
+
+
+def _mean_gray_variance(images: List[Image.Image]) -> float:
+    return float(np.mean([np.asarray(im.convert("L"), dtype=np.float32).var() for im in images]))
 
 
 def _max_pairwise_hamming(images: List[Image.Image]) -> int:
@@ -100,6 +108,22 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 camera_ip,
                 len(images),
             )
+            continue
+
+        try:
+            mean_var = _mean_gray_variance(images)
+        except Exception as exc:
+            logger.warning("[%s] Stuck check failed computing variance: %s", camera_ip, exc)
+            continue
+
+        if mean_var < MIN_MEAN_VARIANCE_FOR_CHECK:
+            logger.info(
+                "[%s] Stuck check skipped: low-variance scene (mean=%.0f < %d, likely fog/night)",
+                camera_ip,
+                mean_var,
+                int(MIN_MEAN_VARIANCE_FOR_CHECK),
+            )
+            CONSECUTIVE_HITS[camera_ip] = 0
             continue
 
         try:
