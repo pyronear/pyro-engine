@@ -167,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--period",
         type=int,
-        default=30,
+        default=5,
         help="Number of seconds between each camera stream analysis",
     )
     args = parser.parse_args()
