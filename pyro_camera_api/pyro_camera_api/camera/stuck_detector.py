@@ -47,7 +47,7 @@ CONSECUTIVE_HITS: Dict[str, int] = {}
 def _phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> np.ndarray:
     """Classic pHash: downscale to grayscale, DCT, threshold low-freq block on its median."""
     img_size = hash_size * highfreq_factor
-    gray = img.convert("L").resize((img_size, img_size), Image.LANCZOS)
+    gray = img.convert("L").resize((img_size, img_size), Image.Resampling.LANCZOS)
     arr = np.asarray(gray, dtype=np.float32)
     dct = cv2.dct(arr)
     low = dct[:hash_size, :hash_size]
