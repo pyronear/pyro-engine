@@ -80,15 +80,9 @@ async def lifespan(app: FastAPI):
             "yes",
             "on",
         )
-        if (
-            stuck_detector_enabled
-            and getattr(cam, "cam_type", "static") == "ptz"
-            and hasattr(cam, "reboot_camera")
-        ):
+        if stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz" and hasattr(cam, "reboot_camera"):
             stuck_flag = threading.Event()
-            stuck_thread = threading.Thread(
-                target=stuck_check_loop, args=(cam_id, stuck_flag), daemon=True
-            )
+            stuck_thread = threading.Thread(target=stuck_check_loop, args=(cam_id, stuck_flag), daemon=True)
             STUCK_CHECK_THREADS[cam_id] = stuck_thread
             STUCK_CHECK_FLAGS[cam_id] = stuck_flag
             stuck_thread.start()
