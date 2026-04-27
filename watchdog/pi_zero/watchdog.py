@@ -59,7 +59,8 @@ CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()
 _INTERNET_HTTP_URLS = [
     "https://clients3.google.com/generate_204",
     "https://connectivitycheck.gstatic.com/generate_204",
-    "https://example.com",
+    "http://cp.cloudflare.com",
+    "www.msftconnecttest.com/connecttest.txt"
 ]
 _INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
