@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import logging
+import zipfile
 from io import BytesIO
+from operator import itemgetter
+from threading import Lock
 from typing import Optional
 
 import requests
@@ -19,17 +22,21 @@ __all__ = ["MockCamera"]
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FAKE_IMAGE_URL = "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/fire_sample_image.jpg"
+DEFAULT_FAKE_IMAGE_URL = "https://github.com/user-attachments/files/27112977/41_croix-augas-02_2025-07-14_11-24-31.zip"
+
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
 
 class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     """
     Mock camera adapter for development and testing.
 
-    It downloads one reference image once, then returns that same image
-    for every capture call, mimicking a stable camera feed.
-    PTZ and focus methods are no-ops that only log, allowing the rest
-    of the system to run without real hardware.
+    The source URL can point to a single image or to a ZIP archive containing
+    an ``images/`` folder. In the ZIP case, the adapter extracts every image
+    in that folder, sorts them by filename, caches them in memory, and loops
+    over the sequence on successive capture calls. PTZ and focus methods are
+    no-ops that only log, allowing the rest of the system to run without
+    real hardware.
     """
 
     def __init__(
@@ -43,7 +50,9 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.image_url = image_url
-        self._cached_image: Optional[Image.Image] = None
+        self._cached_images: list[Image.Image] = []
+        self._index = 0
+        self._lock = Lock()
 
         self.cam_poses = cam_poses or []
         self.cam_azimuths = cam_azimuths or []
@@ -53,19 +62,54 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_image(self) -> None:
-        if self._cached_image is not None:
+    def _load_zip_images(self, content: bytes) -> list[Image.Image]:
+        images: list[tuple[str, Image.Image]] = []
+        with zipfile.ZipFile(BytesIO(content)) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                name = info.filename
+                # Only pick files inside an "images/" folder, at any depth
+                parts = name.split("/")
+                if "images" not in parts[:-1]:
+                    continue
+                if not name.lower().endswith(_IMAGE_EXTENSIONS):
+                    continue
+                with zf.open(info) as fh:
+                    img = Image.open(BytesIO(fh.read())).convert("RGB")
+                images.append((parts[-1], img))
+        images.sort(key=itemgetter(0))
+        return [img for _, img in images]
+
+    def _ensure_images(self) -> None:
+        if self._cached_images:
             return
 
         try:
-            logger.info("MockCamera %s downloading image from %s", self.camera_id, self.image_url)
-            resp = requests.get(self.image_url, timeout=5)
+            logger.info("MockCamera %s downloading from %s", self.camera_id, self.image_url)
+            resp = requests.get(self.image_url, timeout=15)
             resp.raise_for_status()
-            self._cached_image = Image.open(BytesIO(resp.content)).convert("RGB")
-            logger.info("MockCamera %s cached image, size=%s", self.camera_id, self._cached_image.size)
+            content = resp.content
+
+            is_zip = self.image_url.lower().endswith(".zip") or content[:2] == b"PK"
+            if is_zip:
+                self._cached_images = self._load_zip_images(content)
+                if not self._cached_images:
+                    logger.error("MockCamera %s zip contains no images/ entries", self.camera_id)
+                    return
+                logger.info(
+                    "MockCamera %s cached %d images from zip, first size=%s",
+                    self.camera_id,
+                    len(self._cached_images),
+                    self._cached_images[0].size,
+                )
+            else:
+                img = Image.open(BytesIO(content)).convert("RGB")
+                self._cached_images = [img]
+                logger.info("MockCamera %s cached single image, size=%s", self.camera_id, img.size)
         except Exception as exc:
-            logger.error("MockCamera %s failed to download image: %s", self.camera_id, exc)
-            self._cached_image = None
+            logger.error("MockCamera %s failed to download image(s): %s", self.camera_id, exc)
+            self._cached_images = []
 
     # ------------------------------------------------------------------
     # BaseCamera implementation
@@ -73,10 +117,13 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def capture(self, **kwargs) -> Optional[Image.Image]:
         _ = kwargs  # unused
-        self._ensure_image()
-        if self._cached_image is None:
+        self._ensure_images()
+        if not self._cached_images:
             return None
-        return self._cached_image.copy()
+        with self._lock:
+            img = self._cached_images[self._index % len(self._cached_images)]
+            self._index = (self._index + 1) % len(self._cached_images)
+        return img.copy()
 
     # ------------------------------------------------------------------
     # PTZMixin implementation (no op)

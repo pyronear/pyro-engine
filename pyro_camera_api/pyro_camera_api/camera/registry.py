@@ -117,7 +117,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     if adapter in ("mock", "mock"):
         image_url = conf.get(
             "url",
-            "https://github.com/pyronear/pyro-engine/releases/download/v0.1.1/fire_sample_image.jpg",
+            "https://github.com/user-attachments/files/27112977/41_croix-augas-02_2025-07-14_11-24-31.zip",
         )
         cam = MockCamera(
             camera_id=key,
