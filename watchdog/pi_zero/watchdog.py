@@ -56,7 +56,13 @@ CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()
     "192.168.1.11",
     "192.168.1.12",
 ]
-INTERNET_IP = "1.1.1.1"
+_INTERNET_HTTP_URLS = [
+    "https://clients3.google.com/generate_204",
+    "https://connectivitycheck.gstatic.com/generate_204",
+    "http://cp.cloudflare.com",
+    "www.msftconnecttest.com/connecttest.txt",
+]
+_INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
 PING_COUNT = 2
 TIMEOUT = 2  # seconds, used for ping and HTTP timeout
@@ -133,6 +139,25 @@ def ping_host(ip: str, count: int = PING_COUNT, timeout: int = TIMEOUT) -> bool:
         return True
     except subprocess.CalledProcessError:
         return False
+
+
+def internet_check_ok() -> bool:
+    for url in _INTERNET_HTTP_URLS:
+        try:
+            with urlopen(url, timeout=TIMEOUT) as resp:
+                if resp.status in (200, 204):
+                    logging.info("Internet HTTP check OK: %s", url)
+                    return True
+        except Exception:  # noqa: S110
+            pass
+
+    for ip in _INTERNET_PING_IPS:
+        if ping_host(ip, count=1, timeout=TIMEOUT):
+            logging.info("Internet ping fallback OK: %s", ip)
+            return True
+
+    logging.warning("Internet connectivity FAILED")
+    return False
 
 
 def http_health_ok(url: str) -> bool:
@@ -253,8 +278,8 @@ def main() -> None:
 
     reboot_12v = False
 
-    internet_ok = ping_host(INTERNET_IP, count=1, timeout=TIMEOUT)
-    internet_fails = update_fail_counter(internet_ok, FAIL_INTERNET_FILE, f"Internet {INTERNET_IP}")
+    internet_ok = internet_check_ok()
+    internet_fails = update_fail_counter(internet_ok, FAIL_INTERNET_FILE, "Internet")
     if internet_fails >= MAX_FAILS:
         reboot_12v = True
 
