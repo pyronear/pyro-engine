@@ -60,7 +60,7 @@ _INTERNET_HTTP_URLS = [
     "https://clients3.google.com/generate_204",
     "https://connectivitycheck.gstatic.com/generate_204",
     "http://cp.cloudflare.com",
-    "www.msftconnecttest.com/connecttest.txt"
+    "www.msftconnecttest.com/connecttest.txt",
 ]
 _INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
@@ -148,7 +148,7 @@ def internet_check_ok() -> bool:
                 if resp.status in (200, 204):
                     logging.info("Internet HTTP check OK: %s", url)
                     return True
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     for ip in _INTERNET_PING_IPS:
