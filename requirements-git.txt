@@ -1,1 +1,1 @@
-pyroclient @ git+https://github.com/pyronear/pyro-api.git@0790626447bab7c5be86322759975c33f0e54784#subdirectory=client
+pyroclient @ git+https://github.com/pyronear/pyro-api.git@6facf2f780e5ab0bb594f88b9f50118bd6f23c81#subdirectory=client
