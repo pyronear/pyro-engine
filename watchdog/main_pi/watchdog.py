@@ -3,6 +3,9 @@
 Watchdog for the main Pi that pings the Pi Zero and power-cycles its relay
 after repeated failures, with cooldown and daily limits.
 
+Install dependencies (once per Pi):
+  pip install -r /home/pi/pyro-engine/watchdog/requirements.txt
+
 Cron setup (every 10 minutes at :05):
   1) Edit crontab:  crontab -e
   2) Add the line:

@@ -8,6 +8,9 @@ For each selected relay, this script:
   3) verifies the device drops during the cut,
   4) drives the GPIO back HIGH (restore power) and waits for the device to come back.
 
+Install dependencies (once per Pi):
+  pip install -r /home/pi/pyro-engine/watchdog/requirements.txt
+
 Run on the Pi Zero:
   python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py
   python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py --relay main
