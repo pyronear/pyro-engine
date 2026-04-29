@@ -1,1 +1,2 @@
-RPi.GPIO>=0.7.1
+rpi-lgpio>=0.6
+
