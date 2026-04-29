@@ -16,6 +16,18 @@ Run on the Pi Zero:
   python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py --relay main
   python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py --relay cams
 
+Run from the main Pi (when you cannot reach the Pi Zero directly):
+  Testing the 'main' relay cuts power to the main Pi, which kills the SSH
+  chain to the Pi Zero, so the test must be detached on the Pi Zero. From
+  the main Pi:
+
+    ssh pi@<PIZERO_IP> \
+      'nohup python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py \
+       > /tmp/relay_check.log 2>&1 < /dev/null & disown; exit'
+
+  Wait ~3-4 minutes (15s cut + 90s return per relay), then reconnect and:
+    ssh pi@<PIZERO_IP> 'cat /tmp/relay_check.log'
+
 The cams test pings only the first camera in CAM_IPS as a proxy for the 12V rail.
 Exits non-zero if any relay fails the verification.
 """
