@@ -9,7 +9,7 @@ For each relay, this script:
   4) drives the GPIO back HIGH (restore power) and waits for the device to come back.
 
 Install dependencies (once per Pi):
-  pip install -r /home/pi/pyro-engine/watchdog/requirements.txt
+  sudo apt install python3-rpi-lgpio
 
 Run on the main Pi:
   python3 /home/pi/pyro-engine/watchdog/main_pi/relay_check.py
