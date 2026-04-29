@@ -5,6 +5,9 @@ Watchdog script for Pyro Engine hardware.
 It checks the main Pi health endpoint and pings camera IPs, tracking failures
 and power-cycling relays after repeated failures with cooldown/daily limits.
 
+Install dependencies (once per Pi):
+  sudo apt install python3-rpi-lgpio
+
 Cron setup (every 10 minutes):
   1) Edit crontab:  crontab -e
   2) Add the line:
