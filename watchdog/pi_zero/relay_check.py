@@ -9,9 +9,9 @@ For each selected relay, this script:
   4) drives the GPIO back HIGH (restore power) and waits for the device to come back.
 
 Run on the Pi Zero:
-  python3 /home/pi/pyro-engine/watchdog/pi_zero/test_relays.py
-  python3 /home/pi/pyro-engine/watchdog/pi_zero/test_relays.py --relay main
-  python3 /home/pi/pyro-engine/watchdog/pi_zero/test_relays.py --relay cams
+  python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py
+  python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py --relay main
+  python3 /home/pi/pyro-engine/watchdog/pi_zero/relay_check.py --relay cams
 
 The cams test pings only the first camera in CAM_IPS as a proxy for the 12V rail.
 Exits non-zero if any relay fails the verification.
@@ -61,7 +61,6 @@ PING_COUNT = 1
 PING_TIMEOUT = 2
 POWER_OFF_TIME = 15
 
-DROP_GRACE = 5
 RETURN_TIMEOUT = 90
 RETURN_POLL = 3
 
@@ -81,9 +80,10 @@ def ping(ip: str) -> bool:
 
 
 def wait_for_drop(ip: str, deadline_s: int) -> bool:
+    # require two consecutive failed pings to debounce transient packet loss
     end = time.time() + deadline_s
     while time.time() < end:
-        if not ping(ip):
+        if not ping(ip) and not ping(ip):
             return True
         time.sleep(1)
     return False
@@ -109,17 +109,20 @@ def test_relay(name: str, gpio_pin: int, target_ip: str) -> bool:
 
     print(f"[CUT] GPIO {gpio_pin} -> LOW for {POWER_OFF_TIME}s", flush=True)
     GPIO.output(gpio_pin, GPIO.LOW)
+    cut_start = time.time()
     try:
-        dropped = wait_for_drop(target_ip, deadline_s=DROP_GRACE)
+        dropped = wait_for_drop(target_ip, deadline_s=POWER_OFF_TIME)
         if not dropped:
             print(
-                f"[CUT] FAIL: {target_ip} still reachable after {DROP_GRACE}s -- relay or wiring issue",
+                f"[CUT] FAIL: {target_ip} still reachable after {POWER_OFF_TIME}s -- relay or wiring issue",
                 flush=True,
             )
-            time.sleep(max(0, POWER_OFF_TIME - DROP_GRACE))
             return False
-        print(f"[CUT] OK: {target_ip} dropped", flush=True)
-        time.sleep(max(0, POWER_OFF_TIME - DROP_GRACE))
+        print(f"[CUT] OK: {target_ip} dropped after {time.time() - cut_start:.1f}s", flush=True)
+        # hold the cut for the remainder of POWER_OFF_TIME to ensure a real power cycle
+        remaining = POWER_OFF_TIME - (time.time() - cut_start)
+        if remaining > 0:
+            time.sleep(remaining)
     finally:
         print(f"[RESTORE] GPIO {gpio_pin} -> HIGH", flush=True)
         GPIO.output(gpio_pin, GPIO.HIGH)
@@ -135,15 +138,9 @@ def test_relay(name: str, gpio_pin: int, target_ip: str) -> bool:
 # ================== MAIN ==================
 
 
-def _cams_target_ip() -> str:
-    if not CAM_IPS:
-        raise SystemExit("No camera IPs configured (CAM_IPS); cannot run cams relay test.")
-    return CAM_IPS[0]
-
-
 RELAYS = {
     "main": (RELAY_MAIN, lambda: MAIN_PI_IP),
-    "cams": (RELAY_CAMS, _cams_target_ip),
+    "cams": (RELAY_CAMS, lambda: CAM_IPS[0]),
 }
 
 
@@ -157,12 +154,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    selected = list(RELAYS.keys()) if args.relay == "all" else [args.relay]
+
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
-    for pin, _ in RELAYS.values():
+    for name in selected:
+        pin, _ = RELAYS[name]
         GPIO.setup(pin, GPIO.OUT, initial=GPIO.HIGH)
-
-    selected = list(RELAYS.keys()) if args.relay == "all" else [args.relay]
 
     failures: list[str] = []
     try:
@@ -171,7 +169,8 @@ def main() -> int:
             if not test_relay(name, pin, ip_getter()):
                 failures.append(name)
     finally:
-        for pin, _ in RELAYS.values():
+        for name in selected:
+            pin, _ = RELAYS[name]
             GPIO.output(pin, GPIO.HIGH)
         GPIO.cleanup()
 
