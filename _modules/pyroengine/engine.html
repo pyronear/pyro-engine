@@ -438,13 +438,10 @@
             <span class="k">if</span> <span class="n">frame</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">target</span><span class="p">:</span>
                 <span class="n">frame</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">Image</span><span class="o">.</span><span class="n">BILINEAR</span><span class="p">)</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
-        <span class="c1"># Canonical bytes: encode once, decode for inference, reuse for every upload/backup.</span>
-        <span class="c1"># Guarantees model and stored media see byte-identical input.</span>
+        <span class="c1"># Encode once for API uploads and on-disk backup; feed the uncompressed frame to the model.</span>
         <span class="n">buf</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
         <span class="n">frame</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;JPEG&quot;</span><span class="p">,</span> <span class="n">quality</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">jpeg_quality</span><span class="p">)</span>
         <span class="n">encoded_bytes</span> <span class="o">=</span> <span class="n">buf</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
-        <span class="n">buf</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">frame</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="s2">&quot;RGB&quot;</span><span class="p">)</span>
 
         <span class="c1"># Heartbeat</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cam_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
