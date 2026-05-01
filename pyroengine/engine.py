@@ -216,7 +216,11 @@ class Engine(Predictor):
                 now = datetime.now()
                 today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
                 last_pose_sent = self._states[cam_key]["last_pose_image_sent"]
-                if now >= today_noon and (last_pose_sent is None or last_pose_sent < today_noon):
+                if last_pose_sent is None:
+                    # Anchor on first call so a startup after noon does not trigger an immediate send;
+                    # the next noon crossing will fire normally.
+                    self._states[cam_key]["last_pose_image_sent"] = now
+                elif now >= today_noon and last_pose_sent < today_noon:
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     if ip in self.api_client:
