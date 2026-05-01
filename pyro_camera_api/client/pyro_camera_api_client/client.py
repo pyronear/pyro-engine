@@ -209,6 +209,14 @@ class PyroCameraAPIClient:
         resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}")
         return resp.json()
 
+    def reboot_camera(self, camera_ip: str) -> Dict[str, Any]:
+        """
+        Reboot a camera. Supported for Reolink and Linovision adapters.
+        Raises HTTP 501 for adapters that do not implement reboot.
+        """
+        resp = self._request("POST", f"/control/reboot/{camera_ip}")
+        return resp.json()
+
     # ------------------------------------------------------------------
     # Focus
     # ------------------------------------------------------------------
