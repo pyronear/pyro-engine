@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import defaultdict
 from typing import Dict, Optional
 
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
@@ -28,13 +29,27 @@ CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
 
+# Per-camera locks to serialize blocking PTZ operations (click_to_move, zoom).
+# Non-blocking acquire → endpoints return 409 if the camera is already busy.
+MOVE_LOCKS: Dict[str, threading.Lock] = defaultdict(threading.Lock)
+
+# Per-camera cancellation events. /stop sets the event so that any sleeping
+# blocking PTZ handler wakes up early, releases the lock, and the operator
+# can immediately issue a corrective command instead of waiting for 409 to
+# clear. Handlers clear the event when they start a new blocking op.
+STOP_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
+
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      adapter:  "reolink", "linovision", "rtsp", "url", "mock"
+      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url", "mock".
+                Generic "reolink" is still accepted by the registry (it builds
+                a ReolinkCamera from any string containing "reolink"), but the
+                PTZ routes require a specific model for the calibrated speed
+                tables and will fall back to "reolink-823S2" with a warning.
       type:     "ptz" or "static"
       ip_address
       rtsp_url (if adapter=rtsp)
