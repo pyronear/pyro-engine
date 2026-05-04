@@ -6,6 +6,7 @@
 import logging
 import pathlib
 import platform
+import shutil
 import tarfile
 from typing import Tuple
 
@@ -19,8 +20,10 @@ from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_REPO_ID = "pyronear/yolo11s_nimble-narwhal_v6.0.0"
+MODEL_REPO_ID = "pyronear/yolo11s_quick-quokka_v8.0.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
+MODEL_SLUG = MODEL_REPO_ID.split("/", 1)[1]
+MODEL_CACHE_SUBDIR = "models"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
@@ -70,18 +73,37 @@ class Classifier:
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
-            model_path = str(pathlib.Path(model_folder) / model)
+            # Namespace cached weights by model slug so a MODEL_REPO_ID bump lands in a
+            # fresh path and old weights can be purged.
+            cache_root = pathlib.Path(model_folder) / MODEL_CACHE_SUBDIR
+            model_cache = cache_root / MODEL_SLUG
+            model_path = str(model_cache / model)
 
             if not pathlib.Path(model_path).is_file():
+                # Drop previous slugs and legacy flat layout to reclaim disk on edge devices.
+                if cache_root.is_dir():
+                    for entry in cache_root.iterdir():
+                        if entry.name != MODEL_SLUG:
+                            shutil.rmtree(entry, ignore_errors=True)
+                            logger.info(f"Removed stale model cache: {entry}")
+                legacy_archive = pathlib.Path(model_folder) / model
+                legacy_extract = pathlib.Path(model_folder) / model.replace(".tar.gz", "")
+                if legacy_archive.is_file():
+                    legacy_archive.unlink()
+                    logger.info(f"Removed legacy model archive: {legacy_archive}")
+                if legacy_extract.is_dir():
+                    shutil.rmtree(legacy_extract, ignore_errors=True)
+                    logger.info(f"Removed legacy model extract dir: {legacy_extract}")
+
                 logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
-                pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
-                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=model_folder)
+                model_cache.mkdir(exist_ok=True, parents=True)
+                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=str(model_cache))
                 logger.info("Model downloaded!")
 
             # Extract archive
             if model_path.endswith(".tar.gz"):
                 base_name = pathlib.Path(model_path).name.replace(".tar.gz", "")
-                extract_path = str(pathlib.Path(model_folder) / base_name)
+                extract_path = str(model_cache / base_name)
                 if not pathlib.Path(extract_path).is_dir():
                     pathlib.Path(extract_path).mkdir(parents=True, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:

@@ -9,6 +9,7 @@ import shutil
 import signal
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Never, Optional, Tuple
 
@@ -81,7 +82,7 @@ class Engine(Predictor):
         max_bbox_size: float = 0.4,
         api_url: Optional[str] = None,
         cam_creds: Optional[Dict[str, Dict[str, str]]] = None,
-        nb_consecutive_frames: int = 7,
+        nb_consecutive_frames: int = 5,
         frame_size: Optional[Tuple[int, int]] = None,
         cache_backup_period: int = 60,
         frame_saving_period: Optional[int] = None,
@@ -135,6 +136,7 @@ class Engine(Predictor):
         for state in self._states.values():
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
+            state["last_pose_image_sent"] = None
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -149,6 +151,7 @@ class Engine(Predictor):
         state = super()._new_state()
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
+        state["last_pose_image_sent"] = None
         return state
 
     def heartbeat(self, cam_id: str) -> Response:
@@ -184,7 +187,14 @@ class Engine(Predictor):
 
         # Reduce image size to save bandwidth
         if isinstance(self.frame_size, tuple):
-            frame = frame.resize(self.frame_size[::-1], Image.BILINEAR)  # type: ignore[attr-defined]
+            target = (self.frame_size[1], self.frame_size[0])  # PIL expects (W, H)
+            if frame.size != target:
+                frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
+
+        # Encode once for API uploads and on-disk backup; feed the uncompressed frame to the model.
+        buf = io.BytesIO()
+        frame.save(buf, format="JPEG", quality=self.jpeg_quality)
+        encoded_bytes = buf.getvalue()
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -198,10 +208,22 @@ class Engine(Predictor):
                 self._states[cam_key]["last_image_sent"] = time.time()
                 ip = cam_id.split("_")[0]
                 if ip in self.api_client:
-                    stream = io.BytesIO()
-                    frame.save(stream, format="JPEG", quality=self.jpeg_quality)
-                    response = self.api_client[ip].update_last_image(stream.getvalue())
+                    response = self.api_client[ip].update_last_image(encoded_bytes)
                     logger.info(response.text)
+
+            # Send one pose image per day at 12:00
+            if isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
+                now = datetime.now()
+                today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+                last_pose_sent = self._states[cam_key]["last_pose_image_sent"]
+                if now >= today_noon and (last_pose_sent is None or last_pose_sent < today_noon):
+                    _, pose_id = self.cam_creds[cam_id]
+                    ip = cam_id.split("_")[0]
+                    if ip in self.api_client:
+                        logger.info(f"Uploading daily pose image for cam {cam_id} (pose {pose_id})")
+                        self._states[cam_key]["last_pose_image_sent"] = now
+                        response = self.api_client[ip].update_pose_image(pose_id, encoded_bytes)
+                        logger.info(response.text)
 
         # Update occlusion masks from API
         if (
@@ -243,10 +265,10 @@ class Engine(Predictor):
                 preds = np.reshape(preds, (-1, 5))
 
         logger.info(f"pred for {cam_key} : {preds}")
-        conf = self._update_states(frame, preds, cam_key)
+        conf = self._update_states(frame, preds, cam_key, encoded_bytes=encoded_bytes)
 
         if self.save_captured_frames:
-            self._local_backup(frame, cam_id, is_alert=False)
+            self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
 
         # Log analysis result
         device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
@@ -256,20 +278,30 @@ class Engine(Predictor):
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Save the alert in cache to avoid connection issues
-            for idx, (frame, preds, bboxes, ts, is_staged) in enumerate(self._states[cam_key]["last_predictions"]):
+            for idx, (frame_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(
+                self._states[cam_key]["last_predictions"]
+            ):
                 if not is_staged:
-                    self._stage_alert(frame, cam_id, ts, bboxes)
+                    self._stage_alert(frame_, cam_id, ts, bboxes, jpeg_bytes)
                     self._states[cam_key]["last_predictions"][idx] = (
-                        frame,
-                        preds,
+                        frame_,
+                        preds_,
                         bboxes,
                         ts,
                         True,
+                        jpeg_bytes,
                     )
 
         return float(conf)
 
-    def _stage_alert(self, frame: Image.Image, cam_id: str, ts: int, bboxes: list) -> None:
+    def _stage_alert(
+        self,
+        frame: Image.Image,
+        cam_id: str,
+        ts: int,
+        bboxes: list,
+        jpeg_bytes: Optional[bytes] = None,
+    ) -> None:
         # Store information in the queue
         self._alerts.append({
             "frame": frame,
@@ -278,6 +310,7 @@ class Engine(Predictor):
             "media_id": None,
             "alert_id": None,
             "bboxes": bboxes,
+            "jpeg_bytes": jpeg_bytes,
         })
 
     def fill_empty_bboxes(self) -> None:
@@ -310,7 +343,11 @@ class Engine(Predictor):
 
                 # Save alert on device
                 if self.save_detections_frames:
-                    self._local_backup(frame_info["frame"], cam_id)
+                    self._local_backup(
+                        frame_info["frame"],
+                        cam_id,
+                        encoded_bytes=frame_info.get("jpeg_bytes"),
+                    )
 
                 try:
                     # Detection creation
@@ -319,12 +356,16 @@ class Engine(Predictor):
                         logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
                         self._alerts.popleft()
                         continue
-                    stream = io.BytesIO()
-                    frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                    jpeg_bytes = frame_info.get("jpeg_bytes")
+                    if jpeg_bytes is None:
+                        # Fallback for cached alerts staged before this version
+                        stream = io.BytesIO()
+                        frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
+                        jpeg_bytes = stream.getvalue()
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(stream.getvalue(), bboxes, pose_id)
+                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id)
 
                     try:
                         response.json()["id"]
@@ -335,20 +376,27 @@ class Engine(Predictor):
                     # Clear
                     self._alerts.popleft()
                     logger.info(f"Camera '{cam_id}' - alert sent")
-                    stream.seek(0)  # "Rewind" the stream to the beginning so we can read its content
 
                 except (KeyError, RequestsConnectionError, ValueError) as e:
                     logger.error(f"Camera '{cam_id}' - unable to upload cache")
                     logger.error(e)
                     break
 
-    def _local_backup(self, img: Image.Image, cam_id: Optional[str], is_alert: bool = True) -> None:
+    def _local_backup(
+        self,
+        img: Image.Image,
+        cam_id: Optional[str],
+        is_alert: bool = True,
+        encoded_bytes: Optional[bytes] = None,
+    ) -> None:
         """Save image on device
 
         Args:
             img (Image.Image): Image to save
             cam_id (str): camera id (ip address)
             is_alert (bool): is the frame an alert ?
+            encoded_bytes: pre-encoded JPEG bytes — written verbatim when provided so the
+                on-disk file is byte-identical to what was scored / uploaded.
         """
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
@@ -356,7 +404,10 @@ class Engine(Predictor):
         backup_cache = backup_cache.joinpath(f"{time.strftime('%Y%m%d')}/{cam_id}")
         backup_cache.mkdir(parents=True, exist_ok=True)
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
-        img.save(file)
+        if encoded_bytes is not None:
+            file.write_bytes(encoded_bytes)
+        else:
+            img.save(file)
 
     def _clean_local_backup(self, backup_cache: Path) -> None:
         """Clean local backup when it's bigger than _backup_size MB

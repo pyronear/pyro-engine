@@ -19,7 +19,7 @@ Whatever the way you wish to contribute to the project, please respect the [code
 
 This project uses the following integrations to ensure proper codebase maintenance:
 
-- [Github Worklow](https://help.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow) - run jobs for package build and coverage
+- [Github Worklow](https://docs.github.com/en/actions/using-workflows/about-workflows) - run jobs for package build and coverage
 - [Codacy](https://www.codacy.com/) - analyzes commits for code quality
 - [Codecov](https://codecov.io/) - reports back coverage results
 
@@ -55,34 +55,13 @@ to set up the project properly following some steps:
 2. **Fork the project** to be able to start working on a local copy of the project
 
 #### 1. Create a virtual environment
-We are going to create an python3.6 environment with dedicated to Pyro project. We'll use [virtualenvwrapper](https://virtualenvwrapper.readthedocs.io/).
+We use [uv](https://docs.astral.sh/uv/) to manage the Python environment and dependencies. Install it once if you don't have it:
 
-Please open a terminal and follow the instructions.
 ```shell
-# install package
-pip install virtualenvwrapper
-
-# add at the end of your .bashrc
-export VIRTUALENVWRAPPER_PYTHON=$(which python3)
-export WORKON_HOME=$HOME/.virtualenvs
-export PROJECT_HOME=$HOME/Devel
-source /usr/local/bin/virtualenvwrapper.sh
-
-# list available virtual environments
-workon
-
-# create new environment dubbed "pyro36" using python 3.6
-mkvirtualenv -p $(which python3.6) pyro36
-
-# activate pyro36 environment
-workon pyro36
-
-# deactivate the current environment
-deactivate
-
-# delete virtual environment (only do it if needed)
-rmvirtualenv pyro36
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+`uv sync` (run from the repo root after cloning) creates a `.venv/` and installs everything declared in `pyproject.toml` and `uv.lock`. Activate it with `source .venv/bin/activate` or run commands via `uv run <cmd>`.
 
 #### 2. Fork the repository
 We are going to get a local copy of the remote project (_fork_) and set remotes so we stay up to date to recent contributions.
@@ -120,12 +99,8 @@ git merge upstream/master
 
 4. install the project dependencies
 ```shell
-# install dependencies
-pip install -r requirements.txt
-
-# install current project in editable mode,
-# so local changes will be reflected locally (ie:at import)
-pip install -e .
+# create the virtualenv and install the project + dependencies in editable mode
+uv sync
 ```
 
 

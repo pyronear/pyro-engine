@@ -19,15 +19,21 @@ single-docs:
 
 # Update requirements.txt for the main project
 lock:
-	poetry lock
-	poetry export -f requirements.txt --without-hashes --output requirements-all.txt
+	uv lock
+	uv export --no-hashes --no-emit-project --no-default-groups --no-dev \
+		--no-emit-package pyro_predictor --no-emit-package pyro_camera_api_client \
+		--format requirements-txt -o requirements-all.txt
 	grep 'git+' requirements-all.txt > requirements-git.txt || true
-	grep -v 'git+' requirements-all.txt | grep -v 'file://' | grep -v '^opencv-python==' > requirements.txt
+	grep -v 'git+' requirements-all.txt | grep -v 'file://' | grep -v '^-e ' | grep -v '^opencv-python==' > requirements.txt
 	rm requirements-all.txt
 
 # Generate requirements and build camera API Docker image
 build-api:
-	poetry export -C pyro_camera_api -f requirements.txt --without-hashes --output pyro_camera_api/requirements.txt
+	cd pyro_camera_api && \
+		uv lock && \
+		uv export --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements-all.txt && \
+		grep -v '^opencv-python==' requirements-all.txt > requirements.txt && \
+		rm requirements-all.txt
 	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 
 # Build the engine Docker image
@@ -35,18 +41,19 @@ build-app:
 	docker build . -t pyronear/pyro-engine:latest
 
 build-lib:
-	pip install -e .
+	uv sync --no-default-groups
 
 build-optional-lib:
-	pip install -e .[test]
-	pip install -e .[quality]
-	pip install -e .[docs]
-	pip install -e .[dev]
+	uv sync --all-groups
 
 # Pull latest images and run the stack
 run:
 	docker pull pyronear/pyro-engine:latest
 	docker pull pyronear/pyro-camera-api:latest
+	docker compose up -d
+
+# Build images locally and run the stack
+run_local: build-api build-app
 	docker compose up -d
 
 # Get log from engine wrapper
