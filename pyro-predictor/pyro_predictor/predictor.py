@@ -132,7 +132,7 @@ class Predictor:
                         c_idx = int(matched_cand[p_idx])
                         x1, y1, x2, y2 = preds[p_idx, :4]
                         rows.append([x1, y1, x2, y2, float(valid_conf[c_idx])])
-                    output_predictions = np.round(np.array(rows, dtype=np.float64), 3)
+                    output_predictions = np.round(np.array(rows, dtype=np.float64), 3).astype(np.float64)
 
         self._states[cam_key]["last_predictions"].append((
             frame,
