@@ -74,9 +74,6 @@ class Predictor:
         return {
             "last_predictions": deque(maxlen=self.nb_consecutive_frames),
             "ongoing": False,
-            "anchor_bbox": None,
-            "anchor_ts": None,
-            "miss_count": 0,
         }
 
     def _update_states(
@@ -86,90 +83,57 @@ class Predictor:
         cam_key: str,
         encoded_bytes: Optional[bytes] = None,
     ) -> float:
-        prev_ongoing = self._states[cam_key]["ongoing"]
+        nb = self.nb_consecutive_frames
 
-        conf_th = self.conf_thresh * self.nb_consecutive_frames
-        if prev_ongoing:
-            conf_th *= 0.8
-
-        boxes = np.zeros((0, 5), dtype=np.float64)
-        boxes = np.concatenate([boxes, preds])
+        # Pool = current preds + every past frame's raw preds in the sliding window.
+        pool = np.zeros((0, 5), dtype=np.float64)
+        pool = np.concatenate([pool, preds])
         for _, box, _, _, _, _ in self._states[cam_key]["last_predictions"]:
             if box.shape[0] > 0:
-                boxes = np.concatenate([boxes, box])
+                pool = np.concatenate([pool, box])
 
         conf = 0.0
         output_predictions: npt.NDArray[np.float64] = np.zeros((0, 5), dtype=np.float64)
 
-        if boxes.shape[0]:
-            best_boxes = nms(boxes)
-            detections = boxes[boxes[:, -1] > self.conf_thresh, :]
-            ious_detections = box_iou(best_boxes[:, :4], detections[:, :4])
-            strong_detection = np.sum(ious_detections > 0, axis=0) >= int(self.nb_consecutive_frames / 2)
-            best_boxes = best_boxes[strong_detection, :]
+        if pool.shape[0]:
+            candidates = nms(pool)
+            # box_iou(A, B) returns shape (len(B), len(A)); call with (pool, candidates) -> (n_cand, n_pool)
+            ious_pool = box_iou(pool[:, :4], candidates[:, :4])
+            overlap = ious_pool > 0  # (n_cand, n_pool)
+            counts = overlap.sum(axis=1)
+            sums = (overlap * pool[:, 4]).sum(axis=1)
+            combine_conf = sums / nb
 
-            if best_boxes.shape[0]:
-                ious = box_iou(best_boxes[:, :4], boxes[:, :4])
-                best_boxes_scores = np.array([sum(boxes[iou > 0, 4]) for iou in ious.T])
-                combine_predictions = best_boxes[best_boxes_scores > conf_th, :]
-                if len(best_boxes_scores) > 0:
-                    conf = np.max(best_boxes_scores) / (self.nb_consecutive_frames + 1)
+            valid_mask = counts >= (nb // 2)
+            valid_candidates = candidates[valid_mask]
+            valid_conf = combine_conf[valid_mask]
 
-                if combine_predictions.shape[0] > 0:
-                    ious = box_iou(combine_predictions[:, :4], preds[:, :4])
-                    iou_match = np.array([np.max(iou) > 0 for iou in ious], dtype=bool)
-                    matched_preds = preds[iou_match, :]
-                    if matched_preds.ndim == 1:
-                        matched_preds = matched_preds[np.newaxis, :]
-                    output_predictions = matched_preds.astype(np.float64)
+            if valid_conf.size > 0:
+                conf = float(valid_conf.max())
 
-        # no zero confidence fabrication before ongoing
-        # if empty and we were already ongoing, reuse anchor but set conf to 0
-        if output_predictions.shape[0] == 0:
-            anchor = self._states[cam_key]["anchor_bbox"]
-            if prev_ongoing and anchor is not None:
-                output_predictions = anchor.copy()
-                output_predictions[:, -1] = 0.0  # filled during ongoing, confidence forced to 0
-            else:
-                output_predictions = np.empty((0, 5), dtype=np.float64)  # stays empty for backfill later
-        else:
-            # refresh anchor during ongoing with light smoothing
-            if prev_ongoing:
-                best_idx = int(np.argmax(output_predictions[:, 4]))
-                best = output_predictions[best_idx : best_idx + 1]
-                anchor = self._states[cam_key]["anchor_bbox"]
-                if anchor is None:
-                    self._states[cam_key]["anchor_bbox"] = best.copy()
-                else:
-                    alpha = 0.3
-                    self._states[cam_key]["anchor_bbox"] = alpha * best + (1.0 - alpha) * anchor
-                self._states[cam_key]["miss_count"] = 0
-
-        output_predictions = np.round(output_predictions, 3)
-        output_predictions = output_predictions[:5, :]
-        if output_predictions.size > 0:
-            output_predictions = np.atleast_2d(output_predictions)
+            if valid_candidates.shape[0] and preds.shape[0]:
+                # ious_preds shape: (n_valid, n_preds)
+                ious_preds = box_iou(preds[:, :4], valid_candidates[:, :4])
+                overlap_preds = ious_preds > 0
+                has_match = overlap_preds.any(axis=0)
+                if has_match.any():
+                    matched_cand = overlap_preds.argmax(axis=0)
+                    rows = []
+                    for p_idx in np.where(has_match)[0]:
+                        c_idx = int(matched_cand[p_idx])
+                        x1, y1, x2, y2 = preds[p_idx, :4]
+                        rows.append([x1, y1, x2, y2, float(valid_conf[c_idx])])
+                    output_predictions = np.round(np.array(rows, dtype=np.float64), 3)
 
         self._states[cam_key]["last_predictions"].append((
             frame,
             preds,
-            output_predictions.tolist(),  # [] if empty
+            output_predictions.tolist(),
             datetime.now(timezone.utc).isoformat(),
             False,
             encoded_bytes,
         ))
-
-        new_ongoing = conf > self.conf_thresh
-        if prev_ongoing and not new_ongoing:
-            self._states[cam_key]["anchor_bbox"] = None
-            self._states[cam_key]["anchor_ts"] = None
-            self._states[cam_key]["miss_count"] = 0
-        elif not prev_ongoing and new_ongoing:
-            if output_predictions.size > 0:
-                self._states[cam_key]["anchor_bbox"] = output_predictions.copy()
-                self._states[cam_key]["miss_count"] = 0
-
-        self._states[cam_key]["ongoing"] = new_ongoing
+        self._states[cam_key]["ongoing"] = conf > self.conf_thresh
         return conf
 
     def predict(
