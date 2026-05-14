@@ -71,8 +71,9 @@ class Predictor:
                 self._states[cam_id] = self._new_state()
 
     def _new_state(self) -> Dict[str, Any]:
+        # Window holds nb_consecutive_frames - 1 past frames; pool = current + window = nb total.
         return {
-            "last_predictions": deque(maxlen=self.nb_consecutive_frames),
+            "last_predictions": deque(maxlen=self.nb_consecutive_frames - 1),
             "ongoing": False,
         }
 
