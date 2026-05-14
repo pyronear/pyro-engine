@@ -16,6 +16,7 @@ from typing import Any, Dict, Never, Optional, Tuple
 import numpy as np
 from PIL import Image
 from pyro_predictor import Predictor
+from pyro_predictor.utils import box_iou
 from pyroclient import client
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
@@ -277,11 +278,16 @@ class Engine(Predictor):
 
         # Alert
         if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-            # Save the alert in cache to avoid connection issues
+            # Collect every bbox the predictor emitted across the window; treat these as
+            # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
+            tracked = [b[:4] for _, _, bbs, _, _, _ in self._states[cam_key]["last_predictions"] for b in bbs]
+            tracked_arr = np.array(tracked, dtype=np.float64) if tracked else np.empty((0, 4))
+
             for idx, (frame_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(
                 self._states[cam_key]["last_predictions"]
             ):
                 if not is_staged:
+                    bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
                     self._stage_alert(frame_, cam_id, ts, bboxes, jpeg_bytes)
                     self._states[cam_key]["last_predictions"][idx] = (
                         frame_,
@@ -293,6 +299,23 @@ class Engine(Predictor):
                     )
 
         return float(conf)
+
+    @staticmethod
+    def _backfill_bboxes(bboxes: list, preds: np.ndarray, tracked: np.ndarray) -> list:
+        """For each raw pred overlapping a tracked location but not yet in bboxes, append it with conf=0."""
+        if tracked.shape[0] == 0 or preds.shape[0] == 0:
+            return list(bboxes)
+        existing = np.array([b[:4] for b in bboxes], dtype=np.float64) if bboxes else np.empty((0, 4))
+        ious_tracked = box_iou(preds[:, :4], tracked)  # shape (n_tracked, n_preds)
+        hits_tracked = (ious_tracked > 0).any(axis=0)  # per pred
+        out = list(bboxes)
+        for p_idx in np.where(hits_tracked)[0]:
+            box = preds[p_idx, :4]
+            if existing.shape[0] and (box_iou(box[None, :], existing) > 0).any():
+                continue
+            out.append([float(box[0]), float(box[1]), float(box[2]), float(box[3]), 0.0])
+            existing = np.vstack([existing, box[None, :]])
+        return out
 
     def _stage_alert(
         self,
