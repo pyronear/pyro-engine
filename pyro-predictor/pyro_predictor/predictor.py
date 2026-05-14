@@ -113,7 +113,7 @@ class Predictor:
             sums = (overlap * pool[:, 4]).sum(axis=1)
             combine_conf = sums / nb
 
-            valid_mask = (counts >= (nb // 2)) & (combine_conf > effective_thresh)
+            valid_mask = (counts >= ((nb + 1) // 2)) & (combine_conf > effective_thresh)
             valid_candidates = candidates[valid_mask]
             valid_conf = combine_conf[valid_mask]
 
@@ -133,6 +133,8 @@ class Predictor:
                         x1, y1, x2, y2 = preds[p_idx, :4]
                         rows.append([x1, y1, x2, y2, float(valid_conf[c_idx])])
                     output_predictions = np.round(np.array(rows, dtype=np.float64), 3).astype(np.float64)
+                    # Keep top-5 by confidence to bound the API payload.
+                    output_predictions = output_predictions[output_predictions[:, 4].argsort()[::-1]][:5]
 
         self._states[cam_key]["last_predictions"].append((
             frame,
