@@ -55,6 +55,8 @@ class Predictor:
         verbose: bool = True,
         **kwargs: Any,
     ) -> None:
+        if nb_consecutive_frames < 2:
+            raise ValueError(f"nb_consecutive_frames must be >= 2, got {nb_consecutive_frames}")
         self.verbose = verbose
         self.model = Classifier(
             model_path=model_path, conf=model_conf_thresh, max_bbox_size=max_bbox_size, verbose=verbose, **kwargs
@@ -71,9 +73,10 @@ class Predictor:
                 self._states[cam_id] = self._new_state()
 
     def _new_state(self) -> Dict[str, Any]:
-        # Window holds nb_consecutive_frames - 1 past frames; pool = current + window = nb total.
+        # Deque keeps nb past frames so staging can replay them; only the last nb-1
+        # are used to score, keeping pool = current + nb-1 past = nb total.
         return {
-            "last_predictions": deque(maxlen=self.nb_consecutive_frames - 1),
+            "last_predictions": deque(maxlen=self.nb_consecutive_frames),
             "ongoing": False,
         }
 
@@ -89,10 +92,12 @@ class Predictor:
         # Hysteresis: once alerting, relax the threshold so the alert keeps emitting frames.
         effective_thresh = self.conf_thresh * 0.8 if prev_ongoing else self.conf_thresh
 
-        # Pool = current preds + every past frame's raw preds in the sliding window.
+        # Pool = current preds + last (nb - 1) past frames' raw preds.
         pool = np.zeros((0, 5), dtype=np.float64)
         pool = np.concatenate([pool, preds])
-        for _, box, _, _, _, _ in self._states[cam_key]["last_predictions"]:
+        history = self._states[cam_key]["last_predictions"]
+        recent_past = list(history)[-(nb - 1):] if nb > 1 else []
+        for _, box, _, _, _, _ in recent_past:
             if box.shape[0] > 0:
                 pool = np.concatenate([pool, box])
 

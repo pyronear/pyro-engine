@@ -276,8 +276,8 @@ class Engine(Predictor):
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
         logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
-        # Alert
-        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
+        # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip)
+        if self._states[cam_key]["ongoing"] and len(self.api_client) > 0 and isinstance(cam_id, str):
             # Collect every bbox the predictor emitted across the window; treat these as
             # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
             tracked = [b[:4] for _, _, bbs, _, _, _ in self._states[cam_key]["last_predictions"] for b in bbs]
