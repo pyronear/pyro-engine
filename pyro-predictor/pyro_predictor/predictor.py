@@ -85,6 +85,9 @@ class Predictor:
         encoded_bytes: Optional[bytes] = None,
     ) -> float:
         nb = self.nb_consecutive_frames
+        prev_ongoing = self._states[cam_key]["ongoing"]
+        # Hysteresis: once alerting, relax the threshold so the alert keeps emitting frames.
+        effective_thresh = self.conf_thresh * 0.8 if prev_ongoing else self.conf_thresh
 
         # Pool = current preds + every past frame's raw preds in the sliding window.
         pool = np.zeros((0, 5), dtype=np.float64)
@@ -105,7 +108,7 @@ class Predictor:
             sums = (overlap * pool[:, 4]).sum(axis=1)
             combine_conf = sums / nb
 
-            valid_mask = (counts >= (nb // 2)) & (combine_conf > self.conf_thresh)
+            valid_mask = (counts >= (nb // 2)) & (combine_conf > effective_thresh)
             valid_candidates = candidates[valid_mask]
             valid_conf = combine_conf[valid_mask]
 
@@ -134,7 +137,7 @@ class Predictor:
             False,
             encoded_bytes,
         ))
-        self._states[cam_key]["ongoing"] = conf > self.conf_thresh
+        self._states[cam_key]["ongoing"] = conf > effective_thresh
         return conf
 
     def predict(
