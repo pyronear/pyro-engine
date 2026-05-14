@@ -96,7 +96,7 @@ class Predictor:
         pool = np.zeros((0, 5), dtype=np.float64)
         pool = np.concatenate([pool, preds])
         history = self._states[cam_key]["last_predictions"]
-        recent_past = list(history)[-(nb - 1):] if nb > 1 else []
+        recent_past = list(history)[-(nb - 1) :] if nb > 1 else []
         for _, box, _, _, _, _ in recent_past:
             if box.shape[0] > 0:
                 pool = np.concatenate([pool, box])
