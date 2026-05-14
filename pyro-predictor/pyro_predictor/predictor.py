@@ -104,7 +104,7 @@ class Predictor:
             sums = (overlap * pool[:, 4]).sum(axis=1)
             combine_conf = sums / nb
 
-            valid_mask = counts >= (nb // 2)
+            valid_mask = (counts >= (nb // 2)) & (combine_conf > self.conf_thresh)
             valid_candidates = candidates[valid_mask]
             valid_conf = combine_conf[valid_mask]
 
