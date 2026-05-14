@@ -337,23 +337,11 @@ class Engine(Predictor):
         })
 
     def fill_empty_bboxes(self) -> None:
-        cam_id_to_indices: Dict[str, list[int]] = {}
-        for i, alert in enumerate(self._alerts):
-            cam_id_to_indices.setdefault(alert["cam_id"], []).append(i)
-
-        for indices in cam_id_to_indices.values():
-            non_empty_indices = [i for i in indices if self._alerts[i]["bboxes"]]
-            if not non_empty_indices:
-                continue
-            for i in indices:
-                if not self._alerts[i]["bboxes"]:
-                    closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
-                    src = np.array(self._alerts[closest_index]["bboxes"], dtype=float)
-                    if src.size == 0:
-                        continue
-                    filled = src.copy()
-                    filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
-                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled.tolist()]
+        # Stamp a tiny placeholder bbox at conf=0 on any alert with none,
+        # so the upload guard always sees a non-empty payload.
+        for alert in self._alerts:
+            if not alert["bboxes"]:
+                alert["bboxes"] = [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
