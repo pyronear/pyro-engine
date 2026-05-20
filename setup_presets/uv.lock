@@ -199,7 +199,7 @@ wheels = [
 [[package]]
 name = "pyro-camera-api-client"
 version = "0.1.0"
-source = { editable = "../../pyro_camera_api/client" }
+source = { editable = "../pyro_camera_api/client" }
 dependencies = [
     { name = "pillow" },
     { name = "requests" },
@@ -227,7 +227,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pyro-camera-api-client", editable = "../../pyro_camera_api/client" },
+    { name = "pyro-camera-api-client", editable = "../pyro_camera_api/client" },
     { name = "requests", specifier = ">=2.31" },
 ]
 
