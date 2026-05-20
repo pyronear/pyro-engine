@@ -21,16 +21,26 @@ Both variables are required; the script exits early if either is missing.
 
 ## Run
 
-From this folder:
+From this folder (`cd setup_presets`):
 
 ```bash
-cd setup_presets
+# Register presets 0-3 (overwrites any existing ones)
 uv run python setup_presets.py 192.168.1.11 192.168.1.12
+
+# Patrol the registered presets — default 3 cycles, 3s dwell per pose
+uv run python patrol_presets.py 192.168.1.11 192.168.1.12
+uv run python patrol_presets.py 192.168.1.11 -n 10
 ```
 
 Pass `--protocol http` if your cameras don't accept HTTPS.
 
-## What it does for each camera
+## What it does
+
+`setup_presets.py` — for each camera (run in parallel):
 
 1. Pans 90° left from the current position to the leftmost target.
 2. Saves preset `0`, then steps 45° right between each of presets `1`, `2`, `3`.
+
+`patrol_presets.py` — for each camera (run in parallel): cycles through
+presets `0 → 1 → 2 → 3` with a 3-second dwell at each pose, repeated `-n`
+times (default 3).
