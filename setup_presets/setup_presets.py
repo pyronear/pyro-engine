@@ -60,13 +60,6 @@ class ReolinkClient:
             return None
         return data
 
-    def has_preset(self, idx: int) -> bool:
-        data = self._post("GetPtzPreset", [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}])
-        if data is None:
-            return False
-        presets = data[0].get("value", {}).get("PtzPreset", [])
-        return any(p.get("id") == idx and p.get("enable") == 1 for p in presets)
-
     def ptz(self, operation: str, speed: int = 20, idx: int = 0) -> bool:
         return (
             self._post(
@@ -106,10 +99,6 @@ class ReolinkClient:
 def process_camera(ip: str, user: str, password: str, protocol: str) -> None:
     print(f"\n🔧 Processing camera {ip}")
     cam = ReolinkClient(ip, user, password, protocol=protocol)
-
-    if not cam.has_preset(REFERENCE_PRESET):
-        print(f"⚠️  Camera {ip}: reference preset {REFERENCE_PRESET} not configured — skipping")
-        return
 
     print(f"🧭 Going to reference preset {REFERENCE_PRESET}")
     if not cam.ptz("ToPos", speed=50, idx=REFERENCE_PRESET):
