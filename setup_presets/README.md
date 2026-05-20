@@ -27,9 +27,11 @@ From this folder (`cd setup_presets`):
 # Register presets 0-3 (overwrites any existing ones)
 uv run python setup_presets.py 192.168.1.11 192.168.1.12
 
-# Patrol the registered presets — default 3 cycles, 3s dwell per pose
+# Patrol the registered presets (3 cycles by default, 3s dwell per pose)
 uv run python patrol_presets.py 192.168.1.11 192.168.1.12
-uv run python patrol_presets.py 192.168.1.11 -n 10
+
+# Override the cycle count with -n
+uv run python patrol_presets.py 192.168.1.11 192.168.1.12 -n 10
 ```
 
 Pass `--protocol http` if your cameras don't accept HTTPS.
