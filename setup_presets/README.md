@@ -1,10 +1,12 @@
 # setup_presets
 
 One-off tool that registers Reolink PTZ presets `0`, `1`, `2`, `3` spaced
-~45° apart, starting from a manually configured reference preset `10`.
+~45° apart, starting from wherever the camera is currently pointing. Aim
+each camera at the desired centre position by hand (or via a preset)
+before running.
 
-It talks directly to each camera's `cgi-bin/api.cgi` — no Pyro camera API
-service required.
+Cameras passed on the CLI are processed in parallel. It talks directly
+to each camera's `cgi-bin/api.cgi` — no Pyro camera API service required.
 
 ## Setup
 
@@ -30,7 +32,5 @@ Pass `--protocol http` if your cameras don't accept HTTPS.
 
 ## What it does for each camera
 
-1. Verifies reference preset `10` is configured (skips with a warning otherwise).
-2. Moves to preset `10`.
-3. Pans 90° left to the leftmost target position.
-4. Saves preset `0`, then steps 45° right between each of presets `1`, `2`, `3`.
+1. Pans 90° left from the current position to the leftmost target.
+2. Saves preset `0`, then steps 45° right between each of presets `1`, `2`, `3`.
