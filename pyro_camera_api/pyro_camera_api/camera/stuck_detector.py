@@ -101,7 +101,8 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             CONSECUTIVE_HITS[camera_ip] = 0
             continue
 
-        images = [im for pose, im in cam.last_images.items() if pose != -1 and im is not None]
+        poses = [p for p in getattr(cam, "cam_poses", []) or [] if p != -1]
+        images = [im for im in (cam.last_images.get(p) for p in poses) if im is not None]
         if len(images) < MIN_POSES_FOR_CHECK:
             logger.info(
                 "[%s] Stuck check skipped: only %d pose images available",
@@ -163,7 +164,8 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     logger.error("[%s] Reboot raised: %s", camera_ip, exc)
 
                 if ok:
-                    cam.last_images.clear()
+                    for p in poses:
+                        cam.last_images[p] = None
                     CONSECUTIVE_HITS[camera_ip] = 0
                 else:
                     logger.error(
