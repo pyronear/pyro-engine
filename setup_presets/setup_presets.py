@@ -40,10 +40,15 @@ class ReolinkClient:
         return text.replace(self.password, "***") if self.password else text
 
     def _post(self, command: str, payload: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
-        url = f"{self.protocol}://{self.ip}/cgi-bin/api.cgi"
-        params = {"cmd": command, "user": self.user, "password": self.password, "channel": 0}
+        # Reolink CGI does not URL-decode query values, so credentials are interpolated
+        # raw (matches the production ReolinkCamera adapter). Passwords containing
+        # '&', '#' or '=' will break this — keep them out of CAM_PWD.
+        url = (
+            f"{self.protocol}://{self.ip}/cgi-bin/api.cgi?"
+            f"cmd={command}&user={self.user}&password={self.password}&channel=0"
+        )
         try:
-            resp = requests.post(url, params=params, json=payload, verify=False, timeout=HTTP_TIMEOUT)  # nosec: B501
+            resp = requests.post(url, json=payload, verify=False, timeout=HTTP_TIMEOUT)  # nosec: B501
         except requests.RequestException as exc:
             print(f"❌ {self.ip}: request failed: {self._scrub(str(exc))}")
             return None
