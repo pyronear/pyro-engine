@@ -5,88 +5,128 @@
 
 
 import argparse
+import os
+import sys
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from pyro_camera_api_client import PyroCameraAPIClient
+import requests
+import urllib3
+from dotenv import load_dotenv
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 PAN_STEP_DEG = 45.0
 REFERENCE_PRESET = 10
+
+# Reolink 823S2 calibrated values (see pyro_camera_api routes_control.py).
+PAN_SPEED_LEVEL = 5
+PAN_DEG_PER_SEC = 7.1806
+PAN_BIAS_DEG = 2.4465
+
+SETTLE_SECONDS = 1.5
 GOTO_SETTLE_SECONDS = 6.0
+HTTP_TIMEOUT = 5.0
 
 
-def _camera_entries(api: PyroCameraAPIClient) -> List[Dict[str, Any]]:
-    payload = api.get_camera_infos()
-    if isinstance(payload, dict):
-        return list(payload.get("cameras", []))
-    return list(payload)
+class ReolinkClient:
+    def __init__(self, ip: str, user: str, password: str, protocol: str = "https"):
+        self.ip = ip
+        self.user = user
+        self.password = password
+        self.protocol = protocol
+
+    def _post(self, command: str, payload: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+        url = (
+            f"{self.protocol}://{self.ip}/cgi-bin/api.cgi?"
+            f"cmd={command}&user={self.user}&password={self.password}&channel=0"
+        )
+        try:
+            resp = requests.post(url, json=payload, verify=False, timeout=HTTP_TIMEOUT)  # nosec: B501
+        except requests.RequestException as exc:
+            print(f"❌ {self.ip}: request failed: {exc}")
+            return None
+        if resp.status_code != 200:
+            print(f"❌ {self.ip}: HTTP {resp.status_code}: {resp.text}")
+            return None
+        data = resp.json()
+        if data and data[0].get("code") != 0:
+            print(f"❌ {self.ip}: camera returned error: {data}")
+        return data
+
+    def has_preset(self, idx: int) -> bool:
+        data = self._post("GetPtzPreset", [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}])
+        if not data or data[0].get("code") != 0:
+            return False
+        presets = data[0].get("value", {}).get("PtzPreset", [])
+        return any(p.get("id") == idx and p.get("enable") == 1 for p in presets)
+
+    def ptz(self, operation: str, speed: int = 20, idx: int = 0) -> None:
+        self._post(
+            "PtzCtrl",
+            [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}],
+        )
+
+    def pan_degrees(self, direction: str, degrees: float) -> None:
+        duration = max(0.0, (degrees - PAN_BIAS_DEG) / PAN_DEG_PER_SEC)
+        self.ptz(direction, speed=PAN_SPEED_LEVEL)
+        time.sleep(duration)
+        self.ptz("Stop")
+        time.sleep(SETTLE_SECONDS)
+
+    def set_preset(self, idx: int) -> None:
+        self._post(
+            "SetPtzPreset",
+            [
+                {
+                    "cmd": "SetPtzPreset",
+                    "action": 0,
+                    "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": f"pos{idx}"}},
+                }
+            ],
+        )
 
 
-def _has_reference_preset(api: PyroCameraAPIClient, ip: str) -> bool:
-    payload = api.list_presets(ip)
-    presets = payload.get("presets") or []
-    for preset in presets:
-        if preset.get("id") == REFERENCE_PRESET and preset.get("enable", 0) == 1:
-            return True
-    return False
-
-
-def process_camera(ip: str, api: PyroCameraAPIClient) -> None:
+def process_camera(ip: str, user: str, password: str, protocol: str) -> None:
     print(f"\n🔧 Processing camera {ip}")
+    cam = ReolinkClient(ip, user, password, protocol=protocol)
 
-    if not _has_reference_preset(api, ip):
+    if not cam.has_preset(REFERENCE_PRESET):
         print(f"⚠️  Camera {ip}: reference preset {REFERENCE_PRESET} not configured — skipping")
         return
 
     print(f"🧭 Going to reference preset {REFERENCE_PRESET}")
-    api.goto_preset(camera_ip=ip, pose_id=REFERENCE_PRESET)
+    cam.ptz("ToPos", speed=50, idx=REFERENCE_PRESET)
     time.sleep(GOTO_SETTLE_SECONDS)
 
-    print(f"⬅️  Panning {2 * PAN_STEP_DEG:.0f}° left to the leftmost position")
-    api.move_by_degrees(camera_ip=ip, direction="Left", degrees=2 * PAN_STEP_DEG)
+    print(f"⬅️  Panning {2 * PAN_STEP_DEG:.0f}° left")
+    cam.pan_degrees("Left", 2 * PAN_STEP_DEG)
 
     for preset_idx in (0, 1, 2, 3):
         if preset_idx > 0:
             print(f"➡️  Panning {PAN_STEP_DEG:.0f}° right")
-            api.move_by_degrees(camera_ip=ip, direction="Right", degrees=PAN_STEP_DEG)
-
+            cam.pan_degrees("Right", PAN_STEP_DEG)
         print(f"💾 Registering PTZ preset {preset_idx}")
-        api.set_preset(camera_ip=ip, idx=preset_idx)
+        cam.set_preset(preset_idx)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Register PTZ presets 0-3 around reference preset 10.")
-    parser.add_argument("--api_url", default="http://127.0.0.1:8081", help="Pyro camera API base URL")
-    parser.add_argument(
-        "--ip",
-        type=str,
-        default=None,
-        help="Optional IP to run on a single camera (e.g. 192.168.1.11). If omitted, runs on every PTZ camera.",
+    load_dotenv()
+    user = os.getenv("CAM_USER")
+    password = os.getenv("CAM_PWD")
+    if not user or not password:
+        print("❌ Missing CAM_USER or CAM_PWD (set them in your .env)")
+        sys.exit(1)
+
+    parser = argparse.ArgumentParser(
+        description="Register PTZ presets 0-3 around reference preset 10 on Reolink cameras."
     )
+    parser.add_argument("ips", nargs="+", help="One or more camera IPs, e.g. 192.168.1.11 192.168.1.12")
+    parser.add_argument("--protocol", default="https", choices=["http", "https"])
     args = parser.parse_args()
 
-    api = PyroCameraAPIClient(args.api_url, timeout=30.0)
-
-    if args.ip:
-        process_camera(args.ip, api)
-        return
-
-    entries = _camera_entries(api)
-    if not entries:
-        print("⚠️  No cameras returned by the API")
-        return
-
-    print(f"🔎 Found {len(entries)} camera(s)")
-    for entry in entries:
-        ip = entry.get("camera_id") or entry.get("ip")
-        if not ip:
-            print(f"⏭️  Skipping entry without camera_id/ip: {entry!r}")
-            continue
-        cam_type = str(entry.get("type", "")).lower()
-        if cam_type != "ptz":
-            print(f"⏭️  Skipping {ip}: not a PTZ camera (type={entry.get('type')!r})")
-            continue
-        process_camera(ip, api)
+    for ip in args.ips:
+        process_camera(ip, user, password, args.protocol)
 
 
 if __name__ == "__main__":

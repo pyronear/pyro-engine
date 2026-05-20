@@ -1,15 +1,12 @@
 [project]
 name = "pyro-setup-presets"
 version = "0.1.0"
-description = "Register PTZ presets 0-3 around reference preset 10 via the Pyro camera API."
+description = "Register PTZ presets 0-3 around reference preset 10 on Reolink cameras."
 requires-python = ">=3.11"
 dependencies = [
-    "pyro-camera-api-client",
     "requests>=2.31",
+    "python-dotenv>=1.0",
 ]
 
 [tool.uv]
 package = false
-
-[tool.uv.sources]
-pyro-camera-api-client = { path = "../pyro_camera_api/client", editable = true }
