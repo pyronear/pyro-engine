@@ -19,7 +19,10 @@ Both variables are required; the script exits early if either is missing.
 
 ## Run
 
+From this folder:
+
 ```bash
+cd setup_presets
 uv run python setup_presets.py 192.168.1.11 192.168.1.12
 ```
 

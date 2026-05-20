@@ -36,54 +36,70 @@ class ReolinkClient:
         self.password = password
         self.protocol = protocol
 
+    def _scrub(self, text: str) -> str:
+        return text.replace(self.password, "***") if self.password else text
+
     def _post(self, command: str, payload: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
-        url = (
-            f"{self.protocol}://{self.ip}/cgi-bin/api.cgi?"
-            f"cmd={command}&user={self.user}&password={self.password}&channel=0"
-        )
+        url = f"{self.protocol}://{self.ip}/cgi-bin/api.cgi"
+        params = {"cmd": command, "user": self.user, "password": self.password, "channel": 0}
         try:
-            resp = requests.post(url, json=payload, verify=False, timeout=HTTP_TIMEOUT)  # nosec: B501
+            resp = requests.post(url, params=params, json=payload, verify=False, timeout=HTTP_TIMEOUT)  # nosec: B501
         except requests.RequestException as exc:
-            print(f"❌ {self.ip}: request failed: {exc}")
+            print(f"❌ {self.ip}: request failed: {self._scrub(str(exc))}")
             return None
         if resp.status_code != 200:
-            print(f"❌ {self.ip}: HTTP {resp.status_code}: {resp.text}")
+            print(f"❌ {self.ip}: HTTP {resp.status_code}: {self._scrub(resp.text)}")
             return None
-        data = resp.json()
-        if data and data[0].get("code") != 0:
-            print(f"❌ {self.ip}: camera returned error: {data}")
+        try:
+            data = resp.json()
+        except ValueError:
+            print(f"❌ {self.ip}: non-JSON response: {self._scrub(resp.text)[:200]}")
+            return None
+        if not data or data[0].get("code") != 0:
+            print(f"❌ {self.ip}: camera returned error: {self._scrub(str(data))}")
+            return None
         return data
 
     def has_preset(self, idx: int) -> bool:
         data = self._post("GetPtzPreset", [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}])
-        if not data or data[0].get("code") != 0:
+        if data is None:
             return False
         presets = data[0].get("value", {}).get("PtzPreset", [])
         return any(p.get("id") == idx and p.get("enable") == 1 for p in presets)
 
-    def ptz(self, operation: str, speed: int = 20, idx: int = 0) -> None:
-        self._post(
-            "PtzCtrl",
-            [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}],
+    def ptz(self, operation: str, speed: int = 20, idx: int = 0) -> bool:
+        return (
+            self._post(
+                "PtzCtrl",
+                [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}],
+            )
+            is not None
         )
 
-    def pan_degrees(self, direction: str, degrees: float) -> None:
+    def pan_degrees(self, direction: str, degrees: float) -> bool:
         duration = max(0.0, (degrees - PAN_BIAS_DEG) / PAN_DEG_PER_SEC)
-        self.ptz(direction, speed=PAN_SPEED_LEVEL)
-        time.sleep(duration)
-        self.ptz("Stop")
+        if not self.ptz(direction, speed=PAN_SPEED_LEVEL):
+            return False
+        try:
+            time.sleep(duration)
+        finally:
+            self.ptz("Stop")
         time.sleep(SETTLE_SECONDS)
+        return True
 
-    def set_preset(self, idx: int) -> None:
-        self._post(
-            "SetPtzPreset",
-            [
-                {
-                    "cmd": "SetPtzPreset",
-                    "action": 0,
-                    "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": f"pos{idx}"}},
-                }
-            ],
+    def set_preset(self, idx: int) -> bool:
+        return (
+            self._post(
+                "SetPtzPreset",
+                [
+                    {
+                        "cmd": "SetPtzPreset",
+                        "action": 0,
+                        "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": f"pos{idx}"}},
+                    }
+                ],
+            )
+            is not None
         )
 
 
@@ -96,18 +112,26 @@ def process_camera(ip: str, user: str, password: str, protocol: str) -> None:
         return
 
     print(f"🧭 Going to reference preset {REFERENCE_PRESET}")
-    cam.ptz("ToPos", speed=50, idx=REFERENCE_PRESET)
+    if not cam.ptz("ToPos", speed=50, idx=REFERENCE_PRESET):
+        print(f"❌ {ip}: failed to reach reference preset — aborting")
+        return
     time.sleep(GOTO_SETTLE_SECONDS)
 
     print(f"⬅️  Panning {2 * PAN_STEP_DEG:.0f}° left")
-    cam.pan_degrees("Left", 2 * PAN_STEP_DEG)
+    if not cam.pan_degrees("Left", 2 * PAN_STEP_DEG):
+        print(f"❌ {ip}: left pan failed — aborting")
+        return
 
     for preset_idx in (0, 1, 2, 3):
         if preset_idx > 0:
             print(f"➡️  Panning {PAN_STEP_DEG:.0f}° right")
-            cam.pan_degrees("Right", PAN_STEP_DEG)
+            if not cam.pan_degrees("Right", PAN_STEP_DEG):
+                print(f"❌ {ip}: right pan failed — aborting (preset {preset_idx} not saved)")
+                return
         print(f"💾 Registering PTZ preset {preset_idx}")
-        cam.set_preset(preset_idx)
+        if not cam.set_preset(preset_idx):
+            print(f"❌ {ip}: failed to save preset {preset_idx} — aborting")
+            return
 
 
 def main() -> None:
