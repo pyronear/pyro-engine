@@ -20,7 +20,7 @@ from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_REPO_ID = "pyronear/yolo11s_quick-quokka_v8.0.0"
+MODEL_REPO_ID = "pyronear/yolo11s_rapid-raccoon_v8.1.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
 MODEL_SLUG = MODEL_REPO_ID.split("/", 1)[1]
 MODEL_CACHE_SUBDIR = "models"
