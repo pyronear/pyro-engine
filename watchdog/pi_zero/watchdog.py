@@ -5,6 +5,14 @@ Watchdog script for Pyro Engine hardware.
 It checks the main Pi health endpoint and pings camera IPs, tracking failures
 and power-cycling relays after repeated failures with cooldown/daily limits.
 
+Relay wiring:
+  --trigger h : H-trigger module (default)
+                GPIO LOW  = relay inactive = NC closed = device powered
+                GPIO HIGH = relay active   = NC open   = device power cut
+  --trigger l : L-trigger module (legacy)
+                GPIO HIGH = relay inactive = NC closed = device powered
+                GPIO LOW  = relay active   = NC open   = device power cut
+
 Cron setup (every 10 minutes):
   1) Edit crontab:  crontab -e
   2) Add the line:
@@ -13,6 +21,7 @@ Cron setup (every 10 minutes):
 Adjust the path to match where this repo lives on the Pi.
 """
 
+import argparse
 import datetime as dt
 import json
 import logging
@@ -23,6 +32,16 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 import RPi.GPIO as GPIO
+
+# ================= ARGS ===================
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--trigger', choices=['h', 'l'], default='h',
+                    help='Relay trigger type: h=high-trigger (default), l=low-trigger (legacy)')
+args = parser.parse_args()
+
+RELAY_ACTIVE = GPIO.HIGH if args.trigger == 'h' else GPIO.LOW
+RELAY_INACTIVE = GPIO.LOW if args.trigger == 'h' else GPIO.HIGH
 
 # ================= CONFIG =================
 
@@ -98,9 +117,8 @@ logging.basicConfig(
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-
-GPIO.setup(RELAY_MAIN, GPIO.OUT, initial=GPIO.HIGH)
-GPIO.setup(RELAY_CAMS, GPIO.OUT, initial=GPIO.HIGH)
+GPIO.setup(RELAY_MAIN, GPIO.OUT, initial=RELAY_INACTIVE)
+GPIO.setup(RELAY_CAMS, GPIO.OUT, initial=RELAY_INACTIVE)
 
 # ================ IO HELPERS ==============
 
@@ -259,9 +277,9 @@ def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, 
         return
 
     logging.warning("%s: power cycle triggered", label)
-    GPIO.output(relay_gpio, GPIO.LOW)
+    GPIO.output(relay_gpio, RELAY_ACTIVE)    # cut power
     time.sleep(POWER_OFF_TIME)
-    GPIO.output(relay_gpio, GPIO.HIGH)
+    GPIO.output(relay_gpio, RELAY_INACTIVE)  # restore power
     logging.info("%s: power restored", label)
 
     guard.record_reboot(now_ts, last_file, daily_file)
@@ -298,7 +316,6 @@ def main() -> None:
 
     for ip in CAM_IPS:
         ok = ping_host(ip)
-
         fails = update_fail_counter(ok, FAIL_CAM_FILES[ip], f"Camera {ip}", log_result=False)
         cam_results.append((ip, ok, fails))
         if fails >= MAX_FAILS:
