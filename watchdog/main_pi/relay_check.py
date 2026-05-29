@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201
 """
 End-to-end relay test for the main Pi watchdog setup.
 
@@ -156,7 +157,7 @@ def main() -> int:
         GPIO.output(RELAY_PIZERO, RELAY_INACTIVE)
         GPIO.cleanup()
 
-    print("", flush=True)
+    print(flush=True)
     if not ok:
         print("FAILED: pizero", flush=True)
         return 1

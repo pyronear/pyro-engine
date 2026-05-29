@@ -36,12 +36,16 @@ import RPi.GPIO as GPIO
 # ================= ARGS ===================
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--trigger', choices=['h', 'l'], default='h',
-                    help='Relay trigger type: h=high-trigger (default), l=low-trigger (legacy)')
+parser.add_argument(
+    "--trigger",
+    choices=["h", "l"],
+    default="h",
+    help="Relay trigger type: h=high-trigger (default), l=low-trigger (legacy)",
+)
 args = parser.parse_args()
 
-RELAY_ACTIVE = GPIO.HIGH if args.trigger == 'h' else GPIO.LOW
-RELAY_INACTIVE = GPIO.LOW if args.trigger == 'h' else GPIO.HIGH
+RELAY_ACTIVE = GPIO.HIGH if args.trigger == "h" else GPIO.LOW
+RELAY_INACTIVE = GPIO.LOW if args.trigger == "h" else GPIO.HIGH
 
 # ================= CONFIG =================
 
@@ -277,7 +281,7 @@ def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, 
         return
 
     logging.warning("%s: power cycle triggered", label)
-    GPIO.output(relay_gpio, RELAY_ACTIVE)    # cut power
+    GPIO.output(relay_gpio, RELAY_ACTIVE)  # cut power
     time.sleep(POWER_OFF_TIME)
     GPIO.output(relay_gpio, RELAY_INACTIVE)  # restore power
     logging.info("%s: power restored", label)

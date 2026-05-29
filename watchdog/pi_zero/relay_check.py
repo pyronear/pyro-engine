@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201
 """
 End-to-end relay test for the Pi Zero watchdog setup.
 
@@ -94,7 +95,7 @@ CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()
 
 PING_COUNT = 1
 PING_TIMEOUT = 2
-POWER_OFF_TIME = 30   # long enough for 12V rail capacitors to drain
+POWER_OFF_TIME = 30  # long enough for 12V rail capacitors to drain
 RETURN_TIMEOUT = 180  # cameras on 12V rail take longer than a Pi to boot
 RETURN_POLL = 3
 
@@ -199,7 +200,7 @@ def main() -> int:
             GPIO.output(pin, RELAY_INACTIVE)
         GPIO.cleanup()
 
-    print("", flush=True)
+    print(flush=True)
     if failures:
         print(f"FAILED: {', '.join(failures)}", flush=True)
         return 1
