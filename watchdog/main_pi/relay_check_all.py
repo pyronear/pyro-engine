@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201
 """
 End-to-end relay test for the full watchdog setup (main Pi + Pi Zero).
 
@@ -90,7 +91,8 @@ def run_main_pi_test() -> int:
             stderr=subprocess.STDOUT,
             text=True,
         )
-        assert proc.stdout is not None
+        if proc.stdout is None:
+            raise RuntimeError("subprocess stdout is None")
         for line in proc.stdout:
             print(line, end="", flush=True)
             log.write(line)
@@ -101,10 +103,7 @@ def run_main_pi_test() -> int:
 def launch_pi_zero_test() -> int:
     target = f"{PIZERO_USER}@{PIZERO_IP}"
     print(f"\n=== Launching detached Pi Zero relay test on {target} (trigger={TRIGGER}) ===", flush=True)
-    remote_cmd = (
-        f"nohup python3 {PI_ZERO_SCRIPT} --trigger {TRIGGER}"
-        f" > {PI_ZERO_LOG} 2>&1 < /dev/null & disown; exit"
-    )
+    remote_cmd = f"nohup python3 {PI_ZERO_SCRIPT} --trigger {TRIGGER} > {PI_ZERO_LOG} 2>&1 < /dev/null & disown; exit"
     return subprocess.call(["ssh", target, remote_cmd])
 
 
