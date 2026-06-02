@@ -251,9 +251,10 @@ def get_latest_image(
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")
 
-    if pose not in cam.last_images or cam.last_images[pose] is None:
+    image = cam.last_images.get(pose)
+    if image is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     buffer = BytesIO()
-    cam.last_images[pose].save(buffer, format="JPEG", quality=quality)
+    image.save(buffer, format="JPEG", quality=quality)
     return Response(buffer.getvalue(), media_type="image/jpeg")

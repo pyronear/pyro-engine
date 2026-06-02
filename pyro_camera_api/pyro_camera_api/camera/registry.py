@@ -29,6 +29,10 @@ CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
 
+# Stuck-detector threading state, later managed in camera.stuck_detector
+STUCK_CHECK_THREADS: Dict[str, threading.Thread] = {}
+STUCK_CHECK_FLAGS: Dict[str, threading.Event] = {}
+
 # Per-camera locks to serialize blocking PTZ operations (click_to_move, zoom).
 # Non-blocking acquire → endpoints return 409 if the camera is already busy.
 MOVE_LOCKS: Dict[str, threading.Lock] = defaultdict(threading.Lock)

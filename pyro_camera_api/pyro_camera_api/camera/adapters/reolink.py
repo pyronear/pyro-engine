@@ -152,11 +152,17 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, f"Preset {name} set successfully.")
 
-    def reboot_camera(self):
+    def reboot_camera(self) -> bool:
         url = self._build_url("Reboot")
         data = [{"cmd": "Reboot"}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
-        return self._handle_response(response, "Camera reboot initiated successfully.")
+        response_data = self._handle_response(response, "Camera reboot initiated successfully.")
+        if not response_data:
+            return False
+        try:
+            return response_data[0]["code"] == 0
+        except (KeyError, IndexError, TypeError):
+            return False
 
     def get_auto_focus(self):
         url = self._build_url("GetAutoFocus")
