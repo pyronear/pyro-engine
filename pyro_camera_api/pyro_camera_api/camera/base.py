@@ -31,7 +31,7 @@ class BaseCamera(ABC):
         # Dictionary for storing latest images
         # PTZ cameras can use pose -> image
         # Static cameras can use -1 -> image
-        self.last_images: Dict[int, Image.Image] = {}
+        self.last_images: Dict[int, Optional[Image.Image]] = {}
 
     @abstractmethod
     def capture(self, **kwargs) -> Optional[Image.Image]:
