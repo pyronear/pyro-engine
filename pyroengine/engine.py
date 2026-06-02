@@ -132,11 +132,14 @@ class Engine(Predictor):
         # Local backup
         self._backup_size = backup_size
 
-        # Augment states with API-specific fields
+        # Augment states with API-specific fields. Anchor the daily pose timestamp at
+        # construction so a startup after noon does not trigger an immediate send;
+        # the next noon crossing is the first one that fires.
+        init_now = datetime.now()
         for state in self._states.values():
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
-            state["last_pose_image_sent"] = None
+            state["last_pose_image_sent"] = init_now
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -151,7 +154,7 @@ class Engine(Predictor):
         state = super()._new_state()
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
-        state["last_pose_image_sent"] = None
+        state["last_pose_image_sent"] = datetime.now()
         return state
 
     def heartbeat(self, cam_id: str) -> Response:
@@ -216,7 +219,7 @@ class Engine(Predictor):
                 now = datetime.now()
                 today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
                 last_pose_sent = self._states[cam_key]["last_pose_image_sent"]
-                if now >= today_noon and (last_pose_sent is None or last_pose_sent < today_noon):
+                if now >= today_noon and last_pose_sent < today_noon:
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     if ip in self.api_client:
