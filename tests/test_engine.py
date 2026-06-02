@@ -69,11 +69,11 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert len(engine._states["-1"]["last_predictions"]) == 4
     assert engine._states["-1"]["ongoing"]
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
-    assert engine._states["-1"]["last_predictions"][3][1].shape[0] > 0
-    assert engine._states["-1"]["last_predictions"][3][1].shape[1] == 5
+    assert engine._states["-1"]["last_predictions"][-1][1].shape[0] > 0
+    assert engine._states["-1"]["last_predictions"][-1][1].shape[1] == 5
     assert len(engine._states["-1"]["last_predictions"][-1][2][0]) == 5
-    assert engine._states["-1"]["last_predictions"][3][3] < datetime.now().isoformat()
-    assert engine._states["-1"]["last_predictions"][3][4] is False
+    assert engine._states["-1"]["last_predictions"][-1][3] < datetime.now().isoformat()
+    assert engine._states["-1"]["last_predictions"][-1][4] is False
 
 
 def create_dummy_onnx_model(model_path):
@@ -218,8 +218,8 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
 
 
 def test_fill_empty_bboxes(tmp_path):
-    """fill_empty_bboxes should replace empty-bbox alerts with the closest non-empty
-    sibling from the same cam_id, with confidence forced to 0."""
+    """fill_empty_bboxes stamps a placeholder bbox at conf=0 on any empty alert
+    and leaves non-empty alerts untouched."""
     engine = Engine(cache_folder=str(tmp_path))
 
     img = Image.new("RGB", (8, 8))
@@ -237,24 +237,16 @@ def test_fill_empty_bboxes(tmp_path):
 
     engine.fill_empty_bboxes()
 
-    # Every alert is now non-empty
     assert all(alert["bboxes"] for alert in engine._alerts)
-    # The previously-empty frame (index 3) was filled from the closest sibling
-    # (index 2 or 4 — both equidistant; min() picks the lower index)
-    filled = engine._alerts[3]["bboxes"]
-    assert len(filled) == 1
-    # Geometry copied from the source
-    assert filled[0][:4] == pytest.approx((0.436, 0.609, 0.44, 0.62))
-    # Confidence forced to 0
-    assert filled[0][4] == 0.0
-    # Other frames are untouched
+    # Previously-empty frame gets the placeholder bbox at conf=0
+    assert engine._alerts[3]["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
+    # Non-empty frames untouched
     assert engine._alerts[0]["bboxes"][0][4] == pytest.approx(0.089)
     assert engine._alerts[5]["bboxes"][0][4] == pytest.approx(0.389)
 
 
 def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
-    """If a cam_id has only empty-bbox alerts, fill_empty_bboxes leaves them empty
-    so the upload guard in _process_alerts can drop them."""
+    """Even when every alert for a cam_id is empty, each one gets the placeholder."""
     engine = Engine(cache_folder=str(tmp_path))
 
     img = Image.new("RGB", (8, 8))
@@ -263,7 +255,7 @@ def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
 
     engine.fill_empty_bboxes()
 
-    assert all(not alert["bboxes"] for alert in engine._alerts)
+    assert all(alert["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)] for alert in engine._alerts)
 
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):
