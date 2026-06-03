@@ -16,6 +16,7 @@ from typing import Any, Dict, Never, Optional, Tuple
 import numpy as np
 from PIL import Image
 from pyro_predictor import Predictor
+from pyro_predictor.utils import box_iou
 from pyroclient import client
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
@@ -132,11 +133,14 @@ class Engine(Predictor):
         # Local backup
         self._backup_size = backup_size
 
-        # Augment states with API-specific fields
+        # Augment states with API-specific fields. Anchor the daily pose timestamp at
+        # construction so a startup after noon does not trigger an immediate send;
+        # the next noon crossing is the first one that fires.
+        init_now = datetime.now()
         for state in self._states.values():
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
-            state["last_pose_image_sent"] = None
+            state["last_pose_image_sent"] = init_now
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -151,7 +155,7 @@ class Engine(Predictor):
         state = super()._new_state()
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
-        state["last_pose_image_sent"] = None
+        state["last_pose_image_sent"] = datetime.now()
         return state
 
     def heartbeat(self, cam_id: str) -> Response:
@@ -219,7 +223,7 @@ class Engine(Predictor):
                 now = datetime.now()
                 today_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
                 last_pose_sent = self._states[cam_key]["last_pose_image_sent"]
-                if now >= today_noon and (last_pose_sent is None or last_pose_sent < today_noon):
+                if now >= today_noon and last_pose_sent < today_noon:
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     if ip in self.api_client:
@@ -279,13 +283,18 @@ class Engine(Predictor):
         pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
         logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
 
-        # Alert
-        if conf > self.conf_thresh and len(self.api_client) > 0 and isinstance(cam_id, str):
-            # Save the alert in cache to avoid connection issues
+        # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip)
+        if self._states[cam_key]["ongoing"] and len(self.api_client) > 0 and isinstance(cam_id, str):
+            # Collect every bbox the predictor emitted across the window; treat these as
+            # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
+            tracked = [b[:4] for _, _, bbs, _, _, _ in self._states[cam_key]["last_predictions"] for b in bbs]
+            tracked_arr = np.array(tracked, dtype=np.float64) if tracked else np.empty((0, 4))
+
             for idx, (frame_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(
                 self._states[cam_key]["last_predictions"]
             ):
                 if not is_staged:
+                    bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
                     self._stage_alert(frame_, cam_id, ts, bboxes, jpeg_bytes)
                     self._states[cam_key]["last_predictions"][idx] = (
                         frame_,
@@ -355,6 +364,23 @@ class Engine(Predictor):
             crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
         return buf.getvalue()
 
+    @staticmethod
+    def _backfill_bboxes(bboxes: list, preds: np.ndarray, tracked: np.ndarray) -> list:
+        """For each raw pred overlapping a tracked location but not yet in bboxes, append it with conf=0."""
+        if tracked.shape[0] == 0 or preds.shape[0] == 0:
+            return list(bboxes)
+        existing = np.array([b[:4] for b in bboxes], dtype=np.float64) if bboxes else np.empty((0, 4))
+        ious_tracked = box_iou(preds[:, :4], tracked)  # shape (n_tracked, n_preds)
+        hits_tracked = (ious_tracked > 0).any(axis=0)  # per pred
+        out = list(bboxes)
+        for p_idx in np.where(hits_tracked)[0]:
+            box = preds[p_idx, :4]
+            if existing.shape[0] and (box_iou(box[None, :], existing) > 0).any():
+                continue
+            out.append([float(box[0]), float(box[1]), float(box[2]), float(box[3]), 0.0])
+            existing = np.vstack([existing, box[None, :]])
+        return out
+
     def _stage_alert(
         self,
         frame: Image.Image,
@@ -375,23 +401,11 @@ class Engine(Predictor):
         })
 
     def fill_empty_bboxes(self) -> None:
-        cam_id_to_indices: Dict[str, list[int]] = {}
-        for i, alert in enumerate(self._alerts):
-            cam_id_to_indices.setdefault(alert["cam_id"], []).append(i)
-
-        for indices in cam_id_to_indices.values():
-            non_empty_indices = [i for i in indices if self._alerts[i]["bboxes"]]
-            if not non_empty_indices:
-                continue
-            for i in indices:
-                if not self._alerts[i]["bboxes"]:
-                    closest_index = min(non_empty_indices, key=lambda x: abs(x - i))
-                    src = np.array(self._alerts[closest_index]["bboxes"], dtype=float)
-                    if src.size == 0:
-                        continue
-                    filled = src.copy()
-                    filled[:, -1] = 0.0  # force confidence to 0 for duplicated boxes
-                    self._alerts[i]["bboxes"] = [tuple(row) for row in filled.tolist()]
+        # Stamp a tiny placeholder bbox at conf=0 on any alert with none,
+        # so the upload guard always sees a non-empty payload.
+        for alert in self._alerts:
+            if not alert["bboxes"]:
+                alert["bboxes"] = [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:

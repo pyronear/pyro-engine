@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from contextlib import asynccontextmanager
 
@@ -20,7 +21,14 @@ from pyro_camera_api.api.routes_health import router as health_router
 from pyro_camera_api.api.routes_patrol import router as patrol_router
 from pyro_camera_api.api.routes_stream import router as stream_router
 from pyro_camera_api.camera.patrol import patrol_loop, static_loop
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+from pyro_camera_api.camera.registry import (
+    CAMERA_REGISTRY,
+    PATROL_FLAGS,
+    PATROL_THREADS,
+    STUCK_CHECK_FLAGS,
+    STUCK_CHECK_THREADS,
+)
+from pyro_camera_api.camera.stuck_detector import stuck_check_loop
 from pyro_camera_api.core.logging import setup_logging
 from pyro_camera_api.services.anonymizer_rtsp import AnonymizerWorker, BoxStore, LastFrameStore
 from pyro_camera_api.services.stream import set_app_for_stream, stop_stream_if_idle
@@ -66,6 +74,22 @@ async def lifespan(app: FastAPI):
         PATROL_FLAGS[cam_id] = stop_flag
         thread.start()
 
+        stuck_detector_enabled = os.getenv("ENABLE_STUCK_DETECTOR", "true").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz" and hasattr(cam, "reboot_camera"):
+            stuck_flag = threading.Event()
+            stuck_thread = threading.Thread(target=stuck_check_loop, args=(cam_id, stuck_flag), daemon=True)
+            STUCK_CHECK_THREADS[cam_id] = stuck_thread
+            STUCK_CHECK_FLAGS[cam_id] = stuck_flag
+            stuck_thread.start()
+            logger.info("Starting stuck detector for PTZ camera %s", cam_id)
+        elif not stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz":
+            logger.info("Stuck detector disabled by ENABLE_STUCK_DETECTOR for %s", cam_id)
+
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
     try:
@@ -73,6 +97,10 @@ async def lifespan(app: FastAPI):
     finally:
         for cam_id, flag in PATROL_FLAGS.items():
             logger.info("Stopping loop for camera %s", cam_id)
+            flag.set()
+
+        for cam_id, flag in STUCK_CHECK_FLAGS.items():
+            logger.info("Stopping stuck detector for camera %s", cam_id)
             flag.set()
 
         try:
