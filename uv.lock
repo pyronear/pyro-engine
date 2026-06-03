@@ -1158,7 +1158,7 @@ requires-dist = [
 [[package]]
 name = "pyroclient"
 version = "0.2.0.dev0"
-source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#286f9d96d0b3aefe3f4a5f5f856abc9997731b8f" }
+source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#938d0d60eee79b05cbe404e04df3e9d559baa690" }
 dependencies = [
     { name = "requests" },
 ]
@@ -1210,7 +1210,7 @@ requires-dist = [
     { name = "pyro-predictor", editable = "pyro-predictor" },
     { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main" },
     { name = "python-dotenv", specifier = "==1.1.0" },
-    { name = "requests", specifier = "==2.31.0" },
+    { name = "requests", specifier = ">=2.33.0,<3" },
 ]
 
 [package.metadata.requires-dev]
@@ -1353,7 +1353,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.31.0"
+version = "2.34.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1361,9 +1361,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9d/be/10918a2eac4ae9f02f6cfe6414b7a155ccd8f7f9d4380d62fd5b955065c3/requests-2.31.0.tar.gz", hash = "sha256:942c5a758f98d790eaed1a29cb6eefc7ffb0d1cf7af05c3d2791656dbd6ad1e1", size = 110794, upload_time = "2023-05-22T15:12:44.175Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload_time = "2026-05-14T19:25:27.735Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/8e/0e2d847013cb52cd35b38c009bb167a1a26b2ce6cd6965bf26b47bc0bf44/requests-2.31.0-py3-none-any.whl", hash = "sha256:58cd2187c01e70e6e26505bca751777aa9f2ee0b7f4300988b709f44e013003f", size = 62574, upload_time = "2023-05-22T15:12:42.313Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload_time = "2026-05-14T19:25:26.443Z" },
 ]
 
 [[package]]
