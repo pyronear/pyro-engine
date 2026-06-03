@@ -204,7 +204,10 @@ class SystemController:
                             self.is_day = is_day_time(None, frame, "ir")
                             self.engine.predict(frame, cam_id)
                     except requests.HTTPError as e:
-                        logger.error(f"HTTP error for {camera_name}, pose {pose}: {e.response.text}")
+                        logger.error(
+                            f"HTTP error for {camera_name}, pose {pose}: "
+                            f"{e.response.text if e.response is not None else e}"
+                        )
                     except Exception as e:
                         logger.error(f"Error for {camera_name}, pose {pose}: {e}")
 
@@ -220,7 +223,7 @@ class SystemController:
                         self.is_day = is_day_time(None, frame, "ir")
                         self.engine.predict(frame, cam_id)
                 except requests.HTTPError as e:
-                    logger.error(f"HTTP error for {camera_name}: {e.response.text}")
+                    logger.error(f"HTTP error for {camera_name}: {e.response.text if e.response is not None else e}")
                 except Exception as e:
                     logger.error(f"Error for {camera_name}: {e}")
 
