@@ -11,7 +11,7 @@ import operator
 import pathlib
 import time
 from io import BytesIO
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import cv2
 import numpy as np
@@ -99,7 +99,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         Sends a command to move the camera.
         """
         url = self._build_url("PtzCtrl")
-        data = [{"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}]
+        data: Any = [
+            {"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}
+        ]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
@@ -120,7 +122,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         Retrieves the preset positions available for PTZ cameras.
         """
         url = self._build_url("GetPtzPreset")
-        data = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
+        data: Any = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
@@ -142,7 +144,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
 
         url = self._build_url("SetPtzPreset")
         name = f"pos{idx}"
-        data = [
+        data: Any = [
             {
                 "cmd": "SetPtzPreset",
                 "action": 0,
@@ -166,13 +168,13 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def get_auto_focus(self):
         url = self._build_url("GetAutoFocus")
-        data = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
+        data: Any = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         return self._handle_response(response, "Fetched AutoFocus settings successfully.")
 
     def set_auto_focus(self, disable: bool):
         url = self._build_url("SetAutoFocus")
-        data = [
+        data: Any = [
             {
                 "cmd": "SetAutoFocus",
                 "action": 0,
@@ -185,7 +187,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def start_zoom_focus(self, position: int):
         if self.cam_type != "static":
             url = self._build_url("StartZoomFocus")
-            data = [
+            data: Any = [
                 {
                     "cmd": "StartZoomFocus",
                     "action": 0,
@@ -203,7 +205,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         if self.cam_type != "static":
             self.focus_position = position
             url = self._build_url("StartZoomFocus")
-            data = [
+            data: Any = [
                 {
                     "cmd": "StartZoomFocus",
                     "action": 0,
@@ -217,7 +219,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def get_focus_level(self):
         """Retrieve the current manual focus and zoom positions."""
         url = self._build_url("GetZoomFocus")
-        data = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
+        data: Any = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         result = self._handle_response(response, "Got zoom/focus values")
         if result and result[0]["code"] == 0:
