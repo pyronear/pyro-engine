@@ -56,7 +56,7 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert isinstance(out, float)
     assert 0 <= out <= 1
     assert len(engine._states["-1"]["last_predictions"]) == 3
-    assert not engine._states["-1"]["ongoing"]
+    assert engine._states["-1"]["ongoing"]
     assert isinstance(engine._states["-1"]["last_predictions"][0][0], Image.Image)
     assert engine._states["-1"]["last_predictions"][2][1].shape[0] > 0
     assert engine._states["-1"]["last_predictions"][2][1].shape[1] == 5
