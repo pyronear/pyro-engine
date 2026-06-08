@@ -59,7 +59,7 @@ curl "http://192.168.1.97/rpc/Shelly.GetDeviceInfo"
 
 The Shelly is dedicated to running the watchdog, so disable everything else
 with `harden_shelly.sh` (Cloud, MQTT, outbound WebSocket, Wi-Fi access point,
-BLE, and any webhooks/schedules):
+BLE, and any webhooks/schedules) and enable eco mode to reduce heat:
 
 ```bash
 cd watchdog/shelly/device

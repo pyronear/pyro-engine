@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Harden a Shelly Pro used only to run the pi_watchdog script.
 # Disables cloud, remote access, radio features, webhooks and schedules
-# that the local watchdog does not need.
+# that the local watchdog does not need, and enables eco mode to reduce heat.
 #
 # The firmware may be a beta, so some RPC methods can be missing. Every call
 # tolerates failure and the script keeps going.
@@ -95,6 +95,11 @@ rpc_post "Wifi.SetConfig" '{"config":{"ap":{"enable":false}}}'
 
 echo "== BLE off =="
 rpc_post "BLE.SetConfig" '{"config":{"enable":false,"rpc":{"enable":false}}}'
+
+echo "== Eco mode on =="
+# Lowers CPU/radio activity when idle to reduce heat and power draw. The
+# watchdog does not need fast RPC responses, so the extra latency is harmless.
+rpc_post "Sys.SetConfig" '{"config":{"device":{"eco_mode":true}}}'
 
 echo "== Webhooks delete if any =="
 hooks=$(safe_count "Webhook.List" "hooks")
