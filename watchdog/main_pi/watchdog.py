@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-Watchdog for the main Pi that pings the Pi Zero and power-cycles its relay
-after repeated failures, with cooldown and daily limits.
+Watchdog for the main Pi.
+
+It checks internet connectivity and pings the camera IPs. After repeated
+failures it asks the Shelly to power-cycle output 0 (cameras / router 12V),
+with a cooldown and a daily reboot limit.
+
+The main Pi health itself is monitored by the Shelly script (watchdog.js),
+so this watchdog does not check or reboot the main Pi.
 
 Cron setup (every 10 minutes at :05):
   1) Edit crontab:  crontab -e
@@ -17,12 +23,10 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-
-import RPi.GPIO as GPIO
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 # ================= CONFIG =================
-
-RELAY_PIZERO = 16
 
 _ENV_FILE = Path("/home/pi/watchdog.env")
 
@@ -43,13 +47,28 @@ def _load_env(path: Path) -> dict:
 
 _env = _load_env(_ENV_FILE)
 
-PIZERO_IP: str = _env.get("PIZERO_IP", "192.168.1.98")
+SHELLY_IP: str = _env.get("SHELLY_IP", "192.168.1.97")
+SHELLY_OUTPUT_ID = int(_env.get("SHELLY_OUTPUT_ID", "0"))
+
+_cam_ips_raw = _env.get("CAM_IPS", "")
+CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()] or [
+    "192.168.1.11",
+    "192.168.1.12",
+]
+
+_INTERNET_HTTP_URLS = [
+    "https://clients3.google.com/generate_204",
+    "https://connectivitycheck.gstatic.com/generate_204",
+    "http://cp.cloudflare.com",
+    "www.msftconnecttest.com/connecttest.txt",
+]
+_INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
 PING_COUNT = 2
-TIMEOUT = 2  # seconds, used for ping timeout
+TIMEOUT = 2  # seconds, used for ping and HTTP timeout
 
 MAX_FAILS = 3
-POWER_OFF_TIME = 15
+POWER_OFF_TIME = 20
 
 COOLDOWN_SECONDS = 30 * 60
 MAX_REBOOTS_PER_DAY = 3
@@ -57,9 +76,11 @@ MAX_REBOOTS_PER_DAY = 3
 STATE_DIR = Path("/tmp")
 LOG_FILE = Path("/home/pi/watchdog_main.log")
 
-FAIL_PIZERO_FILE = STATE_DIR / "fail_pizero"
-LAST_REBOOT_FILE = STATE_DIR / "last_reboot_pizero"
-DAILY_REBOOT_FILE = STATE_DIR / "daily_reboots_pizero"
+FAIL_INTERNET_FILE = STATE_DIR / "fail_internet"
+FAIL_CAM_FILES = {ip: STATE_DIR / f"fail_cam_{ip.split('.')[-1]}" for ip in CAM_IPS}
+
+LAST_REBOOT_FILE = STATE_DIR / "last_reboot_output0"
+DAILY_REBOOT_FILE = STATE_DIR / "daily_reboots_output0"
 
 # ================ LOGGING =================
 
@@ -69,13 +90,6 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-
-# ================ GPIO ====================
-
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-
-GPIO.setup(RELAY_PIZERO, GPIO.OUT, initial=GPIO.HIGH)
 
 # ================ IO HELPERS ==============
 
@@ -105,10 +119,10 @@ def write_text(path: Path, value: str) -> None:
 # ================ CHECKS ==================
 
 
-def ping_host(ip: str) -> bool:
+def ping_host(ip: str, count: int = PING_COUNT, timeout: int = TIMEOUT) -> bool:
     try:
         subprocess.check_output(
-            ["ping", "-c", str(PING_COUNT), "-W", str(TIMEOUT), ip],
+            ["ping", "-c", str(count), "-W", str(timeout), ip],
             stderr=subprocess.DEVNULL,
         )
         return True
@@ -116,17 +130,53 @@ def ping_host(ip: str) -> bool:
         return False
 
 
+def internet_check_ok() -> bool:
+    for url in _INTERNET_HTTP_URLS:
+        try:
+            with urlopen(url, timeout=TIMEOUT) as resp:
+                if resp.status in (200, 204):
+                    logging.info("Internet HTTP check OK: %s", url)
+                    return True
+        except Exception:  # noqa: S110
+            pass
+
+    for ip in _INTERNET_PING_IPS:
+        if ping_host(ip, count=1, timeout=TIMEOUT):
+            logging.info("Internet ping fallback OK: %s", ip)
+            return True
+
+    logging.warning("Internet connectivity FAILED")
+    return False
+
+
+# ================ SHELLY ==================
+
+
+def shelly_set_output(output_id: int, on: bool) -> bool:
+    query = urlencode({"id": output_id, "on": "true" if on else "false"})
+    url = f"http://{SHELLY_IP}/rpc/Switch.Set?{query}"
+    req = Request(url, method="GET")
+    try:
+        with urlopen(req, timeout=TIMEOUT) as resp:
+            return resp.status == 200
+    except Exception as exc:
+        logging.error("Shelly Switch.Set failed (id=%s, on=%s): %s", output_id, on, exc)
+        return False
+
+
 # ================ FAIL COUNTERS ===========
 
 
-def update_fail_counter(ok: bool, fail_file: Path, label: str) -> int:
+def update_fail_counter(ok: bool, fail_file: Path, label: str, log_result: bool = True) -> int:
     if ok:
-        logging.info("%s check OK", label)
+        if log_result:
+            logging.info("%s check OK", label)
         write_int(fail_file, 0)
         return 0
 
     fails = read_int(fail_file, 0) + 1
-    logging.warning("%s check FAILED (%s/%s)", label, fails, MAX_FAILS)
+    if log_result:
+        logging.warning("%s check FAILED (%s/%s)", label, fails, MAX_FAILS)
     write_int(fail_file, fails)
     return fails
 
@@ -193,18 +243,23 @@ class RebootGuard:
         write_text(daily_file, f"{day} {count}")
 
 
-def power_cycle(relay_gpio: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> None:
+def power_cycle(output_id: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> None:
     now_ts = int(time.time())
 
     if not guard.can_reboot(now_ts, last_file, daily_file, label):
         return
 
-    logging.warning("%s: power cycle triggered", label)
-    GPIO.output(relay_gpio, GPIO.LOW)
-    time.sleep(POWER_OFF_TIME)
-    GPIO.output(relay_gpio, GPIO.HIGH)
-    logging.info("%s: power restored", label)
+    logging.warning("%s: power cycle triggered (Shelly output %s)", label, output_id)
+    if not shelly_set_output(output_id, False):
+        logging.error("%s: failed to switch output off, aborting power cycle", label)
+        return
 
+    time.sleep(POWER_OFF_TIME)
+    if not shelly_set_output(output_id, True):
+        logging.error("%s: failed to switch output back on", label)
+        return
+
+    logging.info("%s: power restored", label)
     guard.record_reboot(now_ts, last_file, daily_file)
 
 
@@ -217,14 +272,43 @@ def main() -> None:
         max_reboots_per_day=MAX_REBOOTS_PER_DAY,
     )
 
-    fails = update_fail_counter(ping_host(PIZERO_IP), FAIL_PIZERO_FILE, "Pi Zero")
-    if fails >= MAX_FAILS:
-        power_cycle(RELAY_PIZERO, "Pi Zero", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard)
-        write_int(FAIL_PIZERO_FILE, 0)
+    reboot = False
+
+    internet_ok = internet_check_ok()
+    internet_fails = update_fail_counter(internet_ok, FAIL_INTERNET_FILE, "Internet")
+    if internet_fails >= MAX_FAILS:
+        reboot = True
+
+    cam_results: list[tuple[str, bool, int]] = []
+    for ip in CAM_IPS:
+        ok = ping_host(ip)
+        fails = update_fail_counter(ok, FAIL_CAM_FILES[ip], f"Camera {ip}", log_result=False)
+        cam_results.append((ip, ok, fails))
+        if fails >= MAX_FAILS:
+            reboot = True
+
+    if cam_results:
+        parts = []
+        any_failed = False
+        for ip, ok, fails in cam_results:
+            if ok:
+                parts.append(f"{ip} OK")
+            else:
+                parts.append(f"{ip} FAILED ({fails}/{MAX_FAILS})")
+                any_failed = True
+
+        summary = "Cameras check: " + ", ".join(parts)
+        if any_failed:
+            logging.warning(summary)
+        else:
+            logging.info(summary)
+
+    if reboot:
+        power_cycle(SHELLY_OUTPUT_ID, "Cameras / Router 12V", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard)
+        for ip in CAM_IPS:
+            write_int(FAIL_CAM_FILES[ip], 0)
+        write_int(FAIL_INTERNET_FILE, 0)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        GPIO.cleanup()
+    main()
