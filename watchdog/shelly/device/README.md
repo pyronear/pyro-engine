@@ -63,6 +63,19 @@ After editing `watchdog.js`:
 ./update_shelly_watchdog.sh
 ```
 
+## Optional: harden the Shelly
+
+When the Shelly is used only to run this watchdog, `harden_shelly.sh` disables
+the features it does not need: Cloud, MQTT, outbound WebSocket, the Wi-Fi access
+point and BLE, and removes any webhooks or schedules.
+
+```bash
+./harden_shelly.sh
+```
+
+After this the Shelly is only reachable over your main Wi-Fi (station mode). If
+that link is lost you need the physical reset button to bring the AP back.
+
 ## Check status
 
 ```bash
