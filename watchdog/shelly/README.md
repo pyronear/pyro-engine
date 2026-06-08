@@ -62,6 +62,7 @@ After editing `watchdog.js`:
 
 ```bash
 curl "http://192.168.1.97/rpc/Script.List"
+# use the id returned by Script.List (often 1 if it is the only script)
 curl "http://192.168.1.97/rpc/Script.GetStatus?id=1"
 ```
 
