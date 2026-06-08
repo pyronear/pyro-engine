@@ -254,13 +254,18 @@ def power_cycle(output_id: int, label: str, last_file: Path, daily_file: Path, g
     if not guard.can_reboot(now_ts, last_file, daily_file, label):
         return False
 
-    logging.warning("%s: power cycle triggered (Shelly output %s, off for %ss)", label, output_id, POWER_OFF_TIME)
-    if not shelly_power_cycle(output_id, POWER_OFF_TIME):
-        logging.error("%s: Shelly power cycle request failed", label)
-        return False
-
-    logging.info("%s: power cycle scheduled, output back on after %ss", label, POWER_OFF_TIME)
+    # Record the attempt before issuing it: output 0 may carry the router rail,
+    # so the Shelly can apply the cut and drop the network before we read the
+    # HTTP response. Counting up-front keeps the cooldown / daily limit enforced
+    # and prevents runaway cycling. The Shelly-side toggle_after timer restores
+    # the output regardless of whether the response reaches us.
     guard.record_reboot(now_ts, last_file, daily_file)
+
+    logging.warning("%s: power cycle triggered (Shelly output %s, off for %ss)", label, output_id, POWER_OFF_TIME)
+    if shelly_power_cycle(output_id, POWER_OFF_TIME):
+        logging.info("%s: power cycle scheduled, output back on after %ss", label, POWER_OFF_TIME)
+    else:
+        logging.error("%s: Shelly power cycle request not confirmed (may still have applied)", label)
     return True
 
 
