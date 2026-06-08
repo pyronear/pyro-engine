@@ -88,11 +88,11 @@ function checkPi() {
     "HTTP.GET",
     { url: PI_URL, timeout: 5 },
     function (result, error_code, error_message) {
-      if (error_code === 0) {
+      if (error_code === 0 && result && result.code === 200) {
         failures = 0;
       } else {
         failures = failures + 1;
-        print("Pi failed, count " + failures);
+        print("Pi failed, count " + failures + " (" + (error_message || "bad status") + ")");
 
         if (failures >= MAX_FAILURES) {
           failures = 0;
