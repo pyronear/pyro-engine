@@ -60,7 +60,7 @@ _INTERNET_HTTP_URLS = [
     "https://clients3.google.com/generate_204",
     "https://connectivitycheck.gstatic.com/generate_204",
     "http://cp.cloudflare.com",
-    "www.msftconnecttest.com/connecttest.txt",
+    "http://www.msftconnecttest.com/connecttest.txt",
 ]
 _INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
@@ -77,7 +77,7 @@ STATE_DIR = Path("/tmp")
 LOG_FILE = Path("/home/pi/watchdog_main.log")
 
 FAIL_INTERNET_FILE = STATE_DIR / "fail_internet"
-FAIL_CAM_FILES = {ip: STATE_DIR / f"fail_cam_{ip.split('.')[-1]}" for ip in CAM_IPS}
+FAIL_CAM_FILES = {ip: STATE_DIR / f"fail_cam_{ip.replace('.', '_')}" for ip in CAM_IPS}
 
 LAST_REBOOT_FILE = STATE_DIR / "last_reboot_output0"
 DAILY_REBOOT_FILE = STATE_DIR / "daily_reboots_output0"
@@ -152,15 +152,20 @@ def internet_check_ok() -> bool:
 # ================ SHELLY ==================
 
 
-def shelly_set_output(output_id: int, on: bool) -> bool:
-    query = urlencode({"id": output_id, "on": "true" if on else "false"})
+def shelly_power_cycle(output_id: int, off_seconds: int) -> bool:
+    """Switch the output off and let the Shelly turn it back on after off_seconds.
+
+    Using the Shelly-side ``toggle_after`` timer means the restore does not depend
+    on the main Pi still being able to reach the Shelly while the output is off.
+    """
+    query = urlencode({"id": output_id, "on": "false", "toggle_after": off_seconds})
     url = f"http://{SHELLY_IP}/rpc/Switch.Set?{query}"
     req = Request(url, method="GET")
     try:
         with urlopen(req, timeout=TIMEOUT) as resp:
             return resp.status == 200
     except Exception as exc:
-        logging.error("Shelly Switch.Set failed (id=%s, on=%s): %s", output_id, on, exc)
+        logging.error("Shelly Switch.Set failed (id=%s): %s", output_id, exc)
         return False
 
 
@@ -243,24 +248,20 @@ class RebootGuard:
         write_text(daily_file, f"{day} {count}")
 
 
-def power_cycle(output_id: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> None:
+def power_cycle(output_id: int, label: str, last_file: Path, daily_file: Path, guard: RebootGuard) -> bool:
     now_ts = int(time.time())
 
     if not guard.can_reboot(now_ts, last_file, daily_file, label):
-        return
+        return False
 
-    logging.warning("%s: power cycle triggered (Shelly output %s)", label, output_id)
-    if not shelly_set_output(output_id, False):
-        logging.error("%s: failed to switch output off, aborting power cycle", label)
-        return
+    logging.warning("%s: power cycle triggered (Shelly output %s, off for %ss)", label, output_id, POWER_OFF_TIME)
+    if not shelly_power_cycle(output_id, POWER_OFF_TIME):
+        logging.error("%s: Shelly power cycle request failed", label)
+        return False
 
-    time.sleep(POWER_OFF_TIME)
-    if not shelly_set_output(output_id, True):
-        logging.error("%s: failed to switch output back on", label)
-        return
-
-    logging.info("%s: power restored", label)
+    logging.info("%s: power cycle scheduled, output back on after %ss", label, POWER_OFF_TIME)
     guard.record_reboot(now_ts, last_file, daily_file)
+    return True
 
 
 # ================= MAIN ===================
@@ -303,8 +304,7 @@ def main() -> None:
         else:
             logging.info(summary)
 
-    if reboot:
-        power_cycle(SHELLY_OUTPUT_ID, "Cameras / Router 12V", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard)
+    if reboot and power_cycle(SHELLY_OUTPUT_ID, "Cameras / Router 12V", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard):
         for ip in CAM_IPS:
             write_int(FAIL_CAM_FILES[ip], 0)
         write_int(FAIL_INTERNET_FILE, 0)
