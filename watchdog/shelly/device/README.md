@@ -3,6 +3,10 @@
 This setup installs a Shelly script on a Shelly Pro device (works with any Pro
 model that exposes the scripting RPC API, e.g. Pro 2PM, Pro 4PM).
 
+It is the Shelly side of the Shelly-based watchdog. The Pi side lives in
+`../main_pi/watchdog.py` and power-cycles output 0 when the internet or the
+cameras are unreachable.
+
 The Shelly checks the Raspberry Pi health endpoint every 10 minutes.
 
 If the Pi health endpoint fails 3 times in a row, the Shelly reboots outputs 0 and 1.
@@ -46,7 +50,7 @@ curl "http://192.168.1.97/rpc/Shelly.GetDeviceInfo"
 ## First install
 
 ```bash
-cd watchdog/shelly
+cd watchdog/shelly/device
 chmod +x setup_shelly_watchdog.sh
 ./setup_shelly_watchdog.sh
 ```
