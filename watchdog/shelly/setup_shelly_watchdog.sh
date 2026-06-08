@@ -5,13 +5,15 @@ SHELLY_IP="${SHELLY_IP:-192.168.1.97}"
 SCRIPT_NAME="${SCRIPT_NAME:-pi_watchdog}"
 SCRIPT_FILE="${SCRIPT_FILE:-watchdog.js}"
 
+trap 'rm -f payload.json' EXIT
+
 echo "Checking Shelly at http://${SHELLY_IP}"
 curl -s "http://${SHELLY_IP}/rpc/Shelly.GetDeviceInfo" > /tmp/shelly_device_info.json
 cat /tmp/shelly_device_info.json
 echo
 
 echo "Looking for existing script named ${SCRIPT_NAME}"
-SCRIPT_ID=$(curl -s "http://${SHELLY_IP}/rpc/Script.List" | python3 - "$SCRIPT_NAME" <<'PY'
+SCRIPT_ID=$(curl -s "http://${SHELLY_IP}/rpc/Script.List" | python3 -c '
 import json
 import sys
 
@@ -24,8 +26,7 @@ for script in data.get("scripts", []):
         sys.exit(0)
 
 print("")
-PY
-)
+' "$SCRIPT_NAME")
 
 if [ -z "$SCRIPT_ID" ]; then
   echo "Creating script ${SCRIPT_NAME}"

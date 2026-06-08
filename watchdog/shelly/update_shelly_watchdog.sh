@@ -5,9 +5,11 @@ SHELLY_IP="${SHELLY_IP:-192.168.1.97}"
 SCRIPT_NAME="${SCRIPT_NAME:-pi_watchdog}"
 SCRIPT_FILE="${SCRIPT_FILE:-watchdog.js}"
 
+trap 'rm -f payload.json' EXIT
+
 echo "Finding script named ${SCRIPT_NAME}"
 
-SCRIPT_ID=$(curl -s "http://${SHELLY_IP}/rpc/Script.List" | python3 - "$SCRIPT_NAME" <<'PY'
+SCRIPT_ID=$(curl -s "http://${SHELLY_IP}/rpc/Script.List" | python3 -c '
 import json
 import sys
 
@@ -20,8 +22,7 @@ for script in data.get("scripts", []):
         sys.exit(0)
 
 raise SystemExit(f"Script not found: {script_name}")
-PY
-)
+' "$SCRIPT_NAME")
 
 echo "Updating script id ${SCRIPT_ID}"
 
