@@ -37,44 +37,78 @@ The daily reboot counter is stored in script memory. If the Shelly itself reboot
 
 Make sure the Shelly is not powered by one of the outputs it cuts.
 
-## Requirements
+## Setup procedure
 
-The machine running the setup script must be able to reach the Shelly on the local network.
+### 1. Put the Shelly on the network
 
-Example:
+Power the Shelly, then use the **Shelly Smart Control** app (iOS / Android):
+
+- The app connects to the device over **Bluetooth**.
+- Add the device and configure it to join your local **Wi-Fi** (station mode).
+- Give it a fixed address (static IP on the device, or a DHCP reservation on the
+  router) so the watchdog can always reach it. The examples here assume
+  `192.168.1.97`.
+
+Check it is reachable from the machine that will run the scripts:
 
 ```bash
 curl "http://192.168.1.97/rpc/Shelly.GetDeviceInfo"
 ```
 
-## First install
+### 2. Harden the Shelly
+
+The Shelly is dedicated to running the watchdog, so disable everything else
+with `harden_shelly.sh` (Cloud, MQTT, outbound WebSocket, Wi-Fi access point,
+BLE, and any webhooks/schedules):
 
 ```bash
 cd watchdog/shelly/device
-chmod +x setup_shelly_watchdog.sh
-./setup_shelly_watchdog.sh
+chmod +x harden_shelly.sh setup_shelly_watchdog.sh update_shelly_watchdog.sh
+SHELLY_IP="192.168.1.97" ./harden_shelly.sh
 ```
 
-## Update existing script
+After this the Shelly is only reachable over your main Wi-Fi (station mode), so
+make sure step 1 worked first. If that link is later lost you need the physical
+reset button to bring the access point back.
 
-After editing `watchdog.js`:
+### 3. Install the Shelly watchdog script
+
+Upload and start `watchdog.js` on the Shelly:
 
 ```bash
-./update_shelly_watchdog.sh
+SHELLY_IP="192.168.1.97" ./setup_shelly_watchdog.sh
 ```
 
-## Optional: harden the Shelly
-
-When the Shelly is used only to run this watchdog, `harden_shelly.sh` disables
-the features it does not need: Cloud, MQTT, outbound WebSocket, the Wi-Fi access
-point and BLE, and removes any webhooks or schedules.
+This is the Shelly side: it polls the Pi `/health` endpoint and reboots outputs
+0 and 1 if the Pi is unhealthy. To change the target URL or timings, edit
+`watchdog.js` and re-run:
 
 ```bash
-./harden_shelly.sh
+SHELLY_IP="192.168.1.97" ./update_shelly_watchdog.sh
 ```
 
-After this the Shelly is only reachable over your main Wi-Fi (station mode). If
-that link is lost you need the physical reset button to bring the AP back.
+### 4. Install the Pi-side watchdog
+
+The Pi side (`../main_pi/watchdog.py`) covers the other direction: it checks
+internet connectivity and the cameras, and asks the Shelly to power-cycle
+output 0 when they fail. Install it on the main Pi.
+
+Create `/home/pi/watchdog.env` (optional — values below are the defaults):
+
+```bash
+SHELLY_IP=192.168.1.97
+SHELLY_OUTPUT_ID=0
+CAM_IPS=192.168.1.11,192.168.1.12
+```
+
+Add a cron entry (`crontab -e`) to run it every 10 minutes:
+
+```cron
+5,15,25,35,45,55 * * * * /usr/bin/python3 /home/pi/pyro-engine/watchdog/shelly/main_pi/watchdog.py >> /home/pi/watchdog_main.log 2>&1
+```
+
+Adjust the path to match where this repo lives on the Pi. It logs to
+`/home/pi/watchdog_main.log`.
 
 ## Check status
 
