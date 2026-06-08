@@ -1,12 +1,13 @@
 # Shelly Pi watchdog
 
-This setup installs a Shelly script on a Shelly Pro 4PM.
+This setup installs a Shelly script on a Shelly Pro device (works with any Pro
+model that exposes the scripting RPC API, e.g. Pro 2PM, Pro 4PM).
 
 The Shelly checks the Raspberry Pi health endpoint every 10 minutes.
 
 If the Pi health endpoint fails 3 times in a row, the Shelly reboots outputs 0 and 1.
 
-Output mapping on Shelly Pro 4PM:
+Output mapping (RPC ids start at 0):
 
 | Shelly output | RPC id |
 | --- | --- |
