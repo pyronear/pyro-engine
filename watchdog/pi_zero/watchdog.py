@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
-Watchdog for the main Pi that pings the Pi Zero and power-cycles its relay
-after repeated failures, with cooldown and daily limits.
+Watchdog script for Pyro Engine hardware.
 
-Cron setup (every 10 minutes at :05):
+It checks the main Pi health endpoint and pings camera IPs, tracking failures
+and power-cycling relays after repeated failures with cooldown/daily limits.
+
+Cron setup (every 10 minutes):
   1) Edit crontab:  crontab -e
   2) Add the line:
-     5,15,25,35,45,55 * * * * /usr/bin/python3 /home/pi/pyro-engine/watchdog/main_pi/watchdog.py >> /home/pi/watchdog_main.log 2>&1
+     */10 * * * * /usr/bin/python3 /home/pi/pyro-engine/watchdog/pi_zero/watchdog.py >> /home/pi/watchdog.log 2>&1
 
-Adjust the paths to match where this repo lives on the Pi.
+Adjust the path to match where this repo lives on the Pi.
 """
 
 import datetime as dt
+import json
 import logging
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 import RPi.GPIO as GPIO
 
 # ================= CONFIG =================
 
-RELAY_PIZERO = 16
+RELAY_MAIN = 16
+RELAY_CAMS = 26
 
 _ENV_FILE = Path("/home/pi/watchdog.env")
 
@@ -43,10 +48,24 @@ def _load_env(path: Path) -> dict:
 
 _env = _load_env(_ENV_FILE)
 
-PIZERO_IP: str = _env.get("PIZERO_IP", "192.168.1.98")
+MAIN_PI_IP: str = _env.get("MAIN_PI_IP", "192.168.1.99")
+MAIN_HEALTH_URL = f"http://{MAIN_PI_IP}:8081/health"
+
+_cam_ips_raw = _env.get("CAM_IPS", "")
+CAM_IPS: list[str] = [ip.strip() for ip in _cam_ips_raw.split(",") if ip.strip()] or [
+    "192.168.1.11",
+    "192.168.1.12",
+]
+_INTERNET_HTTP_URLS = [
+    "https://clients3.google.com/generate_204",
+    "https://connectivitycheck.gstatic.com/generate_204",
+    "http://cp.cloudflare.com",
+    "www.msftconnecttest.com/connecttest.txt",
+]
+_INTERNET_PING_IPS = ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
 
 PING_COUNT = 2
-TIMEOUT = 2  # seconds, used for ping timeout
+TIMEOUT = 2  # seconds, used for ping and HTTP timeout
 
 MAX_FAILS = 3
 POWER_OFF_TIME = 15
@@ -55,11 +74,16 @@ COOLDOWN_SECONDS = 30 * 60
 MAX_REBOOTS_PER_DAY = 3
 
 STATE_DIR = Path("/tmp")
-LOG_FILE = Path("/home/pi/watchdog_main.log")
+LOG_FILE = Path("/home/pi/watchdog.log")
 
-FAIL_PIZERO_FILE = STATE_DIR / "fail_pizero"
-LAST_REBOOT_FILE = STATE_DIR / "last_reboot_pizero"
-DAILY_REBOOT_FILE = STATE_DIR / "daily_reboots_pizero"
+FAIL_MAIN_FILE = STATE_DIR / "fail_main"
+FAIL_INTERNET_FILE = STATE_DIR / "fail_internet"
+FAIL_CAM_FILES = {ip: STATE_DIR / f"fail_cam_{ip.split('.')[-1]}" for ip in CAM_IPS}
+
+MAIN_LAST_REBOOT_FILE = STATE_DIR / "last_reboot_main"
+CAMS_LAST_REBOOT_FILE = STATE_DIR / "last_reboot_cams"
+MAIN_DAILY_FILE = STATE_DIR / "daily_reboots_main"
+CAMS_DAILY_FILE = STATE_DIR / "daily_reboots_cams"
 
 # ================ LOGGING =================
 
@@ -75,7 +99,8 @@ logging.basicConfig(
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
 
-GPIO.setup(RELAY_PIZERO, GPIO.OUT, initial=GPIO.HIGH)
+GPIO.setup(RELAY_MAIN, GPIO.OUT, initial=GPIO.HIGH)
+GPIO.setup(RELAY_CAMS, GPIO.OUT, initial=GPIO.HIGH)
 
 # ================ IO HELPERS ==============
 
@@ -105,10 +130,10 @@ def write_text(path: Path, value: str) -> None:
 # ================ CHECKS ==================
 
 
-def ping_host(ip: str) -> bool:
+def ping_host(ip: str, count: int = PING_COUNT, timeout: int = TIMEOUT) -> bool:
     try:
         subprocess.check_output(
-            ["ping", "-c", str(PING_COUNT), "-W", str(TIMEOUT), ip],
+            ["ping", "-c", str(count), "-W", str(timeout), ip],
             stderr=subprocess.DEVNULL,
         )
         return True
@@ -116,17 +141,51 @@ def ping_host(ip: str) -> bool:
         return False
 
 
+def internet_check_ok() -> bool:
+    for url in _INTERNET_HTTP_URLS:
+        try:
+            with urlopen(url, timeout=TIMEOUT) as resp:
+                if resp.status in (200, 204):
+                    logging.info("Internet HTTP check OK: %s", url)
+                    return True
+        except Exception:  # noqa: S110
+            pass
+
+    for ip in _INTERNET_PING_IPS:
+        if ping_host(ip, count=1, timeout=TIMEOUT):
+            logging.info("Internet ping fallback OK: %s", ip)
+            return True
+
+    logging.warning("Internet connectivity FAILED")
+    return False
+
+
+def http_health_ok(url: str) -> bool:
+    req = Request(url, method="GET", headers={"accept": "application/json"})
+    try:
+        with urlopen(req, timeout=TIMEOUT) as resp:
+            if resp.status != 200:
+                return False
+            body = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(body)
+        return data.get("status") == "ok"
+    except Exception:
+        return False
+
+
 # ================ FAIL COUNTERS ===========
 
 
-def update_fail_counter(ok: bool, fail_file: Path, label: str) -> int:
+def update_fail_counter(ok: bool, fail_file: Path, label: str, log_result: bool = True) -> int:
     if ok:
-        logging.info("%s check OK", label)
+        if log_result:
+            logging.info("%s check OK", label)
         write_int(fail_file, 0)
         return 0
 
     fails = read_int(fail_file, 0) + 1
-    logging.warning("%s check FAILED (%s/%s)", label, fails, MAX_FAILS)
+    if log_result:
+        logging.warning("%s check FAILED (%s/%s)", label, fails, MAX_FAILS)
     write_int(fail_file, fails)
     return fails
 
@@ -217,10 +276,55 @@ def main() -> None:
         max_reboots_per_day=MAX_REBOOTS_PER_DAY,
     )
 
-    fails = update_fail_counter(ping_host(PIZERO_IP), FAIL_PIZERO_FILE, "Pi Zero")
-    if fails >= MAX_FAILS:
-        power_cycle(RELAY_PIZERO, "Pi Zero", LAST_REBOOT_FILE, DAILY_REBOOT_FILE, guard)
-        write_int(FAIL_PIZERO_FILE, 0)
+    reboot_12v = False
+
+    internet_ok = internet_check_ok()
+    internet_fails = update_fail_counter(internet_ok, FAIL_INTERNET_FILE, "Internet")
+    if internet_fails >= MAX_FAILS:
+        reboot_12v = True
+
+    if internet_ok:
+        main_ok = http_health_ok(MAIN_HEALTH_URL)
+        main_fails = update_fail_counter(main_ok, FAIL_MAIN_FILE, "Main Pi health")
+    else:
+        logging.warning("Skipping Main Pi health check (internet_ok=%s)", internet_ok)
+        main_fails = 0
+
+    if main_fails >= MAX_FAILS:
+        power_cycle(RELAY_MAIN, "Main Pi", MAIN_LAST_REBOOT_FILE, MAIN_DAILY_FILE, guard)
+        write_int(FAIL_MAIN_FILE, 0)
+
+    cam_results: list[tuple[str, bool, int]] = []
+
+    for ip in CAM_IPS:
+        ok = ping_host(ip)
+
+        fails = update_fail_counter(ok, FAIL_CAM_FILES[ip], f"Camera {ip}", log_result=False)
+        cam_results.append((ip, ok, fails))
+        if fails >= MAX_FAILS:
+            reboot_12v = True
+
+    if cam_results:
+        parts = []
+        any_failed = False
+        for ip, ok, fails in cam_results:
+            if ok:
+                parts.append(f"{ip} OK")
+            else:
+                parts.append(f"{ip} FAILED ({fails}/{MAX_FAILS})")
+                any_failed = True
+
+        summary = "Cameras check: " + ", ".join(parts)
+        if any_failed:
+            logging.warning(summary)
+        else:
+            logging.info(summary)
+
+    if reboot_12v:
+        power_cycle(RELAY_CAMS, "Cameras / Router 12V", CAMS_LAST_REBOOT_FILE, CAMS_DAILY_FILE, guard)
+        for ip in CAM_IPS:
+            write_int(FAIL_CAM_FILES[ip], 0)
+        write_int(FAIL_INTERNET_FILE, 0)
 
 
 if __name__ == "__main__":
