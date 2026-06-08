@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Harden a Shelly Pro used only to run the pi_watchdog script.
-# Disables cloud, remote access, radio features, webhooks and schedules
-# that the local watchdog does not need, and enables eco mode to reduce heat.
+# Disables cloud, remote access, radio features, webhooks and schedules that
+# the local watchdog does not need, enables eco mode to reduce heat, and forces
+# the watchdog outputs to power on at boot.
 #
 # The firmware may be a beta, so some RPC methods can be missing. Every call
 # tolerates failure and the script keeps going.
@@ -18,6 +19,10 @@ set -euo pipefail
 SHELLY_IP="${SHELLY_IP:-192.168.1.97}"
 BASE="http://${SHELLY_IP}/rpc"
 OUT_DIR="${OUT_DIR:-.}"
+
+# Outputs the watchdog manages; forced ON at boot so a Shelly restart does not
+# leave the Pi / cameras powered off. Space-separated RPC ids.
+WATCHDOG_OUTPUTS="${WATCHDOG_OUTPUTS:-0 1}"
 
 CURL=(curl --connect-timeout 5 --max-time 20 -fsS)
 
@@ -100,6 +105,13 @@ echo "== Eco mode on =="
 # Lowers CPU/radio activity when idle to reduce heat and power draw. The
 # watchdog does not need fast RPC responses, so the extra latency is harmless.
 rpc_post "Sys.SetConfig" '{"config":{"device":{"eco_mode":true}}}'
+
+echo "== Outputs ON by default at boot =="
+# Without this the outputs default to match_input and stay off after a Shelly
+# restart, leaving the Pi / cameras unpowered until manual intervention.
+for id in ${WATCHDOG_OUTPUTS}; do
+  rpc_post "Switch.SetConfig" "{\"id\":${id},\"config\":{\"initial_state\":\"on\"}}"
+done
 
 echo "== Webhooks delete if any =="
 hooks=$(safe_count "Webhook.List" "hooks")

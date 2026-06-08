@@ -59,7 +59,9 @@ curl "http://192.168.1.97/rpc/Shelly.GetDeviceInfo"
 
 The Shelly is dedicated to running the watchdog, so disable everything else
 with `harden_shelly.sh` (Cloud, MQTT, outbound WebSocket, Wi-Fi access point,
-BLE, and any webhooks/schedules) and enable eco mode to reduce heat:
+BLE, and any webhooks/schedules), enable eco mode to reduce heat, and force the
+watchdog outputs (0 and 1) to power on at boot so a Shelly restart does not
+leave the Pi unpowered:
 
 ```bash
 cd watchdog/shelly/device
