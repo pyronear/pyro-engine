@@ -10,7 +10,6 @@ import os
 import sys
 
 from dotenv import load_dotenv
-
 from reolink import ReolinkClient
 
 PAN_STEP_DEG = 45.0

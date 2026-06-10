@@ -11,7 +11,6 @@ import sys
 import time
 
 from dotenv import load_dotenv
-
 from reolink import ReolinkClient
 
 PRESETS = (0, 1, 2, 3)
@@ -56,9 +55,7 @@ def main() -> None:
         sys.exit(1)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(args.ips)) as executor:
-        futures = [
-            executor.submit(patrol_camera, ip, user, password, args.protocol, args.n_patrols) for ip in args.ips
-        ]
+        futures = [executor.submit(patrol_camera, ip, user, password, args.protocol, args.n_patrols) for ip in args.ips]
         for future in concurrent.futures.as_completed(futures):
             future.result()
 
