@@ -345,24 +345,27 @@ class Engine(Predictor):
 
         return round(left), round(top), round(right), round(bottom)
 
-    def _encode_detection_crop(self, frame: Image.Image, bboxes: list) -> Optional[bytes]:
-        """Crop the original frame around bboxes and encode the 224x224 JPEG to upload."""
+    def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
+        """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
         if not bboxes:
             return None
         img_w, img_h = frame.size
-        box = self._compute_crop_box(bboxes, img_w, img_h, padding=0.20)
-        crop = frame.crop(box)
-        crop_w, crop_h = crop.size
-        downscaling = crop_w > 224 or crop_h > 224
-        if (crop_w, crop_h) != (224, 224):
-            crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
-        buf = io.BytesIO()
-        if downscaling:
-            crop.save(buf, format="JPEG", quality=95)
-        else:
-            # Crop was at or below 224 — preserve detail with no chroma subsampling.
-            crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
-        return buf.getvalue()
+        crops: list[bytes] = []
+        for bbox in bboxes:
+            box = self._compute_crop_box([bbox], img_w, img_h, padding=0.20)
+            crop = frame.crop(box)
+            crop_w, crop_h = crop.size
+            downscaling = crop_w > 224 or crop_h > 224
+            if (crop_w, crop_h) != (224, 224):
+                crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
+            buf = io.BytesIO()
+            if downscaling:
+                crop.save(buf, format="JPEG", quality=95)
+            else:
+                # Crop was at or below 224 — preserve detail with no chroma subsampling.
+                crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
+            crops.append(buf.getvalue())
+        return crops
 
     @staticmethod
     def _backfill_bboxes(bboxes: list, preds: np.ndarray, tracked: np.ndarray) -> list:
@@ -438,10 +441,10 @@ class Engine(Predictor):
                         frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                         jpeg_bytes = stream.getvalue()
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    crop_bytes = self._encode_detection_crop(frame_info["frame"], bboxes)
+                    crops = self._encode_detection_crops(frame_info["frame"], bboxes)
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crop=crop_bytes)
+                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crops=crops)
 
                     try:
                         response.json()["id"]
