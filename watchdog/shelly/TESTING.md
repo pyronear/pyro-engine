@@ -33,6 +33,10 @@ stations. The Pi health URL actually tested is the one found in the
 `watchdog.js` uploaded on the Shelly; the script warns if it differs from
 the standard one.
 
+Every run also appends its report to `~/check_station.log` (timestamped,
+`--log-file` to override) on the machine running it — useful to review a
+`--cycle-pi` run after reconnecting to the Pi.
+
 ## Wiring tests (cut power for real)
 
 ```bash

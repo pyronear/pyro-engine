@@ -34,6 +34,10 @@ Station IPs are fixed and used as defaults:
 The Pi health URL actually tested is the one extracted from the watchdog.js
 code uploaded on the Shelly, so what is tested is what actually runs.
 
+Every line of the report is also appended (timestamped) to
+~/check_station.log (--log-file to override), so after a --cycle-pi cut
+the previous run can be reviewed once reconnected to the Pi.
+
 Usage:
   python3 check_station.py                     # all non-destructive checks
   python3 check_station.py --cycle-cameras    # + real power-cycle of output 0
@@ -56,6 +60,7 @@ DEFAULT_PI_URL = "http://192.168.1.99:8081/health"
 DEFAULT_CAM_IPS = ["192.168.1.11", "192.168.1.12"]
 SCRIPT_NAME = "pi_watchdog"
 CYCLE_PI_MARKER = Path.home() / ".check_station_cycle_pi"
+DEFAULT_LOG_FILE = Path.home() / "check_station.log"
 WATCHDOG_OUTPUTS = [0, 1]
 CRON_PATTERN = "watchdog/shelly/main_pi/watchdog.py"
 
@@ -63,31 +68,50 @@ PASS = 0
 FAIL = 0
 WARN = 0
 
+LOG_FILE = DEFAULT_LOG_FILE
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+def emit(line: str = "") -> None:
+    """Print a line and append it (timestamped, colorless) to the log file.
+
+    The log survives the --cycle-pi power cut, so after reconnecting to the
+    Pi the previous run can be reviewed in the file.
+    """
+    print(line, flush=True)
+    try:
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            for raw in line.split("\n"):
+                f.write(f"{stamp} | {_ANSI_RE.sub('', raw)}\n")
+    except Exception:  # noqa: S110 — never fail a check because of the log
+        pass
+
 
 def ok(msg: str) -> None:
     global PASS
     PASS += 1
-    print(f"\033[32m  PASS\033[0m  {msg}")
+    emit(f"\033[32m  PASS\033[0m  {msg}")
 
 
 def ko(msg: str) -> None:
     global FAIL
     FAIL += 1
-    print(f"\033[31m  FAIL\033[0m  {msg}")
+    emit(f"\033[31m  FAIL\033[0m  {msg}")
 
 
 def warn(msg: str) -> None:
     global WARN
     WARN += 1
-    print(f"\033[33m  WARN\033[0m  {msg}")
+    emit(f"\033[33m  WARN\033[0m  {msg}")
 
 
 def skip(msg: str) -> None:
-    print(f"\033[90m  SKIP\033[0m  {msg}")
+    emit(f"\033[90m  SKIP\033[0m  {msg}")
 
 
 def section(title: str) -> None:
-    print(f"\n=== {title} ===")
+    emit(f"\n=== {title} ===")
 
 
 # ---------------------------------------------------------------- helpers
@@ -333,7 +357,7 @@ def cycle_cameras_test(shelly_ip: str, cam_ips: list[str], off_seconds: int = 15
         return
     ok(f"camera {cam} up before the cut")
 
-    print(f"  cutting output 0 for {off_seconds}s (Shelly-side toggle_after restore)...")
+    emit(f"  cutting output 0 for {off_seconds}s (Shelly-side toggle_after restore)...")
     try:
         rpc(shelly_ip, "Switch.Set", {"id": 0, "on": False, "toggle_after": off_seconds})
     except Exception as exc:
@@ -347,7 +371,7 @@ def cycle_cameras_test(shelly_ip: str, cam_ips: list[str], off_seconds: int = 15
     else:
         ok(f"camera {cam} dropped while output 0 is OFF — wiring confirmed")
 
-    print("  waiting for the output to come back and the camera to boot (up to 180s)...")
+    emit("  waiting for the output to come back and the camera to boot (up to 180s)...")
     time.sleep(max(0, off_seconds - 4) + 2)
 
     deadline = time.time() + 180
@@ -374,11 +398,10 @@ def cycle_pi_test(shelly_ip: str, pi_url: str, mode: str, off_seconds: int = 15)
     section("Wiring test: power-cycle output 1 (main Pi)")
 
     if mode == "pi":
-        print("  !!! cutting power to THIS machine in 5s — the SSH session will drop")
-        print(f"  !!! the Shelly restores output 1 after {off_seconds}s, then the Pi reboots")
-        print("  !!! after reboot, re-run check_station.py: it will confirm the reboot")
-        print("  !!! Ctrl+C now to abort")
-        sys.stdout.flush()
+        emit("  !!! cutting power to THIS machine in 5s — the SSH session will drop")
+        emit(f"  !!! the Shelly restores output 1 after {off_seconds}s, then the Pi reboots")
+        emit(f"  !!! after reboot, re-run check_station.py or read {LOG_FILE}")
+        emit("  !!! Ctrl+C now to abort")
         time.sleep(5)
         CYCLE_PI_MARKER.write_text(str(int(time.time())))
         try:
@@ -399,7 +422,7 @@ def cycle_pi_test(shelly_ip: str, pi_url: str, mode: str, off_seconds: int = 15)
         return
     ok("Pi /health up before the cut")
 
-    print(f"  cutting output 1 for {off_seconds}s (Shelly-side toggle_after restore)...")
+    emit(f"  cutting output 1 for {off_seconds}s (Shelly-side toggle_after restore)...")
     try:
         rpc(shelly_ip, "Switch.Set", {"id": 1, "on": False, "toggle_after": off_seconds})
     except Exception as exc:
@@ -412,7 +435,7 @@ def cycle_pi_test(shelly_ip: str, pi_url: str, mode: str, off_seconds: int = 15)
     else:
         ok("Pi dropped while output 1 is OFF — wiring confirmed")
 
-    print("  waiting for the Pi to reboot and /health to answer again (up to 300s)...")
+    emit("  waiting for the Pi to reboot and /health to answer again (up to 300s)...")
     time.sleep(max(0, off_seconds - 4) + 2)
 
     deadline = time.time() + 300
@@ -472,16 +495,27 @@ def main() -> int:
         help="REALLY power-cycle output 1; from the Pi itself this cuts your session, "
         "re-run the script after reboot to get the verdict",
     )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=DEFAULT_LOG_FILE,
+        help=f"append the report to this file (default: {DEFAULT_LOG_FILE})",
+    )
     args = parser.parse_args()
 
+    global LOG_FILE
+    LOG_FILE = args.log_file
+
     shelly_ip = args.shelly_ip
+
+    emit(f"\n##### check_station.py run | args: {' '.join(sys.argv[1:]) or '(none)'} #####")
 
     script_code = check_shelly(shelly_ip)
     extracted_url = extract_pi_url(script_code)
     pi_url = args.pi_url or extracted_url or DEFAULT_PI_URL
 
     mode = args.mode if args.mode != "auto" else detect_mode(pi_url, shelly_ip)
-    print(f"\nMode: {mode}" + (" (auto-detected)" if args.mode == "auto" else ""))
+    emit(f"\nMode: {mode}" + (" (auto-detected)" if args.mode == "auto" else ""))
 
     check_shelly_to_pi(shelly_ip, pi_url, extracted_url)
     check_pi_side(args.cam_ips, pi_url, mode)
@@ -491,13 +525,14 @@ def main() -> int:
     if args.cycle_pi:
         cycle_pi_test(shelly_ip, pi_url, mode)
     if not args.cycle_cameras and not args.cycle_pi:
-        print("\n(wiring not proven: --cycle-cameras cuts output 0, --cycle-pi cuts output 1)")
+        emit("\n(wiring not proven: --cycle-cameras cuts output 0, --cycle-pi cuts output 1)")
 
-    print("\n================================")
-    print(f"  PASS: {PASS}   FAIL: {FAIL}   WARN: {WARN}")
-    print("================================")
+    emit("\n================================")
+    emit(f"  PASS: {PASS}   FAIL: {FAIL}   WARN: {WARN}")
+    emit("================================")
     if FAIL == 0:
-        print("Station OK.")
+        emit("Station OK.")
+    print(f"Full log: {LOG_FILE}")
     return 0 if FAIL == 0 else 1
 
 
