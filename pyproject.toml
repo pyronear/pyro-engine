@@ -147,6 +147,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "pyroengine/core.py" = ["BLE001"]
 "pyroengine/sensors.py" = ["S113", "S501", "ANN"]
 "watchdog/**.py" = ["CPY001", "S108", "S310", "S404", "S603", "S607", "BLE001", "LOG015"]
+"watchdog/shelly/check_station.py" = ["CPY001", "S310", "S603", "S607", "BLE001", "T201"]
 
 [tool.ruff.format]
 quote-style = "double"

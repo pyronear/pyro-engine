@@ -93,7 +93,7 @@ def section(title: str) -> None:
 # ---------------------------------------------------------------- helpers
 
 
-def rpc(shelly_ip: str, method: str, params: dict | None = None, timeout: int = 8):
+def rpc(shelly_ip: str, method: str, params: dict | None = None, timeout: int = 8) -> dict:
     """Call a Shelly Gen2 RPC method, return the result dict or raise."""
     body = json.dumps({"id": 1, "method": method, "params": params or {}}).encode()
     req = Request(
@@ -109,7 +109,7 @@ def rpc(shelly_ip: str, method: str, params: dict | None = None, timeout: int = 
     return data.get("result", {})
 
 
-def rpc_optional(shelly_ip: str, method: str, params: dict | None = None):
+def rpc_optional(shelly_ip: str, method: str, params: dict | None = None) -> dict | None:
     """RPC that returns None instead of raising (beta firmwares miss methods)."""
     try:
         return rpc(shelly_ip, method, params)
@@ -150,7 +150,7 @@ def linux_boot_time() -> int | None:
             if line.startswith("btime "):
                 return int(line.split()[1])
     except Exception:
-        pass
+        return None
     return None
 
 
@@ -221,7 +221,9 @@ def check_shelly(shelly_ip: str) -> str | None:
 
     # hardening (warn-level: the watchdog works without it)
     cloud = rpc_optional(shelly_ip, "Cloud.GetConfig") or {}
-    (ok if cloud.get("enable") is False else warn)("cloud disabled" if cloud.get("enable") is False else "cloud still enabled")
+    (ok if cloud.get("enable") is False else warn)(
+        "cloud disabled" if cloud.get("enable") is False else "cloud still enabled"
+    )
     wifi = rpc_optional(shelly_ip, "WiFi.GetConfig") or {}
     ap_on = (wifi.get("ap") or {}).get("enable")
     (ok if ap_on is False else warn)("WiFi AP disabled" if ap_on is False else "WiFi AP still enabled")
@@ -364,8 +366,7 @@ def cycle_cameras_test(shelly_ip: str, cam_ips: list[str], off_seconds: int = 15
     if status.get("output") is True:
         ok("output 0 restored ON by toggle_after")
     else:
-        ko("output 0 still OFF — turn it back on manually: "
-           f"curl 'http://{shelly_ip}/rpc/Switch.Set?id=0&on=true'")
+        ko(f"output 0 still OFF — turn it back on manually: curl 'http://{shelly_ip}/rpc/Switch.Set?id=0&on=true'")
 
 
 def cycle_pi_test(shelly_ip: str, pi_url: str, mode: str, off_seconds: int = 15) -> None:
@@ -430,8 +431,7 @@ def cycle_pi_test(shelly_ip: str, pi_url: str, mode: str, off_seconds: int = 15)
     if status.get("output") is True:
         ok("output 1 restored ON by toggle_after")
     else:
-        ko("output 1 still OFF — turn it back on manually: "
-           f"curl 'http://{shelly_ip}/rpc/Switch.Set?id=1&on=true'")
+        ko(f"output 1 still OFF — turn it back on manually: curl 'http://{shelly_ip}/rpc/Switch.Set?id=1&on=true'")
 
 
 # ----------------------------------------------------------------- main
