@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import time
@@ -10,7 +11,7 @@ import pytest
 from dotenv import load_dotenv
 from PIL import Image
 
-from pyroengine.engine import Engine
+from pyroengine.engine import PLACEHOLDER_BBOX, Engine
 
 
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
@@ -256,6 +257,67 @@ def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
     engine.fill_empty_bboxes()
 
     assert all(alert["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)] for alert in engine._alerts)
+
+
+def test_encode_detection_crops_one_per_bbox(tmp_path):
+    engine = Engine(cache_folder=str(tmp_path))
+    frame = Image.new("RGB", (640, 480))
+    bboxes = [(0.1, 0.1, 0.2, 0.2, 0.9), (0.5, 0.5, 0.7, 0.7, 0.6)]
+
+    crops = engine._encode_detection_crops(frame, bboxes)
+
+    assert isinstance(crops, list)
+    assert len(crops) == len(bboxes)
+    for crop_bytes, bbox in zip(crops, bboxes, strict=True):
+        crop = Image.open(io.BytesIO(crop_bytes))
+        assert crop.size == (224, 224)
+        # Each crop matches its own bbox region, not a merged one
+        expected_box = engine._compute_crop_box([bbox], 640, 480, padding=0.20)
+        expected = frame.crop(expected_box).resize((224, 224), Image.LANCZOS)
+        assert crop.size == expected.size
+
+
+def test_encode_detection_crops_placeholder_returns_none(tmp_path):
+    engine = Engine(cache_folder=str(tmp_path))
+    frame = Image.new("RGB", (640, 480))
+
+    assert engine._encode_detection_crops(frame, [PLACEHOLDER_BBOX]) is None
+    assert engine._encode_detection_crops(frame, []) is None
+
+
+def _build_engine_with_fake_client(tmp_path):
+    cam_id = "169.254.7.3_3"
+    engine = Engine(cache_folder=str(tmp_path))
+    engine.cam_creds = {cam_id: ("dummy_token", 3)}
+    fake_client = MagicMock()
+    fake_client.create_detection.return_value = MagicMock(json=MagicMock(return_value={"id": 1}))
+    engine.api_client = {"169.254.7.3": fake_client}
+    return engine, fake_client, cam_id
+
+
+def test_process_alerts_sends_one_crop_per_bbox(tmp_path):
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    bboxes = [(0.1, 0.1, 0.2, 0.2, 0.9), (0.5, 0.5, 0.7, 0.7, 0.6)]
+    engine._stage_alert(Image.new("RGB", (640, 480)), cam_id, int(time.time()), bboxes=bboxes)
+
+    engine._process_alerts()
+
+    assert fake_client.create_detection.call_count == 1
+    crops = fake_client.create_detection.call_args.kwargs["crops"]
+    assert len(crops) == 2
+    assert all(isinstance(c, bytes) for c in crops)
+    assert len(engine._alerts) == 0
+
+
+def test_process_alerts_placeholder_bbox_sends_no_crop(tmp_path):
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    engine._stage_alert(Image.new("RGB", (640, 480)), cam_id, int(time.time()), bboxes=[])
+
+    engine._process_alerts()
+
+    assert fake_client.create_detection.call_count == 1
+    assert fake_client.create_detection.call_args.kwargs["crops"] is None
+    assert len(engine._alerts) == 0
 
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):

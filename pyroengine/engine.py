@@ -24,6 +24,9 @@ from requests.models import Response
 
 __all__ = ["Engine"]
 
+# Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
+PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
+
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
@@ -364,6 +367,16 @@ class Engine(Predictor):
             crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
         return buf.getvalue()
 
+    def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
+        """Encode one crop per bbox, aligned by index, as required by the detection API."""
+        if not bboxes or list(bboxes) == [PLACEHOLDER_BBOX]:
+            return None
+        crops = [self._encode_detection_crop(frame, [bbox]) for bbox in bboxes]
+        # The API requires exactly one crop per bbox; drop crops entirely if any encode failed.
+        if not all(crops):
+            return None
+        return [crop for crop in crops if crop is not None]
+
     @staticmethod
     def _backfill_bboxes(bboxes: list, preds: np.ndarray, tracked: np.ndarray) -> list:
         """For each raw pred overlapping a tracked location but not yet in bboxes, append it with conf=0."""
@@ -405,7 +418,7 @@ class Engine(Predictor):
         # so the upload guard always sees a non-empty payload.
         for alert in self._alerts:
             if not alert["bboxes"]:
-                alert["bboxes"] = [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
+                alert["bboxes"] = [PLACEHOLDER_BBOX]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
@@ -438,10 +451,10 @@ class Engine(Predictor):
                         frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
                         jpeg_bytes = stream.getvalue()
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    crop_bytes = self._encode_detection_crop(frame_info["frame"], bboxes)
+                    crops = self._encode_detection_crops(frame_info["frame"], bboxes)
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crop=crop_bytes)
+                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crops=crops)
 
                     try:
                         response.json()["id"]
