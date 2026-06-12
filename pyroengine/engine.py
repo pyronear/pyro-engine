@@ -348,34 +348,28 @@ class Engine(Predictor):
 
         return round(left), round(top), round(right), round(bottom)
 
-    def _encode_detection_crop(self, frame: Image.Image, bboxes: list) -> Optional[bytes]:
-        """Crop the original frame around bboxes and encode the 224x224 JPEG to upload."""
-        if not bboxes:
-            return None
-        img_w, img_h = frame.size
-        box = self._compute_crop_box(bboxes, img_w, img_h, padding=0.20)
-        crop = frame.crop(box)
-        crop_w, crop_h = crop.size
-        downscaling = crop_w > 224 or crop_h > 224
-        if (crop_w, crop_h) != (224, 224):
-            crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
-        buf = io.BytesIO()
-        if downscaling:
-            crop.save(buf, format="JPEG", quality=95)
-        else:
-            # Crop was at or below 224 — preserve detail with no chroma subsampling.
-            crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
-        return buf.getvalue()
-
     def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
-        """Encode one crop per bbox, aligned by index, as required by the detection API."""
+        """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
+        # Placeholder-only alerts carry no real detection, so they upload no crops.
         if not bboxes or list(bboxes) == [PLACEHOLDER_BBOX]:
             return None
-        crops = [self._encode_detection_crop(frame, [bbox]) for bbox in bboxes]
-        # The API requires exactly one crop per bbox; drop crops entirely if any encode failed.
-        if not all(crops):
-            return None
-        return [crop for crop in crops if crop is not None]
+        img_w, img_h = frame.size
+        crops: list[bytes] = []
+        for bbox in bboxes:
+            box = self._compute_crop_box([bbox], img_w, img_h, padding=0.20)
+            crop = frame.crop(box)
+            crop_w, crop_h = crop.size
+            downscaling = crop_w > 224 or crop_h > 224
+            if (crop_w, crop_h) != (224, 224):
+                crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
+            buf = io.BytesIO()
+            if downscaling:
+                crop.save(buf, format="JPEG", quality=95)
+            else:
+                # Crop was at or below 224 — preserve detail with no chroma subsampling.
+                crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
+            crops.append(buf.getvalue())
+        return crops
 
     @staticmethod
     def _backfill_bboxes(bboxes: list, preds: np.ndarray, tracked: np.ndarray) -> list:

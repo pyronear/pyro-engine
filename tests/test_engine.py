@@ -260,21 +260,29 @@ def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
 
 
 def test_encode_detection_crops_one_per_bbox(tmp_path):
+    """_encode_detection_crops returns one 224x224 JPEG per bbox, aligned by index."""
     engine = Engine(cache_folder=str(tmp_path))
-    frame = Image.new("RGB", (640, 480))
-    bboxes = [(0.1, 0.1, 0.2, 0.2, 0.9), (0.5, 0.5, 0.7, 0.7, 0.6)]
+
+    frame = Image.new("RGB", (1280, 720))
+    # Paint the first bbox region red so the two crops have distinct content
+    frame.paste((255, 0, 0), (0, 0, 250, 250))
+    bboxes = [
+        (0.05, 0.05, 0.15, 0.15, 0.9),
+        (0.8, 0.7, 0.95, 0.9, 0.5),
+    ]
 
     crops = engine._encode_detection_crops(frame, bboxes)
 
-    assert isinstance(crops, list)
+    assert crops is not None
     assert len(crops) == len(bboxes)
-    for crop_bytes, bbox in zip(crops, bboxes, strict=True):
+    for crop_bytes in crops:
         crop = Image.open(io.BytesIO(crop_bytes))
+        assert crop.format == "JPEG"
         assert crop.size == (224, 224)
-        # Each crop matches its own bbox region, not a merged one
-        expected_box = engine._compute_crop_box([bbox], 640, 480, padding=0.20)
-        expected = frame.crop(expected_box).resize((224, 224), Image.LANCZOS)
-        assert crop.size == expected.size
+    # Distant bboxes must yield different crops, not one shared global crop
+    assert crops[0] != crops[1]
+
+    assert engine._encode_detection_crops(frame, []) is None
 
 
 def test_encode_detection_crops_placeholder_returns_none(tmp_path):
