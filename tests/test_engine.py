@@ -278,34 +278,36 @@ def test_build_context_crop(tmp_path):
     assert isinstance(context, ContextCrop)
     assert (context.full_w, context.full_h) == (2560, 1440)
     region = Image.open(io.BytesIO(context.jpeg))
-    # Region respects the 1024px floor and contains the pred area
-    assert min(region.size) >= 1024
+    # Small region kept at full resolution (no downscale): box size equals JPEG pixel size
+    assert region.size == (context.right - context.left, context.bottom - context.top)
+    # Field of view respects the 1024px floor and contains the pred area
+    assert context.right - context.left >= 1024
     assert context.left <= 0.4 * 2560
-    assert context.left + region.size[0] >= 0.45 * 2560
+    assert context.right >= 0.45 * 2560
     assert context.top <= 0.4 * 1440
-    assert context.top + region.size[1] >= 0.45 * 1440
+    assert context.bottom >= 0.45 * 1440
     # The point of the change: the stored payload is much smaller than the decoded frame
     assert len(context.jpeg) < 2560 * 1440 * 3 / 10
 
-    # Elongated bbox: both axes are sized on the largest union side so the square
-    # detection crop computed later (1.2x that side) always fits inside the region
+    # Wide field of view: 3x the largest preds-union side, so the frozen crop box stays
+    # inside it even when the bbox drifts. The detection crop box fits in full-frame coords.
     frame = Image.new("RGB", (3840, 2160))
     preds = np.array([[0.10, 0.45, 0.49, 0.50, 0.8]])  # ~1500x108 px
     context = engine._build_context_crop(frame, preds)
-    region = Image.open(io.BytesIO(context.jpeg))
     crop_box = engine._compute_crop_box(preds.tolist(), 3840, 2160)
-    assert region.size[1] >= crop_box[3] - crop_box[1]
-    assert region.size[0] >= crop_box[2] - crop_box[0]
+    assert context.right - context.left >= crop_box[2] - crop_box[0]
+    assert context.bottom - context.top >= crop_box[3] - crop_box[1]
 
-    # A large bbox is capped to the crop box plus a fixed margin, not blown up toward the
-    # full frame, so RAM stays bounded. The crop box still fits inside the region.
+    # A large region is bounded by downscaling the pixels, not by narrowing the view:
+    # the JPEG side is capped while the full-frame box stays wide.
     preds = np.array([[0.30, 0.30, 0.69, 0.69, 0.8]])  # ~1500x842 px square-ish, large
     context = engine._build_context_crop(frame, preds)
     region = Image.open(io.BytesIO(context.jpeg))
+    assert max(region.size) <= 1536  # pixels capped (CONTEXT_MAX_SIDE)
+    assert region.size != (context.right - context.left, context.bottom - context.top)  # downscaled
     crop_box = engine._compute_crop_box(preds.tolist(), 3840, 2160)
-    assert region.size[0] < 3840  # not the full frame width
-    assert region.size[0] >= crop_box[2] - crop_box[0]
-    assert region.size[1] >= crop_box[3] - crop_box[1]
+    assert context.right - context.left >= crop_box[2] - crop_box[0]
+    assert context.bottom - context.top >= crop_box[3] - crop_box[1]
 
 
 def test_cluster_bboxes():

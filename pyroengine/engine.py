@@ -28,12 +28,14 @@ __all__ = ["ContextCrop", "Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
-# Context crop kept in RAM instead of the full-resolution frame: the region is sized on what the
-# final crop needs (the frozen box, CROP_PADDING around the bbox) plus a fixed jitter margin on
-# each side, with a floor of CONTEXT_MIN_SIDE px. The margin is fixed (not a multiple of the bbox)
-# so a very large detection cannot blow the stored region up toward the full frame.
-CONTEXT_MARGIN = 384
+# Context crop kept in RAM instead of the full-resolution frame. The region keeps a wide field of
+# view (CONTEXT_PADDING -> 3x the preds-union side, floor CONTEXT_MIN_SIDE) so crops stay stable
+# even when smoke drifts a lot with the wind. RAM is bounded by downscaling the stored pixels above
+# CONTEXT_MAX_SIDE instead of narrowing the field of view: small regions keep full resolution (no
+# detail loss), large ones are downscaled, which is fine since the final crop is 224x224 anyway.
+CONTEXT_PADDING = 2.0
 CONTEXT_MIN_SIDE = 1024
+CONTEXT_MAX_SIDE = 1536
 CONTEXT_JPEG_QUALITY = 95
 # Padding applied around a bbox cluster for the final 224x224 detection crops.
 CROP_PADDING = 0.20
@@ -44,11 +46,18 @@ MIN_BBOX_COVERAGE = 0.8
 
 @dataclass(frozen=True)
 class ContextCrop:
-    """JPEG-encoded region of a full-resolution frame, with its position and the full frame size."""
+    """JPEG region of a full-resolution frame, kept in RAM instead of the whole frame.
+
+    (left, top, right, bottom) is the region's box in full-frame pixel coords. The stored JPEG may
+    be downscaled below that box size to cap RAM, so coordinates are mapped using the decoded JPEG
+    size, not the box size.
+    """
 
     jpeg: bytes
     left: int
     top: int
+    right: int
+    bottom: int
     full_w: int
     full_h: int
 
@@ -395,10 +404,10 @@ class Engine(Predictor):
     def _build_context_crop(self, frame: Image.Image, preds: np.ndarray) -> Optional[ContextCrop]:
         """Encode a region around the raw predictions instead of keeping the full frame.
 
-        Sized on what the final crop needs (the square frozen box, CROP_PADDING around the largest
-        preds-union side) plus a fixed CONTEXT_MARGIN on each side to absorb bbox jitter between the
-        frozen box and this frame, with a floor of CONTEXT_MIN_SIDE px. The fixed margin caps the
-        region size for very large detections instead of scaling it with the bbox.
+        The field of view is wide (3x the largest preds-union side, floor CONTEXT_MIN_SIDE) so the
+        frozen crop box stays inside it even when smoke drifts with the wind. RAM is bounded by
+        downscaling the pixels above CONTEXT_MAX_SIDE, not by narrowing the view: small regions keep
+        full resolution, large ones are downscaled (harmless since the final crop is 224x224).
         """
         if preds.shape[0] == 0:
             return None
@@ -409,7 +418,7 @@ class Engine(Predictor):
         x2 = float(arr[:, 2].max()) * img_w
         y2 = float(arr[:, 3].max()) * img_h
 
-        side = max(x2 - x1, y2 - y1) * (1.0 + CROP_PADDING) + 2.0 * CONTEXT_MARGIN
+        side = max(x2 - x1, y2 - y1) * (1.0 + CONTEXT_PADDING)
         target_w = min(max(side, CONTEXT_MIN_SIDE), img_w)
         target_h = min(max(side, CONTEXT_MIN_SIDE), img_h)
         cx = (x1 + x2) / 2.0
@@ -418,9 +427,19 @@ class Engine(Predictor):
             (cx - target_w / 2.0, cy - target_h / 2.0, cx + target_w / 2.0, cy + target_h / 2.0), img_w, img_h
         )
         left, top, right, bottom = (round(v) for v in box)
+        region = frame.crop((left, top, right, bottom))
+        longest = max(region.size)
+        if longest > CONTEXT_MAX_SIDE:
+            scale = CONTEXT_MAX_SIDE / longest
+            region = region.resize(
+                (max(1, round(region.size[0] * scale)), max(1, round(region.size[1] * scale))),
+                Image.LANCZOS,  # type: ignore[attr-defined]
+            )
         buf = io.BytesIO()
-        frame.crop((left, top, right, bottom)).save(buf, format="JPEG", quality=CONTEXT_JPEG_QUALITY)
-        return ContextCrop(jpeg=buf.getvalue(), left=left, top=top, full_w=img_w, full_h=img_h)
+        region.save(buf, format="JPEG", quality=CONTEXT_JPEG_QUALITY)
+        return ContextCrop(
+            jpeg=buf.getvalue(), left=left, top=top, right=right, bottom=bottom, full_w=img_w, full_h=img_h
+        )
 
     @staticmethod
     def _cluster_bboxes(bboxes: list) -> List[list]:
@@ -502,14 +521,18 @@ class Engine(Predictor):
             return None
         region = Image.open(io.BytesIO(context_crop.jpeg))
         region_w, region_h = region.size
+        # The stored region may be downscaled, so map full-frame crop boxes through the actual
+        # JPEG-to-region scale rather than assuming 1:1 with the full-frame box.
+        scale_x = region_w / max(context_crop.right - context_crop.left, 1)
+        scale_y = region_h / max(context_crop.bottom - context_crop.top, 1)
         crops: list[bytes] = []
         for box in crop_boxes:
             local = self._fit_box(
                 (
-                    box[0] - context_crop.left,
-                    box[1] - context_crop.top,
-                    box[2] - context_crop.left,
-                    box[3] - context_crop.top,
+                    (box[0] - context_crop.left) * scale_x,
+                    (box[1] - context_crop.top) * scale_y,
+                    (box[2] - context_crop.left) * scale_x,
+                    (box[3] - context_crop.top) * scale_y,
                 ),
                 region_w,
                 region_h,
