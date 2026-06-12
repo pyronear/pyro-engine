@@ -475,7 +475,27 @@ class Engine(Predictor):
             if not any(self._bbox_coverage(bbox, box, full_w, full_h) >= MIN_BBOX_COVERAGE for box in frozen)
         ]
         for cluster in self._cluster_bboxes(uncovered):
-            frozen.append(self._compute_crop_box(cluster, full_w, full_h))
+            self._add_crop_box(frozen, self._compute_crop_box(cluster, full_w, full_h))
+
+    @staticmethod
+    def _add_crop_box(frozen: list, box: Tuple[int, int, int, int]) -> None:
+        """Append a frozen box unless a near-identical one already exists.
+
+        A cluster too large to be covered by a square crop stays uncovered every frame and would
+        otherwise re-append the same capped box forever; the IoU guard bounds the box count.
+        """
+        if not any(Engine._box_iou(box, existing) > 0.9 for existing in frozen):
+            frozen.append(box)
+
+    @staticmethod
+    def _box_iou(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+        inter_w = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+        inter_h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+        inter = inter_w * inter_h
+        if inter <= 0:
+            return 0.0
+        union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+        return inter / union if union > 0 else 0.0
 
     @staticmethod
     def _bbox_coverage(bbox: list, box: Tuple[int, int, int, int], img_w: int, img_h: int) -> float:
@@ -492,21 +512,25 @@ class Engine(Predictor):
         return inter_w * inter_h / area
 
     def _assign_crop_boxes(self, bboxes: list, cam_key: str, full_w: int, full_h: int) -> list:
-        """Pick, for each bbox, the frozen event box with the largest overlap; add one if none overlaps."""
+        """Pick, for each bbox, the frozen box covering it best; add a fresh one if none covers it enough.
+
+        Gating on coverage (not raw overlap) keeps a drifted bbox from being cropped on an old box it
+        only grazes: when the best frozen box covers less than MIN_BBOX_COVERAGE, the bbox is given a
+        box centered on it — unless it is too large for any square crop to cover better.
+        """
         frozen = self._states[cam_key]["event_crop_boxes"]
         assigned = []
         for bbox in bboxes:
-            bx1, by1 = bbox[0] * full_w, bbox[1] * full_h
-            bx2, by2 = bbox[2] * full_w, bbox[3] * full_h
-            best, best_area = None, 0.0
+            best, best_cov = None, -1.0
             for box in frozen:
-                inter_w = max(0.0, min(bx2, box[2]) - max(bx1, box[0]))
-                inter_h = max(0.0, min(by2, box[3]) - max(by1, box[1]))
-                if inter_w * inter_h > best_area:
-                    best, best_area = box, inter_w * inter_h
-            if best is None:
-                best = self._compute_crop_box([bbox], full_w, full_h)
-                frozen.append(best)
+                cov = self._bbox_coverage(bbox, box, full_w, full_h)
+                if cov > best_cov:
+                    best, best_cov = box, cov
+            if best is None or best_cov < MIN_BBOX_COVERAGE:
+                fresh = self._compute_crop_box([bbox], full_w, full_h)
+                if best is None or self._bbox_coverage(bbox, fresh, full_w, full_h) > best_cov:
+                    self._add_crop_box(frozen, fresh)
+                    best = fresh
             assigned.append(best)
         return assigned
 

@@ -360,6 +360,39 @@ def test_event_crop_boxes_frozen(tmp_path):
     assert box_grown[2] - box_grown[0] > box_t0[2] - box_t0[0]
 
 
+def test_assign_crop_boxes_rejects_grazing_box(tmp_path):
+    """A bbox that only grazes an existing frozen box is given a fresh box, not cropped on the old one."""
+    engine = Engine(cache_folder=str(tmp_path))
+    cam_key = "dummy_cam"
+    engine._states[cam_key] = engine._new_state()
+    full_w, full_h = 3840, 2160
+
+    bbox = [0.40, 0.40, 0.45, 0.45, 0.8]
+    engine._update_event_crop_boxes(cam_key, [bbox], full_w, full_h)
+    box = engine._states[cam_key]["event_crop_boxes"][0]
+
+    # A drifted bbox whose corner just touches `box`: < MIN_BBOX_COVERAGE, so it must not reuse it
+    drifted = [0.452, 0.452, 0.502, 0.502, 0.5]
+    assigned = engine._assign_crop_boxes([drifted], cam_key, full_w, full_h)[0]
+    assert assigned != box
+    assert engine._bbox_coverage(drifted, assigned, full_w, full_h) >= 0.8
+
+
+def test_event_crop_boxes_bounded_for_oversized_cluster(tmp_path):
+    """An oversized cluster (uncoverable by a square crop) does not grow event_crop_boxes forever."""
+    engine = Engine(cache_folder=str(tmp_path))
+    cam_key = "dummy_cam"
+    engine._states[cam_key] = engine._new_state()
+    full_w, full_h = 3840, 2160
+
+    # Very wide bbox: the square crop is capped to img height, so it cannot cover 80% of the width.
+    wide = [0.05, 0.48, 0.95, 0.52, 0.8]
+    for _ in range(10):
+        engine._update_event_crop_boxes(cam_key, [wide], full_w, full_h)
+        engine._assign_crop_boxes([wide], cam_key, full_w, full_h)
+    assert len(engine._states[cam_key]["event_crop_boxes"]) <= 2
+
+
 def test_encode_detection_crops_one_per_bbox(tmp_path):
     """_encode_detection_crops returns one 224x224 JPEG per bbox, aligned by index."""
     engine = Engine(cache_folder=str(tmp_path))
