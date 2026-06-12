@@ -9,9 +9,10 @@ import shutil
 import signal
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Never, Optional, Tuple
+from typing import Any, Dict, List, Never, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -22,10 +23,29 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.models import Response
 
-__all__ = ["Engine"]
+__all__ = ["ContextCrop", "Engine"]
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
+
+# Context crop kept in RAM instead of the full-resolution frame: the region around the raw
+# predictions is expanded by CONTEXT_PADDING (3x the union size), with a floor of CONTEXT_MIN_SIDE px.
+CONTEXT_PADDING = 2.0
+CONTEXT_MIN_SIDE = 1024
+CONTEXT_JPEG_QUALITY = 95
+# Padding applied around a bbox cluster for the final 224x224 detection crops.
+CROP_PADDING = 0.20
+
+
+@dataclass(frozen=True)
+class ContextCrop:
+    """JPEG-encoded region of a full-resolution frame, with its position and the full frame size."""
+
+    jpeg: bytes
+    left: int
+    top: int
+    full_w: int
+    full_h: int
 
 
 def handler(_signum: int, _frame: object) -> Never:
@@ -141,6 +161,7 @@ class Engine(Predictor):
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
             state["last_pose_image_sent"] = init_now
+            state["event_crop_boxes"] = []
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -156,6 +177,7 @@ class Engine(Predictor):
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
         state["last_pose_image_sent"] = datetime.now()
+        state["event_crop_boxes"] = []
         return state
 
     def heartbeat(self, cam_id: str) -> Response:
@@ -272,8 +294,13 @@ class Engine(Predictor):
                 preds = np.reshape(preds, (-1, 5))
 
         logger.info(f"pred for {cam_key} : {preds}")
-        # Store the original frame in state so _process_alerts can crop at full resolution.
-        conf = self._update_states(original_frame, preds, cam_key, encoded_bytes=encoded_bytes)
+        # Store only a compact JPEG region around the detections so _process_alerts can crop at
+        # full resolution without keeping the whole original frame in RAM.
+        context_crop = self._build_context_crop(original_frame, preds)
+        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
+        if not self._states[cam_key]["ongoing"]:
+            # Event over: drop the frozen crop boxes so the next event re-centers.
+            self._states[cam_key]["event_crop_boxes"] = []
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
@@ -285,19 +312,29 @@ class Engine(Predictor):
 
         # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip)
         if self._states[cam_key]["ongoing"] and len(self.api_client) > 0 and isinstance(cam_id, str):
+            state = self._states[cam_key]
             # Collect every bbox the predictor emitted across the window; treat these as
             # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
-            tracked = [b[:4] for _, _, bbs, _, _, _ in self._states[cam_key]["last_predictions"] for b in bbs]
+            tracked = [b[:4] for _, _, bbs, _, _, _ in state["last_predictions"] for b in bbs]
             tracked_arr = np.array(tracked, dtype=np.float64) if tracked else np.empty((0, 4))
 
-            for idx, (frame_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
+            # Freeze one square crop box per cluster of tracked bboxes so every frame of the
+            # event is cropped at the same location, even when individual bboxes move.
+            full_size = next(((cc.full_w, cc.full_h) for cc, *_ in state["last_predictions"] if cc is not None), None)
+            if tracked and full_size is not None:
+                self._update_event_crop_boxes(cam_key, tracked, *full_size)
+
+            for idx, (crop_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(state["last_predictions"]):
                 if not is_staged:
                     bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
-                    self._stage_alert(frame_, cam_id, ts, bboxes, jpeg_bytes)
-                    self._states[cam_key]["last_predictions"][idx] = (
-                        frame_,
+                    crop_boxes = (
+                        self._assign_crop_boxes(bboxes, cam_key, *full_size)
+                        if bboxes and full_size is not None
+                        else None
+                    )
+                    self._stage_alert(crop_, cam_id, ts, bboxes, jpeg_bytes, crop_boxes)
+                    state["last_predictions"][idx] = (
+                        crop_,
                         preds_,
                         bboxes,
                         ts,
@@ -308,11 +345,31 @@ class Engine(Predictor):
         return float(conf)
 
     @staticmethod
+    def _fit_box(
+        box: Tuple[float, float, float, float], img_w: float, img_h: float
+    ) -> Tuple[float, float, float, float]:
+        """Shift a box back inside the image to preserve its size; clip only if larger than the image."""
+        left, top, right, bottom = box
+        if left < 0:
+            right -= left
+            left = 0
+        if top < 0:
+            bottom -= top
+            top = 0
+        if right > img_w:
+            left -= right - img_w
+            right = img_w
+        if bottom > img_h:
+            top -= bottom - img_h
+            bottom = img_h
+        return max(left, 0.0), max(top, 0.0), right, bottom
+
+    @staticmethod
     def _compute_crop_box(
         bboxes: list,
         img_w: int,
         img_h: int,
-        padding: float = 0.20,
+        padding: float = CROP_PADDING,
     ) -> Tuple[int, int, int, int]:
         """Square crop covering all bboxes (normalized coords) with `padding` on the largest dim."""
         arr = np.asarray(bboxes, dtype=float)
@@ -327,33 +384,119 @@ class Engine(Predictor):
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
         half = side / 2.0
-        left, top, right, bottom = cx - half, cy - half, cx + half, cy + half
-
-        # Shift back inside the image to keep the crop square instead of clipping.
-        if left < 0:
-            right -= left
-            left = 0
-        if top < 0:
-            bottom -= top
-            top = 0
-        if right > img_w:
-            left -= right - img_w
-            right = img_w
-        if bottom > img_h:
-            top -= bottom - img_h
-            bottom = img_h
-
+        left, top, right, bottom = Engine._fit_box((cx - half, cy - half, cx + half, cy + half), img_w, img_h)
         return round(left), round(top), round(right), round(bottom)
 
-    def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
-        """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
-        if not bboxes:
+    def _build_context_crop(self, frame: Image.Image, preds: np.ndarray) -> Optional[ContextCrop]:
+        """Encode a generous region around the raw predictions instead of keeping the full frame.
+
+        The region is the union of all raw preds expanded to 3x its size per axis (min 1024 px),
+        so the per-event crop boxes computed later almost always fall inside it.
+        """
+        if preds.shape[0] == 0:
             return None
         img_w, img_h = frame.size
-        crops: list[bytes] = []
+        arr = np.asarray(preds, dtype=float)
+        x1 = float(arr[:, 0].min()) * img_w
+        y1 = float(arr[:, 1].min()) * img_h
+        x2 = float(arr[:, 2].max()) * img_w
+        y2 = float(arr[:, 3].max()) * img_h
+
+        target_w = min(max((x2 - x1) * (1.0 + CONTEXT_PADDING), CONTEXT_MIN_SIDE), img_w)
+        target_h = min(max((y2 - y1) * (1.0 + CONTEXT_PADDING), CONTEXT_MIN_SIDE), img_h)
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        box = self._fit_box(
+            (cx - target_w / 2.0, cy - target_h / 2.0, cx + target_w / 2.0, cy + target_h / 2.0), img_w, img_h
+        )
+        left, top, right, bottom = (round(v) for v in box)
+        buf = io.BytesIO()
+        frame.crop((left, top, right, bottom)).save(buf, format="JPEG", quality=CONTEXT_JPEG_QUALITY)
+        return ContextCrop(jpeg=buf.getvalue(), left=left, top=top, full_w=img_w, full_h=img_h)
+
+    @staticmethod
+    def _cluster_bboxes(bboxes: list) -> List[list]:
+        """Group bboxes (normalized coords) into clusters of transitively overlapping boxes."""
+        clusters = [[list(b[:4]), [b]] for b in bboxes]
+        merged = True
+        while merged:
+            merged = False
+            for i in range(len(clusters)):
+                for j in range(i + 1, len(clusters)):
+                    a, b = clusters[i][0], clusters[j][0]
+                    if a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]:
+                        clusters[i][0] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                        clusters[i][1].extend(clusters[j][1])
+                        del clusters[j]
+                        merged = True
+                        break
+                if merged:
+                    break
+        return [members for _, members in clusters]
+
+    def _update_event_crop_boxes(self, cam_key: str, tracked_bboxes: list, full_w: int, full_h: int) -> None:
+        """Add a frozen square crop box for any cluster of tracked bboxes not yet covered.
+
+        Existing boxes are never moved or resized, so all crops of one event stay centered
+        on the same spot regardless of bbox jitter.
+        """
+        frozen = self._states[cam_key]["event_crop_boxes"]
+        uncovered = [
+            bbox for bbox in tracked_bboxes if not any(self._center_in_box(bbox, box, full_w, full_h) for box in frozen)
+        ]
+        for cluster in self._cluster_bboxes(uncovered):
+            frozen.append(self._compute_crop_box(cluster, full_w, full_h))
+
+    @staticmethod
+    def _center_in_box(bbox: list, box: Tuple[int, int, int, int], img_w: int, img_h: int) -> bool:
+        cx = (bbox[0] + bbox[2]) / 2.0 * img_w
+        cy = (bbox[1] + bbox[3]) / 2.0 * img_h
+        return box[0] <= cx <= box[2] and box[1] <= cy <= box[3]
+
+    def _assign_crop_boxes(self, bboxes: list, cam_key: str, full_w: int, full_h: int) -> list:
+        """Pick, for each bbox, the frozen event box with the largest overlap; add one if none overlaps."""
+        frozen = self._states[cam_key]["event_crop_boxes"]
+        assigned = []
         for bbox in bboxes:
-            box = self._compute_crop_box([bbox], img_w, img_h, padding=0.20)
-            crop = frame.crop(box)
+            bx1, by1 = bbox[0] * full_w, bbox[1] * full_h
+            bx2, by2 = bbox[2] * full_w, bbox[3] * full_h
+            best, best_area = None, 0.0
+            for box in frozen:
+                inter_w = max(0.0, min(bx2, box[2]) - max(bx1, box[0]))
+                inter_h = max(0.0, min(by2, box[3]) - max(by1, box[1]))
+                if inter_w * inter_h > best_area:
+                    best, best_area = box, inter_w * inter_h
+            if best is None:
+                best = self._compute_crop_box([bbox], full_w, full_h)
+                frozen.append(best)
+            assigned.append(best)
+        return assigned
+
+    def _encode_detection_crops(
+        self,
+        context_crop: Optional[ContextCrop],
+        bboxes: list,
+        crop_boxes: Optional[list],
+    ) -> Optional[list[bytes]]:
+        """Cut one 224x224 JPEG per bbox out of the context crop, using the frozen event crop boxes."""
+        if context_crop is None or not bboxes or not crop_boxes or len(crop_boxes) != len(bboxes):
+            return None
+        region = Image.open(io.BytesIO(context_crop.jpeg))
+        region_w, region_h = region.size
+        crops: list[bytes] = []
+        for box in crop_boxes:
+            local = self._fit_box(
+                (
+                    box[0] - context_crop.left,
+                    box[1] - context_crop.top,
+                    box[2] - context_crop.left,
+                    box[3] - context_crop.top,
+                ),
+                region_w,
+                region_h,
+            )
+            lx1, ly1, lx2, ly2 = (round(v) for v in local)
+            crop = region.crop((lx1, ly1, lx2, ly2))
             crop_w, crop_h = crop.size
             downscaling = crop_w > 224 or crop_h > 224
             if (crop_w, crop_h) != (224, 224):
@@ -386,21 +529,23 @@ class Engine(Predictor):
 
     def _stage_alert(
         self,
-        frame: Image.Image,
+        context_crop: Optional[ContextCrop],
         cam_id: str,
         ts: int,
         bboxes: list,
         jpeg_bytes: Optional[bytes] = None,
+        crop_boxes: Optional[list] = None,
     ) -> None:
         # Store information in the queue
         self._alerts.append({
-            "frame": frame,
+            "context_crop": context_crop,
             "cam_id": cam_id,
             "ts": ts,
             "media_id": None,
             "alert_id": None,
             "bboxes": bboxes,
             "jpeg_bytes": jpeg_bytes,
+            "crop_boxes": crop_boxes,
         })
 
     def fill_empty_bboxes(self) -> None:
@@ -422,7 +567,7 @@ class Engine(Predictor):
                 # Save alert on device
                 if self.save_detections_frames:
                     self._local_backup(
-                        frame_info["frame"],
+                        None,
                         cam_id,
                         encoded_bytes=frame_info.get("jpeg_bytes"),
                     )
@@ -436,12 +581,14 @@ class Engine(Predictor):
                         continue
                     jpeg_bytes = frame_info.get("jpeg_bytes")
                     if jpeg_bytes is None:
-                        # Fallback for cached alerts staged before this version
-                        stream = io.BytesIO()
-                        frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                        jpeg_bytes = stream.getvalue()
+                        # The full frame is no longer kept in RAM, so there is nothing to re-encode.
+                        logger.warning(f"Camera '{cam_id}' - skipping alert without encoded frame")
+                        self._alerts.popleft()
+                        continue
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    crops = self._encode_detection_crops(frame_info["frame"], bboxes)
+                    crops = self._encode_detection_crops(
+                        frame_info.get("context_crop"), bboxes, frame_info.get("crop_boxes")
+                    )
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crops=crops)
@@ -463,7 +610,7 @@ class Engine(Predictor):
 
     def _local_backup(
         self,
-        img: Image.Image,
+        img: Optional[Image.Image],
         cam_id: Optional[str],
         is_alert: bool = True,
         encoded_bytes: Optional[bytes] = None,
@@ -471,12 +618,14 @@ class Engine(Predictor):
         """Save image on device
 
         Args:
-            img (Image.Image): Image to save
+            img: Image to save; may be None when `encoded_bytes` is provided
             cam_id (str): camera id (ip address)
             is_alert (bool): is the frame an alert ?
             encoded_bytes: pre-encoded JPEG bytes — written verbatim when provided so the
                 on-disk file is byte-identical to what was scored / uploaded.
         """
+        if img is None and encoded_bytes is None:
+            return
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
         self._clean_local_backup(backup_cache)  # Dump old cache
@@ -485,7 +634,7 @@ class Engine(Predictor):
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         if encoded_bytes is not None:
             file.write_bytes(encoded_bytes)
-        else:
+        elif img is not None:
             img.save(file)
 
     def _clean_local_backup(self, backup_cache: Path) -> None:
