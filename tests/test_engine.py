@@ -297,6 +297,16 @@ def test_build_context_crop(tmp_path):
     assert region.size[1] >= crop_box[3] - crop_box[1]
     assert region.size[0] >= crop_box[2] - crop_box[0]
 
+    # A large bbox is capped to the crop box plus a fixed margin, not blown up toward the
+    # full frame, so RAM stays bounded. The crop box still fits inside the region.
+    preds = np.array([[0.30, 0.30, 0.69, 0.69, 0.8]])  # ~1500x842 px square-ish, large
+    context = engine._build_context_crop(frame, preds)
+    region = Image.open(io.BytesIO(context.jpeg))
+    crop_box = engine._compute_crop_box(preds.tolist(), 3840, 2160)
+    assert region.size[0] < 3840  # not the full frame width
+    assert region.size[0] >= crop_box[2] - crop_box[0]
+    assert region.size[1] >= crop_box[3] - crop_box[1]
+
 
 def test_cluster_bboxes():
     """Overlapping bboxes merge (transitively); distant ones stay separate."""

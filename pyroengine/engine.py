@@ -28,9 +28,11 @@ __all__ = ["ContextCrop", "Engine"]
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
-# Context crop kept in RAM instead of the full-resolution frame: the region around the raw
-# predictions is expanded by CONTEXT_PADDING (3x the union size), with a floor of CONTEXT_MIN_SIDE px.
-CONTEXT_PADDING = 2.0
+# Context crop kept in RAM instead of the full-resolution frame: the region is sized on what the
+# final crop needs (the frozen box, CROP_PADDING around the bbox) plus a fixed jitter margin on
+# each side, with a floor of CONTEXT_MIN_SIDE px. The margin is fixed (not a multiple of the bbox)
+# so a very large detection cannot blow the stored region up toward the full frame.
+CONTEXT_MARGIN = 384
 CONTEXT_MIN_SIDE = 1024
 CONTEXT_JPEG_QUALITY = 95
 # Padding applied around a bbox cluster for the final 224x224 detection crops.
@@ -391,10 +393,12 @@ class Engine(Predictor):
         return round(left), round(top), round(right), round(bottom)
 
     def _build_context_crop(self, frame: Image.Image, preds: np.ndarray) -> Optional[ContextCrop]:
-        """Encode a generous region around the raw predictions instead of keeping the full frame.
+        """Encode a region around the raw predictions instead of keeping the full frame.
 
-        Both axes are sized on the largest side of the raw preds union, expanded 3x (min 1024 px),
-        so the square per-event crop boxes computed later almost always fall inside it.
+        Sized on what the final crop needs (the square frozen box, CROP_PADDING around the largest
+        preds-union side) plus a fixed CONTEXT_MARGIN on each side to absorb bbox jitter between the
+        frozen box and this frame, with a floor of CONTEXT_MIN_SIDE px. The fixed margin caps the
+        region size for very large detections instead of scaling it with the bbox.
         """
         if preds.shape[0] == 0:
             return None
@@ -405,7 +409,7 @@ class Engine(Predictor):
         x2 = float(arr[:, 2].max()) * img_w
         y2 = float(arr[:, 3].max()) * img_h
 
-        side = max(x2 - x1, y2 - y1) * (1.0 + CONTEXT_PADDING)
+        side = max(x2 - x1, y2 - y1) * (1.0 + CROP_PADDING) + 2.0 * CONTEXT_MARGIN
         target_w = min(max(side, CONTEXT_MIN_SIDE), img_w)
         target_h = min(max(side, CONTEXT_MIN_SIDE), img_h)
         cx = (x1 + x2) / 2.0
