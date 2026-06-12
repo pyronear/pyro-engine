@@ -38,7 +38,10 @@ logger = logging.getLogger(__name__)
 # detail loss), large ones are downscaled, which is fine since the final crop is 224x224 anyway.
 CONTEXT_PADDING = 2.0
 CONTEXT_MIN_SIDE = 1024
-CONTEXT_MAX_SIDE = 1536
+# Pixel cap on the stored region. The final 224x224 crop is cut from the frozen box (~0.4x the
+# field of view), so this only needs to stay above ~560 px to avoid upscaling that crop; 1024 keeps
+# a ~410 px source for the largest detection while bounding RAM.
+CONTEXT_MAX_SIDE = 1024
 CONTEXT_JPEG_QUALITY = 95
 # Padding applied around a bbox cluster for the final 224x224 detection crops.
 CROP_PADDING = 0.20
@@ -316,12 +319,12 @@ class Engine(Predictor):
 
         logger.info(f"pred for {cam_key} : {preds}")
         # Store only a compact JPEG region around the detections so _process_alerts can crop at
-        # full resolution without keeping the whole original frame in RAM.
-        context_crop = self._build_context_crop(original_frame, preds)
-        if context_crop is None and self._states[cam_key]["ongoing"] and self._states[cam_key]["event_crop_boxes"]:
-            # No detection this frame but an alert is ongoing: still keep a crop of this frame at the
-            # known fire location so the alert sequence does not get a blank/placeholder frame.
-            context_crop = self._context_crop_for_boxes(original_frame, self._states[cam_key]["event_crop_boxes"])
+        # full resolution without keeping the whole original frame in RAM. During an ongoing alert,
+        # also cover the frozen fire locations so carried-forward / backfilled crops are cut from the
+        # right place even when this frame's preds are elsewhere or absent.
+        state = self._states[cam_key]
+        extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
+        context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
         if not self._states[cam_key]["ongoing"]:
             # Event over: drop the frozen crop boxes so the next event re-centers.
@@ -413,39 +416,38 @@ class Engine(Predictor):
         left, top, right, bottom = Engine._fit_box((cx - half, cy - half, cx + half, cy + half), img_w, img_h)
         return round(left), round(top), round(right), round(bottom)
 
-    def _build_context_crop(self, frame: Image.Image, preds: np.ndarray) -> Optional[ContextCrop]:
-        """Encode a region around the raw predictions instead of keeping the full frame.
+    def _build_context_crop(
+        self, frame: Image.Image, preds: np.ndarray, extra_boxes: Optional[list] = None
+    ) -> Optional[ContextCrop]:
+        """Encode a region around the predictions (and any extra px boxes) instead of the full frame.
 
-        The field of view is wide (3x the largest preds-union side, floor CONTEXT_MIN_SIDE) so the
-        frozen crop box stays inside it even when smoke drifts with the wind. RAM is bounded by
-        downscaling the pixels above CONTEXT_MAX_SIDE, not by narrowing the view: small regions keep
-        full resolution, large ones are downscaled (harmless since the final crop is 224x224).
+        The field of view is wide (3x the largest covered side, floor CONTEXT_MIN_SIDE) so the frozen
+        crop box stays inside it even when smoke drifts with the wind. RAM is bounded by downscaling
+        the pixels above CONTEXT_MAX_SIDE, not by narrowing the view: small regions keep full
+        resolution, large ones are downscaled (harmless since the final crop is 224x224).
+
+        `extra_boxes` (full-frame px) are folded into the covered region so that, during an ongoing
+        alert, the frozen fire locations are always inside the stored crop even when this frame's
+        preds are elsewhere or absent.
         """
-        if preds.shape[0] == 0:
-            return None
         img_w, img_h = frame.size
-        arr = np.asarray(preds, dtype=float)
-        union = (
-            float(arr[:, 0].min()) * img_w,
-            float(arr[:, 1].min()) * img_h,
-            float(arr[:, 2].max()) * img_w,
-            float(arr[:, 3].max()) * img_h,
-        )
-        return self._encode_context_region(frame, union)
-
-    def _context_crop_for_boxes(self, frame: Image.Image, boxes: list) -> Optional[ContextCrop]:
-        """Context crop around already-known crop boxes (full-frame px), for frames with no detection.
-
-        Lets an ongoing alert keep a crop of the current frame at the known fire location instead of
-        a blank/placeholder frame, so the alert sequence stays visually continuous.
-        """
-        if not boxes:
+        regions: list = []
+        if preds.shape[0]:
+            arr = np.asarray(preds, dtype=float)
+            regions.append((
+                float(arr[:, 0].min()) * img_w,
+                float(arr[:, 1].min()) * img_h,
+                float(arr[:, 2].max()) * img_w,
+                float(arr[:, 3].max()) * img_h,
+            ))
+        regions.extend((float(box[0]), float(box[1]), float(box[2]), float(box[3])) for box in extra_boxes or [])
+        if not regions:
             return None
         union = (
-            min(b[0] for b in boxes),
-            min(b[1] for b in boxes),
-            max(b[2] for b in boxes),
-            max(b[3] for b in boxes),
+            min(r[0] for r in regions),
+            min(r[1] for r in regions),
+            max(r[2] for r in regions),
+            max(r[3] for r in regions),
         )
         return self._encode_context_region(frame, union)
 

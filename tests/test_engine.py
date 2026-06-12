@@ -12,7 +12,7 @@ import pytest
 from dotenv import load_dotenv
 from PIL import Image
 
-from pyroengine.engine import PLACEHOLDER_BBOX, ContextCrop, Engine
+from pyroengine.engine import CONTEXT_MAX_SIDE, PLACEHOLDER_BBOX, ContextCrop, Engine
 
 
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
@@ -303,7 +303,7 @@ def test_build_context_crop(tmp_path):
     preds = np.array([[0.30, 0.30, 0.69, 0.69, 0.8]])  # ~1500x842 px square-ish, large
     context = engine._build_context_crop(frame, preds)
     region = Image.open(io.BytesIO(context.jpeg))
-    assert max(region.size) <= 1536  # pixels capped (CONTEXT_MAX_SIDE)
+    assert max(region.size) <= CONTEXT_MAX_SIDE  # pixels capped
     assert region.size != (context.right - context.left, context.bottom - context.top)  # downscaled
     crop_box = engine._compute_crop_box(preds.tolist(), 3840, 2160)
     assert context.right - context.left >= crop_box[2] - crop_box[0]
@@ -409,7 +409,7 @@ def test_no_detection_frame_keeps_crop_via_frozen_box(tmp_path):
     # Current frame has no detection: a context crop is still built around the frozen box,
     # and the carried-forward bbox (conf 0) yields a real 224 crop, not a placeholder.
     frame = Image.new("RGB", (full_w, full_h))
-    context = engine._context_crop_for_boxes(frame, boxes)
+    context = engine._build_context_crop(frame, np.empty((0, 5)), boxes)
     assert isinstance(context, ContextCrop)
 
     carried = [[bbox[0], bbox[1], bbox[2], bbox[3], 0.0]]
@@ -418,6 +418,31 @@ def test_no_detection_frame_keeps_crop_via_frozen_box(tmp_path):
     assert crops is not None
     assert len(crops) == 1
     assert Image.open(io.BytesIO(crops[0])).size == (224, 224)
+
+
+def test_context_crop_covers_frozen_box_when_pred_elsewhere(tmp_path):
+    """During an alert, a pred far from the fire still yields a context crop covering the frozen box."""
+    engine = Engine(cache_folder=str(tmp_path))
+    cam_key = "169.254.7.3_3"
+    engine._states[cam_key] = engine._new_state()
+    full_w, full_h = 1280, 720
+
+    fire = [0.80, 0.80, 0.88, 0.88, 0.8]
+    engine._update_event_crop_boxes(cam_key, [fire], full_w, full_h)
+    frozen = engine._states[cam_key]["event_crop_boxes"]
+    fire_box = frozen[0]
+
+    # This frame's only raw prediction is in the opposite corner, away from the fire.
+    far_pred = np.array([[0.05, 0.05, 0.10, 0.10, 0.6]])
+    frame = Image.new("RGB", (full_w, full_h))
+    context = engine._build_context_crop(frame, far_pred, frozen)
+
+    # The stored region must still fully contain the frozen fire box, so a carried-forward crop
+    # there is cut from the right place instead of being clipped to the far prediction.
+    assert context.left <= fire_box[0]
+    assert context.top <= fire_box[1]
+    assert context.right >= fire_box[2]
+    assert context.bottom >= fire_box[3]
 
 
 def test_encode_detection_crops_one_per_bbox(tmp_path):
