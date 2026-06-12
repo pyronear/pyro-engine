@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import time
@@ -256,6 +257,32 @@ def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
     engine.fill_empty_bboxes()
 
     assert all(alert["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)] for alert in engine._alerts)
+
+
+def test_encode_detection_crops_one_per_bbox(tmp_path):
+    """_encode_detection_crops returns one 224x224 JPEG per bbox, aligned by index."""
+    engine = Engine(cache_folder=str(tmp_path))
+
+    frame = Image.new("RGB", (1280, 720))
+    # Paint the first bbox region red so the two crops have distinct content
+    frame.paste((255, 0, 0), (0, 0, 250, 250))
+    bboxes = [
+        (0.05, 0.05, 0.15, 0.15, 0.9),
+        (0.8, 0.7, 0.95, 0.9, 0.5),
+    ]
+
+    crops = engine._encode_detection_crops(frame, bboxes)
+
+    assert crops is not None
+    assert len(crops) == len(bboxes)
+    for crop_bytes in crops:
+        crop = Image.open(io.BytesIO(crop_bytes))
+        assert crop.format == "JPEG"
+        assert crop.size == (224, 224)
+    # Distant bboxes must yield different crops, not one shared global crop
+    assert crops[0] != crops[1]
+
+    assert engine._encode_detection_crops(frame, []) is None
 
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):
