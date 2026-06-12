@@ -24,6 +24,9 @@ from requests.models import Response
 
 __all__ = ["Engine"]
 
+# Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
+PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
+
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
@@ -347,7 +350,9 @@ class Engine(Predictor):
 
     def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
         """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
-        if not bboxes:
+        # Placeholder-only alerts carry no real detection, so they upload no crops.
+        # Compare element-wise as tuples so list-form bboxes are handled too.
+        if not bboxes or all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
             return None
         img_w, img_h = frame.size
         crops: list[bytes] = []
@@ -408,7 +413,7 @@ class Engine(Predictor):
         # so the upload guard always sees a non-empty payload.
         for alert in self._alerts:
             if not alert["bboxes"]:
-                alert["bboxes"] = [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
+                alert["bboxes"] = [PLACEHOLDER_BBOX]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
