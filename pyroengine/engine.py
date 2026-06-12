@@ -42,6 +42,10 @@ CONTEXT_MAX_SIDE = 1536
 CONTEXT_JPEG_QUALITY = 95
 # Padding applied around a bbox cluster for the final 224x224 detection crops.
 CROP_PADDING = 0.20
+# JPEG quality of the uploaded 224x224 detection crop: a bit lower when it was downscaled from a
+# larger region, a bit higher for small crops kept near native size (still without chroma subsampling).
+CROP_JPEG_QUALITY_LARGE = 90
+CROP_JPEG_QUALITY_SMALL = 95
 # Fraction of a bbox that must fall inside a frozen event crop box to reuse it; below this
 # (e.g. a plume that outgrew its box) a new frozen box is added so the crop re-anchors once.
 MIN_BBOX_COVERAGE = 0.8
@@ -610,10 +614,10 @@ class Engine(Predictor):
                 crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
             buf = io.BytesIO()
             if downscaling:
-                crop.save(buf, format="JPEG", quality=95)
+                crop.save(buf, format="JPEG", quality=CROP_JPEG_QUALITY_LARGE)
             else:
-                # Crop was at or below 224 — preserve detail with no chroma subsampling.
-                crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
+                # Crop was at or below 224 — keep more detail with no chroma subsampling.
+                crop.save(buf, format="JPEG", quality=CROP_JPEG_QUALITY_SMALL, subsampling=0, optimize=True)
             crops.append(buf.getvalue())
         return crops
 
