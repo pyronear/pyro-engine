@@ -393,6 +393,33 @@ def test_event_crop_boxes_bounded_for_oversized_cluster(tmp_path):
     assert len(engine._states[cam_key]["event_crop_boxes"]) <= 2
 
 
+def test_no_detection_frame_keeps_crop_via_frozen_box(tmp_path):
+    """A frame with no detection during an alert still yields a crop at the known fire location."""
+    engine = Engine(cache_folder=str(tmp_path))
+    cam_key = "169.254.7.3_3"
+    engine._states[cam_key] = engine._new_state()
+    full_w, full_h = 1280, 720
+
+    # An earlier frame detected a fire and froze a crop box there.
+    bbox = [0.45, 0.45, 0.55, 0.55, 0.8]
+    engine._update_event_crop_boxes(cam_key, [bbox], full_w, full_h)
+    boxes = engine._states[cam_key]["event_crop_boxes"]
+    assert boxes
+
+    # Current frame has no detection: a context crop is still built around the frozen box,
+    # and the carried-forward bbox (conf 0) yields a real 224 crop, not a placeholder.
+    frame = Image.new("RGB", (full_w, full_h))
+    context = engine._context_crop_for_boxes(frame, boxes)
+    assert isinstance(context, ContextCrop)
+
+    carried = [[bbox[0], bbox[1], bbox[2], bbox[3], 0.0]]
+    crop_boxes = engine._assign_crop_boxes(carried, cam_key, full_w, full_h)
+    crops = engine._encode_detection_crops(context, carried, crop_boxes)
+    assert crops is not None
+    assert len(crops) == 1
+    assert Image.open(io.BytesIO(crops[0])).size == (224, 224)
+
+
 def test_encode_detection_crops_one_per_bbox(tmp_path):
     """_encode_detection_crops returns one 224x224 JPEG per bbox, aligned by index."""
     engine = Engine(cache_folder=str(tmp_path))

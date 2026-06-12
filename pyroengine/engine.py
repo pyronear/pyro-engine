@@ -314,6 +314,10 @@ class Engine(Predictor):
         # Store only a compact JPEG region around the detections so _process_alerts can crop at
         # full resolution without keeping the whole original frame in RAM.
         context_crop = self._build_context_crop(original_frame, preds)
+        if context_crop is None and self._states[cam_key]["ongoing"] and self._states[cam_key]["event_crop_boxes"]:
+            # No detection this frame but an alert is ongoing: still keep a crop of this frame at the
+            # known fire location so the alert sequence does not get a blank/placeholder frame.
+            context_crop = self._context_crop_for_boxes(original_frame, self._states[cam_key]["event_crop_boxes"])
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
         if not self._states[cam_key]["ongoing"]:
             # Event over: drop the frozen crop boxes so the next event re-centers.
@@ -341,23 +345,24 @@ class Engine(Predictor):
             if tracked and full_size is not None:
                 self._update_event_crop_boxes(cam_key, tracked, *full_size)
 
+            # Carry the last seen bbox forward onto frames with no detection so the alert keeps a
+            # crop at the same location instead of a blank/placeholder frame (conf 0 flags the carry).
+            last_seen: list = []
             for idx, (crop_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(state["last_predictions"]):
-                if not is_staged:
-                    bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
-                    crop_boxes = (
-                        self._assign_crop_boxes(bboxes, cam_key, *full_size)
-                        if bboxes and full_size is not None
-                        else None
-                    )
-                    self._stage_alert(crop_, cam_id, ts, bboxes, jpeg_bytes, crop_boxes)
-                    state["last_predictions"][idx] = (
-                        crop_,
-                        preds_,
-                        bboxes,
-                        ts,
-                        True,
-                        jpeg_bytes,
-                    )
+                if is_staged:
+                    if bboxes:
+                        last_seen = bboxes
+                    continue
+                bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
+                if not bboxes and last_seen:
+                    bboxes = [[b[0], b[1], b[2], b[3], 0.0] for b in last_seen]
+                if bboxes:
+                    last_seen = bboxes
+                crop_boxes = (
+                    self._assign_crop_boxes(bboxes, cam_key, *full_size) if bboxes and full_size is not None else None
+                )
+                self._stage_alert(crop_, cam_id, ts, bboxes, jpeg_bytes, crop_boxes)
+                state["last_predictions"][idx] = (crop_, preds_, bboxes, ts, True, jpeg_bytes)
 
         return float(conf)
 
@@ -416,11 +421,33 @@ class Engine(Predictor):
             return None
         img_w, img_h = frame.size
         arr = np.asarray(preds, dtype=float)
-        x1 = float(arr[:, 0].min()) * img_w
-        y1 = float(arr[:, 1].min()) * img_h
-        x2 = float(arr[:, 2].max()) * img_w
-        y2 = float(arr[:, 3].max()) * img_h
+        union = (
+            float(arr[:, 0].min()) * img_w,
+            float(arr[:, 1].min()) * img_h,
+            float(arr[:, 2].max()) * img_w,
+            float(arr[:, 3].max()) * img_h,
+        )
+        return self._encode_context_region(frame, union)
 
+    def _context_crop_for_boxes(self, frame: Image.Image, boxes: list) -> Optional[ContextCrop]:
+        """Context crop around already-known crop boxes (full-frame px), for frames with no detection.
+
+        Lets an ongoing alert keep a crop of the current frame at the known fire location instead of
+        a blank/placeholder frame, so the alert sequence stays visually continuous.
+        """
+        if not boxes:
+            return None
+        union = (
+            min(b[0] for b in boxes),
+            min(b[1] for b in boxes),
+            max(b[2] for b in boxes),
+            max(b[3] for b in boxes),
+        )
+        return self._encode_context_region(frame, union)
+
+    def _encode_context_region(self, frame: Image.Image, union_px: Tuple[float, float, float, float]) -> ContextCrop:
+        img_w, img_h = frame.size
+        x1, y1, x2, y2 = union_px
         side = max(x2 - x1, y2 - y1) * (1.0 + CONTEXT_PADDING)
         target_w = min(max(side, CONTEXT_MIN_SIDE), img_w)
         target_h = min(max(side, CONTEXT_MIN_SIDE), img_h)
