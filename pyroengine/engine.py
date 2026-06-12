@@ -351,7 +351,8 @@ class Engine(Predictor):
     def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
         """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
         # Placeholder-only alerts carry no real detection, so they upload no crops.
-        if not bboxes or list(bboxes) == [PLACEHOLDER_BBOX]:
+        # Compare element-wise as tuples so list-form bboxes are handled too.
+        if not bboxes or all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
             return None
         img_w, img_h = frame.size
         crops: list[bytes] = []

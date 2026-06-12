@@ -291,6 +291,21 @@ def test_encode_detection_crops_placeholder_returns_none(tmp_path):
 
     assert engine._encode_detection_crops(frame, [PLACEHOLDER_BBOX]) is None
     assert engine._encode_detection_crops(frame, []) is None
+    # List-form placeholder (not a tuple) must still be treated as placeholder-only
+    assert engine._encode_detection_crops(frame, [list(PLACEHOLDER_BBOX)]) is None
+
+
+def test_encode_detection_crops_mixed_placeholder_and_real_bbox(tmp_path):
+    """A placeholder mixed with a real bbox still yields one crop per bbox, not None."""
+    engine = Engine(cache_folder=str(tmp_path))
+    frame = Image.new("RGB", (640, 480))
+    bboxes = [PLACEHOLDER_BBOX, (0.5, 0.5, 0.7, 0.7, 0.6)]
+
+    crops = engine._encode_detection_crops(frame, bboxes)
+
+    assert crops is not None
+    assert len(crops) == len(bboxes)
+    assert all(isinstance(c, bytes) for c in crops)
 
 
 def _build_engine_with_fake_client(tmp_path):
