@@ -287,6 +287,16 @@ def test_build_context_crop(tmp_path):
     # The point of the change: the stored payload is much smaller than the decoded frame
     assert len(context.jpeg) < 2560 * 1440 * 3 / 10
 
+    # Elongated bbox: both axes are sized on the largest union side so the square
+    # detection crop computed later (1.2x that side) always fits inside the region
+    frame = Image.new("RGB", (3840, 2160))
+    preds = np.array([[0.10, 0.45, 0.49, 0.50, 0.8]])  # ~1500x108 px
+    context = engine._build_context_crop(frame, preds)
+    region = Image.open(io.BytesIO(context.jpeg))
+    crop_box = engine._compute_crop_box(preds.tolist(), 3840, 2160)
+    assert region.size[1] >= crop_box[3] - crop_box[1]
+    assert region.size[0] >= crop_box[2] - crop_box[0]
+
 
 def test_cluster_bboxes():
     """Overlapping bboxes merge (transitively); distant ones stay separate."""
@@ -329,9 +339,13 @@ def test_event_crop_boxes_frozen(tmp_path):
     assert boxes[0] == box_t0
     assert boxes[1] != box_t0
 
-    # Event over: frozen boxes are reset through state
-    engine._states[cam_key]["event_crop_boxes"] = []
-    assert engine._states[cam_key]["event_crop_boxes"] == []
+    # A plume that outgrew its frozen box re-anchors on a new, larger box
+    bbox_grown = [0.35, 0.35, 0.50, 0.50, 0.9]
+    engine._update_event_crop_boxes(cam_key, [bbox_grown, bbox_far], full_w, full_h)
+    assert len(engine._states[cam_key]["event_crop_boxes"]) == 3
+    box_grown = engine._assign_crop_boxes([bbox_grown], cam_key, full_w, full_h)[0]
+    assert box_grown != box_t0
+    assert box_grown[2] - box_grown[0] > box_t0[2] - box_t0[0]
 
 
 def test_encode_detection_crops_one_per_bbox(tmp_path):

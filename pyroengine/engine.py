@@ -35,6 +35,9 @@ CONTEXT_MIN_SIDE = 1024
 CONTEXT_JPEG_QUALITY = 95
 # Padding applied around a bbox cluster for the final 224x224 detection crops.
 CROP_PADDING = 0.20
+# Fraction of a bbox that must fall inside a frozen event crop box to reuse it; below this
+# (e.g. a plume that outgrew its box) a new frozen box is added so the crop re-anchors once.
+MIN_BBOX_COVERAGE = 0.8
 
 
 @dataclass(frozen=True)
@@ -390,8 +393,8 @@ class Engine(Predictor):
     def _build_context_crop(self, frame: Image.Image, preds: np.ndarray) -> Optional[ContextCrop]:
         """Encode a generous region around the raw predictions instead of keeping the full frame.
 
-        The region is the union of all raw preds expanded to 3x its size per axis (min 1024 px),
-        so the per-event crop boxes computed later almost always fall inside it.
+        Both axes are sized on the largest side of the raw preds union, expanded 3x (min 1024 px),
+        so the square per-event crop boxes computed later almost always fall inside it.
         """
         if preds.shape[0] == 0:
             return None
@@ -402,8 +405,9 @@ class Engine(Predictor):
         x2 = float(arr[:, 2].max()) * img_w
         y2 = float(arr[:, 3].max()) * img_h
 
-        target_w = min(max((x2 - x1) * (1.0 + CONTEXT_PADDING), CONTEXT_MIN_SIDE), img_w)
-        target_h = min(max((y2 - y1) * (1.0 + CONTEXT_PADDING), CONTEXT_MIN_SIDE), img_h)
+        side = max(x2 - x1, y2 - y1) * (1.0 + CONTEXT_PADDING)
+        target_w = min(max(side, CONTEXT_MIN_SIDE), img_w)
+        target_h = min(max(side, CONTEXT_MIN_SIDE), img_h)
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
         box = self._fit_box(
@@ -437,21 +441,32 @@ class Engine(Predictor):
     def _update_event_crop_boxes(self, cam_key: str, tracked_bboxes: list, full_w: int, full_h: int) -> None:
         """Add a frozen square crop box for any cluster of tracked bboxes not yet covered.
 
-        Existing boxes are never moved or resized, so all crops of one event stay centered
-        on the same spot regardless of bbox jitter.
+        Existing boxes are never moved or resized, so all crops of one event stay centered on the
+        same spot regardless of bbox jitter. A bbox that grew mostly outside its box (coverage below
+        MIN_BBOX_COVERAGE) gets a new frozen box, so the crop re-anchors once instead of drifting.
         """
         frozen = self._states[cam_key]["event_crop_boxes"]
         uncovered = [
-            bbox for bbox in tracked_bboxes if not any(self._center_in_box(bbox, box, full_w, full_h) for box in frozen)
+            bbox
+            for bbox in tracked_bboxes
+            if not any(self._bbox_coverage(bbox, box, full_w, full_h) >= MIN_BBOX_COVERAGE for box in frozen)
         ]
         for cluster in self._cluster_bboxes(uncovered):
             frozen.append(self._compute_crop_box(cluster, full_w, full_h))
 
     @staticmethod
-    def _center_in_box(bbox: list, box: Tuple[int, int, int, int], img_w: int, img_h: int) -> bool:
-        cx = (bbox[0] + bbox[2]) / 2.0 * img_w
-        cy = (bbox[1] + bbox[3]) / 2.0 * img_h
-        return box[0] <= cx <= box[2] and box[1] <= cy <= box[3]
+    def _bbox_coverage(bbox: list, box: Tuple[int, int, int, int], img_w: int, img_h: int) -> float:
+        """Fraction of the bbox area (normalized coords) covered by the pixel box."""
+        bx1, by1 = bbox[0] * img_w, bbox[1] * img_h
+        bx2, by2 = bbox[2] * img_w, bbox[3] * img_h
+        inter_w = max(0.0, min(bx2, box[2]) - max(bx1, box[0]))
+        inter_h = max(0.0, min(by2, box[3]) - max(by1, box[1]))
+        area = (bx2 - bx1) * (by2 - by1)
+        if area <= 0:
+            # Degenerate bbox: covered if its center falls inside the box
+            cx, cy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+            return 1.0 if box[0] <= cx <= box[2] and box[1] <= cy <= box[3] else 0.0
+        return inter_w * inter_h / area
 
     def _assign_crop_boxes(self, bboxes: list, cam_key: str, full_w: int, full_h: int) -> list:
         """Pick, for each bbox, the frozen event box with the largest overlap; add one if none overlaps."""
@@ -496,6 +511,14 @@ class Engine(Predictor):
                 region_h,
             )
             lx1, ly1, lx2, ly2 = (round(v) for v in local)
+            # A frozen box larger than the stored region gets clipped above; re-square the
+            # crop on its center so the 224x224 resize never distorts the aspect ratio.
+            w, h = lx2 - lx1, ly2 - ly1
+            if w != h:
+                side = min(w, h)
+                lx1 += (w - side) // 2
+                ly1 += (h - side) // 2
+                lx2, ly2 = lx1 + side, ly1 + side
             crop = region.crop((lx1, ly1, lx2, ly2))
             crop_w, crop_h = crop.size
             downscaling = crop_w > 224 or crop_h > 224
