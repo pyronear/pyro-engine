@@ -25,6 +25,9 @@ from requests.models import Response
 
 __all__ = ["ContextCrop", "Engine"]
 
+# Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
+PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
+
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
@@ -543,6 +546,9 @@ class Engine(Predictor):
         """Cut one 224x224 JPEG per bbox out of the context crop, using the frozen event crop boxes."""
         if context_crop is None or not bboxes or not crop_boxes or len(crop_boxes) != len(bboxes):
             return None
+        # Placeholder-only alerts carry no real detection, so they upload no crops.
+        if all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
+            return None
         region = Image.open(io.BytesIO(context_crop.jpeg))
         region_w, region_h = region.size
         # The stored region may be downscaled, so map full-frame crop boxes through the actual
@@ -627,7 +633,7 @@ class Engine(Predictor):
         # so the upload guard always sees a non-empty payload.
         for alert in self._alerts:
             if not alert["bboxes"]:
-                alert["bboxes"] = [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
+                alert["bboxes"] = [PLACEHOLDER_BBOX]
 
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
