@@ -204,6 +204,21 @@ class Engine(Predictor):
         state["event_crop_boxes"] = []
         return state
 
+    def _end_event(self, cam_key: str) -> None:
+        """Reset per-event staging state when an alert ends.
+
+        Drops the frozen crop boxes so the next event re-centers, and clears the bboxes of
+        already-staged frames still lingering in the window so a previous event's fire location
+        cannot seed the next event's carry-forward / tracked set. Unstaged frames (the lead-up to
+        the next event) keep their bboxes.
+        """
+        state = self._states[cam_key]
+        state["event_crop_boxes"] = []
+        window = state["last_predictions"]
+        for i, entry in enumerate(window):
+            if entry[4]:  # is_staged: belongs to the event that just ended
+                window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
+
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
         ip = cam_id.split("_")[0]
@@ -327,8 +342,7 @@ class Engine(Predictor):
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
         if not self._states[cam_key]["ongoing"]:
-            # Event over: drop the frozen crop boxes so the next event re-centers.
-            self._states[cam_key]["event_crop_boxes"] = []
+            self._end_event(cam_key)
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)

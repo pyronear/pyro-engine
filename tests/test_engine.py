@@ -445,6 +445,28 @@ def test_context_crop_covers_frozen_box_when_pred_elsewhere(tmp_path):
     assert context.bottom >= fire_box[3]
 
 
+def test_end_event_clears_staged_bboxes_only(tmp_path):
+    """Ending an event drops frozen boxes and staged bboxes, but keeps unstaged lead-up frames."""
+    engine = Engine(cache_folder=str(tmp_path))
+    cam_key = "169.254.7.3_3"
+    engine._states[cam_key] = engine._new_state()
+    state = engine._states[cam_key]
+    state["event_crop_boxes"] = [(10, 10, 50, 50)]
+
+    staged = (None, np.empty((0, 5)), [[0.8, 0.8, 0.9, 0.9, 0.7]], "t1", True, b"x")
+    lead_up = (None, np.empty((0, 5)), [[0.1, 0.1, 0.2, 0.2, 0.6]], "t2", False, b"y")
+    state["last_predictions"].append(staged)
+    state["last_predictions"].append(lead_up)
+
+    engine._end_event(cam_key)
+
+    assert state["event_crop_boxes"] == []
+    # Staged frame from the ended event: bbox cleared so it cannot seed the next event's carry-forward
+    assert state["last_predictions"][0][2] == []
+    # Unstaged lead-up frame: untouched
+    assert state["last_predictions"][1][2] == [[0.1, 0.1, 0.2, 0.2, 0.6]]
+
+
 def test_encode_detection_crops_one_per_bbox(tmp_path):
     """_encode_detection_crops returns one 224x224 JPEG per bbox, aligned by index."""
     engine = Engine(cache_folder=str(tmp_path))
