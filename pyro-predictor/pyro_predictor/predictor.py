@@ -82,11 +82,13 @@ class Predictor:
 
     def _update_states(
         self,
-        frame: Image.Image,
+        frame: Any,
         preds: np.ndarray,
         cam_key: str,
         encoded_bytes: Optional[bytes] = None,
     ) -> float:
+        # `frame` is stored opaquely in the window and replayed at staging time; callers may
+        # pass a full PIL image or any lighter payload (e.g. Engine passes a compact context crop).
         nb = self.nb_consecutive_frames
         prev_ongoing = self._states[cam_key]["ongoing"]
         # Hysteresis: once alerting, relax the threshold so the alert keeps emitting frames.
