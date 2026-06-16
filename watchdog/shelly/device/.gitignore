@@ -1,0 +1,4 @@
+# Runtime artifacts produced by the helper scripts
+payload.json
+shelly_methods.json
+shelly_config_after_hardening.json
