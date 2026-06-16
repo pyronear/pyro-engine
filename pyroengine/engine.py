@@ -9,9 +9,10 @@ import shutil
 import signal
 import time
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Never, Optional, Tuple
+from typing import Any, Dict, List, Never, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -22,13 +23,53 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.models import Response
 
-__all__ = ["Engine"]
+__all__ = ["ContextCrop", "Engine"]
 
 # Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
 PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
+
+# Context crop kept in RAM instead of the full-resolution frame. The region keeps a wide field of
+# view (CONTEXT_PADDING -> 3x the preds-union side, floor CONTEXT_MIN_SIDE) so crops stay stable
+# even when smoke drifts a lot with the wind. RAM is bounded by downscaling the stored pixels above
+# CONTEXT_MAX_SIDE instead of narrowing the field of view: small regions keep full resolution (no
+# detail loss), large ones are downscaled, which is fine since the final crop is 224x224 anyway.
+CONTEXT_PADDING = 2.0
+CONTEXT_MIN_SIDE = 1024
+# Pixel cap on the stored region. The final 224x224 crop is cut from the frozen box (~0.4x the
+# field of view), so this only needs to stay above ~560 px to avoid upscaling that crop; 1024 keeps
+# a ~410 px source for the largest detection while bounding RAM.
+CONTEXT_MAX_SIDE = 1024
+CONTEXT_JPEG_QUALITY = 95
+# Padding applied around a bbox cluster for the final 224x224 detection crops.
+CROP_PADDING = 0.20
+# JPEG quality of the uploaded 224x224 detection crop: a bit lower when it was downscaled from a
+# larger region, a bit higher for small crops kept near native size (still without chroma subsampling).
+CROP_JPEG_QUALITY_LARGE = 90
+CROP_JPEG_QUALITY_SMALL = 95
+# Fraction of a bbox that must fall inside a frozen event crop box to reuse it; below this
+# (e.g. a plume that outgrew its box) a new frozen box is added so the crop re-anchors once.
+MIN_BBOX_COVERAGE = 0.8
+
+
+@dataclass(frozen=True)
+class ContextCrop:
+    """JPEG region of a full-resolution frame, kept in RAM instead of the whole frame.
+
+    (left, top, right, bottom) is the region's box in full-frame pixel coords. The stored JPEG may
+    be downscaled below that box size to cap RAM, so coordinates are mapped using the decoded JPEG
+    size, not the box size.
+    """
+
+    jpeg: bytes
+    left: int
+    top: int
+    right: int
+    bottom: int
+    full_w: int
+    full_h: int
 
 
 def handler(_signum: int, _frame: object) -> Never:
@@ -144,6 +185,7 @@ class Engine(Predictor):
             state["last_image_sent"] = None
             state["last_bbox_mask_fetch"] = None
             state["last_pose_image_sent"] = init_now
+            state["event_crop_boxes"] = []
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -159,7 +201,23 @@ class Engine(Predictor):
         state["last_image_sent"] = None
         state["last_bbox_mask_fetch"] = None
         state["last_pose_image_sent"] = datetime.now()
+        state["event_crop_boxes"] = []
         return state
+
+    def _end_event(self, cam_key: str) -> None:
+        """Reset per-event staging state when an alert ends.
+
+        Drops the frozen crop boxes so the next event re-centers, and clears the bboxes of
+        already-staged frames still lingering in the window so a previous event's fire location
+        cannot seed the next event's carry-forward / tracked set. Unstaged frames (the lead-up to
+        the next event) keep their bboxes.
+        """
+        state = self._states[cam_key]
+        state["event_crop_boxes"] = []
+        window = state["last_predictions"]
+        for i, entry in enumerate(window):
+            if entry[4]:  # is_staged: belongs to the event that just ended
+                window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
     def heartbeat(self, cam_id: str) -> Response:
         """Updates last ping of device"""
@@ -275,8 +333,16 @@ class Engine(Predictor):
                 preds = np.reshape(preds, (-1, 5))
 
         logger.info(f"pred for {cam_key} : {preds}")
-        # Store the original frame in state so _process_alerts can crop at full resolution.
-        conf = self._update_states(original_frame, preds, cam_key, encoded_bytes=encoded_bytes)
+        # Store only a compact JPEG region around the detections so _process_alerts can crop at
+        # full resolution without keeping the whole original frame in RAM. During an ongoing alert,
+        # also cover the frozen fire locations so carried-forward / backfilled crops are cut from the
+        # right place even when this frame's preds are elsewhere or absent.
+        state = self._states[cam_key]
+        extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
+        context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
+        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
+        if not self._states[cam_key]["ongoing"]:
+            self._end_event(cam_key)
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
@@ -288,34 +354,65 @@ class Engine(Predictor):
 
         # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip)
         if self._states[cam_key]["ongoing"] and len(self.api_client) > 0 and isinstance(cam_id, str):
+            state = self._states[cam_key]
             # Collect every bbox the predictor emitted across the window; treat these as
             # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
-            tracked = [b[:4] for _, _, bbs, _, _, _ in self._states[cam_key]["last_predictions"] for b in bbs]
+            tracked = [b[:4] for _, _, bbs, _, _, _ in state["last_predictions"] for b in bbs]
             tracked_arr = np.array(tracked, dtype=np.float64) if tracked else np.empty((0, 4))
 
-            for idx, (frame_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(
-                self._states[cam_key]["last_predictions"]
-            ):
-                if not is_staged:
-                    bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
-                    self._stage_alert(frame_, cam_id, ts, bboxes, jpeg_bytes)
-                    self._states[cam_key]["last_predictions"][idx] = (
-                        frame_,
-                        preds_,
-                        bboxes,
-                        ts,
-                        True,
-                        jpeg_bytes,
-                    )
+            # Freeze one square crop box per cluster of tracked bboxes so every frame of the
+            # event is cropped at the same location, even when individual bboxes move.
+            full_size = next(((cc.full_w, cc.full_h) for cc, *_ in state["last_predictions"] if cc is not None), None)
+            if tracked and full_size is not None:
+                self._update_event_crop_boxes(cam_key, tracked, *full_size)
+
+            # Carry the last seen bbox forward onto frames with no detection so the alert keeps a
+            # crop at the same location instead of a blank/placeholder frame (conf 0 flags the carry).
+            last_seen: list = []
+            for idx, (crop_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(state["last_predictions"]):
+                if is_staged:
+                    if bboxes:
+                        last_seen = bboxes
+                    continue
+                bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
+                if not bboxes and last_seen:
+                    bboxes = [[b[0], b[1], b[2], b[3], 0.0] for b in last_seen]
+                if bboxes:
+                    last_seen = bboxes
+                crop_boxes = (
+                    self._assign_crop_boxes(bboxes, cam_key, *full_size) if bboxes and full_size is not None else None
+                )
+                self._stage_alert(crop_, cam_id, ts, bboxes, jpeg_bytes, crop_boxes)
+                state["last_predictions"][idx] = (crop_, preds_, bboxes, ts, True, jpeg_bytes)
 
         return float(conf)
+
+    @staticmethod
+    def _fit_box(
+        box: Tuple[float, float, float, float], img_w: float, img_h: float
+    ) -> Tuple[float, float, float, float]:
+        """Shift a box back inside the image to preserve its size; clip only if larger than the image."""
+        left, top, right, bottom = box
+        if left < 0:
+            right -= left
+            left = 0
+        if top < 0:
+            bottom -= top
+            top = 0
+        if right > img_w:
+            left -= right - img_w
+            right = img_w
+        if bottom > img_h:
+            top -= bottom - img_h
+            bottom = img_h
+        return max(left, 0.0), max(top, 0.0), right, bottom
 
     @staticmethod
     def _compute_crop_box(
         bboxes: list,
         img_w: int,
         img_h: int,
-        padding: float = 0.20,
+        padding: float = CROP_PADDING,
     ) -> Tuple[int, int, int, int]:
         """Square crop covering all bboxes (normalized coords) with `padding` on the largest dim."""
         arr = np.asarray(bboxes, dtype=float)
@@ -330,45 +427,213 @@ class Engine(Predictor):
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
         half = side / 2.0
-        left, top, right, bottom = cx - half, cy - half, cx + half, cy + half
-
-        # Shift back inside the image to keep the crop square instead of clipping.
-        if left < 0:
-            right -= left
-            left = 0
-        if top < 0:
-            bottom -= top
-            top = 0
-        if right > img_w:
-            left -= right - img_w
-            right = img_w
-        if bottom > img_h:
-            top -= bottom - img_h
-            bottom = img_h
-
+        left, top, right, bottom = Engine._fit_box((cx - half, cy - half, cx + half, cy + half), img_w, img_h)
         return round(left), round(top), round(right), round(bottom)
 
-    def _encode_detection_crops(self, frame: Image.Image, bboxes: list) -> Optional[list[bytes]]:
-        """Crop the original frame around each bbox and encode one 224x224 JPEG per bbox to upload."""
-        # Placeholder-only alerts carry no real detection, so they upload no crops.
-        # Compare element-wise as tuples so list-form bboxes are handled too.
-        if not bboxes or all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
-            return None
+    def _build_context_crop(
+        self, frame: Image.Image, preds: np.ndarray, extra_boxes: Optional[list] = None
+    ) -> Optional[ContextCrop]:
+        """Encode a region around the predictions (and any extra px boxes) instead of the full frame.
+
+        The field of view is wide (3x the largest covered side, floor CONTEXT_MIN_SIDE) so the frozen
+        crop box stays inside it even when smoke drifts with the wind. RAM is bounded by downscaling
+        the pixels above CONTEXT_MAX_SIDE, not by narrowing the view: small regions keep full
+        resolution, large ones are downscaled (harmless since the final crop is 224x224).
+
+        `extra_boxes` (full-frame px) are folded into the covered region so that, during an ongoing
+        alert, the frozen fire locations are always inside the stored crop even when this frame's
+        preds are elsewhere or absent.
+        """
         img_w, img_h = frame.size
-        crops: list[bytes] = []
+        regions: list = []
+        if preds.shape[0]:
+            arr = np.asarray(preds, dtype=float)
+            regions.append((
+                float(arr[:, 0].min()) * img_w,
+                float(arr[:, 1].min()) * img_h,
+                float(arr[:, 2].max()) * img_w,
+                float(arr[:, 3].max()) * img_h,
+            ))
+        regions.extend((float(box[0]), float(box[1]), float(box[2]), float(box[3])) for box in extra_boxes or [])
+        if not regions:
+            return None
+        union = (
+            min(r[0] for r in regions),
+            min(r[1] for r in regions),
+            max(r[2] for r in regions),
+            max(r[3] for r in regions),
+        )
+        return self._encode_context_region(frame, union)
+
+    def _encode_context_region(self, frame: Image.Image, union_px: Tuple[float, float, float, float]) -> ContextCrop:
+        img_w, img_h = frame.size
+        x1, y1, x2, y2 = union_px
+        side = max(x2 - x1, y2 - y1) * (1.0 + CONTEXT_PADDING)
+        target_w = min(max(side, CONTEXT_MIN_SIDE), img_w)
+        target_h = min(max(side, CONTEXT_MIN_SIDE), img_h)
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        box = self._fit_box(
+            (cx - target_w / 2.0, cy - target_h / 2.0, cx + target_w / 2.0, cy + target_h / 2.0), img_w, img_h
+        )
+        left, top, right, bottom = (round(v) for v in box)
+        region = frame.crop((left, top, right, bottom))
+        longest = max(region.size)
+        if longest > CONTEXT_MAX_SIDE:
+            scale = CONTEXT_MAX_SIDE / longest
+            region = region.resize(
+                (max(1, round(region.size[0] * scale)), max(1, round(region.size[1] * scale))),
+                Image.LANCZOS,  # type: ignore[attr-defined]
+            )
+        buf = io.BytesIO()
+        region.save(buf, format="JPEG", quality=CONTEXT_JPEG_QUALITY)
+        return ContextCrop(
+            jpeg=buf.getvalue(), left=left, top=top, right=right, bottom=bottom, full_w=img_w, full_h=img_h
+        )
+
+    @staticmethod
+    def _cluster_bboxes(bboxes: list) -> List[list]:
+        """Group bboxes (normalized coords) into clusters of transitively overlapping boxes."""
+        clusters = [[list(b[:4]), [b]] for b in bboxes]
+        merged = True
+        while merged:
+            merged = False
+            for i in range(len(clusters)):
+                for j in range(i + 1, len(clusters)):
+                    a, b = clusters[i][0], clusters[j][0]
+                    if a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]:
+                        clusters[i][0] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                        clusters[i][1].extend(clusters[j][1])
+                        del clusters[j]
+                        merged = True
+                        break
+                if merged:
+                    break
+        return [members for _, members in clusters]
+
+    def _update_event_crop_boxes(self, cam_key: str, tracked_bboxes: list, full_w: int, full_h: int) -> None:
+        """Add a frozen square crop box for any cluster of tracked bboxes not yet covered.
+
+        Existing boxes are never moved or resized, so all crops of one event stay centered on the
+        same spot regardless of bbox jitter. A bbox that grew mostly outside its box (coverage below
+        MIN_BBOX_COVERAGE) gets a new frozen box, so the crop re-anchors once instead of drifting.
+        """
+        frozen = self._states[cam_key]["event_crop_boxes"]
+        uncovered = [
+            bbox
+            for bbox in tracked_bboxes
+            if not any(self._bbox_coverage(bbox, box, full_w, full_h) >= MIN_BBOX_COVERAGE for box in frozen)
+        ]
+        for cluster in self._cluster_bboxes(uncovered):
+            self._add_crop_box(frozen, self._compute_crop_box(cluster, full_w, full_h))
+
+    @staticmethod
+    def _add_crop_box(frozen: list, box: Tuple[int, int, int, int]) -> None:
+        """Append a frozen box unless a near-identical one already exists.
+
+        A cluster too large to be covered by a square crop stays uncovered every frame and would
+        otherwise re-append the same capped box forever; the IoU guard bounds the box count.
+        """
+        if not any(Engine._box_iou(box, existing) > 0.9 for existing in frozen):
+            frozen.append(box)
+
+    @staticmethod
+    def _box_iou(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
+        inter_w = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+        inter_h = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+        inter = inter_w * inter_h
+        if inter <= 0:
+            return 0.0
+        union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+        return inter / union if union > 0 else 0.0
+
+    @staticmethod
+    def _bbox_coverage(bbox: list, box: Tuple[int, int, int, int], img_w: int, img_h: int) -> float:
+        """Fraction of the bbox area (normalized coords) covered by the pixel box."""
+        bx1, by1 = bbox[0] * img_w, bbox[1] * img_h
+        bx2, by2 = bbox[2] * img_w, bbox[3] * img_h
+        inter_w = max(0.0, min(bx2, box[2]) - max(bx1, box[0]))
+        inter_h = max(0.0, min(by2, box[3]) - max(by1, box[1]))
+        area = (bx2 - bx1) * (by2 - by1)
+        if area <= 0:
+            # Degenerate bbox: covered if its center falls inside the box
+            cx, cy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
+            return 1.0 if box[0] <= cx <= box[2] and box[1] <= cy <= box[3] else 0.0
+        return inter_w * inter_h / area
+
+    def _assign_crop_boxes(self, bboxes: list, cam_key: str, full_w: int, full_h: int) -> list:
+        """Pick, for each bbox, the frozen box covering it best; add a fresh one if none covers it enough.
+
+        Gating on coverage (not raw overlap) keeps a drifted bbox from being cropped on an old box it
+        only grazes: when the best frozen box covers less than MIN_BBOX_COVERAGE, the bbox is given a
+        box centered on it — unless it is too large for any square crop to cover better.
+        """
+        frozen = self._states[cam_key]["event_crop_boxes"]
+        assigned = []
         for bbox in bboxes:
-            box = self._compute_crop_box([bbox], img_w, img_h, padding=0.20)
-            crop = frame.crop(box)
+            best, best_cov = None, -1.0
+            for box in frozen:
+                cov = self._bbox_coverage(bbox, box, full_w, full_h)
+                if cov > best_cov:
+                    best, best_cov = box, cov
+            if best is None or best_cov < MIN_BBOX_COVERAGE:
+                fresh = self._compute_crop_box([bbox], full_w, full_h)
+                if best is None or self._bbox_coverage(bbox, fresh, full_w, full_h) > best_cov:
+                    self._add_crop_box(frozen, fresh)
+                    best = fresh
+            assigned.append(best)
+        return assigned
+
+    def _encode_detection_crops(
+        self,
+        context_crop: Optional[ContextCrop],
+        bboxes: list,
+        crop_boxes: Optional[list],
+    ) -> Optional[list[bytes]]:
+        """Cut one 224x224 JPEG per bbox out of the context crop, using the frozen event crop boxes."""
+        if context_crop is None or not bboxes or not crop_boxes or len(crop_boxes) != len(bboxes):
+            return None
+        # Placeholder-only alerts carry no real detection, so they upload no crops.
+        if all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
+            return None
+        region = Image.open(io.BytesIO(context_crop.jpeg))
+        region_w, region_h = region.size
+        # The stored region may be downscaled, so map full-frame crop boxes through the actual
+        # JPEG-to-region scale rather than assuming 1:1 with the full-frame box.
+        scale_x = region_w / max(context_crop.right - context_crop.left, 1)
+        scale_y = region_h / max(context_crop.bottom - context_crop.top, 1)
+        crops: list[bytes] = []
+        for box in crop_boxes:
+            local = self._fit_box(
+                (
+                    (box[0] - context_crop.left) * scale_x,
+                    (box[1] - context_crop.top) * scale_y,
+                    (box[2] - context_crop.left) * scale_x,
+                    (box[3] - context_crop.top) * scale_y,
+                ),
+                region_w,
+                region_h,
+            )
+            lx1, ly1, lx2, ly2 = (round(v) for v in local)
+            # A frozen box larger than the stored region gets clipped above; re-square the
+            # crop on its center so the 224x224 resize never distorts the aspect ratio.
+            w, h = lx2 - lx1, ly2 - ly1
+            if w != h:
+                side = min(w, h)
+                lx1 += (w - side) // 2
+                ly1 += (h - side) // 2
+                lx2, ly2 = lx1 + side, ly1 + side
+            crop = region.crop((lx1, ly1, lx2, ly2))
             crop_w, crop_h = crop.size
             downscaling = crop_w > 224 or crop_h > 224
             if (crop_w, crop_h) != (224, 224):
                 crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
             buf = io.BytesIO()
             if downscaling:
-                crop.save(buf, format="JPEG", quality=95)
+                crop.save(buf, format="JPEG", quality=CROP_JPEG_QUALITY_LARGE)
             else:
-                # Crop was at or below 224 — preserve detail with no chroma subsampling.
-                crop.save(buf, format="JPEG", quality=100, subsampling=0, optimize=True)
+                # Crop was at or below 224 — keep more detail with no chroma subsampling.
+                crop.save(buf, format="JPEG", quality=CROP_JPEG_QUALITY_SMALL, subsampling=0, optimize=True)
             crops.append(buf.getvalue())
         return crops
 
@@ -391,21 +656,23 @@ class Engine(Predictor):
 
     def _stage_alert(
         self,
-        frame: Image.Image,
+        context_crop: Optional[ContextCrop],
         cam_id: str,
         ts: int,
         bboxes: list,
         jpeg_bytes: Optional[bytes] = None,
+        crop_boxes: Optional[list] = None,
     ) -> None:
         # Store information in the queue
         self._alerts.append({
-            "frame": frame,
+            "context_crop": context_crop,
             "cam_id": cam_id,
             "ts": ts,
             "media_id": None,
             "alert_id": None,
             "bboxes": bboxes,
             "jpeg_bytes": jpeg_bytes,
+            "crop_boxes": crop_boxes,
         })
 
     def fill_empty_bboxes(self) -> None:
@@ -427,7 +694,7 @@ class Engine(Predictor):
                 # Save alert on device
                 if self.save_detections_frames:
                     self._local_backup(
-                        frame_info["frame"],
+                        None,
                         cam_id,
                         encoded_bytes=frame_info.get("jpeg_bytes"),
                     )
@@ -441,12 +708,14 @@ class Engine(Predictor):
                         continue
                     jpeg_bytes = frame_info.get("jpeg_bytes")
                     if jpeg_bytes is None:
-                        # Fallback for cached alerts staged before this version
-                        stream = io.BytesIO()
-                        frame_info["frame"].save(stream, format="JPEG", quality=self.jpeg_quality)
-                        jpeg_bytes = stream.getvalue()
+                        # The full frame is no longer kept in RAM, so there is nothing to re-encode.
+                        logger.warning(f"Camera '{cam_id}' - skipping alert without encoded frame")
+                        self._alerts.popleft()
+                        continue
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
-                    crops = self._encode_detection_crops(frame_info["frame"], bboxes)
+                    crops = self._encode_detection_crops(
+                        frame_info.get("context_crop"), bboxes, frame_info.get("crop_boxes")
+                    )
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crops=crops)
@@ -468,7 +737,7 @@ class Engine(Predictor):
 
     def _local_backup(
         self,
-        img: Image.Image,
+        img: Optional[Image.Image],
         cam_id: Optional[str],
         is_alert: bool = True,
         encoded_bytes: Optional[bytes] = None,
@@ -476,12 +745,14 @@ class Engine(Predictor):
         """Save image on device
 
         Args:
-            img (Image.Image): Image to save
+            img: Image to save; may be None when `encoded_bytes` is provided
             cam_id (str): camera id (ip address)
             is_alert (bool): is the frame an alert ?
             encoded_bytes: pre-encoded JPEG bytes — written verbatim when provided so the
                 on-disk file is byte-identical to what was scored / uploaded.
         """
+        if img is None and encoded_bytes is None:
+            return
         folder = "alerts" if is_alert else "save"
         backup_cache = self._cache.joinpath(f"backup/{folder}/")
         self._clean_local_backup(backup_cache)  # Dump old cache
@@ -490,7 +761,7 @@ class Engine(Predictor):
         file = backup_cache.joinpath(f"{time.strftime('%Y%m%d-%H%M%S')}.jpg")
         if encoded_bytes is not None:
             file.write_bytes(encoded_bytes)
-        else:
+        elif img is not None:
             img.save(file)
 
     def _clean_local_backup(self, backup_cache: Path) -> None:
