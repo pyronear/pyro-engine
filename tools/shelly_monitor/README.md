@@ -2,9 +2,9 @@
 
 Collect and analyze power consumption data from a **Shelly Gen2** device via its local HTTP API.
 
-Compatible with any Gen2 Shelly with a Switch PM component:
-- **Shelly 1 Mini Gen 3** - 1 channel
-- **Shelly Pro 2PM** - 2 channels
+Compatible with any Gen2 Shelly device equipped with a Switch PM component.
+The number of available channels depends on the device model — refer to your
+device's documentation or the Shelly app to find the right value.
 
 ---
 
@@ -25,7 +25,7 @@ No mandatory external dependencies - both scripts use the Python standard librar
 
 For the optional chart (`--plot`):
 ```bash
-pip install matplotlib
+apt install python3-matplotlib
 ```
 
 ---
@@ -39,14 +39,14 @@ Edit the `CHANNEL_NAMES` dict at the top of `collect.py` to match your physical 
 ```python
 CHANNEL_NAMES = {
     0: "rpi",           # channel 0 label in the CSV
-    1: "router_switch", # channel 1 label (Pro 2PM only)
+    1: "router_switch", # channel 1 label in the CSV (second channel, if available)
 }
 ```
 
 ### Finding your Shelly's IP address
 
 - Shelly app -> Device -> Local IP
-- Router DHCP table: look for a device named `ShellyMini1G3-XXXXXX` or `ShellyPro2PM-XXXXXX`
+- Router DHCP table: look for a device named example : `ShellyPro2PM-XXXXXX`
 - Quick test:
   ```bash
   curl http://<SHELLY_IP>/rpc/Switch.GetStatus?id=0
@@ -59,7 +59,7 @@ CHANNEL_NAMES = {
 ### One-shot run
 ```bash
 python3 collect.py --host 192.168.1.42
-python3 collect.py --host 192.168.1.42 --channels 2 --output /data/shelly_data.csv
+python3 collect.py --host 192.168.1.42 --channels 1 --output /data/shelly_data.csv
 ```
 
 ### Cron (every 10 minutes)
@@ -68,8 +68,10 @@ crontab -e
 ```
 Add:
 ```
-*/10 * * * * /usr/bin/python3 /path/to/tools/shelly_monitor/collect.py --host 192.168.1.42 --channels 2 --output /data/shelly_data.csv >> /data/collect.log 2>&1
+*/10 * * * * /usr/bin/python3 /path/to/tools/shelly_monitor/collect.py --host 192.168.1.90 --channels 1 --output /data/shelly_data.csv >> /data/collect.log 2>&1
 ```
+
+Comment the line with '#' if you want to stop the cron.
 
 ### Help
 ```
@@ -95,6 +97,9 @@ python3 analyze.py --input shelly_data.csv --plot
 
 # Custom night window (default: 20h -> 6h)
 python3 analyze.py --input shelly_data.csv --night-start 19 --night-end 7
+
+# Custom night window (default: 20h -> 6h) with a power-over-time chart
+python3 analyze.py --input shelly_data.csv --night-start 19 --night-end 7 --plot
 ```
 
 ### Help

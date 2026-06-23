@@ -5,16 +5,16 @@ collect.py - Periodic power data collection from a Shelly Gen2 device (local API
 Queries the Switch.GetStatus endpoint for each channel and appends the results
 to a CSV file. Designed to be run periodically via cron on a Raspberry Pi.
 
-Compatible devices (any Gen2 Shelly with Switch PM component):
+Compatible devices (any Gen2 Shelly with Switch PM component), examples:
   - Shelly 1 Mini Gen 3  (1 channel)
   - Shelly Pro 2PM       (2 channels)
 
 Usage:
   python collect.py --host 192.168.1.42
-  python collect.py --host 192.168.1.42 --channels 2 --output /data/shelly_data.csv
+  python collect.py --host 192.168.1.42 --channels 1 --output /data/shelly_data.csv
 
 Cron example (every 10 minutes):
-  */10 * * * * /usr/bin/python3 /path/to/collect.py --host 192.168.1.42 --channels 2 --output /data/shelly_data.csv >> /data/collect.log 2>&1
+  */10 * * * * /usr/bin/python3 /path/to/collect.py --host 192.168.1.42 --channels 1 --output /data/shelly_data.csv >> /data/collect.log 2>&1
 """
 
 import argparse
@@ -149,10 +149,10 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "examples:\n"
             "  python collect.py --host 192.168.1.42\n"
-            "  python collect.py --host 192.168.1.42 --channels 2 --output /data/shelly_data.csv\n\n"
+            "  python collect.py --host 192.168.1.42 --channels 1 --output /data/shelly_data.csv\n\n"
             "cron (every 10 min):\n"
             "  */10 * * * * python3 /path/to/collect.py --host 192.168.1.42 "
-            "--channels 2 --output /data/shelly_data.csv >> /data/collect.log 2>&1"
+            "--channels 1 --output /data/shelly_data.csv >> /data/collect.log 2>&1"
         ),
     )
     parser.add_argument(
@@ -168,8 +168,8 @@ def parse_args() -> argparse.Namespace:
         default=2,
         choices=[1, 2],
         metavar="{1,2}",
-        help="Number of channels to query. "
-             "Use 1 for Shelly 1 Mini Gen 3, 2 for Shelly Pro 2PM (default: 2).",
+        help="Number of Switch PM channels available on the device (default: 2)."
+             "Check your device's documentation or the Shelly app to find the right value.",
     )
     parser.add_argument(
         "--output",

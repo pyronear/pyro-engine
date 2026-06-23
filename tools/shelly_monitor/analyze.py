@@ -165,6 +165,16 @@ def analyze_channel(name: str, rows: list[dict], night_start: int, night_end: in
     day_powers   = [r["power_w"] for r in day_rows   if r["power_w"] is not None]
     night_powers = [r["power_w"] for r in night_rows if r["power_w"] is not None]
 
+    # When rows exist for a period but all power values are None, the device was
+    # off (output=False) for that entire window -> treat as 0 W, not missing data.
+    # None is reserved for "no rows at all in this period" (truly unknown).
+    def avg_power(powers: list, rows: list):
+        if powers:
+            return round(sum(powers) / len(powers), 2)
+        if rows:   # rows exist but device was off -> 0 W
+            return 0.0
+        return None  # no data at all for this period
+
     # Total time span covered by the dataset
     dts = sorted(r["_dt"] for r in rows)
     span_hours = (dts[-1] - dts[0]).total_seconds() / 3600 if len(dts) > 1 else 0
@@ -183,8 +193,8 @@ def analyze_channel(name: str, rows: list[dict], night_start: int, night_end: in
         "avg_power_w":       round(sum(powers) / len(powers), 2)       if powers       else None,
         "max_power_w":       round(max(powers), 2)                     if powers       else None,
         "min_power_w":       round(min(powers), 2)                     if powers       else None,
-        "avg_day_power_w":   round(sum(day_powers) / len(day_powers), 2)   if day_powers   else None,
-        "avg_night_power_w": round(sum(night_powers) / len(night_powers), 2) if night_powers else None,
+        "avg_day_power_w":   avg_power(day_powers,   day_rows),
+        "avg_night_power_w": avg_power(night_powers, night_rows),
         "n_day_samples":     len(day_rows),
         "n_night_samples":   len(night_rows),
     }
@@ -255,7 +265,7 @@ def plot_data(rows_by_channel: dict, night_start: int, night_end: int) -> None:
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
     except ImportError:
-        print("[WARN] matplotlib is not installed. Run: pip install matplotlib")
+        print("[WARN] matplotlib is not installed. Run: apt install python3-matplotlib")
         return
 
     colors = ["#2196F3", "#FF5722", "#4CAF50", "#9C27B0"]
