@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (C) 2022-2026, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
 """
 analyze.py - Analyze power consumption data collected by collect.py.
 
@@ -22,15 +27,16 @@ Typical workflow when running collect.py on a Raspberry Pi:
 
 import argparse
 import csv
-import json
+import operator
 from collections import defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # - Day/night defaults ----------------------------
 # Night = period when cameras are inactive (insufficient light).
 # These are initial estimates; refine after inspecting a few days of data.
-DEFAULT_NIGHT_START = 20   # 8 PM
-DEFAULT_NIGHT_END   = 6    # 6 AM
+DEFAULT_NIGHT_START = 20  # 8 PM
+DEFAULT_NIGHT_END = 6  # 6 AM
 # ---------------------------------------
 
 
@@ -48,10 +54,9 @@ def load_csv(filepath: str) -> list[dict]:
     Returns:
         List of row dicts with typed fields and an added '_dt' key.
     """
-    numeric_fields = ("power_w", "voltage_v", "current_a", "pf", "freq_hz",
-                      "energy_wh", "temperature_c")
+    numeric_fields = ("power_w", "voltage_v", "current_a", "pf", "freq_hz", "energy_wh", "temperature_c")
     rows = []
-    with open(filepath, newline="") as f:
+    with Path(filepath).open(newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             # Cast numeric fields; treat empty strings and "None" as missing
@@ -93,9 +98,8 @@ def is_night(dt: datetime, night_start: int, night_end: int) -> bool:
     if night_start > night_end:
         # Window crosses midnight: e.g. 20h-6h
         return h >= night_start or h < night_end
-    else:
-        # Window within a single day: e.g. 0h-6h
-        return night_start <= h < night_end
+    # Window within a single day: e.g. 0h-6h
+    return night_start <= h < night_end
 
 
 def group_by_channel(rows: list[dict]) -> dict[str, list[dict]]:
@@ -160,18 +164,18 @@ def analyze_channel(name: str, rows: list[dict], night_start: int, night_end: in
     powers = [r["power_w"] for r in rows if r["power_w"] is not None]
 
     # Split into day vs night subsets
-    day_rows   = [r for r in rows if not is_night(r["_dt"], night_start, night_end)]
-    night_rows = [r for r in rows if     is_night(r["_dt"], night_start, night_end)]
-    day_powers   = [r["power_w"] for r in day_rows   if r["power_w"] is not None]
+    day_rows = [r for r in rows if not is_night(r["_dt"], night_start, night_end)]
+    night_rows = [r for r in rows if is_night(r["_dt"], night_start, night_end)]
+    day_powers = [r["power_w"] for r in day_rows if r["power_w"] is not None]
     night_powers = [r["power_w"] for r in night_rows if r["power_w"] is not None]
 
     # When rows exist for a period but all power values are None, the device was
     # off (output=False) for that entire window -> treat as 0 W, not missing data.
     # None is reserved for "no rows at all in this period" (truly unknown).
-    def avg_power(powers: list, rows: list):
+    def avg_power(powers: list, rows: list) -> float | None:
         if powers:
             return round(sum(powers) / len(powers), 2)
-        if rows:   # rows exist but device was off -> 0 W
+        if rows:  # rows exist but device was off -> 0 W
             return 0.0
         return None  # no data at all for this period
 
@@ -179,24 +183,24 @@ def analyze_channel(name: str, rows: list[dict], night_start: int, night_end: in
     dts = sorted(r["_dt"] for r in rows)
     span_hours = (dts[-1] - dts[0]).total_seconds() / 3600 if len(dts) > 1 else 0
 
-    energy_kwh    = compute_energy_kwh(rows)
+    energy_kwh = compute_energy_kwh(rows)
     # Normalise to a per-24h figure if more than one day of data is available
     energy_per_24h = (energy_kwh / span_hours * 24) if span_hours > 0 else 0
 
     return {
-        "channel":           name,
-        "n_samples":         len(rows),
-        "span_hours":        round(span_hours, 1),
-        "span_days":         round(span_hours / 24, 2),
-        "energy_total_kwh":  round(energy_kwh, 4),
+        "channel": name,
+        "n_samples": len(rows),
+        "span_hours": round(span_hours, 1),
+        "span_days": round(span_hours / 24, 2),
+        "energy_total_kwh": round(energy_kwh, 4),
         "energy_per_24h_kwh": round(energy_per_24h, 4),
-        "avg_power_w":       round(sum(powers) / len(powers), 2)       if powers       else None,
-        "max_power_w":       round(max(powers), 2)                     if powers       else None,
-        "min_power_w":       round(min(powers), 2)                     if powers       else None,
-        "avg_day_power_w":   avg_power(day_powers,   day_rows),
+        "avg_power_w": round(sum(powers) / len(powers), 2) if powers else None,
+        "max_power_w": round(max(powers), 2) if powers else None,
+        "min_power_w": round(min(powers), 2) if powers else None,
+        "avg_day_power_w": avg_power(day_powers, day_rows),
         "avg_night_power_w": avg_power(night_powers, night_rows),
-        "n_day_samples":     len(day_rows),
-        "n_night_samples":   len(night_rows),
+        "n_day_samples": len(day_rows),
+        "n_night_samples": len(night_rows),
     }
 
 
@@ -212,41 +216,41 @@ def print_report(stats: list[dict], night_start: int, night_end: int) -> None:
         night_end:   Night end hour, shown in the report header.
     """
     sep = "-" * 60
-    print(f"\n{'=' * 60}")
-    print("  POWER CONSUMPTION REPORT - Shelly Monitor")
-    print(f"{'=' * 60}")
-    print(f"  Night window: {night_start:02d}h -> {night_end:02d}h\n")
+    print(f"\n{'=' * 60}")  # noqa: T201
+    print("  POWER CONSUMPTION REPORT - Shelly Monitor")  # noqa: T201
+    print(f"{'=' * 60}")  # noqa: T201
+    print(f"  Night window: {night_start:02d}h -> {night_end:02d}h\n")  # noqa: T201
 
     for s in stats:
-        print(sep)
-        print(f"  Channel: {s['channel']}")
-        print(sep)
-        print(f"  Period covered       : {s['span_days']} days ({s['span_hours']} h)")
-        print(f"  Samples              : {s['n_samples']} data points")
-        print()
-        print(f"  ⚡ Average power     : {s['avg_power_w']} W")
-        print(f"  ⚡ Peak power        : {s['max_power_w']} W")
-        print(f"  ⚡ Min power         : {s['min_power_w']} W")
-        print()
-        print(f"  🌞 Avg DAY power     : {s['avg_day_power_w']} W  ({s['n_day_samples']} samples)")
-        print(f"  🌙 Avg NIGHT power   : {s['avg_night_power_w']} W  ({s['n_night_samples']} samples)")
-        print()
-        print(f"  🔋 Total energy      : {s['energy_total_kwh']} kWh")
-        print(f"  🔋 Energy per 24h    : {s['energy_per_24h_kwh']} kWh/day")
+        print(sep)  # noqa: T201
+        print(f"  Channel: {s['channel']}")  # noqa: T201
+        print(sep)  # noqa: T201
+        print(f"  Period covered       : {s['span_days']} days ({s['span_hours']} h)")  # noqa: T201
+        print(f"  Samples              : {s['n_samples']} data points")  # noqa: T201
+        print()  # noqa: T201
+        print(f"  ⚡ Average power     : {s['avg_power_w']} W")  # noqa: T201
+        print(f"  ⚡ Peak power        : {s['max_power_w']} W")  # noqa: T201
+        print(f"  ⚡ Min power         : {s['min_power_w']} W")  # noqa: T201
+        print()  # noqa: T201
+        print(f"  🌞 Avg DAY power     : {s['avg_day_power_w']} W  ({s['n_day_samples']} samples)")  # noqa: T201
+        print(f"  🌙 Avg NIGHT power   : {s['avg_night_power_w']} W  ({s['n_night_samples']} samples)")  # noqa: T201
+        print()  # noqa: T201
+        print(f"  🔋 Total energy      : {s['energy_total_kwh']} kWh")  # noqa: T201
+        print(f"  🔋 Energy per 24h    : {s['energy_per_24h_kwh']} kWh/day")  # noqa: T201
 
     # Combined totals only make sense when multiple channels are present
     if len(stats) > 1:
         total_energy = sum(s["energy_total_kwh"] for s in stats)
-        total_24h    = sum(s["energy_per_24h_kwh"] for s in stats)
-        avg_powers   = [s["avg_power_w"] for s in stats if s["avg_power_w"] is not None]
-        print(f"\n{sep}")
-        print("  COMBINED TOTAL (all channels)")
-        print(sep)
-        print(f"  ⚡ Total avg power   : {round(sum(avg_powers), 2)} W")
-        print(f"  🔋 Total energy      : {round(total_energy, 4)} kWh")
-        print(f"  🔋 Energy per 24h    : {round(total_24h, 4)} kWh/day")
+        total_24h = sum(s["energy_per_24h_kwh"] for s in stats)
+        avg_powers = [s["avg_power_w"] for s in stats if s["avg_power_w"] is not None]
+        print(f"\n{sep}")  # noqa: T201
+        print("  COMBINED TOTAL (all channels)")  # noqa: T201
+        print(sep)  # noqa: T201
+        print(f"  ⚡ Total avg power   : {round(sum(avg_powers), 2)} W")  # noqa: T201
+        print(f"  🔋 Total energy      : {round(total_energy, 4)} kWh")  # noqa: T201
+        print(f"  🔋 Energy per 24h    : {round(total_24h, 4)} kWh/day")  # noqa: T201
 
-    print(f"\n{'=' * 60}\n")
+    print(f"\n{'=' * 60}\n")  # noqa: T201
 
 
 def plot_data(rows_by_channel: dict, night_start: int, night_end: int) -> None:
@@ -262,10 +266,10 @@ def plot_data(rows_by_channel: dict, night_start: int, night_end: int) -> None:
         night_end:       Night end hour for background shading.
     """
     try:
-        import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
+        import matplotlib.pyplot as plt
     except ImportError:
-        print("[WARN] matplotlib is not installed. Run: apt install python3-matplotlib")
+        print("[WARN] matplotlib is not installed. Run: apt install python3-matplotlib")  # noqa: T201
         return
 
     colors = ["#2196F3", "#FF5722", "#4CAF50", "#9C27B0"]
@@ -274,9 +278,9 @@ def plot_data(rows_by_channel: dict, night_start: int, night_end: int) -> None:
     if n == 1:
         axes = [axes]  # ensure axes is always iterable
 
-    for ax, (name, rows), color in zip(axes, rows_by_channel.items(), colors):
-        rows_sorted = sorted(rows, key=lambda r: r["_dt"])
-        dts    = [r["_dt"] for r in rows_sorted]
+    for ax, (name, rows), color in zip(axes, rows_by_channel.items(), colors, strict=False):
+        rows_sorted = sorted(rows, key=operator.itemgetter("_dt"))
+        dts = [r["_dt"] for r in rows_sorted]
         powers = [r["power_w"] if r["power_w"] is not None else 0 for r in rows_sorted]
 
         ax.plot(dts, powers, color=color, linewidth=1, label=name)
@@ -308,7 +312,7 @@ def plot_data(rows_by_channel: dict, night_start: int, night_end: int) -> None:
 
     outfile = "shelly_power.png"
     plt.savefig(outfile, dpi=150)
-    print(f"Chart saved: {outfile}")
+    print(f"Chart saved: {outfile}")  # noqa: T201
     plt.close()
 
 
@@ -382,18 +386,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    print(f"Loading {args.input} ...")
+    print(f"Loading {args.input} ...")  # noqa: T201
     rows = load_csv(args.input)
-    print(f"{len(rows)} valid rows loaded.")
+    print(f"{len(rows)} valid rows loaded.")  # noqa: T201
 
     if not rows:
-        print("[ERROR] No valid data found in the file.")
+        print("[ERROR] No valid data found in the file.")  # noqa: T201
         return
 
     rows_by_channel = group_by_channel(rows)
     stats = [
-        analyze_channel(name, ch_rows, args.night_start, args.night_end)
-        for name, ch_rows in rows_by_channel.items()
+        analyze_channel(name, ch_rows, args.night_start, args.night_end) for name, ch_rows in rows_by_channel.items()
     ]
 
     print_report(stats, args.night_start, args.night_end)

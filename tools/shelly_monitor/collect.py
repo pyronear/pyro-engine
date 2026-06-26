@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (C) 2022-2026, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 """
 collect.py - Periodic power data collection from a Shelly Gen2 device (local API).
 
@@ -20,10 +24,11 @@ Cron example (every 10 minutes):
 import argparse
 import csv
 import json
-import os
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime
+from pathlib import Path
 
 # - Constants ---------------------------------
 
@@ -42,9 +47,18 @@ CHANNEL_NAMES = {
 
 # CSV columns - order matters, must stay consistent across runs
 CSV_FIELDNAMES = [
-    "timestamp", "channel_id", "channel_name",
-    "output", "power_w", "voltage_v", "current_a", "pf", "freq_hz",
-    "energy_wh", "energy_by_minute_mWh", "temperature_c",
+    "timestamp",
+    "channel_id",
+    "channel_name",
+    "output",
+    "power_w",
+    "voltage_v",
+    "current_a",
+    "pf",
+    "freq_hz",
+    "energy_wh",
+    "energy_by_minute_mWh",
+    "temperature_c",
 ]
 
 # ---------------------------------------
@@ -68,8 +82,8 @@ def fetch_switch_status(host: str, channel_id: int) -> dict:
     try:
         with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
             return json.loads(resp.read())
-    except Exception as e:
-        print(f"[ERROR] Channel {channel_id} - {e}", file=sys.stderr)
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError) as e:
+        print(f"[ERROR] Channel {channel_id} - {e}", file=sys.stderr)  # noqa: T201
         return {}
 
 
@@ -88,27 +102,25 @@ def extract_metrics(status: dict, channel_id: int, channel_name: str) -> dict:
         A flat dict with keys matching CSV_FIELDNAMES.
     """
     return {
-        "timestamp":   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "channel_id":  channel_id,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "channel_id": channel_id,
         "channel_name": channel_name,
         # Relay output state: True = ON, False = OFF
-        "output":      status.get("output"),
+        "output": status.get("output"),
         # Instantaneous active power in Watts
-        "power_w":     status.get("apower"),
+        "power_w": status.get("apower"),
         # RMS voltage in Volts
-        "voltage_v":   status.get("voltage"),
+        "voltage_v": status.get("voltage"),
         # RMS current in Amperes
-        "current_a":   status.get("current"),
+        "current_a": status.get("current"),
         # Power factor (dimensionless, 0.0-1.0)
-        "pf":          status.get("pf"),
+        "pf": status.get("pf"),
         # AC frequency in Hz
-        "freq_hz":     status.get("freq"),
+        "freq_hz": status.get("freq"),
         # Cumulative energy counter in Wh (resets on Switch.ResetCounters)
-        "energy_wh":   status.get("aenergy", {}).get("total"),
+        "energy_wh": status.get("aenergy", {}).get("total"),
         # Energy consumed per minute over the last 3 minutes (JSON list of floats, milliwatt-hours)
-        "energy_by_minute_mWh": json.dumps(
-            status.get("aenergy", {}).get("by_minute", [])
-        ),
+        "energy_by_minute_mWh": json.dumps(status.get("aenergy", {}).get("by_minute", [])),
         # Internal device temperature in Celsius (thermal protection monitoring)
         "temperature_c": status.get("temperature", {}).get("tC"),
     }
@@ -125,8 +137,9 @@ def append_to_csv(filepath: str, rows: list[dict]) -> None:
         filepath: Path to the CSV output file.
         rows:     List of metric dicts, each matching CSV_FIELDNAMES.
     """
-    file_exists = os.path.isfile(filepath)
-    with open(filepath, "a", newline="") as f:
+    path = Path(filepath)
+    file_exists = path.is_file()
+    with path.open("a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDNAMES)
         if not file_exists:
             writer.writeheader()
@@ -160,7 +173,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         metavar="IP",
         help="IP address or hostname of the Shelly device (required). "
-             "Find it in the Shelly app or your router's DHCP table.",
+        "Find it in the Shelly app or your router's DHCP table.",
     )
     parser.add_argument(
         "--channels",
@@ -169,7 +182,7 @@ def parse_args() -> argparse.Namespace:
         choices=[1, 2],
         metavar="{1,2}",
         help="Number of Switch PM channels available on the device (default: 2)."
-             "Check your device's documentation or the Shelly app to find the right value.",
+        "Check your device's documentation or the Shelly app to find the right value.",
     )
     parser.add_argument(
         "--output",
@@ -190,18 +203,15 @@ def main() -> None:
         if status:
             row = extract_metrics(status, ch_id, name)
             rows.append(row)
-            print(
-                f"[OK] {row['timestamp']} | {name} | "
-                f"{row['power_w']} W | {row['energy_wh']} Wh"
-            )
+            print(f"[OK] {row['timestamp']} | {name} | {row['power_w']} W | {row['energy_wh']} Wh")  # noqa: T201
         else:
-            print(f"[SKIP] Channel {ch_id} - no data received.", file=sys.stderr)
+            print(f"[SKIP] Channel {ch_id} - no data received.", file=sys.stderr)  # noqa: T201
 
     if rows:
         append_to_csv(args.output, rows)
-        print(f"-> {len(rows)} row(s) appended to {args.output}")
+        print(f"-> {len(rows)} row(s) appended to {args.output}")  # noqa: T201
     else:
-        print("[WARN] No data collected.", file=sys.stderr)
+        print("[WARN] No data collected.", file=sys.stderr)  # noqa: T201
         sys.exit(1)
 
 
