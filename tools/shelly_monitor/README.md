@@ -123,7 +123,7 @@ python3 analyze.py --help
 | `pf` | Power factor (0.0-1.0) |
 | `freq_hz` | AC frequency (Hz) |
 | `energy_wh` | Cumulative energy counter (Wh, resets on `Switch.ResetCounters`) |
-| `energy_by_minute_wh` | Energy per minute over the last 3 minutes (JSON list, Wh) |
+| `energy_by_minute_mWh` | Energy per minute over the last 3 minutes (JSON list, milliwatt-hours) |
 | `temperature_c` | Internal device temperature (°C) |
 
 ---

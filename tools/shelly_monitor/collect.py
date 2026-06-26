@@ -44,7 +44,7 @@ CHANNEL_NAMES = {
 CSV_FIELDNAMES = [
     "timestamp", "channel_id", "channel_name",
     "output", "power_w", "voltage_v", "current_a", "pf", "freq_hz",
-    "energy_wh", "energy_by_minute_wh", "temperature_c",
+    "energy_wh", "energy_by_minute_mWh", "temperature_c",
 ]
 
 # ---------------------------------------
@@ -105,8 +105,8 @@ def extract_metrics(status: dict, channel_id: int, channel_name: str) -> dict:
         "freq_hz":     status.get("freq"),
         # Cumulative energy counter in Wh (resets on Switch.ResetCounters)
         "energy_wh":   status.get("aenergy", {}).get("total"),
-        # Energy consumed per minute over the last 3 minutes (JSON list of floats, Wh)
-        "energy_by_minute_wh": json.dumps(
+        # Energy consumed per minute over the last 3 minutes (JSON list of floats, milliwatt-hours)
+        "energy_by_minute_mWh": json.dumps(
             status.get("aenergy", {}).get("by_minute", [])
         ),
         # Internal device temperature in Celsius (thermal protection monitoring)
