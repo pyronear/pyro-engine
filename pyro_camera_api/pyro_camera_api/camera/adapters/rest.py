@@ -11,6 +11,7 @@ import logging
 import re
 from io import BytesIO
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 import requests
 from PIL import Image
@@ -74,6 +75,16 @@ class RestSnapshotCamera(BaseCamera):
         """Mask credential-like query parameters for safe logging."""
         return _SENSITIVE_QUERY.sub(r"\1=***", url)
 
+    def _safe_headers(self) -> Dict[str, str]:
+        """Return headers with sensitive values removed (for cross-origin fetches)."""
+        return {k: v for k, v in self.headers.items() if k.lower() not in _SENSITIVE_HEADERS}
+
+    @staticmethod
+    def _same_origin(a: str, b: str) -> bool:
+        """True when both URLs share scheme, host and port."""
+        pa, pb = urlparse(a), urlparse(b)
+        return (pa.scheme, pa.hostname, pa.port) == (pb.scheme, pb.hostname, pb.port)
+
     @staticmethod
     def _dig(payload: Any, path: str) -> Any:
         """Navigate a dot-separated path into a nested JSON structure."""
@@ -99,7 +110,15 @@ class RestSnapshotCamera(BaseCamera):
                 return base64.b64decode(field)
 
             if self.encoding == "url":
-                sub = self._session.get(field, headers=self.headers, timeout=self.timeout)
+                # The JSON endpoint controls this URL, so only forward the auth
+                # headers when it stays on the same origin; otherwise strip them
+                # to avoid disclosing the token to an arbitrary host (e.g. a CDN).
+                if self._same_origin(self.url, field):
+                    headers = self.headers
+                else:
+                    headers = self._safe_headers()
+                    logger.info("REST nested fetch is cross-origin, dropping sensitive headers")
+                sub = self._session.get(field, headers=headers, timeout=self.timeout)
                 sub.raise_for_status()
                 return sub.content
 

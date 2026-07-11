@@ -77,6 +77,41 @@ def test_capture_json_url_refetch():
     assert get.call_count == 2
 
 
+def test_url_refetch_same_origin_forwards_auth_header():
+    cam = RestSnapshotCamera(
+        "cam",
+        "https://host/meta",
+        headers={"Authorization": "Bearer secret"},
+        response="json",
+        json_path="url",
+        encoding="url",
+    )
+    meta = _response(json_body={"url": "https://host/frames/1.jpg"})  # same origin
+    image = _response(content=_jpeg_bytes())
+    with patch.object(cam._session, "get", side_effect=[meta, image]) as get:
+        cam.capture()
+    _, kwargs = get.call_args  # second (nested) call
+    assert kwargs["headers"].get("Authorization") == "Bearer secret"
+
+
+def test_url_refetch_cross_origin_strips_auth_header():
+    cam = RestSnapshotCamera(
+        "cam",
+        "https://host/meta",
+        headers={"Authorization": "Bearer secret", "User-Agent": "pyro"},
+        response="json",
+        json_path="url",
+        encoding="url",
+    )
+    meta = _response(json_body={"url": "https://cdn.other.com/1.jpg"})  # different origin
+    image = _response(content=_jpeg_bytes())
+    with patch.object(cam._session, "get", side_effect=[meta, image]) as get:
+        cam.capture()
+    _, kwargs = get.call_args
+    assert "Authorization" not in kwargs["headers"]
+    assert kwargs["headers"].get("User-Agent") == "pyro"  # non-sensitive header kept
+
+
 def test_capture_returns_none_on_http_error():
     cam = RestSnapshotCamera("cam", "https://host/snap", retries=0)
     with patch.object(cam._session, "get", return_value=_response(status=500, content=b"<html>error</html>")):
