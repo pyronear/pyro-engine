@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 PyroEngine is a wildfire detection system for edge devices (Raspberry Pi, etc.). It has two main packages:
 
 - **`pyroengine/`** — Core detection engine: runs YOLO model inference on camera images, manages alert states, communicates with the PyroNear API.
-- **`pyro_camera_api/`** — FastAPI service: unified REST interface for controlling heterogeneous cameras (Reolink, Linovision/Hikvision, RTSP, HTTP URL).
+- **`pyro_camera_api/`** — FastAPI service: unified REST interface for controlling heterogeneous cameras (Reolink, Linovision/Hikvision, RTSP, HTTP URL, generic REST/JSON snapshot API).
 
 These two services run as separate Docker containers and communicate over localhost (host network mode). The engine calls the camera API to capture frames and manage PTZ patrols.
 
@@ -44,7 +44,8 @@ pytest tests/test_engine.py -v
 ### Camera API
 
 - Entry point: `pyro_camera_api/pyro_camera_api/main.py` (FastAPI + lifespan)
-- Camera adapters in `camera/adapters/`: `reolink.py`, `linovision.py`, `rtsp.py`, `url.py`, `mock.py` — all inherit from abstract bases in `camera/base.py`
+- Camera adapters in `camera/adapters/`: `reolink.py`, `linovision.py`, `rtsp.py`, `url.py`, `rest.py`, `mock.py` — all inherit from abstract bases in `camera/base.py`
+  - `rest.py` (`RestSnapshotCamera`, adapter `"rest"`/`"api"`) is a config-driven HTTP snapshot adapter for endpoints that need custom auth headers or return the image wrapped in JSON (base64 or nested URL), e.g. vigilant.cat. Header/URL values may reference env vars via `${VAR}`.
 - `camera/registry.py` tracks live camera instances and background threads
 - Background patrol loops run in `camera/patrol.py`
 - Routes under `api/`: cameras, control (PTZ), focus, patrol, stream, health
