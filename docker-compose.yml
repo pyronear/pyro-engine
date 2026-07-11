@@ -4,6 +4,10 @@ services:
       context: ./pyro_camera_api
     image: pyronear/pyro-camera-api:${PYRO_ENGINE_VERSION:-latest}
     container_name: pyro-camera-api
+    # Load .env so tokens referenced as ${VAR} by "rest" adapter cameras
+    # (in credentials.json) are available inside the container.
+    env_file:
+      - .env
     environment:
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
