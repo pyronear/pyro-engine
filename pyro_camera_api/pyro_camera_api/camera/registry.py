@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
 import threading
 from collections import defaultdict
 from typing import Dict, Optional
@@ -14,10 +16,34 @@ from typing import Dict, Optional
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
+from pyro_camera_api.camera.adapters.rest import RestSnapshotCamera
 from pyro_camera_api.camera.adapters.rtsp import RTSPCamera
 from pyro_camera_api.camera.adapters.url import URLCamera
 from pyro_camera_api.camera.base import BaseCamera
 from pyro_camera_api.core.config import CAM_PWD, CAM_USER, RAW_CONFIG
+
+# Placeholder for referencing environment variables from credentials.json,
+# e.g. {"headers": {"Authorization": "Bearer ${VIGILANT_TOKEN}"}}. Keeps
+# secrets in .env instead of the committed/mounted config file.
+_ENV_PLACEHOLDER = re.compile(r"\$\{([^}]+)\}")
+
+
+def _resolve_env(value: str) -> str:
+    """Replace ${VAR} placeholders using environment variables.
+
+    Raises KeyError on the first unset variable so a misconfigured camera fails
+    fast at registration instead of sending broken credentials at capture time.
+    """
+
+    def repl(match: re.Match[str]) -> str:
+        name = match.group(1)
+        env_val = os.environ.get(name)
+        if env_val is None:
+            raise KeyError(name)
+        return env_val
+
+    return _ENV_PLACEHOLDER.sub(repl, value)
+
 
 logger = logging.getLogger("CameraRegistry")
 logger.setLevel(logging.INFO)
@@ -49,7 +75,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url", "mock".
+      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url",
+                "rest" (alias "api"), "mock".
                 Generic "reolink" is still accepted by the registry (it builds
                 a ReolinkCamera from any string containing "reolink"), but the
                 PTZ routes require a specific model for the calibrated speed
@@ -57,7 +84,9 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
       type:     "ptz" or "static"
       ip_address
       rtsp_url (if adapter=rtsp)
-      url (if adapter=url or adapter=mock)
+      url (if adapter=url, rest or mock)
+      headers, response, json_path, encoding, timeout, retries (if adapter=rest).
+        Header/URL values may reference environment variables as ${VAR}.
       poses, azimuths, focus_position (PTZ adapters)
     """
     adapter = conf.get("adapter", "").lower()
@@ -130,6 +159,37 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             cam_type="static",
         )
         logger.info("Registered URL snapshot camera %s", key)
+        return cam
+
+    # Generic REST / HTTP-API snapshot camera (capture only).
+    # Handles endpoints needing custom auth headers and/or a JSON-wrapped image
+    # (base64 or nested URL), e.g. vigilant.cat.
+    if adapter in ("rest", "api"):
+        snapshot_url = conf.get("url")
+        if not snapshot_url:
+            logger.error("Camera %s declared as REST adapter but missing 'url'", key)
+            return None
+
+        headers = conf.get("headers", {}) or {}
+        try:
+            snapshot_url = _resolve_env(snapshot_url)
+            headers = {k: _resolve_env(str(v)) for k, v in headers.items()}
+        except KeyError as exc:
+            logger.error("Camera %s references unset environment variable %s", key, exc)
+            return None
+
+        cam = RestSnapshotCamera(
+            camera_id=key,
+            url=snapshot_url,
+            headers=headers,
+            response=conf.get("response", "image"),
+            json_path=conf.get("json_path"),
+            encoding=conf.get("encoding", "base64"),
+            timeout=conf.get("timeout", 15),
+            retries=conf.get("retries", 2),
+            cam_type="static",
+        )
+        logger.info("Registered REST snapshot camera %s", key)
         return cam
 
     # Mock camera adapter for tests and demos
