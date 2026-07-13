@@ -27,7 +27,7 @@ Current configuration:
 | Pi health URL | `http://192.168.1.99:8081/health` |
 | Check interval | 10 minutes |
 | Consecutive failures before reboot | 3 |
-| Reboot duration | 3 minutes |
+| Reboot duration | 2 minutes |
 | Outputs rebooted | 0 and 1 |
 | Max reboots per outage | 3 |
 

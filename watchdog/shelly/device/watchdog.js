@@ -4,8 +4,9 @@ let OUTPUT_IDS = [0, 1];
 
 let CHECK_INTERVAL_MS = 10 * 60 * 1000;
 // A crashed Pi draws almost no current, so the PSU capacitors keep it powered
-// through a short cut. 3 minutes guarantees a real power loss.
-let REBOOT_DURATION_MS = 3 * 60 * 1000;
+// through a short cut. 2 minutes guarantees a real power loss (~1 min was
+// enough in the field).
+let REBOOT_DURATION_MS = 2 * 60 * 1000;
 
 let MAX_FAILURES = 3;
 let MAX_REBOOTS_PER_WINDOW = 3;
