@@ -60,7 +60,7 @@ python3 watchdog/shelly/check_station.py --cycle-pi        # Pi or PC
 ## Manual test (first station at least)
 
 Trigger the Shelly watchdog for real: stop the `/health` service and wait
-3 check intervals (~30 min) — the Shelly must cut outputs 0 and 1 for 20 s.
+3 check intervals (~30 min) — the Shelly must cut outputs 0 and 1 for 3 min.
 To speed it up, temporarily re-upload `watchdog.js` with a short
 `CHECK_INTERVAL_MS`, then restore it with `update_shelly_watchdog.sh`.
 
