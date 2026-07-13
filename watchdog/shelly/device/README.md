@@ -27,13 +27,21 @@ Current configuration:
 | Pi health URL | `http://192.168.1.99:8081/health` |
 | Check interval | 10 minutes |
 | Consecutive failures before reboot | 3 |
-| Reboot duration | 20 seconds |
+| Reboot duration | 2 minutes |
 | Outputs rebooted | 0 and 1 |
-| Max reboots per day | 3 |
+| Max reboots per outage | 3 |
+
+The reboot duration is long on purpose: a crashed Pi draws almost no current,
+so the power supply capacitors can keep it alive through a short cut.
+
+The reboot budget (3 attempts) resets when the Pi answers a health check again,
+or after 12 hours measured by a repeating timer. Timers only depend on uptime,
+so the reset works even when the Shelly has no NTP/internet and its wall-clock
+date is frozen.
 
 Important limitation:
 
-The daily reboot counter is stored in script memory. If the Shelly itself reboots, the counter is reset.
+The reboot counter is stored in script memory. If the Shelly itself reboots, the counter is reset.
 
 Make sure the Shelly is not powered by one of the outputs it cuts.
 
