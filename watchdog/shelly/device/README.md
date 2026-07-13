@@ -35,7 +35,7 @@ The reboot duration is long on purpose: a crashed Pi draws almost no current,
 so the power supply capacitors can keep it alive through a short cut.
 
 The reboot budget (3 attempts) resets when the Pi answers a health check again,
-or after 24 hours measured by a repeating timer. Timers only depend on uptime,
+or after 12 hours measured by a repeating timer. Timers only depend on uptime,
 so the reset works even when the Shelly has no NTP/internet and its wall-clock
 date is frozen.
 

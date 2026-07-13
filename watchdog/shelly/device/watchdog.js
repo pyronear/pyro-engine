@@ -12,8 +12,8 @@ let MAX_FAILURES = 3;
 let MAX_REBOOTS_PER_WINDOW = 3;
 // The Shelly has no NTP when the station is offline, so wall-clock dates are
 // unreliable. Timers only depend on uptime, so the budget is reset by a
-// repeating 24h timer instead of a date change.
-let RESET_WINDOW_MS = 24 * 60 * 60 * 1000;
+// repeating 12h timer instead of a date change.
+let RESET_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 let failures = 0;
 let rebooting = false;
@@ -93,7 +93,7 @@ function checkPi() {
 }
 
 Timer.set(RESET_WINDOW_MS, true, function () {
-  resetRebootBudget("24h window elapsed");
+  resetRebootBudget("12h window elapsed");
 });
 Timer.set(CHECK_INTERVAL_MS, true, checkPi);
 checkPi();
