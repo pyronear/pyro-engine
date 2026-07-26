@@ -27,6 +27,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
+# Reolink CGI endpoints occasionally accept the TCP connection and never
+# answer; a bounded (connect, read) timeout keeps patrol and focus threads
+# from hanging forever on such calls.
+REQUEST_TIMEOUT = (2, 5)
+
 
 class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     """
@@ -102,7 +107,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         data: Any = [
             {"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}
         ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
     def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
@@ -123,7 +128,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         url = self._build_url("GetPtzPreset")
         data: Any = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
@@ -151,13 +156,13 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         self._handle_response(response, f"Preset {name} set successfully.")
 
     def reboot_camera(self) -> bool:
         url = self._build_url("Reboot")
         data = [{"cmd": "Reboot"}]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         response_data = self._handle_response(response, "Camera reboot initiated successfully.")
         if not response_data:
             return False
@@ -169,7 +174,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def get_auto_focus(self):
         url = self._build_url("GetAutoFocus")
         data: Any = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         return self._handle_response(response, "Fetched AutoFocus settings successfully.")
 
     def set_auto_focus(self, disable: bool):
@@ -181,7 +186,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
@@ -194,7 +199,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
                 }
             ]
-            response = requests.post(url, json=data, verify=False)  # nosec: B501
+            response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
             return self._handle_response(response, "Started ZoomFocus successfully.")
         return None
 
@@ -212,7 +217,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
                 }
             ]
-            response = requests.post(url, json=data, verify=False)  # nosec: B501
+            response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
             return self._handle_response(response, f"Manual focus set at position {position}")
         return None
 
@@ -220,7 +225,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """Retrieve the current manual focus and zoom positions."""
         url = self._build_url("GetZoomFocus")
         data: Any = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = requests.post(url, json=data, verify=False, timeout=REQUEST_TIMEOUT)  # nosec: B501
         result = self._handle_response(response, "Got zoom/focus values")
         if result and result[0]["code"] == 0:
             zoom_focus = result[0]["value"]["ZoomFocus"]
