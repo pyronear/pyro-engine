@@ -9,9 +9,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,13 @@ SKIP_DURATION = 30 * 60.0  # skip for 30 minutes
 # per camera state for the static loop
 FAILURE_COUNT: Dict[str, int] = {}
 SKIP_UNTIL: Dict[str, float] = {}
+
+# Serializes patrol thread creation so concurrent start requests cannot spawn
+# two loops for the same camera.
+_LIFECYCLE_LOCK = threading.Lock()
+
+# How long to wait for a stopping thread to exit before replacing it.
+STOPPING_THREAD_JOIN_TIMEOUT = 5.0
 
 
 def _is_thread_alive(obj: object) -> bool:
@@ -178,3 +185,48 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             break
 
     logger.info("[%s] Static camera loop exited cleanly", camera_ip)
+
+
+def start_patrol_thread(camera_ip: str) -> Tuple[str, str]:
+    """
+    Start (or reuse) the patrol thread for a camera.
+
+    Returns (status, loop_type) with status "started" or "already_running" and
+    loop_type "patrol" or "static".
+
+    If a previous thread is still alive but its stop flag is set (stop was
+    requested), wait briefly for a graceful exit; if it is stuck (e.g. hung
+    camera call), abandon it and start a fresh loop anyway. The old thread
+    owns its own stop event, already set, so it exits on its next wakeup
+    without affecting the new loop.
+    """
+    cam = CAMERA_REGISTRY[camera_ip]
+    loop_type = "patrol" if getattr(cam, "cam_type", "static") == "ptz" else "static"
+    target_fn = patrol_loop if loop_type == "patrol" else static_loop
+
+    with _LIFECYCLE_LOCK:
+        old_thread = PATROL_THREADS.get(camera_ip)
+        old_flag = PATROL_FLAGS.get(camera_ip)
+        if old_thread is not None and old_thread.is_alive():
+            if old_flag is None or not old_flag.is_set():
+                return "already_running", loop_type
+
+            old_thread.join(timeout=STOPPING_THREAD_JOIN_TIMEOUT)
+            if old_thread.is_alive():
+                logger.warning(
+                    "[%s] Previous patrol thread did not exit after stop, replacing it",
+                    camera_ip,
+                )
+
+        stop_flag = threading.Event()
+        thread = threading.Thread(
+            target=target_fn,
+            args=(camera_ip, stop_flag),
+            daemon=True,
+        )
+        PATROL_THREADS[camera_ip] = thread
+        PATROL_FLAGS[camera_ip] = stop_flag
+        thread.start()
+
+    logger.info("[%s] Started %s loop", camera_ip, loop_type)
+    return "started", loop_type

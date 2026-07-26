@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -15,8 +14,7 @@ from pyro_camera_api.camera.patrol import (
     FAILURE_COUNT,
     SKIP_UNTIL,
     is_stream_running_for,
-    patrol_loop,
-    static_loop,
+    start_patrol_thread,
 )
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
@@ -51,34 +49,8 @@ def start_patrol(camera_ip: str, request: Request):
             detail=f"Stream is running for {camera_ip}, patrol cannot start",
         )
 
-    # already running
-    if camera_ip in PATROL_THREADS and PATROL_THREADS[camera_ip].is_alive():
-        return {
-            "status": "already_running",
-            "camera_ip": camera_ip,
-            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,
-        }
-
-    stop_flag = threading.Event()
-
-    if getattr(cam, "cam_type", "static") == "ptz":
-        target_fn = patrol_loop
-        loop_type = "patrol"
-    else:
-        target_fn = static_loop
-        loop_type = "static"
-
-    thread = threading.Thread(
-        target=target_fn,
-        args=(camera_ip, stop_flag),
-        daemon=True,
-    )
-    PATROL_THREADS[camera_ip] = thread
-    PATROL_FLAGS[camera_ip] = stop_flag
-    thread.start()
-
-    logger.info("[%s] Started %s loop", camera_ip, loop_type)
-    return {"status": "started", "camera_ip": camera_ip, "loop_type": loop_type}
+    status, loop_type = start_patrol_thread(camera_ip)
+    return {"status": status, "camera_ip": camera_ip, "loop_type": loop_type}
 
 
 @router.post("/stop_patrol")
