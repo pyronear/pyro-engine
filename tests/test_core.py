@@ -121,3 +121,63 @@ def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine,
 
     assert not mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_does_not_update_is_day_from_cached_frames(mock_client_class, mock_engine, mock_camera_data):
+    # Regression: a stale cached IR frame must not flip the engine to night mode
+    mock_client = mock_client_class.return_value
+    night_img = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_client.get_latest_image.return_value = night_img
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = True
+
+    controller.inference_loop()
+
+    assert controller.is_day is True
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_refresh_is_day_uses_fresh_capture(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    mock_client.capture_image.return_value = Image.new("RGB", (100, 100), (255, 255, 255))
+    controller._refresh_is_day()
+    assert controller.is_day is False
+
+    mock_client.capture_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    controller._refresh_is_day()
+    assert controller.is_day is True
+
+    # keep previous state when every capture fails
+    mock_client.capture_image.side_effect = Exception("camera down")
+    controller._refresh_is_day()
+    assert controller.is_day is True
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_main_loop_stops_running_patrols_at_night(mock_client_class, mock_engine, mock_camera_data, monkeypatch):
+    # Regression: the night branch used to stop patrols that were NOT running
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = False
+    mock_client.get_patrol_status.return_value = {"patrol_running": True}
+
+    class _Break(Exception):
+        pass
+
+    def sleep_then_break(seconds):
+        if seconds == 3600:
+            raise _Break
+
+    monkeypatch.setattr("pyroengine.core.time.sleep", sleep_then_break)
+
+    with pytest.raises(_Break):
+        controller.main_loop(period=30)
+
+    mock_client.stop_patrol.assert_called_once_with("192.168.1.1")

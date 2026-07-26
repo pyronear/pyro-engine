@@ -201,7 +201,6 @@ class SystemController:
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
                             logger.info(f"Captured image for {ip}, pose {pose}")
-                            self.is_day = is_day_time(None, frame, "ir")
                             self.engine.predict(frame, cam_id)
                     except requests.HTTPError as e:
                         logger.error(
@@ -220,12 +219,29 @@ class SystemController:
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
                         logger.info(f"Captured image for {ip}")
-                        self.is_day = is_day_time(None, frame, "ir")
                         self.engine.predict(frame, cam_id)
                 except requests.HTTPError as e:
                     logger.error(f"HTTP error for {camera_name}: {e.response.text if e.response is not None else e}")
                 except Exception as e:
                     logger.error(f"Error for {camera_name}: {e}")
+
+    def _refresh_is_day(self) -> None:
+        """
+        Refresh the day/night state from a fresh capture.
+
+        Cached latest_image frames can go stale when a patrol stops, and a
+        frozen infrared frame would otherwise lock the engine in night mode
+        during the day. Keep the previous state if every capture fails.
+        """
+        for ip in self.camera_data:
+            try:
+                frame = self.camera_api_client.capture_image(ip)
+                if frame is not None:
+                    self.is_day = is_day_time(None, frame, "ir")
+                    return
+            except Exception as e:
+                logger.error(f"Could not refresh day/night state using camera {ip}: {e}")
+        logger.warning("Could not refresh day/night state from any camera, keeping previous state")
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -270,7 +286,7 @@ class SystemController:
                 for ip in self.camera_data:
                     try:
                         patrol_status = self.camera_api_client.get_patrol_status(ip)
-                        if not patrol_status.get("patrol_running", True):
+                        if patrol_status.get("patrol_running", False):
                             self.camera_api_client.stop_patrol(ip)
                             logger.info(f"Stopped patrol for camera {ip} due to night")
                     except Exception as e:
@@ -306,6 +322,7 @@ class SystemController:
 
                 self.check_and_restart_patrol()
                 self.inference_loop()
+                self._refresh_is_day()
 
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)
