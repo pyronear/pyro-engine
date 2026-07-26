@@ -142,6 +142,7 @@ def test_inference_loop_does_not_update_is_day_from_cached_frames(mock_client_cl
 @patch("pyroengine.core.PyroCameraAPIClient")
 def test_refresh_is_day_uses_fresh_capture(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
 
     mock_client.capture_image.return_value = Image.new("RGB", (100, 100), (255, 255, 255))
@@ -155,6 +156,22 @@ def test_refresh_is_day_uses_fresh_capture(mock_client_class, mock_engine, mock_
     # keep previous state when every capture fails
     mock_client.capture_image.side_effect = Exception("camera down")
     controller._refresh_is_day()
+    assert controller.is_day is True
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_refresh_is_day_skips_capture_when_stream_active(mock_client_class, mock_engine, mock_camera_data):
+    # The capture endpoint refreshes the API activity timestamp, so calling it
+    # periodically during a stream would prevent the idle stopper from ever
+    # ending the stream.
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 1}
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = True
+
+    controller._refresh_is_day()
+
+    assert not mock_client.capture_image.called
     assert controller.is_day is True
 
 

@@ -232,7 +232,13 @@ class SystemController:
         Cached latest_image frames can go stale when a patrol stops, and a
         frozen infrared frame would otherwise lock the engine in night mode
         during the day. Keep the previous state if every capture fails.
+
+        Skipped while a stream is active: the capture endpoint refreshes the
+        camera API activity timestamp, which would prevent idle streams from
+        ever being stopped.
         """
+        if self._any_stream_active():
+            return
         for ip in self.camera_data:
             try:
                 frame = self.camera_api_client.capture_image(ip)
