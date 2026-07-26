@@ -19,6 +19,7 @@ class _FakeStaticCamera(BaseCamera):
         super().__init__(camera_id="fake", cam_type="static")
 
     def capture(self, **kwargs) -> Optional[Image.Image]:
+        _ = kwargs  # unused, signature imposed by BaseCamera
         return Image.new("RGB", (8, 8), (255, 200, 200))
 
 

@@ -168,16 +168,16 @@ def test_main_loop_stops_running_patrols_at_night(mock_client_class, mock_engine
     controller.is_day = False
     mock_client.get_patrol_status.return_value = {"patrol_running": True}
 
-    class _Break(Exception):
+    class _BreakError(Exception):
         pass
 
     def sleep_then_break(seconds):
         if seconds == 3600:
-            raise _Break
+            raise _BreakError
 
     monkeypatch.setattr("pyroengine.core.time.sleep", sleep_then_break)
 
-    with pytest.raises(_Break):
+    with pytest.raises(_BreakError):
         controller.main_loop(period=30)
 
     mock_client.stop_patrol.assert_called_once_with("192.168.1.1")
