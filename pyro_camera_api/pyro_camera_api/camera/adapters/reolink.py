@@ -60,6 +60,14 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         self.focus_position = focus_position
         # Dead-reckoned real-world azimuth; None until a preset move gives a reference.
         self.current_azimuth: Optional[float] = None
+        if self.cam_type == "ptz" and len(self.cam_poses) != len(self.cam_azimuths):
+            logger.warning(
+                "[%s] poses (%d) and azimuths (%d) differ in credentials.json; "
+                "azimuth tracking will stay unknown until fixed",
+                self.ip_address,
+                len(self.cam_poses),
+                len(self.cam_azimuths),
+            )
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
