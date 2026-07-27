@@ -860,14 +860,36 @@ def get_camera_azimuth(camera_ip: str):
     move (patrol pass or /goto_preset) provides a reference, and after an
     interrupted or untimed free move. ``moving`` reflects whether a blocking
     PTZ command currently holds the per-camera lock.
+
+    ``zoom`` and ``h_fov_deg`` describe the current field of view: the zoom
+    level is read from the camera and the horizontal FOV comes from the
+    calibrated tables (fov_at_zoom). For adapters without calibration
+    (e.g. Linovision) h_fov_deg falls back to the default table and is only
+    indicative.
     """
     cam = _require_ptz(camera_ip)
+    conf = RAW_CONFIG.get(camera_ip, {})
+    adapter = _resolve_adapter(conf.get("adapter", "unknown"))
+
+    zoom = 0
+    if hasattr(cam, "get_focus_level"):
+        try:
+            info = cam.get_focus_level() or {}
+            z = info.get("zoom")
+            if z is not None:
+                zoom = int(z)
+        except Exception as exc:
+            logger.warning("[%s] azimuth: failed to read zoom, assuming 0: %s", camera_ip, exc)
+    h_fov, _ = fov_at_zoom(zoom, adapter)
+
     azimuth = cam.get_azimuth()
     return {
         "camera_ip": camera_ip,
         "azimuth_deg": None if azimuth is None else round(azimuth, 2),
         "source": cam.azimuth_source,
         "moving": MOVE_LOCKS[camera_ip].locked(),
+        "zoom": zoom,
+        "h_fov_deg": round(h_fov, 2),
     }
 
 
