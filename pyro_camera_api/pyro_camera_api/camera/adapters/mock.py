@@ -38,7 +38,7 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         image_url: str = DEFAULT_FAKE_IMAGE_URL,
         cam_type: str = "static",
         cam_poses: Optional[list[int]] = None,
-        cam_azimuths: Optional[list[int]] = None,
+        cam_azimuths: Optional[list[float]] = None,
         focus_position: Optional[int] = None,
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)

@@ -45,7 +45,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
-        cam_azimuths: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
         protocol: str = "https",
         focus_position: Optional[int] = None,
     ):
@@ -60,7 +60,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         self.focus_position = focus_position
         # Dead-reckoned real-world azimuth; None until a preset move gives a reference.
         self.current_azimuth: Optional[float] = None
-        if self.cam_type == "ptz" and len(self.cam_poses) != len(self.cam_azimuths):
+        # An empty azimuth list is normal at boot: the mapping is fetched from
+        # the platform API by camera.pose_azimuths. A non-empty mismatched list
+        # is a config error that silently disables tracking, hence the warning.
+        if self.cam_type == "ptz" and self.cam_azimuths and len(self.cam_poses) != len(self.cam_azimuths):
             logger.warning(
                 "[%s] poses (%d) and azimuths (%d) differ in credentials.json; "
                 "azimuth tracking will stay unknown until fixed",

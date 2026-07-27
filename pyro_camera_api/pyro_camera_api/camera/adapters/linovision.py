@@ -47,7 +47,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
-        cam_azimuths: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
         protocol: str = "http",
         verify_tls: bool = False,
         snapshot_channel: str = "101",

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from PIL import Image
 
@@ -62,6 +62,12 @@ class PTZMixin(ABC):
     # "tracked": azimuth is dead-reckoned server-side from commanded moves.
     # "hardware": azimuth is read back from the camera itself.
     azimuth_source: str = "tracked"
+
+    # Local pose presets and their real-world azimuths, index-aligned. The
+    # azimuths come from credentials.json (legacy) or are fetched from the
+    # platform API at startup (see camera.pose_azimuths).
+    cam_poses: List[int]
+    cam_azimuths: List[float]
 
     # Seconds the API keeps the camera locked after a fire-and-forget preset
     # move so concurrent commands get rejected while the camera travels.
