@@ -33,6 +33,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     A controller class for interacting with Reolink cameras.
     """
 
+    # ToPos is fire-and-forget with no completion feedback: hold the per-camera
+    # lock for a conservative travel time so concurrent commands get a 409.
+    preset_move_hold_s = 5.0
+
     def __init__(
         self,
         camera_id: str,
@@ -99,6 +103,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0):
         """
         Sends a command to move the camera.
+
+        Raises RuntimeError when the camera rejects the command, so callers
+        (and the dead-reckoned azimuth) never assume a move that did not start.
         """
         if operation in PAN_OPERATIONS:
             # Untimed pan motion starts: azimuth is unknown until the caller
@@ -110,19 +117,25 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         ]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
         response_data = self._handle_response(response, "PTZ operation successful.")
-        if operation == "ToPos":
-            self._sync_azimuth_from_pose(int(idx), response_data)
-
-    def _sync_azimuth_from_pose(self, pose_id: int, response_data: Any) -> None:
-        """Resync the dead-reckoned azimuth from the pose mapping after an accepted ToPos."""
         try:
             ok = bool(response_data) and response_data[0]["code"] == 0
         except (KeyError, IndexError, TypeError):
             ok = False
         if not ok:
-            return
+            raise RuntimeError(f"PTZ command '{operation}' rejected by camera {self.ip_address}")
+        if operation == "ToPos":
+            self._sync_azimuth_from_pose(int(idx))
+
+    def _sync_azimuth_from_pose(self, pose_id: int) -> None:
+        """Resync the dead-reckoned azimuth from the pose mapping after an accepted ToPos.
+
+        An accepted preset outside the configured mapping still moves the
+        camera, so the previous reference becomes stale and is dropped.
+        """
         if pose_id in self.cam_poses and len(self.cam_poses) == len(self.cam_azimuths):
             self.current_azimuth = float(self.cam_azimuths[self.cam_poses.index(pose_id)]) % 360.0
+        else:
+            self.current_azimuth = None
 
     def get_azimuth(self) -> Optional[float]:
         """Return the dead-reckoned azimuth, or None when unknown."""

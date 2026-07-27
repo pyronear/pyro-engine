@@ -63,6 +63,11 @@ class PTZMixin(ABC):
     # "hardware": azimuth is read back from the camera itself.
     azimuth_source: str = "tracked"
 
+    # Seconds the API keeps the camera locked after a fire-and-forget preset
+    # move so concurrent commands get rejected while the camera travels.
+    # 0 when the adapter blocks (or completes instantly) on preset moves.
+    preset_move_hold_s: float = 0.0
+
     @abstractmethod
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
         """

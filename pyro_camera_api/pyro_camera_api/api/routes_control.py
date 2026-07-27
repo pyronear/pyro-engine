@@ -554,13 +554,6 @@ def _interruptible_sleep(camera_ip: str, duration: float) -> bool:
     return STOP_EVENTS[camera_ip].wait(timeout=duration)
 
 
-# Reolink executes ToPos asynchronously with no completion feedback, so preset
-# moves hold the per-camera lock for this conservative duration to enforce
-# "no concurrent command while the camera is moving". Linovision preset moves
-# already block inside the adapter until the target azimuth is reached.
-PRESET_MOVE_HOLD_S = 5.0
-
-
 def _shortest_delta_deg(current: float, target: float) -> float:
     """Signed shortest rotation from current to target azimuth, in [-180, 180)."""
     return ((target - current + 180.0) % 360.0) - 180.0
@@ -589,14 +582,15 @@ def _start_azimuth_for_tracking(cam: PTZMixin) -> Optional[float]:
 def _hold_for_preset_move(cam: PTZMixin, camera_ip: str, resp: dict) -> dict:
     """Hold the per-camera lock while a fire-and-forget preset move completes.
 
-    Only applies to tracked-source adapters (Reolink-style async ToPos). If the
-    hold is interrupted by /stop, the camera stopped between poses, so the
-    tracked azimuth set at command time is invalidated.
+    Only applies to adapters with a non-zero preset_move_hold_s (Reolink-style
+    async ToPos). If the hold is interrupted by /stop, the camera stopped
+    between poses, so the tracked azimuth set at command time is invalidated.
     """
-    if cam.azimuth_source != "tracked":
+    hold_s = cam.preset_move_hold_s
+    if hold_s <= 0:
         return resp
-    resp["hold_s"] = PRESET_MOVE_HOLD_S
-    if _interruptible_sleep(camera_ip, PRESET_MOVE_HOLD_S):
+    resp["hold_s"] = hold_s
+    if _interruptible_sleep(camera_ip, hold_s):
         resp["interrupted"] = True
         if hasattr(cam, "current_azimuth"):
             cam.current_azimuth = None
@@ -718,123 +712,7 @@ def move_by_degrees(
 
     lock = _acquire_or_409(camera_ip)
     try:
-        zoom = 0
-        if hasattr(cam, "get_focus_level"):
-            try:
-                info = cam.get_focus_level() or {}
-                z = info.get("zoom")
-                if z is not None:
-                    zoom = int(z)
-            except Exception as exc:
-                logger.warning("[%s] move_by_degrees: failed to read zoom, assuming 0: %s", camera_ip, exc)
-
-        axis_speeds = PAN_SPEEDS.get(adapter, {}) if direction in ("Left", "Right") else TILT_SPEEDS.get(adapter, {})
-        axis_bias = PAN_BIAS.get(adapter, {}) if direction in ("Left", "Right") else TILT_BIAS.get(adapter, {})
-
-        # Reject out-of-range explicit speeds up-front rather than silently
-        # downgrading them later. The server enforces the rule that matches
-        # physical reality: at zoom 0 only calibrated levels are valid, and
-        # at zoom > 0 only speed 1 is honored by Reolink hardware.
-        if speed is not None:
-            if zoom > 0 and speed != 1:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"speed={speed} invalid at zoom={zoom}: Reolink caps all speeds "
-                        f"to speed 1 (~1.5 °/s) above zoom 0. Pass speed=1 or omit 'speed' "
-                        f"to auto-pick."
-                    ),
-                )
-            if axis_speeds and speed not in axis_speeds:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"speed={speed} not in calibrated table for adapter '{adapter}' "
-                        f"(levels: {sorted(axis_speeds)}). Omit 'speed' to auto-pick."
-                    ),
-                )
-
-        # Auto-pick the calibrated speed level when caller didn't specify one.
-        # _pick_speed restricts to speed 1 at zoom > 0, and may return None
-        # for angles below bias[1] — those become a micro-impulse below.
-        auto_speed = speed is None
-        if auto_speed:
-            picked = _pick_speed(abs(degrees), axis_speeds, axis_bias, zoom=zoom) if axis_speeds else None
-            speed = picked if picked is not None else 1
-
-        # speed is guaranteed non-None here: either the caller passed one (and
-        # the early-return validation above rejected bad values) or the auto
-        # branch assigned a fallback of 1.
-        effective_speed: int = speed  # type: ignore[assignment]
-
-        if direction in ("Left", "Right"):
-            deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
-            bias = get_pan_bias(adapter, effective_speed)
-        else:
-            deg_per_sec = get_tilt_speed_per_sec(adapter, effective_speed)
-            bias = get_tilt_bias(adapter, effective_speed)
-
-        if deg_per_sec is None:
-            # Uncalibrated adapter (e.g. linovision): rough "speed≈°/s" proxy.
-            # Calibrated adapters can't reach this branch because the caller's
-            # speed was already validated against the table above, and
-            # auto-pick on an empty table yields speed=1 which also falls here.
-            try:
-                deg_per_sec = max(0.1, float(effective_speed))
-            except Exception:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported adapter '{adapter}' or speed level {effective_speed}",
-                )
-
-        duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
-        micro = duration_sec == 0.0 and abs(degrees) > 0
-        interrupted = False
-        start_azimuth = _start_azimuth_for_tracking(cam)
-
-        if micro:
-            logger.info(
-                "[%s] move_by_degrees %s %.2f° micro-impulse speed=1 (adapter=%s)",
-                camera_ip,
-                direction,
-                abs(degrees),
-                adapter,
-            )
-            cam.move_camera(direction, speed=1)
-            cam.move_camera("Stop")
-        else:
-            logger.info(
-                "[%s] move_by_degrees %s %.2f° dur=%.2fs speed=%s (adapter=%s)",
-                camera_ip,
-                direction,
-                abs(degrees),
-                duration_sec,
-                effective_speed,
-                adapter,
-            )
-            cam.move_camera(direction, speed=effective_speed)
-            interrupted = _interruptible_sleep(camera_ip, duration_sec)
-            cam.move_camera("Stop")
-
-        if not interrupted:
-            # A micro-impulse physically moves about the speed-1 coast bias.
-            moved_deg = get_pan_bias(adapter, 1) if micro else abs(degrees)
-            _update_tracked_azimuth(cam, start_azimuth, direction, moved_deg)
-
-        resp: dict = {
-            "status": "ok",
-            "camera_ip": camera_ip,
-            "direction": direction,
-            "degrees": degrees,
-            "duration": 0 if micro else round(duration_sec, 2),
-            "speed": 1 if micro else effective_speed,
-            "adapter": adapter,
-            "zoom": zoom,
-            "micro": micro,
-        }
-        if interrupted:
-            resp["interrupted"] = True
-        return resp
+        return _execute_degrees_move(cam, camera_ip, direction, degrees, speed, adapter)
     except HTTPException:
         raise
     except Exception as exc:
@@ -842,6 +720,134 @@ def move_by_degrees(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         lock.release()
+
+
+def _execute_degrees_move(
+    cam: PTZMixin,
+    camera_ip: str,
+    direction: str,
+    degrees: float,
+    speed: Optional[int],
+    adapter: str,
+) -> dict:
+    """Core of /move_by_degrees; the caller must hold the per-camera lock."""
+    zoom = 0
+    if hasattr(cam, "get_focus_level"):
+        try:
+            info = cam.get_focus_level() or {}
+            z = info.get("zoom")
+            if z is not None:
+                zoom = int(z)
+        except Exception as exc:
+            logger.warning("[%s] move_by_degrees: failed to read zoom, assuming 0: %s", camera_ip, exc)
+
+    axis_speeds = PAN_SPEEDS.get(adapter, {}) if direction in ("Left", "Right") else TILT_SPEEDS.get(adapter, {})
+    axis_bias = PAN_BIAS.get(adapter, {}) if direction in ("Left", "Right") else TILT_BIAS.get(adapter, {})
+
+    # Reject out-of-range explicit speeds up-front rather than silently
+    # downgrading them later. The server enforces the rule that matches
+    # physical reality: at zoom 0 only calibrated levels are valid, and
+    # at zoom > 0 only speed 1 is honored by Reolink hardware.
+    if speed is not None:
+        if zoom > 0 and speed != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"speed={speed} invalid at zoom={zoom}: Reolink caps all speeds "
+                    f"to speed 1 (~1.5 °/s) above zoom 0. Pass speed=1 or omit 'speed' "
+                    f"to auto-pick."
+                ),
+            )
+        if axis_speeds and speed not in axis_speeds:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"speed={speed} not in calibrated table for adapter '{adapter}' "
+                    f"(levels: {sorted(axis_speeds)}). Omit 'speed' to auto-pick."
+                ),
+            )
+
+    # Auto-pick the calibrated speed level when caller didn't specify one.
+    # _pick_speed restricts to speed 1 at zoom > 0, and may return None
+    # for angles below bias[1] — those become a micro-impulse below.
+    auto_speed = speed is None
+    if auto_speed:
+        picked = _pick_speed(abs(degrees), axis_speeds, axis_bias, zoom=zoom) if axis_speeds else None
+        speed = picked if picked is not None else 1
+
+    # speed is guaranteed non-None here: either the caller passed one (and
+    # the early-return validation above rejected bad values) or the auto
+    # branch assigned a fallback of 1.
+    effective_speed: int = speed  # type: ignore[assignment]
+
+    if direction in ("Left", "Right"):
+        deg_per_sec = get_pan_speed_per_sec(adapter, effective_speed)
+        bias = get_pan_bias(adapter, effective_speed)
+    else:
+        deg_per_sec = get_tilt_speed_per_sec(adapter, effective_speed)
+        bias = get_tilt_bias(adapter, effective_speed)
+
+    if deg_per_sec is None:
+        # Uncalibrated adapter (e.g. linovision): rough "speed≈°/s" proxy.
+        # Calibrated adapters can't reach this branch because the caller's
+        # speed was already validated against the table above, and
+        # auto-pick on an empty table yields speed=1 which also falls here.
+        try:
+            deg_per_sec = max(0.1, float(effective_speed))
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported adapter '{adapter}' or speed level {effective_speed}",
+            )
+
+    duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
+    micro = duration_sec == 0.0 and abs(degrees) > 0
+    interrupted = False
+    start_azimuth = _start_azimuth_for_tracking(cam)
+
+    if micro:
+        logger.info(
+            "[%s] move_by_degrees %s %.2f° micro-impulse speed=1 (adapter=%s)",
+            camera_ip,
+            direction,
+            abs(degrees),
+            adapter,
+        )
+        cam.move_camera(direction, speed=1)
+        cam.move_camera("Stop")
+    else:
+        logger.info(
+            "[%s] move_by_degrees %s %.2f° dur=%.2fs speed=%s (adapter=%s)",
+            camera_ip,
+            direction,
+            abs(degrees),
+            duration_sec,
+            effective_speed,
+            adapter,
+        )
+        cam.move_camera(direction, speed=effective_speed)
+        interrupted = _interruptible_sleep(camera_ip, duration_sec)
+        cam.move_camera("Stop")
+
+    if not interrupted:
+        # A micro-impulse physically moves about the speed-1 coast bias.
+        moved_deg = get_pan_bias(adapter, 1) if micro else abs(degrees)
+        _update_tracked_azimuth(cam, start_azimuth, direction, moved_deg)
+
+    resp: dict = {
+        "status": "ok",
+        "camera_ip": camera_ip,
+        "direction": direction,
+        "degrees": degrees,
+        "duration": 0 if micro else round(duration_sec, 2),
+        "speed": 1 if micro else effective_speed,
+        "adapter": adapter,
+        "zoom": zoom,
+        "micro": micro,
+    }
+    if interrupted:
+        resp["interrupted"] = True
+    return resp
 
 
 @router.get("/azimuth")
@@ -901,36 +907,48 @@ def move_to_azimuth(camera_ip: str, azimuth: float, speed: Optional[int] = None)
         finally:
             lock.release()
 
-    current = cam.get_azimuth()
-    if current is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Camera azimuth unknown; wait for a patrol pass or call /goto_preset first",
-        )
-
-    delta = _shortest_delta_deg(current, target)
     conf = RAW_CONFIG.get(camera_ip, {})
     adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
-    # Same skip threshold as click_to_move: below half the speed-1 coast bias,
-    # a micro-impulse would overshoot more than staying put.
-    if abs(delta) < PAN_BIAS.get(adapter, {}).get(1, 1.0) / 2:
-        return {
-            "status": "ok",
-            "camera_ip": camera_ip,
-            "azimuth_deg": round(current, 2),
-            "source": "tracked",
-            "skipped": True,
-            "delta_deg": round(delta, 3),
-        }
+    # Hold one lock across the azimuth read, delta computation, and move so a
+    # concurrent command cannot make the delta stale in between.
+    lock = _acquire_or_409(camera_ip)
+    try:
+        current = cam.get_azimuth()
+        if current is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Camera azimuth unknown; wait for a patrol pass or call /goto_preset first",
+            )
 
-    direction = "Right" if delta > 0 else "Left"
-    resp = move_by_degrees(camera_ip=camera_ip, direction=direction, degrees=abs(delta), speed=speed)
-    resp["source"] = "tracked"
-    resp["target_azimuth_deg"] = round(target, 2)
-    tracked = cam.get_azimuth()
-    resp["azimuth_deg"] = None if tracked is None else round(tracked, 2)
-    return resp
+        delta = _shortest_delta_deg(current, target)
+
+        # Same skip threshold as click_to_move: below half the speed-1 coast
+        # bias, a micro-impulse would overshoot more than staying put.
+        if abs(delta) < PAN_BIAS.get(adapter, {}).get(1, 1.0) / 2:
+            return {
+                "status": "ok",
+                "camera_ip": camera_ip,
+                "azimuth_deg": round(current, 2),
+                "source": "tracked",
+                "skipped": True,
+                "delta_deg": round(delta, 3),
+            }
+
+        direction = "Right" if delta > 0 else "Left"
+        resp = _execute_degrees_move(cam, camera_ip, direction, abs(delta), speed, adapter)
+        resp["source"] = "tracked"
+        resp["target_azimuth_deg"] = round(target, 2)
+        tracked = cam.get_azimuth()
+        resp["azimuth_deg"] = None if tracked is None else round(tracked, 2)
+        return resp
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[%s] move_to_azimuth error: %s", camera_ip, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        lock.release()
 
 
 @router.get("/speed_tables")

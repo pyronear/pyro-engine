@@ -33,11 +33,13 @@ def test_topos_sets_azimuth_from_pose_mapping():
     assert cam.get_azimuth() == 180.0
 
 
-def test_topos_unknown_pose_keeps_azimuth():
+def test_topos_unmapped_pose_invalidates_azimuth():
+    # An accepted preset outside the mapping still moves the camera, so the
+    # previous reference is stale and must be dropped.
     cam = _ptz_mock()
     cam.move_camera("ToPos", idx=1)
     cam.move_camera("ToPos", idx=99)
-    assert cam.get_azimuth() == 90.0
+    assert cam.get_azimuth() is None
 
 
 def test_pan_operation_invalidates_azimuth():
