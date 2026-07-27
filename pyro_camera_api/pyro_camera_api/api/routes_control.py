@@ -229,6 +229,8 @@ def click_to_move(
         if zoom > 0:
             result["warning"] = f"speed limited to 1 (zoom={zoom} > 0)"
 
+        start_azimuth = _start_azimuth_for_tracking(cam)
+
         def _execute_axis(axis: str, deg: float, direction: str, speeds: dict, bias: dict) -> bool:
             """Execute a single-axis move: calibrated duration, or micro-pulse if below bias.
             Returns True if the move was interrupted by /stop."""
@@ -248,6 +250,8 @@ def click_to_move(
                 cam.move_camera(direction, speed=speed_level)
                 interrupted = _interruptible_sleep(camera_ip, dur)
                 cam.move_camera("Stop")
+                if not interrupted:
+                    _update_tracked_azimuth(cam, start_azimuth, direction, abs(deg))
                 entry: dict = {
                     "axis": axis,
                     "direction": direction,
@@ -266,6 +270,8 @@ def click_to_move(
                 )
                 cam.move_camera(direction, speed=1)
                 cam.move_camera("Stop")
+                # A micro-impulse physically moves about the speed-1 coast bias.
+                _update_tracked_azimuth(cam, start_azimuth, direction, bias.get(1, 0.0))
                 result["moves"].append({
                     "axis": axis,
                     "direction": direction,
@@ -345,7 +351,8 @@ def move_camera(
         if pose_id is not None:
             logger.info("[%s] Moving to preset pose %s at speed %s", camera_ip, pose_id, speed)
             cam.move_camera("ToPos", speed=speed, idx=pose_id)
-            return {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+            pose_resp: dict = {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+            return _hold_for_preset_move(cam, camera_ip, pose_resp)
 
         if duration is not None and direction:
             logger.info(
@@ -416,6 +423,7 @@ def move_camera(
             # Micro-impulse: angle below bias → move+stop at speed 1
             micro = duration_sec == 0.0 and abs(degrees) > 0
             interrupted = False
+            start_azimuth = _start_azimuth_for_tracking(cam)
             if micro:
                 logger.info(
                     "[%s] Moving %s %.2f° micro-impulse speed=1 (adapter=%s)",
@@ -438,6 +446,11 @@ def move_camera(
                 cam.move_camera(direction, speed=effective_speed)
                 interrupted = _interruptible_sleep(camera_ip, duration_sec)
                 cam.move_camera("Stop")
+
+            if not interrupted:
+                # A micro-impulse physically moves about the speed-1 coast bias.
+                moved_deg = get_pan_bias(adapter, 1) if micro else abs(degrees)
+                _update_tracked_azimuth(cam, start_azimuth, direction, moved_deg)
 
             resp = {
                 "status": "ok",
@@ -541,18 +554,71 @@ def _interruptible_sleep(camera_ip: str, duration: float) -> bool:
     return STOP_EVENTS[camera_ip].wait(timeout=duration)
 
 
+# Reolink executes ToPos asynchronously with no completion feedback, so preset
+# moves hold the per-camera lock for this conservative duration to enforce
+# "no concurrent command while the camera is moving". Linovision preset moves
+# already block inside the adapter until the target azimuth is reached.
+PRESET_MOVE_HOLD_S = 5.0
+
+
+def _shortest_delta_deg(current: float, target: float) -> float:
+    """Signed shortest rotation from current to target azimuth, in [-180, 180)."""
+    return ((target - current + 180.0) % 360.0) - 180.0
+
+
+def _update_tracked_azimuth(cam: PTZMixin, start_azimuth: Optional[float], direction: str, degrees: float) -> None:
+    """Dead-reckon the azimuth after a completed timed pan move.
+
+    ``start_azimuth`` must be captured before the move starts (the adapter
+    invalidates its tracked azimuth when a pan operation begins). No-op for
+    hardware-reported adapters, tilt moves, or when the azimuth was unknown.
+    """
+    if cam.azimuth_source != "tracked" or not hasattr(cam, "current_azimuth"):
+        return
+    if start_azimuth is None or direction not in ("Left", "Right"):
+        return
+    signed = degrees if direction == "Right" else -degrees
+    cam.current_azimuth = (start_azimuth + signed) % 360.0
+
+
+def _start_azimuth_for_tracking(cam: PTZMixin) -> Optional[float]:
+    """Snapshot the tracked azimuth before a move; None for hardware adapters."""
+    return cam.get_azimuth() if cam.azimuth_source == "tracked" else None
+
+
+def _hold_for_preset_move(cam: PTZMixin, camera_ip: str, resp: dict) -> dict:
+    """Hold the per-camera lock while a fire-and-forget preset move completes.
+
+    Only applies to tracked-source adapters (Reolink-style async ToPos). If the
+    hold is interrupted by /stop, the camera stopped between poses, so the
+    tracked azimuth set at command time is invalidated.
+    """
+    if cam.azimuth_source != "tracked":
+        return resp
+    resp["hold_s"] = PRESET_MOVE_HOLD_S
+    if _interruptible_sleep(camera_ip, PRESET_MOVE_HOLD_S):
+        resp["interrupted"] = True
+        if hasattr(cam, "current_azimuth"):
+            cam.current_azimuth = None
+    return resp
+
+
 @router.post("/goto_preset")
 def goto_preset(camera_ip: str, pose_id: int, speed: int = 50):
-    """Move a PTZ camera to a configured preset pose. Returns immediately;
-    the camera completes the move asynchronously. Acquires the per-camera
-    lock to gate against interrupting an in-flight blocking PTZ op → 409 if busy."""
+    """Move a PTZ camera to a configured preset pose.
+
+    For adapters with fire-and-forget preset moves (Reolink) the per-camera
+    lock is held for a conservative duration while the camera travels, so
+    concurrent PTZ commands get a 409. Linovision blocks until the pose is
+    reached. Returns 409 if the camera is already busy."""
     update_command_time()
     cam = _require_ptz(camera_ip)
     lock = _acquire_or_409(camera_ip)
     try:
         logger.info("[%s] goto_preset %s speed=%s", camera_ip, pose_id, speed)
         cam.move_camera("ToPos", speed=speed, idx=pose_id)
-        return {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+        resp: dict = {"status": "ok", "camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
+        return _hold_for_preset_move(cam, camera_ip, resp)
     except Exception as exc:
         logger.error("[%s] goto_preset error: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -724,6 +790,7 @@ def move_by_degrees(
         duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
         micro = duration_sec == 0.0 and abs(degrees) > 0
         interrupted = False
+        start_azimuth = _start_azimuth_for_tracking(cam)
 
         if micro:
             logger.info(
@@ -749,6 +816,11 @@ def move_by_degrees(
             interrupted = _interruptible_sleep(camera_ip, duration_sec)
             cam.move_camera("Stop")
 
+        if not interrupted:
+            # A micro-impulse physically moves about the speed-1 coast bias.
+            moved_deg = get_pan_bias(adapter, 1) if micro else abs(degrees)
+            _update_tracked_azimuth(cam, start_azimuth, direction, moved_deg)
+
         resp: dict = {
             "status": "ok",
             "camera_ip": camera_ip,
@@ -770,6 +842,95 @@ def move_by_degrees(
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         lock.release()
+
+
+@router.get("/azimuth")
+def get_camera_azimuth(camera_ip: str):
+    """Return the camera's current real-world azimuth in degrees.
+
+    ``source`` is "hardware" when the value is read back from the camera
+    (Linovision) and "tracked" when it is dead-reckoned from commanded moves
+    (Reolink). For tracked adapters ``azimuth_deg`` is null until a preset
+    move (patrol pass or /goto_preset) provides a reference, and after an
+    interrupted or untimed free move. ``moving`` reflects whether a blocking
+    PTZ command currently holds the per-camera lock.
+    """
+    cam = _require_ptz(camera_ip)
+    azimuth = cam.get_azimuth()
+    return {
+        "camera_ip": camera_ip,
+        "azimuth_deg": None if azimuth is None else round(azimuth, 2),
+        "source": cam.azimuth_source,
+        "moving": MOVE_LOCKS[camera_ip].locked(),
+    }
+
+
+@router.post("/move_to_azimuth")
+def move_to_azimuth(camera_ip: str, azimuth: float, speed: Optional[int] = None):
+    """Move the camera to an absolute real-world azimuth in degrees.
+
+    Hardware adapters (Linovision) execute a blocking absolute move. Tracked
+    adapters (Reolink) rotate by the shortest signed delta from the current
+    dead-reckoned azimuth using the calibrated speed tables, reusing the
+    /move_by_degrees semantics (auto speed pick, zoom cap, micro-impulse).
+
+    Returns 409 when the camera is busy, or when the tracked azimuth is still
+    unknown (no preset move since boot; wait for a patrol pass or call
+    /goto_preset first).
+    """
+    update_command_time()
+    cam = _require_ptz(camera_ip)
+    target = azimuth % 360.0
+
+    if hasattr(cam, "move_to_azimuth"):
+        # Hardware absolute move, blocking until the camera reports arrival.
+        lock = _acquire_or_409(camera_ip)
+        try:
+            logger.info("[%s] move_to_azimuth %.2f° (hardware)", camera_ip, target)
+            ptz_status = cam.move_to_azimuth(target)
+            return {
+                "status": "ok",
+                "camera_ip": camera_ip,
+                "azimuth_deg": round(target, 2),
+                "source": "hardware",
+                "ptz_status": ptz_status,
+            }
+        except Exception as exc:
+            logger.error("[%s] move_to_azimuth error: %s", camera_ip, exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+        finally:
+            lock.release()
+
+    current = cam.get_azimuth()
+    if current is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Camera azimuth unknown; wait for a patrol pass or call /goto_preset first",
+        )
+
+    delta = _shortest_delta_deg(current, target)
+    conf = RAW_CONFIG.get(camera_ip, {})
+    adapter = _resolve_adapter(conf.get("adapter", "unknown"))
+
+    # Same skip threshold as click_to_move: below half the speed-1 coast bias,
+    # a micro-impulse would overshoot more than staying put.
+    if abs(delta) < PAN_BIAS.get(adapter, {}).get(1, 1.0) / 2:
+        return {
+            "status": "ok",
+            "camera_ip": camera_ip,
+            "azimuth_deg": round(current, 2),
+            "source": "tracked",
+            "skipped": True,
+            "delta_deg": round(delta, 3),
+        }
+
+    direction = "Right" if delta > 0 else "Left"
+    resp = move_by_degrees(camera_ip=camera_ip, direction=direction, degrees=abs(delta), speed=speed)
+    resp["source"] = "tracked"
+    resp["target_azimuth_deg"] = round(target, 2)
+    tracked = cam.get_azimuth()
+    resp["azimuth_deg"] = None if tracked is None else round(tracked, 2)
+    return resp
 
 
 @router.get("/speed_tables")
