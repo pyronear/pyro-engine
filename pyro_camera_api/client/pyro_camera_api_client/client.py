@@ -199,7 +199,11 @@ class PyroCameraAPIClient:
         if duration is not None:
             params["duration"] = duration
 
-        resp = self._request("POST", "/control/move", params=params)
+        # Preset moves block server-side while the camera travels (lock hold),
+        # and duration/degrees modes sleep for the move time: use a timeout
+        # that covers the longest server-side wait.
+        req_timeout = self.timeout if (pose_id is None and duration is None and degrees is None) else 30.0
+        resp = self._request("POST", "/control/move", params=params, timeout=req_timeout)
         return resp.json()
 
     # ------------------------------------------------------------------
@@ -207,9 +211,13 @@ class PyroCameraAPIClient:
     # ------------------------------------------------------------------
 
     def goto_preset(self, camera_ip: str, pose_id: int, speed: int = 50) -> Dict[str, Any]:
-        """Move to a configured preset pose. Returns immediately."""
+        """Move to a configured preset pose.
+
+        Blocks until the camera has settled: the server holds the per-camera
+        lock while fire-and-forget adapters (Reolink) travel to the pose.
+        """
         params = {"camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
-        resp = self._request("POST", "/control/goto_preset", params=params)
+        resp = self._request("POST", "/control/goto_preset", params=params, timeout=30.0)
         return resp.json()
 
     def start_move(self, camera_ip: str, direction: str, speed: int = 10) -> Dict[str, Any]:
