@@ -288,6 +288,25 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/control/click_to_move", params=params, timeout=30.0)
         return resp.json()
 
+    def get_azimuth(self, camera_ip: str) -> Dict[str, Any]:
+        """Return the camera's current real-world azimuth.
+
+        Response: {"camera_ip", "azimuth_deg" (null when unknown),
+        "source" ("hardware" or "tracked"), "moving"}.
+        """
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/control/azimuth", params=params)
+        return resp.json()
+
+    def move_to_azimuth(self, camera_ip: str, azimuth: float, speed: Optional[int] = None) -> Dict[str, Any]:
+        """Move to an absolute real-world azimuth. Blocks while the camera
+        moves; raises on 409 if busy or if the tracked azimuth is unknown."""
+        params: Dict[str, Any] = {"camera_ip": camera_ip, "azimuth": azimuth}
+        if speed is not None:
+            params["speed"] = speed
+        resp = self._request("POST", "/control/move_to_azimuth", params=params, timeout=30.0)
+        return resp.json()
+
     def get_speed_tables(self, camera_ip: str) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/control/speed_tables", params=params)
