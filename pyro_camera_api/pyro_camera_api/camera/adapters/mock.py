@@ -13,7 +13,7 @@ from typing import Optional
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusMixin, PTZMixin
 
 __all__ = ["MockCamera"]
 
@@ -48,6 +48,8 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         self.cam_poses = cam_poses or []
         self.cam_azimuths = cam_azimuths or []
         self.focus_position = focus_position
+        # Same dead-reckoned azimuth behavior as Reolink, for tests and demos.
+        self.current_azimuth: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -83,6 +85,10 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     # ------------------------------------------------------------------
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
+        if operation in PAN_OPERATIONS:
+            self.current_azimuth = None
+        elif operation == "ToPos" and idx in self.cam_poses and len(self.cam_poses) == len(self.cam_azimuths):
+            self.current_azimuth = float(self.cam_azimuths[self.cam_poses.index(idx)]) % 360.0
         logger.info(
             "MockCamera %s move_camera called, op=%s speed=%s idx=%s (no op)",
             self.camera_id,
@@ -90,6 +96,9 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
             speed,
             idx,
         )
+
+    def get_azimuth(self) -> Optional[float]:
+        return self.current_azimuth
 
     # ------------------------------------------------------------------
     # FocusMixin implementation (fake but compatible)

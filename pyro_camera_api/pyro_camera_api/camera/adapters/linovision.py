@@ -37,6 +37,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
       camera_command_az = (real_az + azimuth_offset_deg) % 360
     """
 
+    azimuth_source = "hardware"
+
     def __init__(
         self,
         camera_id: str,
@@ -192,6 +194,21 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             "zoom_raw": zoom,
             "real_azimuth_deg": self._camera_to_real_azimuth(az10 / 10.0),
         }
+
+    def get_azimuth(self) -> Optional[float]:
+        """Read the current real-world azimuth from the camera's PTZ status."""
+        try:
+            return float(self.get_ptz_status()["real_azimuth_deg"])
+        except Exception as exc:
+            logger.warning("[%s] Failed to read azimuth: %s", self.ip_address, exc)
+            return None
+
+    def move_to_azimuth(self, azimuth_deg: float) -> dict:
+        """Move to a real-world azimuth, blocking until the camera reports it reached."""
+        return self.move_absolute_perfect(
+            azimuth_deg=self._real_to_camera_azimuth(azimuth_deg),
+            elevation_deg=self.default_elevation_deg,
+        )
 
     def wait_reached_azimuth_raw(
         self,

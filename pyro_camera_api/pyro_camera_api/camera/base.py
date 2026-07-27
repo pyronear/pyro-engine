@@ -46,12 +46,22 @@ class BaseCamera(ABC):
         ...
 
 
+# Continuous operations that involve the pan axis. Starting one of these makes
+# a dead-reckoned azimuth stale until the caller computes the displacement or a
+# preset move provides a fresh reference.
+PAN_OPERATIONS = frozenset({"Left", "Right", "UpLeft", "UpRight", "DownLeft", "DownRight"})
+
+
 class PTZMixin(ABC):
     """
     Capability mixin for cameras that support pan tilt zoom controls.
 
     Use isinstance(camera, PTZMixin) to check support.
     """
+
+    # "tracked": azimuth is dead-reckoned server-side from commanded moves.
+    # "hardware": azimuth is read back from the camera itself.
+    azimuth_source: str = "tracked"
 
     @abstractmethod
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
@@ -63,6 +73,14 @@ class PTZMixin(ABC):
                        examples "Left", "Right", "Up", "Down", "Stop", "ToPos".
             speed: adapter specific speed value.
             idx: Preset index for operations that use a preset.
+        """
+        ...
+
+    @abstractmethod
+    def get_azimuth(self) -> Optional[float]:
+        """
+        Return the camera's current real-world azimuth in degrees [0, 360),
+        or None when unknown (e.g. after boot, before any preset move).
         """
         ...
 
