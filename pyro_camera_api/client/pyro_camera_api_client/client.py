@@ -310,7 +310,8 @@ class PyroCameraAPIClient:
         return resp.json()
 
     def zoom(self, camera_ip: str, level: int) -> Dict[str, Any]:
-        resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}")
+        # The server holds the per-camera lock while the zoom settles (~2-10 s).
+        resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}", timeout=30.0)
         return resp.json()
 
     def reboot_camera(self, camera_ip: str) -> Dict[str, Any]:
