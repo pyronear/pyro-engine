@@ -508,9 +508,10 @@ def stop_camera(camera_ip: str):
         raise HTTPException(status_code=400, detail="Camera does not support PTZ controls")
 
     try:
-        cam.move_camera("Stop")
-        # Wake any blocking handler currently sleeping under the lock.
+        # Wake any blocking handler first: even if the Stop command below is
+        # rejected by the camera, the woken handler sends its own timed Stop.
         STOP_EVENTS[camera_ip].set()
+        cam.move_camera("Stop")
         logger.info("[%s] Movement stopped", camera_ip)
         return {"message": f"Camera {camera_ip} stopped moving"}
     except Exception as exc:
@@ -898,13 +899,15 @@ def move_to_azimuth(camera_ip: str, azimuth: float, speed: Optional[int] = None)
     """Move the camera to an absolute real-world azimuth in degrees.
 
     Hardware adapters (Linovision) execute a blocking absolute move. Tracked
-    adapters (Reolink) rotate by the shortest signed delta from the current
-    dead-reckoned azimuth using the calibrated speed tables, reusing the
-    /move_by_degrees semantics (auto speed pick, zoom cap, micro-impulse).
+    adapters (Reolink) first recall the preset pose whose azimuth is closest
+    to the target (fast hardware travel that also re-anchors the dead-reckoned
+    reference), then correct the small residual with a calibrated timed pan
+    (same semantics as /move_by_degrees: auto speed pick, zoom cap,
+    micro-impulse). The residual is bounded by half the inter-pose spacing,
+    so the blocking time stays click_to_move-sized even at zoom > 0.
 
-    Returns 409 when the camera is busy, or when the tracked azimuth is still
-    unknown (no preset move since boot; wait for a patrol pass or call
-    /goto_preset first).
+    Returns 409 when the camera is busy, or when the pose azimuths have not
+    been resolved from the platform API yet (no anchor available).
     """
     update_command_time()
     cam = _require_ptz(camera_ip)
@@ -932,35 +935,69 @@ def move_to_azimuth(camera_ip: str, azimuth: float, speed: Optional[int] = None)
     conf = RAW_CONFIG.get(camera_ip, {})
     adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
-    # Hold one lock across the azimuth read, delta computation, and move so a
-    # concurrent command cannot make the delta stale in between.
+    poses = list(getattr(cam, "cam_poses", []) or [])
+    azimuths = list(getattr(cam, "cam_azimuths", []) or [])
+    if not azimuths or len(azimuths) != len(poses):
+        raise HTTPException(
+            status_code=409,
+            detail="Pose azimuths not resolved from the platform API yet; cannot anchor an absolute move",
+        )
+
+    # Hold one lock across the whole anchor-then-correct sequence so a
+    # concurrent command cannot slip in between the preset recall and the
+    # residual pan.
     lock = _acquire_or_409(camera_ip)
     try:
-        current = cam.get_azimuth()
-        if current is None:
-            raise HTTPException(
-                status_code=409,
-                detail="Camera azimuth unknown; wait for a patrol pass or call /goto_preset first",
-            )
-
-        delta = _shortest_delta_deg(current, target)
-
         # Same skip threshold as click_to_move: below half the speed-1 coast
         # bias, a micro-impulse would overshoot more than staying put.
-        if abs(delta) < PAN_BIAS.get(adapter, {}).get(1, 1.0) / 2:
+        skip_threshold = PAN_BIAS.get(adapter, {}).get(1, 1.0) / 2
+        current = cam.get_azimuth()
+        if current is not None and abs(_shortest_delta_deg(current, target)) < skip_threshold:
             return {
                 "status": "ok",
                 "camera_ip": camera_ip,
                 "azimuth_deg": round(current, 2),
                 "source": "tracked",
                 "skipped": True,
-                "delta_deg": round(delta, 3),
+                "delta_deg": round(_shortest_delta_deg(current, target), 3),
             }
 
-        direction = "Right" if delta > 0 else "Left"
-        resp = _execute_degrees_move(cam, camera_ip, direction, abs(delta), speed, adapter)
-        resp["source"] = "tracked"
-        resp["target_azimuth_deg"] = round(target, 2)
+        # Anchor on the preset pose closest to the target: preset recall runs
+        # at hardware speed regardless of zoom, and re-sets the dead-reckoned
+        # reference, so drift cannot accumulate across absolute moves.
+        pose_id, pose_azimuth = min(
+            zip(poses, azimuths, strict=True),
+            key=lambda pair: abs(_shortest_delta_deg(pair[1], target)),
+        )
+        logger.info(
+            "[%s] move_to_azimuth %.2f° via pose %s (%.2f°)",
+            camera_ip,
+            target,
+            pose_id,
+            pose_azimuth,
+        )
+        cam.move_camera("ToPos", speed=50, idx=pose_id)
+        resp: dict = {
+            "status": "ok",
+            "camera_ip": camera_ip,
+            "source": "tracked",
+            "target_azimuth_deg": round(target, 2),
+            "pose_id": pose_id,
+            "pose_azimuth_deg": round(pose_azimuth, 2),
+        }
+        _hold_for_preset_move(cam, camera_ip, resp)
+        if resp.get("interrupted"):
+            resp["azimuth_deg"] = None
+            return resp
+
+        residual = _shortest_delta_deg(pose_azimuth, target)
+        if abs(residual) >= skip_threshold:
+            direction = "Right" if residual > 0 else "Left"
+            move_resp = _execute_degrees_move(cam, camera_ip, direction, abs(residual), speed, adapter)
+            resp["residual_move"] = move_resp
+            if move_resp.get("interrupted"):
+                resp["interrupted"] = True
+
         tracked = cam.get_azimuth()
         resp["azimuth_deg"] = None if tracked is None else round(tracked, 2)
         return resp

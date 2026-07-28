@@ -110,7 +110,7 @@ def azimuth_sync_loop(stop_flag: threading.Event) -> None:
                 logger.info(
                     "[%s] Pose azimuths resolved from platform API: %s",
                     key,
-                    dict(zip(cam.cam_poses, cam.cam_azimuths)),
+                    dict(zip(cam.cam_poses, cam.cam_azimuths, strict=True)),
                 )
 
         stop_flag.wait(RETRY_INTERVAL_S)
