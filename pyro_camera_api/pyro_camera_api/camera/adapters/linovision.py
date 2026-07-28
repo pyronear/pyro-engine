@@ -203,13 +203,6 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             logger.warning("[%s] Failed to read azimuth: %s", self.ip_address, exc)
             return None
 
-    def move_to_azimuth(self, azimuth_deg: float) -> dict:
-        """Move to a real-world azimuth, blocking until the camera reports it reached."""
-        return self.move_absolute_perfect(
-            azimuth_deg=self._real_to_camera_azimuth(azimuth_deg),
-            elevation_deg=self.default_elevation_deg,
-        )
-
     def wait_reached_azimuth_raw(
         self,
         target_azimuth_deg: float,
