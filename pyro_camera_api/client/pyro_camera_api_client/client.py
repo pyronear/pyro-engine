@@ -292,7 +292,8 @@ class PyroCameraAPIClient:
         """Return the camera's current real-world azimuth.
 
         Response: {"camera_ip", "azimuth_deg" (null when unknown),
-        "source" ("hardware" or "tracked"), "moving"}.
+        "source" ("hardware" or "tracked"), "moving", "zoom",
+        "h_fov_deg" (calibrated horizontal FOV at the current zoom)}.
         """
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/control/azimuth", params=params)
