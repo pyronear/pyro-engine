@@ -1,3 +1,4 @@
+import logging
 import pathlib
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -79,6 +80,43 @@ def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_ca
 
     assert mock_engine.predict.called
     mock_client.get_latest_image.assert_called()
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_quiet_round_logs_single_line(mock_client_class, mock_engine, mock_camera_data, caplog):
+    """A round with no detection reports one INFO summary, not one line per pose."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.inference_loop()
+
+    info_lines = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert len(info_lines) == 1
+    assert "analyzed=2" in info_lines[0]
+    assert "positive=0" in info_lines[0]
+    # The engine healthcheck greps the log for "confidence"
+    assert "max_confidence" in info_lines[0]
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_summary_counts_failures(mock_client_class, mock_engine, mock_camera_data, caplog):
+    """Poses that fail to capture are reported in the round summary."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.side_effect = Exception("camera down")
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.inference_loop()
+
+    summary = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO][-1]
+    assert "analyzed=0" in summary
+    assert "failed=2" in summary
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
