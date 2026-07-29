@@ -28,7 +28,6 @@ __all__ = ["ContextCrop", "Engine"]
 # Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
 PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 # Context crop kept in RAM instead of the full-resolution frame. The region keeps a wide field of

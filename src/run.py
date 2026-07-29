@@ -16,18 +16,19 @@ from pyroclient import client
 
 from pyroengine import SystemController
 from pyroengine.engine import Engine
+from pyroengine.logs import setup_logging
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 
 def main(args):
-    print(args)
-
     # .env loading
     load_dotenv(".env")
+
+    setup_logging()
+    logger.info("Starting engine with %s", vars(args))
     api_url = os.environ.get("API_URL")
     assert isinstance(api_url, str)
     cam_user = os.environ.get("CAM_USER")
