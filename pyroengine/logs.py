@@ -31,6 +31,9 @@ def setup_logging() -> None:
         force=True,
     )
 
-    # Reduce noise from external libraries
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("PIL").setLevel(logging.WARNING)
+    # Reduce noise from external libraries. Never below the configured level: a child logger
+    # level is not re-checked against the root one, so WARNING here would leak warnings
+    # through an ERROR root.
+    noisy_level = max(level, logging.WARNING)
+    logging.getLogger("urllib3").setLevel(noisy_level)
+    logging.getLogger("PIL").setLevel(noisy_level)

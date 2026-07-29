@@ -84,7 +84,12 @@ def main(args):
         save_detections_frames=args.save_detections_frames,
     )
 
-    sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
+    sys_controller = SystemController(
+        engine,
+        camera_data,
+        args.pyro_camera_api_url,
+        heartbeat_file=str(pathlib.Path(args.cache) / "heartbeat"),
+    )
 
     sys_controller.main_loop(args.period, args.send_alerts)
 
