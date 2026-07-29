@@ -27,7 +27,6 @@ MODEL_NAME = "ncnn_cpu.tar.gz"
 MODEL_SLUG = f"{MODEL_REPO_ID.split('/', 1)[1]}_{MODEL_REVISION}"
 MODEL_CACHE_SUBDIR = "models"
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 

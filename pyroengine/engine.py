@@ -26,7 +26,6 @@ __all__ = ["ContextCrop", "Engine"]
 # Client errors worth retrying later; every other 4xx is a permanent rejection of the payload.
 RETRYABLE_STATUS = frozenset({408, 425, 429})
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 # Context crop kept in RAM instead of the full-resolution frame. The region keeps a wide field of
