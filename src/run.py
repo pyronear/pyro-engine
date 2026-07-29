@@ -88,7 +88,7 @@ def main(args):
         engine,
         camera_data,
         args.pyro_camera_api_url,
-        heartbeat_file=str(pathlib.Path(args.cache) / "heartbeat"),
+        heartbeat_file=args.heartbeat_file,
     )
 
     sys_controller.main_loop(args.period, args.send_alerts)
@@ -109,6 +109,12 @@ if __name__ == "__main__":
     parser.add_argument("--pyro_camera_api_url", type=str, default="http://127.0.0.1:8081", help="Camera api url")
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
+    parser.add_argument(
+        "--heartbeat-file",
+        type=str,
+        default="data/heartbeat",
+        help="File refreshed on every loop, used by the container healthcheck",
+    )
     parser.add_argument(
         "--frame-size",
         type=tuple,
