@@ -213,7 +213,7 @@ def log_ffmpeg_stderr(proc: subprocess.Popen[bytes], name: str) -> None:
     for line in iter(proc.stderr.readline, b""):
         if not line:
             break
-        logger.info("[%s] %s", name, line.decode(errors="ignore").rstrip())
+        logger.debug("[ffmpeg %s] %s", name, line.decode(errors="ignore").rstrip())
 
 
 class FPSMeter:
@@ -236,7 +236,7 @@ class FPSMeter:
             inst = self._count / dt
             self._ema = inst if self._ema is None else 0.9 * self._ema + 0.1 * inst
             if now - self._last_log >= self._log_every:
-                logger.info("FPS %s, current %.2f, smoothed %.2f", self.name, inst, self._ema or inst)
+                logger.debug("FPS %s, current %.2f, smoothed %.2f", self.name, inst, self._ema or inst)
                 self._last_log = now
                 self._t0 = now
                 self._count = 0
