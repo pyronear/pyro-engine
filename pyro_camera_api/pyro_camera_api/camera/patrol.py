@@ -11,9 +11,14 @@ import threading
 import time
 from typing import Any, Dict
 
+from pyro_camera_api.camera.base import FocusMixin
+from pyro_camera_api.camera.focus_manager import FINE_TUNE_INTERVAL, fine_adjustment, full_calibration
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 
 logger = logging.getLogger(__name__)
+
+# Seconds to let the turret settle on the calibration pose before capturing
+CALIBRATION_SETTLE_TIME = 3.0
 
 # backoff settings for static cameras
 MAX_FAILS_BEFORE_SKIP = 2  # skip after 2 consecutive failures
@@ -72,6 +77,20 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         logger.warning("[%s] No poses defined, exiting patrol loop", camera_ip)
         return
 
+    # Full calibration once at startup, unless a reference focus is already
+    # configured. The result is stored in cam.focus_position and restored by
+    # the patrol loop after every round.
+    if isinstance(cam, FocusMixin) and cam.focus_position is None:
+        calibration_pose = poses[1] if len(poses) > 1 else poses[0]
+        try:
+            cam.move_camera("ToPos", idx=calibration_pose, speed=50)
+            time.sleep(CALIBRATION_SETTLE_TIME)
+            full_calibration(cam)
+        except Exception as exc:
+            logger.warning("[%s] Startup focus calibration failed: %s", camera_ip, exc)
+
+    next_fine_tune = time.monotonic() + FINE_TUNE_INTERVAL
+
     logger.info("[%s] Starting patrol cycle with %d poses", camera_ip, len(poses))
 
     while not stop_flag.is_set():
@@ -108,6 +127,15 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 logger.info("[%s] Restored manual focus to %s", camera_ip, cam.focus_position)
             except Exception as exc:
                 logger.warning("[%s] Failed to restore focus: %s", camera_ip, exc)
+
+        # Light focus touch-up around the reference between rounds; skipped
+        # internally while a stream is active or the camera is busy.
+        if not stop_flag.is_set() and time.monotonic() >= next_fine_tune:
+            try:
+                fine_adjustment(cam)
+            except Exception as exc:
+                logger.warning("[%s] Fine focus adjustment failed: %s", camera_ip, exc)
+            next_fine_tune = time.monotonic() + FINE_TUNE_INTERVAL
 
         elapsed = time.time() - start_time
         sleep_time = max(0.0, 30.0 - elapsed)
