@@ -163,9 +163,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     cam.last_images[-1] = image
                     # Steady state is silent, only the recovery is worth an INFO line.
                     if FAILURE_COUNT[camera_ip]:
-                        logger.info(
-                            "[%s] Capture recovered after %d failures", camera_ip, FAILURE_COUNT[camera_ip]
-                        )
+                        logger.info("[%s] Capture recovered after %d failures", camera_ip, FAILURE_COUNT[camera_ip])
                     else:
                         logger.debug("[%s] Updated static image (pose -1)", camera_ip)
                     # success reset failure counter and clear skip
