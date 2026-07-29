@@ -242,7 +242,12 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         should_abort: Optional[Callable[[], bool]] = None,
     ) -> int:
         """
-        Perform adaptive exponential hill climb to find best manual focus.
+        Find the best manual focus with a coarse sweep followed by a local refine.
+
+        The Laplacian sharpness metric is nearly flat far from focus, so a pure
+        hill climb from a bad start can stall in noise on a blurry position.
+        The sweep probes the whole focus range first to locate the sharpness
+        basin, then small steps refine inside it.
 
         should_abort is checked before each capture; when it returns True the
         search stops early and the best position found so far is applied.
@@ -251,6 +256,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
 
         abs_min = 600
         abs_max = 900
+        sweep_step = 10
         history: List[Tuple[int, float]] = []
 
         def clamp_focus(pos: int) -> int:
@@ -292,30 +298,8 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         start_focus = clamp_focus(int(current_focus))
 
         try:
-            capture_and_score(start_focus)
-
-            forward_score = capture_and_score(start_focus + 1)
-            backward_score = capture_and_score(start_focus - 1)
-
-            if forward_score > backward_score:
-                direction = 1
-                next_focus = start_focus + 1
-                next_score = forward_score
-            else:
-                direction = -1
-                next_focus = start_focus - 1
-                next_score = backward_score
-
-            step = 2
-            while True:
-                test_focus = clamp_focus(next_focus + direction * step)
-                score = capture_and_score(test_focus)
-                if score > next_score:
-                    next_focus = test_focus
-                    next_score = score
-                    step *= 2
-                else:
-                    break
+            for pos in range(abs_min, abs_max + 1, sweep_step):
+                capture_and_score(pos)
 
             best_focus, best_score = max(history, key=operator.itemgetter(1))
             for fine_step in [3, 1]:
