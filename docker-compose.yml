@@ -51,7 +51,9 @@ services:
     restart: always
     network_mode: host
     healthcheck:
-      test: ["CMD-SHELL", "grep -q 'confidence\\|Nighttime detected' engine.log || exit 1"]
+      # Liveness comes from the heartbeat file the main loop refreshes, not from log
+      # content, so changing LOG_LEVEL cannot mark a healthy engine as unhealthy.
+      test: ["CMD-SHELL", "[ -n \"$$(find data/heartbeat -mmin -5 2>/dev/null)\" ] || exit 1"]
       interval: 30s
       retries: 3
       start_period: 20s
