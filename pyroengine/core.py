@@ -210,6 +210,8 @@ class SystemController:
                     return
 
                 cam_id = f"{ip}_{pose}" if is_ptz else ip
+                # A round over many poses can outlast the healthcheck window on slow hardware.
+                self._write_heartbeat()
                 try:
                     frame = self._safe_get_latest_image(ip, pose)
                     if frame is None:
@@ -342,4 +344,4 @@ class SystemController:
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)
                 logger.debug("Loop ran in %.2fs, sleeping for %.2fs", loop_time, sleep_time)
-                time.sleep(sleep_time)
+                self._sleep_with_heartbeat(sleep_time)
