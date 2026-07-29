@@ -41,7 +41,7 @@ from pyro_camera_api.services.stream import (
 logger = logging.getLogger(__name__)
 
 # Seconds between two fine adjustments of the same camera
-FINE_TUNE_INTERVAL = 5 * 60.0
+FINE_TUNE_INTERVAL = 30 * 60.0
 # Offsets probed around the reference focus position
 FINE_TUNE_OFFSETS = (-4, -2, 2, 4)
 # Relative sharpness gain required before moving the reference
