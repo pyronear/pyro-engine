@@ -11,7 +11,7 @@ import operator
 import pathlib
 import time
 from io import BytesIO
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -19,7 +19,7 @@ import requests
 import urllib3
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 __all__ = ["ReolinkCamera"]
 
@@ -235,25 +235,37 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         laplacian = cv2.Laplacian(arr, cv2.CV_64F)
         return float(laplacian.var())
 
-    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
         """
         Perform adaptive exponential hill climb to find best manual focus.
+
+        should_abort is checked before each capture; when it returns True the
+        search stops early and the best position found so far is applied.
         """
         _ = retry_depth  # unused, kept for signature compatibility
 
         abs_min = 600
         abs_max = 900
+        history: List[Tuple[int, float]] = []
 
         def clamp_focus(pos: int) -> int:
             return max(abs_min, min(abs_max, pos))
 
         def capture_and_score(pos: int) -> float:
             pos = clamp_focus(pos)
+            if should_abort is not None and should_abort():
+                raise FocusAbortedError
             self.set_manual_focus(pos)
             time.sleep(2)
             image = self.capture()
             if image is None:
                 logger.warning("[%s] No image at focus %s", self.ip_address, pos)
+                history.append((pos, 0.0))
                 return 0.0
             score_local = self._measure_sharpness(image)
             logger.info("[%s] Focus %s: Sharpness = %.2f", self.ip_address, pos, score_local)
@@ -261,6 +273,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 folder = f"focus_debug/{self.ip_address.replace('.', '_')}"
                 pathlib.Path(folder).mkdir(exist_ok=True, parents=True)
                 image.save(f"{folder}/focus_{pos}.jpg")
+            history.append((pos, score_local))
             return score_local
 
         if self.cam_type == "static":
@@ -276,48 +289,55 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             current_focus = self.focus_position
             logger.info("[%s] Using existing focus position: %s", self.ip_address, current_focus)
 
-        best_focus = clamp_focus(int(current_focus))
-        best_score = capture_and_score(best_focus)
+        start_focus = clamp_focus(int(current_focus))
 
-        forward_score = capture_and_score(best_focus + 1)
-        backward_score = capture_and_score(best_focus - 1)
+        try:
+            capture_and_score(start_focus)
 
-        if forward_score > backward_score:
-            direction = 1
-            next_focus = best_focus + 1
-            next_score = forward_score
-        else:
-            direction = -1
-            next_focus = best_focus - 1
-            next_score = backward_score
+            forward_score = capture_and_score(start_focus + 1)
+            backward_score = capture_and_score(start_focus - 1)
 
-        step = 2
-        history = [(best_focus, best_score), (next_focus, next_score)]
-
-        while True:
-            test_focus = clamp_focus(next_focus + direction * step)
-            score = capture_and_score(test_focus)
-            history.append((test_focus, score))
-            if score > next_score:
-                next_focus = test_focus
-                next_score = score
-                step *= 2
+            if forward_score > backward_score:
+                direction = 1
+                next_focus = start_focus + 1
+                next_score = forward_score
             else:
-                break
+                direction = -1
+                next_focus = start_focus - 1
+                next_score = backward_score
 
-        best_focus, best_score = max(history, key=operator.itemgetter(1))
-        for fine_step in [3, 1]:
-            improved = True
-            while improved:
-                improved = False
-                for offset in (-fine_step, fine_step):
-                    candidate = clamp_focus(best_focus + offset)
-                    score = capture_and_score(candidate)
-                    if score > best_score:
-                        best_score = score
-                        best_focus = candidate
-                        improved = True
-                        break
+            step = 2
+            while True:
+                test_focus = clamp_focus(next_focus + direction * step)
+                score = capture_and_score(test_focus)
+                if score > next_score:
+                    next_focus = test_focus
+                    next_score = score
+                    step *= 2
+                else:
+                    break
+
+            best_focus, best_score = max(history, key=operator.itemgetter(1))
+            for fine_step in [3, 1]:
+                improved = True
+                while improved:
+                    improved = False
+                    for offset in (-fine_step, fine_step):
+                        candidate = clamp_focus(best_focus + offset)
+                        score = capture_and_score(candidate)
+                        if score > best_score:
+                            best_score = score
+                            best_focus = candidate
+                            improved = True
+                            break
+        except FocusAbortedError:
+            if not history:
+                logger.info("[%s] Focus search aborted before any capture", self.ip_address)
+                self.focus_position = start_focus
+                self.set_manual_focus(start_focus)
+                return start_focus
+            best_focus, best_score = max(history, key=operator.itemgetter(1))
+            logger.info("[%s] Focus search aborted, keeping best known position %s", self.ip_address, best_focus)
 
         self.focus_position = best_focus
         self.set_manual_focus(best_focus)

@@ -49,6 +49,11 @@ def set_app_for_stream(app: "FastAPI") -> None:
     _APP = app
 
 
+def get_app_for_stream() -> Optional["FastAPI"]:
+    """Return the FastAPI app stored by set_app_for_stream, or None before startup."""
+    return _APP
+
+
 def get_workers(app: "FastAPI") -> dict[str, Pipeline]:
     """Return the mapping camera_id -> Pipeline from app.state."""
     return cast(dict[str, Pipeline], getattr(app.state, "stream_workers", {}))

@@ -7,9 +7,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from PIL import Image
+
+
+class FocusAbortedError(Exception):
+    """Raised inside focus_finder when the caller requests an early abort."""
 
 
 class BaseCamera(ABC):
@@ -74,6 +78,9 @@ class FocusMixin(ABC):
     Use isinstance(camera, FocusMixin) to check support.
     """
 
+    # Reference focus position found by calibration, None until known
+    focus_position: Optional[int] = None
+
     @abstractmethod
     def set_manual_focus(self, position: int) -> None:
         """Set manual focus to a specific position."""
@@ -88,3 +95,18 @@ class FocusMixin(ABC):
           { "focus": int | None, "zoom": int | None }
         """
         ...
+
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
+        """
+        Run the adapter's autofocus search and return the best focus position.
+
+        should_abort, when provided, is polled between capture steps so a
+        caller can stop the search early (e.g. when a stream starts).
+        Adapters without a real implementation return their current reference.
+        """
+        raise NotImplementedError
