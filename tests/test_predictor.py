@@ -57,25 +57,34 @@ def test_predictor_fake_pred(mock_wildfire_image):
     assert isinstance(out, float)
 
 
-def test_predictor_verbose_false_no_logs(mock_wildfire_image, caplog):
-    """verbose=False suppresses pyro_predictor log output."""
-    predictor = Predictor(nb_consecutive_frames=2, verbose=False)
+def test_predictor_quiet_frame_no_info_logs(mock_wildfire_image, caplog):
+    """A frame with no detection stays out of INFO, so a quiet round is silent."""
+    predictor = Predictor(nb_consecutive_frames=2)
     with caplog.at_level(logging.INFO, logger="pyro_predictor"):
-        predictor.predict(mock_wildfire_image)
+        predictor.predict(mock_wildfire_image, fake_pred=np.empty((0,)))
     assert caplog.records == []
 
 
-def test_predictor_verbose_true_emits_logs(mock_wildfire_image, caplog):
-    """verbose=True (default) emits INFO logs."""
-    predictor = Predictor(nb_consecutive_frames=2, verbose=True)
+def test_predictor_detection_emits_info_log(mock_wildfire_image, caplog):
+    """A detection is always reported at INFO."""
+    predictor = Predictor(nb_consecutive_frames=2)
+    fake = np.array([[0.1, 0.1, 0.2, 0.2, 0.9], [0.3, 0.3, 0.4, 0.4, 0.8]]).T
     with caplog.at_level(logging.INFO, logger="pyro_predictor"):
-        predictor.predict(mock_wildfire_image)
-    assert any(r.levelno == logging.INFO for r in caplog.records)
+        predictor.predict(mock_wildfire_image, cam_id="cam_a", fake_pred=fake)
+    assert any(r.levelno == logging.INFO and "cam_a" in r.getMessage() for r in caplog.records)
 
 
-def test_classifier_verbose_false_no_logs(tmpdir_factory, caplog):
-    """Classifier verbose=False suppresses log output during init."""
+def test_predictor_frame_details_at_debug(mock_wildfire_image, caplog):
+    """Per-frame details remain available when DEBUG is enabled."""
+    predictor = Predictor(nb_consecutive_frames=2)
+    with caplog.at_level(logging.DEBUG, logger="pyro_predictor"):
+        predictor.predict(mock_wildfire_image, fake_pred=np.empty((0,)))
+    assert any(r.levelno == logging.DEBUG for r in caplog.records)
+
+
+def test_classifier_does_not_configure_root_logger(tmpdir_factory):
+    """Importing/constructing the library must not install root handlers."""
     folder = str(tmpdir_factory.mktemp("cls_cache"))
-    with caplog.at_level(logging.INFO, logger="pyro_predictor"):
-        Classifier(model_folder=folder, format="onnx", verbose=False)
-    assert caplog.records == []
+    root_handlers = list(logging.root.handlers)
+    Classifier(model_folder=folder, format="onnx", verbose=False)
+    assert logging.root.handlers == root_handlers

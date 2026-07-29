@@ -50,9 +50,8 @@ class Classifier:
         max_bbox_size=0.4,
         verbose=True,
     ) -> None:
+        # Kept for backward compatibility: per-frame output is now controlled by the log level.
         self.verbose = verbose
-        if not verbose:
-            logger.setLevel(logging.WARNING)
 
         if model_path:
             if not pathlib.Path(model_path).is_file():
@@ -230,7 +229,7 @@ class Classifier:
         pred = pred[(pred[:, 2] - pred[:, 0]) < self.max_bbox_size, :]
         pred = np.reshape(pred, (-1, 5))
 
-        logger.info(f"Model original pred : {pred}")
+        logger.debug("Model original pred: %s", pred)
 
         # Remove prediction in bbox occlusion mask
         if len(occlusion_bboxes):

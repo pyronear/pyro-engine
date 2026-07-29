@@ -81,9 +81,9 @@ def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 1) -> 
     try:
         api_instance.heartbeat(cam_id)
     except TimeoutError:
-        logger.warning(f"Heartbeat check timed out for {cam_id}")
+        logger.warning("[%s] Heartbeat check timed out", cam_id)
     except RequestsConnectionError:
-        logger.warning(f"Unable to reach the pyro-api with {cam_id}")
+        logger.warning("[%s] Unable to reach the pyro-api", cam_id)
     finally:
         signal.alarm(0)
 
@@ -271,12 +271,12 @@ class Engine(Predictor):
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
             ):
                 # send image periodically
-                logger.info(f"Uploading periodical image for cam {cam_id}")
+                logger.info("[%s] Uploading periodical image", cam_id)
                 self._states[cam_key]["last_image_sent"] = time.time()
                 ip = cam_id.split("_")[0]
                 if ip in self.api_client:
                     response = self.api_client[ip].update_last_image(encoded_bytes)
-                    logger.info(response.text)
+                    logger.debug("[%s] Periodical image response: %s", cam_id, response.text)
 
             # Send one pose image per day at 12:00
             if isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
@@ -287,17 +287,17 @@ class Engine(Predictor):
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     if ip in self.api_client:
-                        logger.info(f"Uploading daily pose image for cam {cam_id} (pose {pose_id})")
+                        logger.info("[%s] Uploading daily pose image (pose %s)", cam_id, pose_id)
                         self._states[cam_key]["last_pose_image_sent"] = now
                         response = self.api_client[ip].update_pose_image(pose_id, encoded_bytes)
-                        logger.info(response.text)
+                        logger.debug("[%s] Daily pose image response: %s", cam_id, response.text)
 
         # Update occlusion masks from API
         if (
             self._states[cam_key]["last_bbox_mask_fetch"] is None
             or time.time() - self._states[cam_key]["last_bbox_mask_fetch"] > self.last_bbox_mask_fetch_period
         ):
-            logger.info(f"Update occlusion masks for cam {cam_key}")
+            logger.debug("[%s] Updating occlusion masks", cam_key)
             self._states[cam_key]["last_bbox_mask_fetch"] = time.time()
             if isinstance(cam_id, str) and isinstance(self.cam_creds, dict) and cam_id in self.cam_creds:
                 _, pose_id = self.cam_creds[cam_id]
@@ -313,9 +313,10 @@ class Engine(Predictor):
                             coords = tuple(float(c) for c in mask_str.split(","))
                             bbox_mask_dict[str(mask_entry["id"])] = coords
                         self.occlusion_masks[cam_key] = bbox_mask_dict
-                        logger.info(f"Downloaded occlusion masks for cam {cam_key}: {bbox_mask_dict}")
+                        logger.info("[%s] Downloaded %d occlusion masks", cam_key, len(bbox_mask_dict))
+                        logger.debug("[%s] Occlusion masks: %s", cam_key, bbox_mask_dict)
                     except RequestException as e:
-                        logger.warning(f"Failed to fetch occlusion masks for cam {cam_key} (pose {pose_id}): {e}")
+                        logger.warning("[%s] Failed to fetch occlusion masks (pose %s): %s", cam_key, pose_id, e)
 
         # Inference with ONNX
         if fake_pred is None:
@@ -331,7 +332,7 @@ class Engine(Predictor):
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
 
-        logger.info(f"pred for {cam_key} : {preds}")
+        logger.debug("[%s] Raw predictions: %s", cam_key, preds)
         # Store only a compact JPEG region around the detections so _process_alerts can crop at
         # full resolution without keeping the whole original frame in RAM. During an ongoing alert,
         # also cover the frozen fire locations so carried-forward / backfilled crops are cut from the
@@ -346,10 +347,11 @@ class Engine(Predictor):
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
 
-        # Log analysis result
-        device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-        pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-        logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        # Log analysis result: a detection is always worth an INFO line, a quiet frame is not.
+        if conf > self.conf_thresh:
+            logger.info("[%s] Wildfire detected (confidence: %.2f%%)", cam_key, conf * 100)
+        else:
+            logger.debug("[%s] No wildfire (confidence: %.2f%%)", cam_key, conf * 100)
 
         # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip)
         if self._states[cam_key]["ongoing"] and len(self.api_client) > 0 and isinstance(cam_id, str):
@@ -688,7 +690,7 @@ class Engine(Predictor):
                 # try to upload the oldest element
                 frame_info = self._alerts[0]
                 cam_id = frame_info["cam_id"]
-                logger.info(f"Camera '{cam_id}' - Sending alert from {frame_info['ts']}...")
+                logger.info("[%s] Sending alert from %s", cam_id, frame_info["ts"])
 
                 # Save alert on device
                 if self.save_detections_frames:
@@ -702,13 +704,13 @@ class Engine(Predictor):
                     # Detection creation
                     bboxes = self._alerts[0]["bboxes"]
                     if not bboxes:
-                        logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
+                        logger.warning("[%s] Skipping alert with empty bboxes", cam_id)
                         self._alerts.popleft()
                         continue
                     jpeg_bytes = frame_info.get("jpeg_bytes")
                     if jpeg_bytes is None:
                         # The full frame is no longer kept in RAM, so there is nothing to re-encode.
-                        logger.warning(f"Camera '{cam_id}' - skipping alert without encoded frame")
+                        logger.warning("[%s] Skipping alert without encoded frame", cam_id)
                         self._alerts.popleft()
                         continue
                     bboxes = [tuple(bboxe) for bboxe in bboxes]
@@ -724,16 +726,15 @@ class Engine(Predictor):
                     try:
                         response.json()["id"]
                     except ValueError:
-                        logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
+                        logger.error("[%s] Non-JSON response body: %s", cam_id, response.text)
                         raise
 
                     # Clear
                     self._alerts.popleft()
-                    logger.info(f"Camera '{cam_id}' - alert sent")
+                    logger.info("[%s] Alert sent, %d remaining in cache", cam_id, len(self._alerts))
 
                 except (KeyError, RequestsConnectionError, ValueError) as e:
-                    logger.error(f"Camera '{cam_id}' - unable to upload cache")
-                    logger.error(e)
+                    logger.error("[%s] Unable to upload cache: %s", cam_id, e)
                     break
 
     def _local_backup(

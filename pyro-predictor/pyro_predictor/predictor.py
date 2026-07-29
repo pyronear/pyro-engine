@@ -34,7 +34,7 @@ class Predictor:
         nb_consecutive_frames: sliding-window size for temporal smoothing
         frame_size: if set, resize each frame to (H, W) before inference
         cam_ids: list of camera IDs to pre-initialise state for
-        verbose: if False, suppress all informational log output (default True)
+        verbose: kept for backward compatibility, log verbosity is driven by the logging level
         kwargs: forwarded to Classifier
 
     Examples:
@@ -186,13 +186,13 @@ class Predictor:
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
 
-        if self.verbose:
-            logger.info(f"pred for {cam_key} : {preds}")
+        logger.debug("[%s] Raw predictions: %s", cam_key, preds)
         conf = self._update_states(frame, preds, cam_key)
 
-        if self.verbose:
-            device_str = f"Camera '{cam_id}' - " if isinstance(cam_id, str) else ""
-            pred_str = "Wildfire detected" if conf > self.conf_thresh else "No wildfire"
-            logger.info(f"{device_str}{pred_str} (confidence: {conf:.2%})")
+        # A detection is always worth an INFO line, a quiet frame is not.
+        if conf > self.conf_thresh:
+            logger.info("[%s] Wildfire detected (confidence: %.2f%%)", cam_key, conf * 100)
+        else:
+            logger.debug("[%s] No wildfire (confidence: %.2f%%)", cam_key, conf * 100)
 
         return float(conf)
