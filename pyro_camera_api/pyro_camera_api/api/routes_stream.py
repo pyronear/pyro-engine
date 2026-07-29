@@ -26,6 +26,7 @@ from pyro_camera_api.services.stream import (
     log_ffmpeg_output,
     stop_any_running_stream,
 )
+from pyro_camera_api.utils.redact import redact_url
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
@@ -102,7 +103,7 @@ def start_stream(camera_ip: str, request: Request):
         )
 
         workers[camera_ip] = Pipeline(decoder=decoder, encoder=encoder)
-        logger.info("[%s] start pipeline, rtsp %s, srt %s", camera_ip, input_url, output_url)
+        logger.info("[%s] Start pipeline, rtsp %s, srt %s", camera_ip, redact_url(input_url), output_url)
         decoder.start()
         encoder.start()
 
@@ -114,7 +115,8 @@ def start_stream(camera_ip: str, request: Request):
 
     # restream mode
     cmd = build_ffmpeg_restream_cmd(input_url=input_url, output_url=output_url)
-    logger.info("[%s] Running ffmpeg command, %s", camera_ip, " ".join(cmd))
+    logger.info("[%s] Starting ffmpeg restream to %s", camera_ip, output_url)
+    logger.debug("[%s] ffmpeg command: %s", camera_ip, " ".join(redact_url(part) for part in cmd))
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     procs[camera_ip] = proc
     threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()

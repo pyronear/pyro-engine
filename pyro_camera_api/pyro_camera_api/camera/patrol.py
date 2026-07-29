@@ -76,6 +76,8 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
     while not stop_flag.is_set():
         start_time = time.time()
+        captured = 0
+        failed = 0
 
         for pose in poses:
             if stop_flag.is_set():
@@ -83,33 +85,46 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
             try:
                 cam.move_camera("ToPos", idx=pose, speed=50)
-                logger.info("[%s] Moving to pose %s", camera_ip, pose)
+                logger.debug("[%s] Moved to pose %s", camera_ip, pose)
                 time.sleep(1.5)
 
                 image = cam.capture()
                 if image:
                     cam.last_images[pose] = image
-                    logger.info("[%s] Stored image for pose %s", camera_ip, pose)
+                    captured += 1
+                    logger.debug("[%s] Stored image for pose %s", camera_ip, pose)
+                else:
+                    failed += 1
+                    logger.debug("[%s] Capture returned no image for pose %s", camera_ip, pose)
 
             except Exception as exc:
+                failed += 1
                 logger.error("[%s] Error at pose %s: %s", camera_ip, pose, exc)
                 continue
 
         try:
             cam.move_camera("ToPos", idx=poses[0], speed=50)
-            logger.info("[%s] Returned to pose 0", camera_ip)
+            logger.debug("[%s] Returned to pose %s", camera_ip, poses[0])
         except Exception as exc:
-            logger.warning("[%s] Failed to return to pose 0: %s", camera_ip, exc)
+            logger.warning("[%s] Failed to return to first pose: %s", camera_ip, exc)
 
         if getattr(cam, "focus_position", None) is not None:
             try:
                 if cam.focus_position is not None:
                     cam.set_manual_focus(cam.focus_position)
-                logger.info("[%s] Restored manual focus to %s", camera_ip, cam.focus_position)
+                logger.debug("[%s] Restored manual focus to %s", camera_ip, cam.focus_position)
             except Exception as exc:
                 logger.warning("[%s] Failed to restore focus: %s", camera_ip, exc)
 
         elapsed = time.time() - start_time
+        logger.info(
+            "[%s] Patrol cycle: captured=%d/%d failed=%d duration=%.1fs",
+            camera_ip,
+            captured,
+            len(poses),
+            failed,
+            elapsed,
+        )
         sleep_time = max(0.0, 30.0 - elapsed)
         stop_flag.wait(sleep_time)
 
@@ -129,10 +144,10 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     while not stop_flag.is_set():
         now = time.time()
 
-        # skip window
+        # skip window: entering it is already logged once, so stay quiet while it lasts
         if now < SKIP_UNTIL[camera_ip]:
             left = int(SKIP_UNTIL[camera_ip] - now)
-            logger.warning("[%s] Skipped for %ds due to previous failures", camera_ip, left)
+            logger.debug("[%s] Skipped for %ds due to previous failures", camera_ip, left)
         else:
             try:
                 # capture with internal timeout handled by RTSP or URL adapters
@@ -146,13 +161,19 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
                 if image and now >= settle_until:
                     cam.last_images[-1] = image
-                    logger.info("[%s] Updated static image (pose -1)", camera_ip)
+                    # Steady state is silent, only the recovery is worth an INFO line.
+                    if FAILURE_COUNT[camera_ip]:
+                        logger.info(
+                            "[%s] Capture recovered after %d failures", camera_ip, FAILURE_COUNT[camera_ip]
+                        )
+                    else:
+                        logger.debug("[%s] Updated static image (pose -1)", camera_ip)
                     # success reset failure counter and clear skip
                     FAILURE_COUNT[camera_ip] = 0
                     SKIP_UNTIL[camera_ip] = 0.0
                 else:
                     FAILURE_COUNT[camera_ip] += 1
-                    logger.error(
+                    logger.warning(
                         "[%s] Capture returned no image, failures=%d",
                         camera_ip,
                         FAILURE_COUNT[camera_ip],
@@ -163,7 +184,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
             except Exception as exc:
                 FAILURE_COUNT[camera_ip] += 1
-                logger.error(
+                logger.warning(
                     "[%s] Error capturing static image: %s, failures=%d",
                     camera_ip,
                     exc,
