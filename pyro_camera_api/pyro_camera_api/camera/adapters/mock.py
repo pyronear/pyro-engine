@@ -62,7 +62,7 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
             resp = requests.get(self.image_url, timeout=5)
             resp.raise_for_status()
             self._cached_image = Image.open(BytesIO(resp.content)).convert("RGB")
-            logger.info("MockCamera %s cached image, size=%s", self.camera_id, self._cached_image.size)
+            logger.debug("MockCamera %s cached image, size=%s", self.camera_id, self._cached_image.size)
         except Exception as exc:
             logger.error("MockCamera %s failed to download image: %s", self.camera_id, exc)
             self._cached_image = None
@@ -97,14 +97,14 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def set_manual_focus(self, position: int) -> None:
         self.focus_position = position
-        logger.info("MockCamera %s set_manual_focus(%s) (no op)", self.camera_id, position)
+        logger.debug("MockCamera %s set_manual_focus(%s) (no op)", self.camera_id, position)
 
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         _ = save_images
         _ = retry_depth
         if self.focus_position is None:
             self.focus_position = 720
-        logger.info("MockCamera %s focus_finder -> %s (fake)", self.camera_id, self.focus_position)
+        logger.debug("MockCamera %s focus_finder -> %s (fake)", self.camera_id, self.focus_position)
         return int(self.focus_position)
 
     # ------------------------------------------------------------------
@@ -112,15 +112,15 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     # ------------------------------------------------------------------
 
     def set_auto_focus(self, disable: bool):
-        logger.info("MockCamera %s set_auto_focus(disable=%s) (no op)", self.camera_id, disable)
+        logger.debug("MockCamera %s set_auto_focus(disable=%s) (no op)", self.camera_id, disable)
         return {"status": "ok", "disable": disable}
 
     def get_focus_level(self):
         focus = self.focus_position if self.focus_position is not None else 720
         zoom = 0
-        logger.info("MockCamera %s get_focus_level -> focus=%s zoom=%s (fake)", self.camera_id, focus, zoom)
+        logger.debug("MockCamera %s get_focus_level -> focus=%s zoom=%s (fake)", self.camera_id, focus, zoom)
         return {"focus": focus, "zoom": zoom}
 
     def start_zoom_focus(self, position: int):
-        logger.info("MockCamera %s start_zoom_focus(%s) (no op)", self.camera_id, position)
+        logger.debug("MockCamera %s start_zoom_focus(%s) (no op)", self.camera_id, position)
         return {"status": "ok", "position": position}

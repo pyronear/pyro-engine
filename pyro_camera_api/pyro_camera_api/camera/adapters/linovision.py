@@ -491,11 +491,11 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         return self._handle_response(resp, "Reboot requested") is not None
 
     def get_auto_focus(self):
-        logger.warning("Auto focus retrieval not implemented for Linovision")
+        logger.debug("Auto focus retrieval not implemented for Linovision")
         return
 
     def set_auto_focus(self, disable: bool):
-        logger.warning("Auto focus setting not implemented for Linovision (disable=%s)", disable)
+        logger.debug("Auto focus setting not implemented for Linovision (disable=%s)", disable)
         return
 
     def _zoom_to_raw(self, zoom: int) -> int:
@@ -532,16 +532,16 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
     def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
         _ = save_images
         _ = retry_depth
-        logger.warning("Focus finder not implemented for Linovision")
+        logger.debug("Focus finder not implemented for Linovision")
         return self.focus_position if self.focus_position is not None else -1
 
     def set_manual_focus(self, position: int):
         self.focus_position = position
-        logger.warning("Manual focus not implemented for Linovision yet (position=%s)", position)
+        logger.debug("Manual focus not implemented for Linovision yet (position=%s)", position)
         return
 
     def get_focus_level(self):
-        logger.warning("Focus level not implemented for Linovision yet")
+        logger.debug("Focus level not implemented for Linovision yet")
         return
 
     def disable_ptz_osd(self):

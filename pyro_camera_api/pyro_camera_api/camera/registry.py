@@ -45,8 +45,7 @@ def _resolve_env(value: str) -> str:
     return _ENV_PLACEHOLDER.sub(repl, value)
 
 
-logger = logging.getLogger("CameraRegistry")
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Global registry of camera objects, keyed by camera id
 CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
