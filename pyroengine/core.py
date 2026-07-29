@@ -80,7 +80,6 @@ class SystemController:
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
-        self.last_autofocus: Optional[datetime] = None
 
         # Wait for the camera API to be available
         time.sleep(self.API_INITIAL_WAIT)
@@ -112,33 +111,6 @@ class SystemController:
             except Exception as e:
                 logger.error(f"Inference failed: {e}")
                 time.sleep(self.API_RETRY_DELAY)
-
-    def focus_finder(self) -> None:
-        """
-        Run hourly autofocus on non static cameras when it is daytime.
-
-        This stops patrol, runs the server side focus optimization, then restarts patrol.
-        """
-        now = datetime.now()
-        if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
-            logger.info("Hourly autofocus triggered after idle period")
-
-            for ip, cam in self.camera_data.items():
-                if cam.get("type") != "static":
-                    poses = cam.get("poses", [])
-                    if not poses:
-                        continue
-                    pose = poses[-1]
-                    if self._safe_get_latest_image(ip, pose) is not None:
-                        try:
-                            self.camera_api_client.stop_patrol(ip)
-                            time.sleep(0.5)
-                            self.camera_api_client.run_focus_optimization(ip)
-                            logger.info(f"Autofocus completed for {ip}")
-                            self.camera_api_client.start_patrol(ip)
-                            self.last_autofocus = now
-                        except Exception as e:
-                            logger.error(f"[Failed to run hourly focus finder on camera {ip}: {e}")
 
     def _any_stream_active(self) -> bool:
         """
@@ -255,7 +227,6 @@ class SystemController:
 
         This loop handles:
         detection alerts,
-        autofocus,
         patrol management,
         image inference for all cameras.
 
@@ -300,9 +271,6 @@ class SystemController:
                         self.engine._process_alerts()
                     except Exception as e:
                         logger.error(f"Error processing alerts: {e}")
-                else:
-                    logger.info("Run focus finder")
-                    self.focus_finder()
 
                 self.check_and_restart_patrol()
                 self.inference_loop()

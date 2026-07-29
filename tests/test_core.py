@@ -50,20 +50,6 @@ def test_is_day_time_time_strategy(tmp_path):
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
-def test_focus_finder_runs_hourly(mock_client_class, mock_engine, mock_camera_data):
-    mock_client = mock_client_class.return_value
-    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
-    controller.is_day = True
-    controller.last_autofocus = datetime.now().replace(hour=0)
-
-    controller.focus_finder()
-
-    assert mock_client.run_focus_optimization.called
-    assert mock_client.stop_patrol.called
-    assert mock_client.start_patrol.called
-
-
-@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     dummy_img = Image.new("RGB", (100, 100), (255, 200, 200))
