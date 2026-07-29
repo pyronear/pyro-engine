@@ -658,7 +658,7 @@ class Engine(Predictor):
         self,
         context_crop: Optional[ContextCrop],
         cam_id: str,
-        ts: int,
+        ts: str,
         bboxes: list,
         jpeg_bytes: Optional[bytes] = None,
         crop_boxes: Optional[list] = None,
@@ -718,7 +718,9 @@ class Engine(Predictor):
                     )
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
-                    response = self.api_client[ip].create_detection(jpeg_bytes, bboxes, pose_id, crops=crops)
+                    response = self.api_client[ip].create_detection(
+                        jpeg_bytes, bboxes, pose_id, crops=crops, recorded_at=frame_info["ts"]
+                    )
 
                     try:
                         response.json()["id"]

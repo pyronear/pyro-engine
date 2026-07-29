@@ -548,7 +548,8 @@ def test_process_alerts_sends_one_crop_per_bbox(tmp_path):
     crop_boxes = [engine._compute_crop_box([b], 640, 480) for b in bboxes]
     buf = io.BytesIO()
     frame.save(buf, format="JPEG")
-    engine._stage_alert(context, cam_id, int(time.time()), bboxes, jpeg_bytes=buf.getvalue(), crop_boxes=crop_boxes)
+    ts = "2026-07-21T12:00:00.000000+00:00"
+    engine._stage_alert(context, cam_id, ts, bboxes, jpeg_bytes=buf.getvalue(), crop_boxes=crop_boxes)
 
     engine._process_alerts()
 
@@ -556,6 +557,7 @@ def test_process_alerts_sends_one_crop_per_bbox(tmp_path):
     crops = fake_client.create_detection.call_args.kwargs["crops"]
     assert len(crops) == 2
     assert all(isinstance(c, bytes) for c in crops)
+    assert fake_client.create_detection.call_args.kwargs["recorded_at"] == ts
     assert len(engine._alerts) == 0
 
 
@@ -564,7 +566,7 @@ def test_process_alerts_placeholder_bbox_sends_no_crop(tmp_path):
     buf = io.BytesIO()
     Image.new("RGB", (640, 480)).save(buf, format="JPEG")
     # Empty bboxes -> fill_empty_bboxes stamps the placeholder; no context crop / crop boxes.
-    engine._stage_alert(None, cam_id, int(time.time()), bboxes=[], jpeg_bytes=buf.getvalue())
+    engine._stage_alert(None, cam_id, "2026-07-21T12:00:00.000000+00:00", bboxes=[], jpeg_bytes=buf.getvalue())
 
     engine._process_alerts()
 
