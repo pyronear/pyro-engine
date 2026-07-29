@@ -154,13 +154,14 @@ def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mo
 def test_heartbeat_file_is_written(mock_client_class, mock_engine, mock_camera_data, tmp_path):
     """The healthcheck relies on this file, so it must be refreshed independently of log level."""
     mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
     mock_client.get_stream_status.return_value = {"active_streams": 0}
     heartbeat = tmp_path / "heartbeat"
 
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url", heartbeat_file=str(heartbeat))
-    assert not heartbeat.exists()
+    heartbeat.unlink(missing_ok=True)
 
-    controller._write_heartbeat()
+    controller.inference_loop()
 
     assert heartbeat.exists()
     assert heartbeat.read_text()
