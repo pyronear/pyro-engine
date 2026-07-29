@@ -91,7 +91,15 @@ Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max
 
 ### Environment Variables (`.env`)
 
-Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`.
+Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `LOG_LEVEL`.
+
+### Logging
+
+Both services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/main.py` calls `core.logging.setup_logging`), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
+
+Convention: camera-scoped messages start with `[cam_id]`, use `%`-style lazy args, and INFO is reserved for events an operator should see (one summary per inference round and per patrol cycle, detections, alerts, failures). Per-pose and per-frame detail belongs at DEBUG.
+
+The engine container healthcheck reads the freshness of the heartbeat file (`--heartbeat-file`, default `data/heartbeat`) refreshed by the main loop, so it is independent of log level and log wording.
 
 ### Legacy direct-camera module
 

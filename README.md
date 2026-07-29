@@ -113,9 +113,15 @@ CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
 MEDIAMTX_SERVER_IP=1.2.3.4
 PYRO_ENGINE_VERSION=latest
+LOG_LEVEL=INFO
 ```
 
 `PYRO_ENGINE_VERSION` controls which Docker image tag is pulled for both services (defaults to `latest` if unset).
+
+`LOG_LEVEL` sets the verbosity of both services (defaults to `INFO`). At `INFO` a quiet patrol
+round is one summary line per camera cycle and one per inference round; detections, alerts and
+failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
+predictions, ffmpeg output and HTTP access logs.
 
 ### Data directory
 
