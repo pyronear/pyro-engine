@@ -262,7 +262,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         def clamp_focus(pos: int) -> int:
             return max(abs_min, min(abs_max, pos))
 
-        def capture_and_score(pos: int) -> float:
+        def capture_and_score(pos: int) -> Optional[float]:
+            """Score the image at pos. Failed captures are NOT recorded so they
+            can never win max(history) and become the stored reference."""
             pos = clamp_focus(pos)
             if should_abort is not None and should_abort():
                 raise FocusAbortedError
@@ -271,8 +273,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             image = self.capture()
             if image is None:
                 logger.warning("[%s] No image at focus %s", self.ip_address, pos)
-                history.append((pos, 0.0))
-                return 0.0
+                return None
             score_local = self._measure_sharpness(image)
             logger.info("[%s] Focus %s: Sharpness = %.2f", self.ip_address, pos, score_local)
             if save_images:
@@ -297,9 +298,20 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
 
         start_focus = clamp_focus(int(current_focus))
 
+        def restore_start() -> None:
+            self.focus_position = start_focus
+            try:
+                self.set_manual_focus(start_focus)
+            except Exception as exc:
+                logger.warning("[%s] Could not restore focus %s: %s", self.ip_address, start_focus, exc)
+
         try:
             for pos in range(abs_min, abs_max + 1, sweep_step):
                 capture_and_score(pos)
+
+            if not history:
+                restore_start()
+                raise RuntimeError(f"Focus search got no valid capture on camera {self.ip_address}")
 
             best_focus, best_score = max(history, key=operator.itemgetter(1))
             for fine_step in [3, 1]:
@@ -309,19 +321,25 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                     for offset in (-fine_step, fine_step):
                         candidate = clamp_focus(best_focus + offset)
                         score = capture_and_score(candidate)
-                        if score > best_score:
+                        if score is not None and score > best_score:
                             best_score = score
                             best_focus = candidate
                             improved = True
                             break
         except FocusAbortedError:
             if not history:
-                logger.info("[%s] Focus search aborted before any capture", self.ip_address)
-                self.focus_position = start_focus
-                self.set_manual_focus(start_focus)
+                logger.info("[%s] Focus search aborted before any valid capture", self.ip_address)
+                restore_start()
                 return start_focus
             best_focus, best_score = max(history, key=operator.itemgetter(1))
             logger.info("[%s] Focus search aborted, keeping best known position %s", self.ip_address, best_focus)
+        except RuntimeError:
+            raise
+        except Exception:
+            # A camera error mid-search must not leave the lens on an
+            # unvalidated probe position
+            restore_start()
+            raise
 
         self.focus_position = best_focus
         self.set_manual_focus(best_focus)
