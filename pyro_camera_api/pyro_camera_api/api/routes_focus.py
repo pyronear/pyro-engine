@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import FocusMixin
 from pyro_camera_api.camera.focus_manager import full_calibration, stream_is_active
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
@@ -109,8 +109,9 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     The optional `save_images` parameter allows storing captured frames generated
     during the autofocus process.
 
-    Returns 409 when a stream is active for the camera or when the camera is
-    already busy with another blocking operation.
+    Returns 409 when the patrol is running for the camera (stop it first),
+    when a stream is active, or when the camera is already busy with another
+    blocking operation.
     """
     update_command_time()
 
@@ -123,6 +124,19 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
 
     if getattr(cam, "cam_type", "static") == "static":
         raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
+
+    # The patrol loop moves the camera without taking the move lock, so a
+    # focus search running alongside it would measure sharpness on a moving
+    # scene. Require the patrol to be stopped first.
+    thread = PATROL_THREADS.get(camera_ip)
+    if thread is not None and thread.is_alive():
+        flag = PATROL_FLAGS.get(camera_ip)
+        if flag is not None and flag.is_set():
+            raise HTTPException(status_code=409, detail="Patrol is stopping, retry in a few seconds")
+        raise HTTPException(
+            status_code=409,
+            detail="Patrol running, stop the patrol before running focus optimization",
+        )
 
     if stream_is_active(camera_ip):
         raise HTTPException(status_code=409, detail="Stream active, focus optimization refused")

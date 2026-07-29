@@ -130,6 +130,33 @@ def test_fine_adjustment_aborts_when_stream_starts(monkeypatch):
     assert cam.focus_position == 700
 
 
+def test_route_refuses_focus_finder_while_patrol_running():
+    from fastapi import HTTPException
+
+    from pyro_camera_api.api.routes_focus import run_focus_optimization
+    from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+
+    cam_ip = "route-patrol"
+    CAMERA_REGISTRY[cam_ip] = _ptz_mock(cam_ip)
+    PATROL_THREADS[cam_ip] = MagicMock(is_alive=lambda: True)
+    PATROL_FLAGS[cam_ip] = MagicMock(is_set=lambda: False)
+    try:
+        with pytest.raises(HTTPException) as exc:
+            run_focus_optimization(cam_ip)
+        assert exc.value.status_code == 409
+        assert "stop the patrol" in exc.value.detail
+
+        PATROL_FLAGS[cam_ip] = MagicMock(is_set=lambda: True)
+        with pytest.raises(HTTPException) as exc:
+            run_focus_optimization(cam_ip)
+        assert exc.value.status_code == 409
+        assert "stopping" in exc.value.detail
+    finally:
+        del CAMERA_REGISTRY[cam_ip]
+        del PATROL_THREADS[cam_ip]
+        del PATROL_FLAGS[cam_ip]
+
+
 def test_reolink_focus_finder_aborts_before_first_capture():
     camera = ReolinkCamera("reolink-abort", "192.168.1.99", "user", "pwd", "ptz", focus_position=700)
     response = MagicMock(status_code=200)
