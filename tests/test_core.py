@@ -19,7 +19,8 @@ def fast_sleep(monkeypatch):
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
-    engine.predict.return_value = None
+    engine.predict.return_value = 0.0
+    engine.conf_thresh = 0.25
     return engine
 
 
