@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
 from pyro_camera_api.camera.registry import MOVE_LOCKS
 from pyro_camera_api.services.stream import (
     get_app_for_stream,
@@ -48,6 +48,8 @@ FINE_TUNE_OFFSETS = (-4, -2, 2, 4)
 FINE_TUNE_MIN_GAIN = 1.10
 # Seconds to wait after a focus move before capturing
 FOCUS_SETTLE_TIME = 2.0
+# Seconds to let the turret settle on the calibration pose before capturing
+POSE_SETTLE_TIME = 3.0
 
 
 def stream_is_active(camera_id: str) -> bool:
@@ -70,12 +72,34 @@ def measure_sharpness(image: Image.Image) -> float:
     return float(cv2.Laplacian(arr, cv2.CV_64F).var())
 
 
+def _move_to_calibration_pose(cam: BaseCamera) -> None:
+    """
+    Point the camera at its calibration pose (second preset when available).
+
+    Both stages measure sharpness on this pose so the reference is always
+    optimized for the same scene. Move failures are logged, not fatal.
+    """
+    if not isinstance(cam, PTZMixin):
+        return
+    poses = getattr(cam, "cam_poses", []) or []
+    if not poses:
+        return
+    pose = poses[1] if len(poses) > 1 else poses[0]
+    try:
+        cam.move_camera("ToPos", idx=pose, speed=50)
+        time.sleep(POSE_SETTLE_TIME)
+    except Exception as exc:
+        logger.warning("[%s] Could not move to calibration pose %s: %s", cam.camera_id, pose, exc)
+
+
 def full_calibration(cam: BaseCamera, save_images: bool = False) -> Optional[int]:
     """
     Run the adapter's full focus search and store the result as reference.
 
-    Returns the best focus position, or None when the calibration was skipped
-    (unsupported camera, active stream, or camera busy).
+    The camera is moved to its calibration pose first, under the same lock,
+    so no other PTZ command can interleave. Returns the best focus position,
+    or None when the calibration was skipped (unsupported camera, active
+    stream, or camera busy).
     """
     if not isinstance(cam, FocusMixin) or cam.cam_type == "static":
         return None
@@ -89,6 +113,7 @@ def full_calibration(cam: BaseCamera, save_images: bool = False) -> Optional[int
         logger.info("[%s] Skipping focus calibration, camera busy", cam.camera_id)
         return None
     try:
+        _move_to_calibration_pose(cam)
         best = cam.focus_finder(save_images=save_images, should_abort=lambda: stream_is_active(cam.camera_id))
         logger.info("[%s] Focus calibration done, reference=%s", cam.camera_id, best)
         return int(best)
@@ -127,10 +152,11 @@ def fine_adjustment(cam: BaseCamera) -> Optional[int]:
                 return None
             return measure_sharpness(image)
 
+        _move_to_calibration_pose(cam)
+
         ref_score = probe(reference)
         if ref_score is None:
             logger.warning("[%s] Fine adjustment skipped, no image at reference", cam.camera_id)
-            cam.set_manual_focus(reference)
             return None
 
         best_pos, best_score = reference, ref_score
@@ -154,8 +180,13 @@ def fine_adjustment(cam: BaseCamera) -> Optional[int]:
             )
             reference = best_pos
 
-        cam.focus_position = reference
-        cam.set_manual_focus(reference)
         return reference
     finally:
+        # Always leave the camera on a validated reference, even when a probe
+        # raised mid-run and left the motor on an unvalidated candidate.
+        cam.focus_position = reference
+        try:
+            cam.set_manual_focus(reference)
+        except Exception as exc:
+            logger.warning("[%s] Could not restore reference focus %s: %s", cam.camera_id, reference, exc)
         lock.release()

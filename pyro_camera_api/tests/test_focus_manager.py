@@ -20,6 +20,7 @@ from pyro_camera_api.camera.registry import MOVE_LOCKS
 @pytest.fixture(autouse=True)
 def fast_settle(monkeypatch):
     monkeypatch.setattr(focus_manager, "FOCUS_SETTLE_TIME", 0.0)
+    monkeypatch.setattr(focus_manager, "POSE_SETTLE_TIME", 0.0)
 
 
 def _flat_image(size=(64, 64)):
@@ -96,6 +97,29 @@ def test_fine_adjustment_moves_reference_when_sharper():
     cam = FocusDependentCamera(sharp_at=702, camera_id="fine-move", cam_type="ptz", focus_position=700)
     assert fine_adjustment(cam) == 702
     assert cam.focus_position == 702
+
+
+class ProbeFailureCamera(MockCamera):
+    """Mock camera whose capture starts failing after the first probe."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._cached_image = _flat_image()
+        self.captures = 0
+
+    def capture(self, **kwargs):
+        _ = kwargs
+        self.captures += 1
+        if self.captures > 1:
+            raise RuntimeError("camera unreachable")
+        return _flat_image()
+
+
+def test_fine_adjustment_restores_reference_when_probe_raises():
+    cam = ProbeFailureCamera(camera_id="fine-error", cam_type="ptz", focus_position=700)
+    with pytest.raises(RuntimeError):
+        fine_adjustment(cam)
+    assert cam.focus_position == 700
 
 
 def test_fine_adjustment_aborts_when_stream_starts(monkeypatch):

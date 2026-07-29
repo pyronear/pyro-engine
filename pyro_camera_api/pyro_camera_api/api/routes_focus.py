@@ -7,13 +7,12 @@
 from __future__ import annotations
 
 import logging
-import time
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException
 
-from pyro_camera_api.camera.base import FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import FocusMixin
 from pyro_camera_api.camera.focus_manager import full_calibration, stream_is_active
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.utils.time_utils import update_command_time
@@ -105,8 +104,8 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     Run the autofocus search algorithm and return the optimal focus position.
 
     This operation is supported only on PTZ cameras implementing FocusMixin.
-    If the camera exposes PTZ presets the algorithm tries moving to the second
-    preset before the optimization step when available.
+    The camera is moved to its calibration pose (second preset when available)
+    before the optimization step, under the per-camera lock.
     The optional `save_images` parameter allows storing captured frames generated
     during the autofocus process.
 
@@ -127,16 +126,6 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
 
     if stream_is_active(camera_ip):
         raise HTTPException(status_code=409, detail="Stream active, focus optimization refused")
-
-    if isinstance(cam, PTZMixin):
-        cam_poses = getattr(cam, "cam_poses", None)
-        if cam_poses and len(cam_poses) > 1:
-            pose1 = cam_poses[1]
-            try:
-                cam.move_camera("ToPos", idx=pose1, speed=50)
-                time.sleep(1)
-            except Exception as exc:
-                logger.warning("Could not move camera to pose %s before focus: %s", pose1, exc)
 
     best_position = full_calibration(cam, save_images=save_images)
     if best_position is None:
