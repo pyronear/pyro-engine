@@ -11,9 +11,14 @@ import threading
 import time
 from typing import Any, Dict
 
-from pyro_camera_api.camera.base import FocusMixin
-from pyro_camera_api.camera.focus_manager import FINE_TUNE_INTERVAL, fine_adjustment, full_calibration
+from pyro_camera_api.camera.focus_manager import (
+    FINE_TUNE_INTERVAL,
+    fine_adjustment,
+    full_calibration,
+    supports_focus_search,
+)
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.services.stream import is_camera_streaming
 
 logger = logging.getLogger(__name__)
 
@@ -26,44 +31,9 @@ FAILURE_COUNT: Dict[str, int] = {}
 SKIP_UNTIL: Dict[str, float] = {}
 
 
-def _is_thread_alive(obj: object) -> bool:
-    try:
-        thr = getattr(obj, "_thread", None)
-        return isinstance(thr, threading.Thread) and thr.is_alive()
-    except Exception:
-        return False
-
-
 def is_stream_running_for(app: Any, camera_ip: str) -> bool:
-    """
-    True if a pipeline or an ffmpeg restream is active for this camera.
-    Expects app.state.stream_workers and app.state.stream_processes to be set in lifespan.
-    """
-    try:
-        workers = getattr(app.state, "stream_workers", {})
-        procs = getattr(app.state, "stream_processes", {})
-    except Exception:
-        return False
-
-    # three worker pipeline
-    p = workers.get(camera_ip)
-    if p is not None:
-        try:
-            if _is_thread_alive(p.decoder) and _is_thread_alive(p.encoder):
-                return True
-        except Exception as exc:
-            logger.debug("Could not check anonymizer pipeline state for %s: %s", camera_ip, exc)
-
-    # plain ffmpeg restream
-    proc = procs.get(camera_ip)
-    if proc is not None:
-        try:
-            if proc.poll() is None:
-                return True
-        except Exception as exc:
-            logger.debug("Could not check ffmpeg process state for %s: %s", camera_ip, exc)
-
-    return False
+    """True if a pipeline or an ffmpeg restream is active for this camera."""
+    return is_camera_streaming(camera_ip, app)
 
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
@@ -76,10 +46,11 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
     # Full calibration once at startup, unless a reference focus is already
     # configured. The result is stored in cam.focus_position and restored by
-    # the patrol loop after every round.
-    if isinstance(cam, FocusMixin) and cam.focus_position is None:
+    # the patrol loop after every round. stop_flag is forwarded so stop_patrol
+    # interrupts the search at the next capture instead of waiting minutes.
+    if supports_focus_search(cam) and getattr(cam, "focus_position", None) is None:
         try:
-            full_calibration(cam)
+            full_calibration(cam, should_abort=stop_flag.is_set)
         except Exception as exc:
             logger.warning("[%s] Startup focus calibration failed: %s", camera_ip, exc)
 
@@ -126,12 +97,12 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         # is active or the camera is busy. Falls back to a full calibration as
         # long as no reference could be established (e.g. startup calibration
         # was skipped because of a stream or a camera error).
-        if not stop_flag.is_set() and isinstance(cam, FocusMixin) and time.monotonic() >= next_fine_tune:
+        if not stop_flag.is_set() and supports_focus_search(cam) and time.monotonic() >= next_fine_tune:
             try:
-                if cam.focus_position is None:
-                    full_calibration(cam)
+                if getattr(cam, "focus_position", None) is None:
+                    full_calibration(cam, should_abort=stop_flag.is_set)
                 else:
-                    fine_adjustment(cam)
+                    fine_adjustment(cam, should_abort=stop_flag.is_set)
             except Exception as exc:
                 logger.warning("[%s] Focus maintenance failed: %s", camera_ip, exc)
             next_fine_tune = time.monotonic() + FINE_TUNE_INTERVAL

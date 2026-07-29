@@ -7,36 +7,32 @@
 """Two-stage autofocus orchestration.
 
 Stage 1: full_calibration runs the adapter's focus_finder search once (at
-patrol startup, or on demand via the /focus/focus_finder route) and stores the
-result in cam.focus_position, which acts as the per-camera reference.
+patrol startup, or on demand via the /focus/focus_finder route), validates the
+result and stores it in cam.focus_position, the per-camera reference.
 
 Stage 2: fine_adjustment probes a few positions around the reference between
 patrol rounds and moves the reference only when a candidate is clearly sharper.
 
-Both stages are skipped while a stream is active for the camera and abort
-mid-run if one starts, so live viewers never see a focus sweep. The per-camera
-MOVE_LOCKS serialize them against manual PTZ commands.
+Both stages abort when a stream is active or requested for the camera, when
+the patrol thread is asked to stop, or when a caller-provided predicate fires.
+The per-camera MOVE_LOCKS serialize them against manual PTZ commands, and
+stream startup calls cancel_focus_and_wait so a live viewer never sees a
+focus sweep.
 """
 
 from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 import cv2
 import numpy as np
 from PIL import Image
 
 from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
-from pyro_camera_api.camera.registry import MOVE_LOCKS
-from pyro_camera_api.services.stream import (
-    get_app_for_stream,
-    get_processes,
-    get_workers,
-    is_pipeline_running,
-    is_process_running,
-)
+from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
+from pyro_camera_api.services.stream import is_camera_streaming
 
 logger = logging.getLogger(__name__)
 
@@ -50,26 +46,59 @@ FINE_TUNE_MIN_GAIN = 1.10
 FOCUS_SETTLE_TIME = 2.0
 # Seconds to let the turret settle on the calibration pose before capturing
 POSE_SETTLE_TIME = 3.0
+# Seconds stream startup waits for a running focus operation to abort
+FOCUS_CANCEL_TIMEOUT = 20.0
 
 
 def stream_is_active(camera_id: str) -> bool:
     """True if a live pipeline or ffmpeg restream is running for this camera."""
-    app = get_app_for_stream()
-    if app is None:
-        return False
-    try:
-        if is_pipeline_running(get_workers(app).get(camera_id)):
-            return True
-        return is_process_running(get_processes(app).get(camera_id))
-    except Exception as exc:
-        logger.debug("Could not check stream state for %s: %s", camera_id, exc)
-        return False
+    return is_camera_streaming(camera_id)
 
 
 def measure_sharpness(image: Image.Image) -> float:
     """Variance of the Laplacian over the grayscale image."""
     arr = np.array(image.convert("L"))
     return float(cv2.Laplacian(arr, cv2.CV_64F).var())
+
+
+def supports_focus_search(cam: BaseCamera) -> bool:
+    """True when the adapter really implements the autofocus search.
+
+    Adapters that inherit the FocusMixin default (which raises
+    NotImplementedError) are excluded, as are static cameras.
+    """
+    return (
+        isinstance(cam, FocusMixin)
+        and type(cam).focus_finder is not FocusMixin.focus_finder
+        and getattr(cam, "cam_type", "static") != "static"
+    )
+
+
+def _abort_requested(camera_id: str, extra: Optional[Callable[[], bool]]) -> bool:
+    """Combined abort predicate: stream active, stream start pending, or caller signal."""
+    if FOCUS_CANCEL_EVENTS[camera_id].is_set():
+        return True
+    if stream_is_active(camera_id):
+        return True
+    return extra is not None and extra()
+
+
+def cancel_focus_and_wait(camera_id: str, timeout: float = FOCUS_CANCEL_TIMEOUT) -> bool:
+    """
+    Ask any running focus operation on this camera to abort and wait for it.
+
+    Sets the per-camera cancel event (polled between captures by the focus
+    search) then waits for MOVE_LOCKS to be free, which also covers the final
+    focus restoration. Returns True when the camera is free.
+    """
+    event = FOCUS_CANCEL_EVENTS[camera_id]
+    event.set()
+    lock = MOVE_LOCKS[camera_id]
+    acquired = lock.acquire(timeout=timeout)
+    if acquired:
+        lock.release()
+    event.clear()
+    return acquired
 
 
 def _move_to_calibration_pose(cam: BaseCamera) -> None:
@@ -92,20 +121,28 @@ def _move_to_calibration_pose(cam: BaseCamera) -> None:
         logger.warning("[%s] Could not move to calibration pose %s: %s", cam.camera_id, pose, exc)
 
 
-def full_calibration(cam: BaseCamera, save_images: bool = False) -> Optional[int]:
+def full_calibration(
+    cam: BaseCamera,
+    save_images: bool = False,
+    should_abort: Optional[Callable[[], bool]] = None,
+) -> Optional[int]:
     """
-    Run the adapter's full focus search and store the result as reference.
+    Run the adapter's full focus search, validate and store the reference.
 
     The camera is moved to its calibration pose first, under the same lock,
-    so no other PTZ command can interleave. Returns the best focus position,
-    or None when the calibration was skipped (unsupported camera, active
-    stream, or camera busy).
+    so no other PTZ command can interleave. The reference is committed here
+    (cam.focus_position) only for a plausible result, adapters do not have to
+    do it themselves. Returns the reference, or None when the calibration was
+    skipped (unsupported camera, active stream, camera busy, invalid result).
+
+    should_abort is an additional caller-provided abort signal (e.g. patrol
+    stop flag), polled between captures on top of the stream checks.
     """
-    if not isinstance(cam, FocusMixin) or cam.cam_type == "static":
+    if not supports_focus_search(cam) or not isinstance(cam, FocusMixin):
         return None
 
-    if stream_is_active(cam.camera_id):
-        logger.info("[%s] Skipping focus calibration, stream active", cam.camera_id)
+    if _abort_requested(cam.camera_id, should_abort):
+        logger.info("[%s] Skipping focus calibration, stream active or abort requested", cam.camera_id)
         return None
 
     lock = MOVE_LOCKS[cam.camera_id]
@@ -114,14 +151,28 @@ def full_calibration(cam: BaseCamera, save_images: bool = False) -> Optional[int
         return None
     try:
         _move_to_calibration_pose(cam)
-        best = cam.focus_finder(save_images=save_images, should_abort=lambda: stream_is_active(cam.camera_id))
-        logger.info("[%s] Focus calibration done, reference=%s", cam.camera_id, best)
-        return int(best)
+        best = int(
+            cam.focus_finder(
+                save_images=save_images,
+                should_abort=lambda: _abort_requested(cam.camera_id, should_abort),
+            )
+        )
     finally:
         lock.release()
 
+    if not 0 <= best <= 1000:
+        logger.warning("[%s] Focus calibration returned implausible position %s, not stored", cam.camera_id, best)
+        return None
 
-def fine_adjustment(cam: BaseCamera) -> Optional[int]:
+    cam.focus_position = best
+    logger.info("[%s] Focus calibration done, reference=%s", cam.camera_id, best)
+    return best
+
+
+def fine_adjustment(
+    cam: BaseCamera,
+    should_abort: Optional[Callable[[], bool]] = None,
+) -> Optional[int]:
     """
     Probe a few positions around the reference focus and keep the sharpest.
 
@@ -129,14 +180,14 @@ def fine_adjustment(cam: BaseCamera) -> Optional[int]:
     FINE_TUNE_MIN_GAIN, so noise in the sharpness measure does not make the
     focus drift. Returns the reference in use, or None when skipped.
     """
-    if not isinstance(cam, FocusMixin) or cam.cam_type == "static":
+    if not supports_focus_search(cam) or not isinstance(cam, FocusMixin):
         return None
 
     if cam.focus_position is None:
         return None
     reference = int(cam.focus_position)
 
-    if stream_is_active(cam.camera_id):
+    if _abort_requested(cam.camera_id, should_abort):
         return None
 
     lock = MOVE_LOCKS[cam.camera_id]
@@ -161,8 +212,8 @@ def fine_adjustment(cam: BaseCamera) -> Optional[int]:
 
         best_pos, best_score = reference, ref_score
         for offset in FINE_TUNE_OFFSETS:
-            if stream_is_active(cam.camera_id):
-                logger.info("[%s] Fine adjustment aborted, stream started", cam.camera_id)
+            if _abort_requested(cam.camera_id, should_abort):
+                logger.info("[%s] Fine adjustment aborted", cam.camera_id)
                 break
             candidate = reference + offset
             score = probe(candidate)

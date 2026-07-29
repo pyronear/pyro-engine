@@ -69,6 +69,11 @@ MOVE_LOCKS: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 # clear. Handlers clear the event when they start a new blocking op.
 STOP_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
 
+# Per-camera focus cancellation events. Stream startup sets the event so any
+# running focus search aborts at its next capture, then waits for MOVE_LOCKS
+# to be free before starting the pipeline (see focus_manager.cancel_focus_and_wait).
+FOCUS_CANCEL_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
+
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """

@@ -13,11 +13,17 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import FocusMixin
-from pyro_camera_api.camera.focus_manager import full_calibration, stream_is_active
+from pyro_camera_api.camera.focus_manager import full_calibration, stream_is_active, supports_focus_search
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
+
+
+def _patrol_is_running(camera_ip: str) -> bool:
+    thread = PATROL_THREADS.get(camera_ip)
+    flag = PATROL_FLAGS.get(camera_ip)
+    return bool(thread and thread.is_alive() and (flag is None or not flag.is_set()))
 
 
 @router.post("/manual")
@@ -119,11 +125,8 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     if cam is None:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    if not isinstance(cam, FocusMixin):
-        raise HTTPException(status_code=400, detail="Camera does not support autofocus")
-
-    if getattr(cam, "cam_type", "static") == "static":
-        raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
+    if not supports_focus_search(cam):
+        raise HTTPException(status_code=400, detail="Camera does not support the autofocus search")
 
     # The patrol loop moves the camera without taking the move lock, so a
     # focus search running alongside it would measure sharpness on a moving
@@ -141,7 +144,16 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     if stream_is_active(camera_ip):
         raise HTTPException(status_code=409, detail="Stream active, focus optimization refused")
 
-    best_position = full_calibration(cam, save_images=save_images)
+    try:
+        # A patrol started mid-search would move the camera under the sweep,
+        # so it is also part of the abort predicate (TOCTOU mitigation).
+        best_position = full_calibration(
+            cam,
+            save_images=save_images,
+            should_abort=lambda: _patrol_is_running(camera_ip),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=f"Focus search failed: {exc}")
     if best_position is None:
         raise HTTPException(status_code=409, detail="Camera busy, focus optimization refused")
 

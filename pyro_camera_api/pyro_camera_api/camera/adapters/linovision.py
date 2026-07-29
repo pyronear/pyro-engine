@@ -10,7 +10,7 @@ import logging
 import time
 import xml.etree.ElementTree as ET
 from io import BytesIO
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 import requests
 import urllib3
@@ -529,17 +529,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         )
         return {"zoom_raw": z}
 
-    def focus_finder(
-        self,
-        save_images: bool = False,
-        retry_depth: int = 0,
-        should_abort: Optional[Callable[[], bool]] = None,
-    ) -> int:
-        _ = save_images
-        _ = retry_depth
-        _ = should_abort
-        logger.warning("Focus finder not implemented for Linovision")
-        return self.focus_position if self.focus_position is not None else -1
+    # focus_finder is intentionally not overridden: the FocusMixin default
+    # raises NotImplementedError and supports_focus_search() excludes this
+    # adapter from automatic calibration.
 
     def set_manual_focus(self, position: int):
         self.focus_position = position

@@ -13,8 +13,14 @@ from PIL import Image
 from pyro_camera_api.camera import focus_manager
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
-from pyro_camera_api.camera.focus_manager import fine_adjustment, full_calibration
-from pyro_camera_api.camera.registry import MOVE_LOCKS
+from pyro_camera_api.camera.base import BaseCamera, FocusMixin
+from pyro_camera_api.camera.focus_manager import (
+    cancel_focus_and_wait,
+    fine_adjustment,
+    full_calibration,
+    supports_focus_search,
+)
+from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
 
 
 @pytest.fixture(autouse=True)
@@ -53,10 +59,75 @@ class FocusDependentCamera(MockCamera):
         return _flat_image()
 
 
+class ReturnOnlyCamera(MockCamera):
+    """Adapter whose focus_finder returns a value without storing it itself."""
+
+    def __init__(self, result: int, **kwargs):
+        super().__init__(**kwargs)
+        self._result = result
+
+    def focus_finder(self, save_images=False, retry_depth=0, should_abort=None):
+        _ = save_images, retry_depth, should_abort
+        return self._result
+
+
+class NoSearchCamera(BaseCamera, FocusMixin):
+    """Adapter inheriting the FocusMixin default focus_finder (no search)."""
+
+    def capture(self, **kwargs):
+        _ = kwargs
+        return _flat_image()
+
+    def set_manual_focus(self, position: int) -> None:
+        self.focus_position = position
+
+    def get_focus_level(self):
+        return {"focus": self.focus_position, "zoom": 0}
+
+
 def test_full_calibration_sets_reference():
     cam = _ptz_mock("calib-ok")
     assert full_calibration(cam) == 720
     assert cam.focus_position == 720
+
+
+def test_full_calibration_commits_reference_itself():
+    cam = ReturnOnlyCamera(701, camera_id="calib-commit", cam_type="ptz")
+    assert full_calibration(cam) == 701
+    assert cam.focus_position == 701
+
+
+def test_full_calibration_rejects_implausible_result():
+    cam = ReturnOnlyCamera(-1, camera_id="calib-implausible", cam_type="ptz")
+    assert full_calibration(cam) is None
+    assert cam.focus_position is None
+
+
+def test_supports_focus_search_excludes_default_adapter():
+    cam = NoSearchCamera(camera_id="no-search", cam_type="ptz")
+    assert not supports_focus_search(cam)
+    assert full_calibration(cam) is None
+    assert supports_focus_search(_ptz_mock("search-ok"))
+
+
+def test_full_calibration_skips_on_external_abort():
+    cam = _ptz_mock("calib-ext-abort")
+    assert full_calibration(cam, should_abort=lambda: True) is None
+    assert cam.focus_position is None
+
+
+def test_cancel_focus_and_wait():
+    cam_id = "cancel-wait"
+    assert cancel_focus_and_wait(cam_id, timeout=0.2)
+    assert not FOCUS_CANCEL_EVENTS[cam_id].is_set()
+
+    lock = MOVE_LOCKS[cam_id]
+    assert lock.acquire(blocking=False)
+    try:
+        assert not cancel_focus_and_wait(cam_id, timeout=0.2)
+    finally:
+        lock.release()
+    assert not FOCUS_CANCEL_EVENTS[cam_id].is_set()
 
 
 def test_full_calibration_skips_static_camera():
@@ -164,4 +235,19 @@ def test_reolink_focus_finder_aborts_before_first_capture():
     with patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response):
         best = camera.focus_finder(should_abort=lambda: True)
     assert best == 700
+    assert camera.focus_position == 700
+
+
+def test_reolink_focus_finder_fails_without_valid_capture(monkeypatch):
+    camera = ReolinkCamera("reolink-nocapture", "192.168.1.99", "user", "pwd", "ptz", focus_position=700)
+    response = MagicMock(status_code=200)
+    response.json.return_value = [{"code": 0, "value": {}}]
+    monkeypatch.setattr("pyro_camera_api.camera.adapters.reolink.time.sleep", lambda *_: None)
+    with (
+        patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response),
+        patch.object(camera, "capture", return_value=None),
+        pytest.raises(RuntimeError),
+    ):
+        camera.focus_finder()
+    # The blurry sweep start (600) must not become the reference
     assert camera.focus_position == 700
