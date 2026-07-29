@@ -75,11 +75,14 @@ class SystemController:
         engine: Engine,
         camera_data: Dict[str, Dict[str, Any]],
         pyro_camera_api_url: str,
+        heartbeat_file: Optional[str] = None,
     ) -> None:
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
         self.last_autofocus: Optional[datetime] = None
+        # Touched on every loop so container liveness does not depend on log content.
+        self.heartbeat_file = Path(heartbeat_file) if heartbeat_file else None
 
         # Wait for the camera API to be available
         logger.info("Waiting for Pyro Camera API at %s", pyro_camera_api_url)
@@ -236,6 +239,27 @@ class SystemController:
             time.time() - start_ts,
         )
 
+    def _write_heartbeat(self) -> None:
+        """Refresh the heartbeat file used by the container healthcheck.
+
+        A failure here must not stop detection, so it is reported and execution continues.
+        """
+        if self.heartbeat_file is None:
+            return
+        try:
+            self.heartbeat_file.write_text(datetime.now().isoformat())
+        except OSError as e:
+            logger.warning("Could not write heartbeat file %s: %s", self.heartbeat_file, e)
+
+    def _sleep_with_heartbeat(self, duration: float, step: float = 60.0) -> None:
+        """Sleep in steps, refreshing the heartbeat, so the long night sleep stays healthy."""
+        remaining = duration
+        while remaining > 0:
+            self._write_heartbeat()
+            chunk = min(step, remaining)
+            time.sleep(chunk)
+            remaining -= chunk
+
     def check_and_restart_patrol(self) -> None:
         """
         Check stream activity and ensure patrol is running when no stream is active.
@@ -274,6 +298,7 @@ class SystemController:
         """
         while True:
             start_ts = time.time()
+            self._write_heartbeat()
 
             if not self.is_day:
                 for ip in self.camera_data:
@@ -286,7 +311,7 @@ class SystemController:
                         logger.error("[%s] Failed to stop patrol: %s", ip, e)
 
                 logger.info("Nighttime detected by at least one camera, sleeping for 1 hour")
-                time.sleep(3600)
+                self._sleep_with_heartbeat(3600)
 
                 try:
                     ip = next(iter(self.camera_data.keys()))
