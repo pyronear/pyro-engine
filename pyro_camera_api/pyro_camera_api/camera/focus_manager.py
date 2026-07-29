@@ -70,7 +70,7 @@ def measure_sharpness(image: Image.Image) -> float:
     return float(cv2.Laplacian(arr, cv2.CV_64F).var())
 
 
-def full_calibration(cam: BaseCamera) -> Optional[int]:
+def full_calibration(cam: BaseCamera, save_images: bool = False) -> Optional[int]:
     """
     Run the adapter's full focus search and store the result as reference.
 
@@ -89,7 +89,7 @@ def full_calibration(cam: BaseCamera) -> Optional[int]:
         logger.info("[%s] Skipping focus calibration, camera busy", cam.camera_id)
         return None
     try:
-        best = cam.focus_finder(should_abort=lambda: stream_is_active(cam.camera_id))
+        best = cam.focus_finder(save_images=save_images, should_abort=lambda: stream_is_active(cam.camera_id))
         logger.info("[%s] Focus calibration done, reference=%s", cam.camera_id, best)
         return int(best)
     finally:
