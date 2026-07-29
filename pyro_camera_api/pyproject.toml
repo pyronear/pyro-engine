@@ -23,6 +23,9 @@ quality = [
     "ruff==0.11.9",
     "mypy==1.10.0",
 ]
+dev = [
+    "pytest>=7.0,<9",
+]
 
 [tool.uv]
 package = false
