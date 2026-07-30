@@ -13,13 +13,12 @@ import time
 from io import BytesIO
 from typing import Any, Callable, List, Optional, Tuple
 
-import cv2
-import numpy as np
 import requests
 import urllib3
 from PIL import Image
 
 from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.utils.image_utils import measure_sharpness
 
 __all__ = ["ReolinkCamera"]
 
@@ -230,10 +229,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         return None
 
     def _measure_sharpness(self, pil_image: Image.Image) -> float:
-        img = pil_image.convert("L")
-        arr = np.array(img)
-        laplacian = cv2.Laplacian(arr, cv2.CV_64F)
-        return float(laplacian.var())
+        return measure_sharpness(pil_image)
 
     def focus_finder(
         self,

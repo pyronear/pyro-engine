@@ -26,13 +26,10 @@ import logging
 import time
 from typing import Callable, Optional
 
-import cv2
-import numpy as np
-from PIL import Image
-
 from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
 from pyro_camera_api.services.stream import is_camera_streaming
+from pyro_camera_api.utils.image_utils import measure_sharpness
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +50,6 @@ FOCUS_CANCEL_TIMEOUT = 20.0
 def stream_is_active(camera_id: str) -> bool:
     """True if a live pipeline or ffmpeg restream is running for this camera."""
     return is_camera_streaming(camera_id)
-
-
-def measure_sharpness(image: Image.Image) -> float:
-    """Variance of the Laplacian over the grayscale image."""
-    arr = np.array(image.convert("L"))
-    return float(cv2.Laplacian(arr, cv2.CV_64F).var())
 
 
 def supports_focus_search(cam: BaseCamera) -> bool:

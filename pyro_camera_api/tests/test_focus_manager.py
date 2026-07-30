@@ -85,6 +85,21 @@ class NoSearchCamera(BaseCamera, FocusMixin):
         return {"focus": self.focus_position, "zoom": 0}
 
 
+def test_measure_sharpness_ignores_upper_half():
+    from pyro_camera_api.utils.image_utils import measure_sharpness
+
+    def split_image(sharp_on_top: bool, size=(64, 64)):
+        flat = np.full((size[1] // 2, size[0], 3), 128, dtype=np.uint8)
+        rng = np.random.default_rng(0)
+        textured = rng.integers(0, 255, (size[1] // 2, size[0], 3), dtype=np.uint8)
+        halves = (textured, flat) if sharp_on_top else (flat, textured)
+        return Image.fromarray(np.vstack(halves), "RGB")
+
+    # Texture only in the sky half must not register as sharpness
+    assert measure_sharpness(split_image(sharp_on_top=True)) == 0.0
+    assert measure_sharpness(split_image(sharp_on_top=False)) > 0.0
+
+
 def test_full_calibration_sets_reference():
     cam = _ptz_mock("calib-ok")
     assert full_calibration(cam) == 720
