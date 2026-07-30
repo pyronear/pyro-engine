@@ -39,6 +39,14 @@ def setup_logging() -> None:
     logging.getLogger("PIL").setLevel(noisy_level)
     logging.getLogger("ffmpeg").setLevel(noisy_level)
 
+    # Uvicorn installs its own handlers with propagate=False, so its startup and access lines
+    # would keep their own timestamp-less format. Hand them to the root handler instead, so
+    # every line in the container shares one format.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uvicorn_logger = logging.getLogger(name)
+        uvicorn_logger.handlers.clear()
+        uvicorn_logger.propagate = True
+
     # The engine polls capture endpoints every few seconds; one access line per request
     # drowns the log, so keep them for debug runs only.
     logging.getLogger("uvicorn.access").setLevel(logging.DEBUG if level <= logging.DEBUG else noisy_level)
