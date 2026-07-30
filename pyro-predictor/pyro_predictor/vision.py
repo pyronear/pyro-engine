@@ -50,8 +50,10 @@ class Classifier:
         max_bbox_size=0.4,
         verbose=True,
     ) -> None:
-        # Kept for backward compatibility: per-frame output is now controlled by the log level.
         self.verbose = verbose
+        # verbose=False downgrades the setup chatter to DEBUG so nothing reaches the caller's
+        # INFO stream, without mutating this module's logger level for the whole process.
+        info = logger.info if verbose else logger.debug
 
         if model_path:
             if not pathlib.Path(model_path).is_file():
@@ -62,7 +64,7 @@ class Classifier:
         else:
             if format == "ncnn":
                 if not self.is_arm_architecture():
-                    logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
+                    info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
             elif format == "onnx":
@@ -83,20 +85,20 @@ class Classifier:
                     for entry in cache_root.iterdir():
                         if entry.name != MODEL_SLUG:
                             shutil.rmtree(entry, ignore_errors=True)
-                            logger.info(f"Removed stale model cache: {entry}")
+                            info(f"Removed stale model cache: {entry}")
                 legacy_archive = pathlib.Path(model_folder) / model
                 legacy_extract = pathlib.Path(model_folder) / model.replace(".tar.gz", "")
                 if legacy_archive.is_file():
                     legacy_archive.unlink()
-                    logger.info(f"Removed legacy model archive: {legacy_archive}")
+                    info(f"Removed legacy model archive: {legacy_archive}")
                 if legacy_extract.is_dir():
                     shutil.rmtree(legacy_extract, ignore_errors=True)
-                    logger.info(f"Removed legacy model extract dir: {legacy_extract}")
+                    info(f"Removed legacy model extract dir: {legacy_extract}")
 
-                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
+                info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
                 model_cache.mkdir(exist_ok=True, parents=True)
                 hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=str(model_cache))
-                logger.info("Model downloaded!")
+                info("Model downloaded!")
 
             # Extract archive
             if model_path.endswith(".tar.gz"):
@@ -106,7 +108,7 @@ class Classifier:
                     pathlib.Path(extract_path).mkdir(parents=True, exist_ok=True)
                     with tarfile.open(model_path, "r:gz") as tar:
                         tar.extractall(extract_path)
-                    logger.info(f"Extracted model to: {extract_path}")
+                    info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 
         if self.format == "ncnn":
@@ -120,16 +122,16 @@ class Classifier:
                 available_providers = onnxruntime.get_available_providers()
                 if "CUDAExecutionProvider" in available_providers:
                     providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-                    logger.info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
+                    info("CUDA is available — using CUDAExecutionProvider for ONNX inference")
                 else:
                     providers = ["CPUExecutionProvider"]
-                    logger.info("Using CPUExecutionProvider for ONNX inference")
+                    info("Using CPUExecutionProvider for ONNX inference")
                 self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
 
-            logger.info(f"ONNX model loaded successfully from {model_path}")
+            info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
         self.conf = conf

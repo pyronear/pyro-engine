@@ -34,7 +34,9 @@ class Predictor:
         nb_consecutive_frames: sliding-window size for temporal smoothing
         frame_size: if set, resize each frame to (H, W) before inference
         cam_ids: list of camera IDs to pre-initialise state for
-        verbose: kept for backward compatibility, log verbosity is driven by the logging level
+        verbose: if False, informational output is downgraded to DEBUG so nothing is emitted at
+            INFO (default True). Unlike previous versions this no longer mutates a global logger
+            level, so it cannot silence an unrelated part of the host application.
         kwargs: forwarded to Classifier
 
     Examples:
@@ -189,10 +191,11 @@ class Predictor:
         logger.debug("[%s] Raw predictions: %s", cam_key, preds)
         conf = self._update_states(frame, preds, cam_key)
 
-        # A detection is always worth an INFO line, a quiet frame is not.
-        if conf > self.conf_thresh:
+        # A detection is worth an INFO line, a quiet frame is not. verbose=False keeps the
+        # caller's INFO stream clean without touching any global logger level.
+        if conf > self.conf_thresh and self.verbose:
             logger.info("[%s] Wildfire detected (confidence: %.2f%%)", cam_key, conf * 100)
         else:
-            logger.debug("[%s] No wildfire (confidence: %.2f%%)", cam_key, conf * 100)
+            logger.debug("[%s] Wildfire=%s (confidence: %.2f%%)", cam_key, conf > self.conf_thresh, conf * 100)
 
         return float(conf)

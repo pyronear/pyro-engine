@@ -74,6 +74,22 @@ def test_predictor_detection_emits_info_log(mock_wildfire_image, caplog):
     assert any(r.levelno == logging.INFO and "cam_a" in r.getMessage() for r in caplog.records)
 
 
+def test_predictor_verbose_false_emits_no_info(mock_wildfire_image, caplog):
+    """verbose=False keeps the caller's INFO stream clean, even on a detection."""
+    predictor = Predictor(nb_consecutive_frames=2, verbose=False)
+    fake = np.array([[0.1, 0.1, 0.2, 0.2, 0.9], [0.3, 0.3, 0.4, 0.4, 0.8]]).T
+    with caplog.at_level(logging.INFO, logger="pyro_predictor"):
+        predictor.predict(mock_wildfire_image, cam_id="cam_a", fake_pred=fake)
+    assert caplog.records == []
+
+
+def test_verbose_false_does_not_mutate_logger_levels():
+    """verbose=False must stay local to the instance, never touch a shared logger level."""
+    before = logging.getLogger("pyro_predictor.vision").level
+    Predictor(nb_consecutive_frames=2, verbose=False)
+    assert logging.getLogger("pyro_predictor.vision").level == before
+
+
 def test_predictor_frame_details_at_debug(mock_wildfire_image, caplog):
     """Per-frame details remain available when DEBUG is enabled."""
     predictor = Predictor(nb_consecutive_frames=2)
