@@ -30,7 +30,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
 from pyro_camera_api.services.stream import is_camera_streaming
 
@@ -133,7 +133,9 @@ def full_calibration(
     so no other PTZ command can interleave. The reference is committed here
     (cam.focus_position) only for a plausible result, adapters do not have to
     do it themselves. Returns the reference, or None when the calibration was
-    skipped (unsupported camera, active stream, camera busy, invalid result).
+    skipped (unsupported camera, active stream, camera busy, invalid result)
+    or aborted mid-search, in which case no reference is stored and the
+    patrol retries a full calibration later.
 
     should_abort is an additional caller-provided abort signal (e.g. patrol
     stop flag), polled between captures on top of the stream checks.
@@ -157,6 +159,12 @@ def full_calibration(
                 should_abort=lambda: _abort_requested(cam.camera_id, should_abort),
             )
         )
+    except FocusAbortedError:
+        # An interrupted search only probed part of the range; committing its
+        # best-so-far would freeze a possibly blurry reference forever (the
+        # patrol recalibrates only while focus_position is None).
+        logger.info("[%s] Focus calibration aborted, no reference stored", cam.camera_id)
+        return None
     finally:
         lock.release()
 

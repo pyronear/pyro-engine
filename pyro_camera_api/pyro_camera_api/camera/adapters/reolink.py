@@ -249,8 +249,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         The sweep probes the whole focus range first to locate the sharpness
         basin, then small steps refine inside it.
 
-        should_abort is checked before each capture; when it returns True the
-        search stops early and the best position found so far is applied.
+        should_abort is checked before each capture; when it fires the search
+        stops, the pre-search focus is restored and FocusAbortedError is
+        raised so the caller does not store a reference from a partial sweep.
         """
         _ = retry_depth  # unused, kept for signature compatibility
 
@@ -286,6 +287,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         if self.cam_type == "static":
             return 720
 
+        # set_manual_focus records every probed position in focus_position, so
+        # the pre-search reference must be captured here to be restorable
+        initial_reference = self.focus_position
+
         if self.focus_position is None:
             self.start_zoom_focus(0)
             time.sleep(0.5)
@@ -299,11 +304,13 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         start_focus = clamp_focus(int(current_focus))
 
         def restore_start() -> None:
-            self.focus_position = start_focus
             try:
                 self.set_manual_focus(start_focus)
             except Exception as exc:
                 logger.warning("[%s] Could not restore focus %s: %s", self.ip_address, start_focus, exc)
+            # A failed or aborted search must not establish a reference the
+            # patrol would then trust and never recalibrate
+            self.focus_position = initial_reference
 
         try:
             for pos in range(abs_min, abs_max + 1, sweep_step):
@@ -327,12 +334,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                             improved = True
                             break
         except FocusAbortedError:
-            if not history:
-                logger.info("[%s] Focus search aborted before any valid capture", self.ip_address)
-                restore_start()
-                return start_focus
-            best_focus, best_score = max(history, key=operator.itemgetter(1))
-            logger.info("[%s] Focus search aborted, keeping best known position %s", self.ip_address, best_focus)
+            logger.info("[%s] Focus search aborted, restoring pre-search focus %s", self.ip_address, start_focus)
+            restore_start()
+            raise
         except RuntimeError:
             raise
         except Exception:

@@ -13,7 +13,7 @@ from PIL import Image
 from pyro_camera_api.camera import focus_manager
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin
 from pyro_camera_api.camera.focus_manager import (
     cancel_focus_and_wait,
     fine_adjustment,
@@ -232,10 +232,57 @@ def test_reolink_focus_finder_aborts_before_first_capture():
     camera = ReolinkCamera("reolink-abort", "192.168.1.99", "user", "pwd", "ptz", focus_position=700)
     response = MagicMock(status_code=200)
     response.json.return_value = [{"code": 0, "value": {}}]
-    with patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response):
-        best = camera.focus_finder(should_abort=lambda: True)
-    assert best == 700
+    with (
+        patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response),
+        pytest.raises(FocusAbortedError),
+    ):
+        camera.focus_finder(should_abort=lambda: True)
     assert camera.focus_position == 700
+
+
+def test_reolink_focus_finder_abort_mid_sweep_restores_reference(monkeypatch):
+    camera = ReolinkCamera("reolink-midabort", "192.168.1.99", "user", "pwd", "ptz", focus_position=700)
+    monkeypatch.setattr("pyro_camera_api.camera.adapters.reolink.time.sleep", lambda *_: None)
+    response = MagicMock(status_code=200)
+    response.json.return_value = [{"code": 0, "value": {}}]
+    checks = {"count": 0}
+
+    def abort_after_three_captures():
+        checks["count"] += 1
+        return checks["count"] > 3
+
+    with (
+        patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response),
+        patch.object(camera, "capture", return_value=_sharp_image()),
+        pytest.raises(FocusAbortedError),
+    ):
+        camera.focus_finder(should_abort=abort_after_three_captures)
+    # The partial sweep (600..620) must not replace the reference
+    assert camera.focus_position == 700
+
+
+def test_reolink_failed_search_without_prior_reference_stores_none(monkeypatch):
+    camera = ReolinkCamera("reolink-noref", "192.168.1.99", "user", "pwd", "ptz")
+    monkeypatch.setattr("pyro_camera_api.camera.adapters.reolink.time.sleep", lambda *_: None)
+    response = MagicMock(status_code=200)
+    response.json.return_value = [{"code": 0, "value": {}}]
+    with (
+        patch("pyro_camera_api.camera.adapters.reolink.requests.post", return_value=response),
+        patch.object(camera, "get_focus_level", return_value={"focus": 650, "zoom": 0}),
+        patch.object(camera, "capture", return_value=None),
+        pytest.raises(RuntimeError),
+    ):
+        camera.focus_finder()
+    # No reference existed before the failed search, none may exist after,
+    # so the patrol retries a full calibration instead of fine-tuning
+    assert camera.focus_position is None
+
+
+def test_full_calibration_aborted_mid_search_stores_no_reference():
+    cam = _ptz_mock("calib-abort-mid")
+    flags = iter([False, True])
+    assert full_calibration(cam, should_abort=lambda: next(flags, True)) is None
+    assert cam.focus_position is None
 
 
 def test_reolink_focus_finder_fails_without_valid_capture(monkeypatch):

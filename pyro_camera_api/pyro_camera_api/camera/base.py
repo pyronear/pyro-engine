@@ -105,8 +105,10 @@ class FocusMixin(ABC):
         """
         Run the adapter's autofocus search and return the best focus position.
 
-        should_abort, when provided, is polled between capture steps so a
-        caller can stop the search early (e.g. when a stream starts).
-        Adapters without a real implementation return their current reference.
+        should_abort, when provided, is polled between capture steps; when it
+        fires the adapter must restore its pre-search focus and raise
+        FocusAbortedError so the caller does not store a reference.
+        Adapters without a real search keep this default, which raises
+        NotImplementedError and excludes them via supports_focus_search().
         """
         raise NotImplementedError

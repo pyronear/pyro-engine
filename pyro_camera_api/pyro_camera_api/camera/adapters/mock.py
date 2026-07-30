@@ -13,7 +13,7 @@ from typing import Callable, Optional
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 __all__ = ["MockCamera"]
 
@@ -109,7 +109,7 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         _ = retry_depth
         if should_abort is not None and should_abort():
             logger.info("MockCamera %s focus_finder aborted (fake)", self.camera_id)
-            return int(self.focus_position) if self.focus_position is not None else 720
+            raise FocusAbortedError
         if self.focus_position is None:
             self.focus_position = 720
         logger.info("MockCamera %s focus_finder -> %s (fake)", self.camera_id, self.focus_position)
