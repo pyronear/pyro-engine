@@ -29,3 +29,8 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+# The project is not installed as a package (tool.uv.package = false), so the
+# repo root must be on sys.path for `import pyro_camera_api` to work in tests.
+pythonpath = ["."]
