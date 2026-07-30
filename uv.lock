@@ -1158,7 +1158,7 @@ requires-dist = [
 [[package]]
 name = "pyroclient"
 version = "0.2.0.dev0"
-source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#2f4a08ad39b313982051f178b11070d6f9b1165f" }
+source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#7582b1572aa54ecb12882134b3d0127bf0b3fc80" }
 dependencies = [
     { name = "requests" },
 ]
