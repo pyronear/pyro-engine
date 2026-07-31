@@ -20,7 +20,7 @@ from pyro_camera_api.camera.focus_manager import (
     full_calibration,
     supports_focus_search,
 )
-from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
+from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, LAST_FOCUS_TIME, MOVE_LOCKS
 
 
 @pytest.fixture(autouse=True)
@@ -313,3 +313,29 @@ def test_reolink_focus_finder_fails_without_valid_capture(monkeypatch):
         camera.focus_finder()
     # The blurry sweep start (600) must not become the reference
     assert camera.focus_position == 700
+
+
+def test_full_calibration_stamps_last_focus_time():
+    LAST_FOCUS_TIME.pop("stamp-calib", None)
+    cam = _ptz_mock("stamp-calib")
+    assert full_calibration(cam) == 720
+    assert LAST_FOCUS_TIME.get("stamp-calib", 0.0) > 0.0
+
+
+def test_skipped_calibration_does_not_stamp_last_focus_time():
+    LAST_FOCUS_TIME.pop("stamp-skip", None)
+    cam = _ptz_mock("stamp-skip")
+    assert full_calibration(cam, should_abort=lambda: True) is None
+    assert "stamp-skip" not in LAST_FOCUS_TIME
+
+
+def test_fine_adjustment_stamps_only_when_reference_moves():
+    LAST_FOCUS_TIME.pop("stamp-stable", None)
+    cam = _ptz_mock("stamp-stable", focus_position=700)
+    assert fine_adjustment(cam) == 700
+    assert "stamp-stable" not in LAST_FOCUS_TIME
+
+    LAST_FOCUS_TIME.pop("stamp-move", None)
+    cam = FocusDependentCamera(sharp_at=702, camera_id="stamp-move", cam_type="ptz", focus_position=700)
+    assert fine_adjustment(cam) == 702
+    assert LAST_FOCUS_TIME.get("stamp-move", 0.0) > 0.0

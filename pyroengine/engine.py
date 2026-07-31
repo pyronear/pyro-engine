@@ -224,6 +224,16 @@ class Engine(Predictor):
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat()
 
+    def mark_periodic_images_stale(self, ip: str) -> None:
+        """Force the next predict() on every pose of this camera to re-upload its periodic image.
+
+        Called after a focus change so the platform image reflects the new focus
+        without waiting for the hourly period.
+        """
+        for cam_id, state in self._states.items():
+            if cam_id.split("_")[0] == ip:
+                state["last_image_sent"] = None
+
     def predict(
         self,
         frame: Image.Image,

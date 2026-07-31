@@ -74,6 +74,11 @@ STOP_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
 # to be free before starting the pipeline (see focus_manager.cancel_focus_and_wait).
 FOCUS_CANCEL_EVENTS: Dict[str, threading.Event] = defaultdict(threading.Event)
 
+# Per-camera wall-clock time of the last committed focus change (successful
+# calibration, accepted fine adjustment or manual focus). Exposed via
+# /patrol/patrol_status so the engine can re-upload a fresh platform image.
+LAST_FOCUS_TIME: Dict[str, float] = {}
+
 
 def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     """

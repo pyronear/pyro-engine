@@ -27,7 +27,7 @@ import time
 from typing import Callable, Optional
 
 from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
-from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, MOVE_LOCKS
+from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS, LAST_FOCUS_TIME, MOVE_LOCKS
 from pyro_camera_api.services.stream import is_camera_streaming
 from pyro_camera_api.utils.image_utils import measure_sharpness
 
@@ -164,6 +164,7 @@ def full_calibration(
         return None
 
     cam.focus_position = best
+    LAST_FOCUS_TIME[cam.camera_id] = time.time()
     logger.info("[%s] Focus calibration done, reference=%s", cam.camera_id, best)
     return best
 
@@ -229,6 +230,7 @@ def fine_adjustment(
                 best_score,
             )
             reference = best_pos
+            LAST_FOCUS_TIME[cam.camera_id] = time.time()
 
         return reference
     finally:

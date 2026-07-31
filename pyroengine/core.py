@@ -80,6 +80,8 @@ class SystemController:
         self.engine = engine
         self.camera_data = camera_data
         self.is_day = True
+        # Last focus timestamp seen per camera IP, to re-upload an image after a focus change
+        self._last_focus_seen: Dict[str, float] = {}
 
         # Wait for the camera API to be available
         time.sleep(self.API_INITIAL_WAIT)
@@ -215,6 +217,11 @@ class SystemController:
             for ip in self.camera_data:
                 try:
                     patrol_status = self.camera_api_client.get_patrol_status(ip)
+                    last_focus = float(patrol_status.get("last_focus_time") or 0.0)
+                    if last_focus > self._last_focus_seen.get(ip, 0.0):
+                        self._last_focus_seen[ip] = last_focus
+                        self.engine.mark_periodic_images_stale(ip)
+                        logger.info(f"Focus changed on camera {ip}, periodic images will be re-uploaded")
                     if not patrol_status.get("patrol_running", False):
                         self.camera_api_client.start_patrol(ip)
                         logger.info(f"Patrol restarted on camera {ip}")

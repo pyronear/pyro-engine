@@ -107,3 +107,39 @@ def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine,
 
     assert not mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_check_and_restart_patrol_resends_image_after_focus(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_pipelines": [], "active_ffmpeg": []}
+    mock_client.get_latest_image.return_value = None
+    mock_client.get_patrol_status.return_value = {"patrol_running": True, "last_focus_time": 100.0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    controller.check_and_restart_patrol()
+    mock_engine.mark_periodic_images_stale.assert_called_once_with("192.168.1.1")
+
+    # Unchanged focus timestamp does not trigger another re-upload
+    controller.check_and_restart_patrol()
+    assert mock_engine.mark_periodic_images_stale.call_count == 1
+
+    # A newer focus triggers again
+    mock_client.get_patrol_status.return_value = {"patrol_running": True, "last_focus_time": 200.0}
+    controller.check_and_restart_patrol()
+    assert mock_engine.mark_periodic_images_stale.call_count == 2
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_check_and_restart_patrol_handles_missing_focus_time(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_pipelines": [], "active_ffmpeg": []}
+    mock_client.get_latest_image.return_value = None
+    # Older API without the last_focus_time field
+    mock_client.get_patrol_status.return_value = {"patrol_running": True}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.check_and_restart_patrol()
+
+    assert not mock_engine.mark_periodic_images_stale.called

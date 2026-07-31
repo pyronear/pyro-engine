@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import FocusMixin
 from pyro_camera_api.camera.focus_manager import full_calibration, stream_is_active, supports_focus_search
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, LAST_FOCUS_TIME, PATROL_FLAGS, PATROL_THREADS
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
@@ -44,6 +45,7 @@ def manual_focus(camera_ip: str, position: int):
         raise HTTPException(status_code=400, detail="Camera does not support manual focus")
 
     result = cam.set_manual_focus(position)
+    LAST_FOCUS_TIME[camera_ip] = time.time()
 
     return {
         "status": "manual_focus",

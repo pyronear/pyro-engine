@@ -698,3 +698,16 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
 
         # Predictions are filtered by the occlusion mask, so no wildfire is detected
         assert engine._states["dummy_cam"]["ongoing"] is False
+
+
+def test_mark_periodic_images_stale(tmp_path):
+    engine = Engine(cache_folder=str(tmp_path))
+    for cam_id in ("192.168.1.10_0", "192.168.1.10_1", "192.168.1.11"):
+        engine._states[cam_id] = engine._new_state()
+        engine._states[cam_id]["last_image_sent"] = 12345
+
+    engine.mark_periodic_images_stale("192.168.1.10")
+
+    assert engine._states["192.168.1.10_0"]["last_image_sent"] is None
+    assert engine._states["192.168.1.10_1"]["last_image_sent"] is None
+    assert engine._states["192.168.1.11"]["last_image_sent"] == 12345
