@@ -857,6 +857,15 @@ def get_camera_azimuth(camera_ip: str):
     interrupted or untimed free move. ``moving`` reflects whether a blocking
     PTZ command currently holds the per-camera lock.
 
+    Read ``azimuth_deg`` together with ``moving``: for tracked adapters, a
+    non-null value under ``moving: true`` is the destination of an in-flight
+    preset move, not the current position (hardware adapters read back the
+    actual mid-travel position). ``moving`` only tracks the per-camera lock,
+    which the patrol loop does not take, so a patrolling camera reports
+    ``moving: false`` while physically turning; callers that need a
+    trustworthy position must stop the patrol first, as they already do for
+    manual control.
+
     ``zoom`` and ``h_fov_deg`` describe the current field of view: the zoom
     level is read from the camera and the horizontal FOV comes from the
     calibrated tables (fov_at_zoom). For adapters without calibration

@@ -294,6 +294,12 @@ class PyroCameraAPIClient:
         Response: {"camera_ip", "azimuth_deg" (null when unknown),
         "source" ("hardware" or "tracked"), "moving", "zoom",
         "h_fov_deg" (calibrated horizontal FOV at the current zoom)}.
+
+        When "moving" is true and "source" is "tracked", "azimuth_deg" is the
+        destination of the in-flight preset move rather than the current
+        position ("hardware" reads back the actual mid-travel position).
+        "moving" only reflects the server-side PTZ lock, so a camera moving
+        under patrol reports false.
         """
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/control/azimuth", params=params)
