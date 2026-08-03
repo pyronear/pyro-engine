@@ -71,6 +71,29 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 len(self.cam_poses),
                 len(self.cam_azimuths),
             )
+        self._has_motorised_lens: Optional[bool] = None
+
+    def has_motorised_lens(self) -> bool:
+        """Whether this camera's lens can be driven.
+
+        ``cam_type`` describes how the camera is mounted, not what optics it
+        carries. A "static" camera is one that does not pan or tilt, which says
+        nothing about zoom: Reolink bullets such as the RLC-811A or the P430 sit
+        fixed on their mast and still ship a motorised varifocal lens.
+
+        Rather than infer it, ask the camera. ``GetZoomFocus`` reports a zoom
+        position only on models that can move the lens, so the answer comes from
+        the device itself and holds for any model. The result is cached: it
+        cannot change while the camera is running, and this saves a request on
+        every zoom or focus command.
+        """
+        if self._has_motorised_lens is None:
+            try:
+                self._has_motorised_lens = (self.get_focus_level() or {}).get("zoom") is not None
+            except Exception as exc:
+                logger.warning("[%s] could not probe lens capability: %s", self.ip_address, exc)
+                return False
+        return self._has_motorised_lens
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -232,7 +255,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             url = self._build_url("StartZoomFocus")
             data: Any = [
                 {
@@ -249,7 +272,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         Set manual focus to a specific position.
         """
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             self.focus_position = position
             url = self._build_url("StartZoomFocus")
             data: Any = [
@@ -310,7 +333,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 image.save(f"{folder}/focus_{pos}.jpg")
             return score_local
 
-        if self.cam_type == "static":
+        if not self.has_motorised_lens():
             return 720
 
         if self.focus_position is None:
