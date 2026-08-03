@@ -89,10 +89,18 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         if self._has_motorised_lens is None:
             try:
-                self._has_motorised_lens = (self.get_focus_level() or {}).get("zoom") is not None
+                lens = self.get_focus_level()
             except Exception as exc:
                 logger.warning("[%s] could not probe lens capability: %s", self.ip_address, exc)
                 return False
+            if lens is None:
+                # The camera did not answer, which says nothing about its optics.
+                # Caching this would strand a PTZ camera as fixed-lens for the
+                # rest of the process over one failed request, so try again next
+                # time and skip the command for now.
+                logger.warning("[%s] lens capability probe was inconclusive", self.ip_address)
+                return False
+            self._has_motorised_lens = lens.get("zoom") is not None
         return self._has_motorised_lens
 
     def _build_url(self, command: str) -> str:

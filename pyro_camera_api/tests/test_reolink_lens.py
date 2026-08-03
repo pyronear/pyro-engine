@@ -14,7 +14,7 @@ def _camera(cam_type="static"):
         camera_id="cam",
         ip_address="192.168.1.10",
         username="user",
-        password="pwd",  # ruff: ignore[hardcoded-password-func-arg]
+        password="pwd",  # noqa: S106
         cam_type=cam_type,
     )
 
@@ -38,6 +38,16 @@ def test_unreachable_camera_is_treated_as_fixed_lens():
     cam = _camera()
     with patch.object(ReolinkCamera, "get_focus_level", side_effect=OSError("unreachable")):
         assert cam.has_motorised_lens() is False
+
+
+def test_an_inconclusive_probe_is_not_cached():
+    """A failed request says nothing about the optics. Caching it would strand a
+    PTZ camera as fixed-lens for the rest of the process over one bad answer."""
+    cam = _camera(cam_type="ptz")
+    with patch.object(ReolinkCamera, "get_focus_level", return_value=None):
+        assert cam.has_motorised_lens() is False
+    with patch.object(ReolinkCamera, "get_focus_level", return_value={"focus": 1, "zoom": 0}):
+        assert cam.has_motorised_lens() is True
 
 
 def test_capability_is_probed_once():
