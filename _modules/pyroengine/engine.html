@@ -906,7 +906,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">context_crop</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ContextCrop</span><span class="p">],</span>
         <span class="n">cam_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-        <span class="n">ts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ts</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">bboxes</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
         <span class="n">jpeg_bytes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">crop_boxes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -966,7 +966,9 @@
                     <span class="p">)</span>
                     <span class="n">_</span><span class="p">,</span> <span class="n">pose_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_creds</span><span class="p">[</span><span class="n">cam_id</span><span class="p">]</span>
                     <span class="n">ip</span> <span class="o">=</span> <span class="n">cam_id</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-                    <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">ip</span><span class="p">]</span><span class="o">.</span><span class="n">create_detection</span><span class="p">(</span><span class="n">jpeg_bytes</span><span class="p">,</span> <span class="n">bboxes</span><span class="p">,</span> <span class="n">pose_id</span><span class="p">,</span> <span class="n">crops</span><span class="o">=</span><span class="n">crops</span><span class="p">)</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">api_client</span><span class="p">[</span><span class="n">ip</span><span class="p">]</span><span class="o">.</span><span class="n">create_detection</span><span class="p">(</span>
+                        <span class="n">jpeg_bytes</span><span class="p">,</span> <span class="n">bboxes</span><span class="p">,</span> <span class="n">pose_id</span><span class="p">,</span> <span class="n">crops</span><span class="o">=</span><span class="n">crops</span><span class="p">,</span> <span class="n">recorded_at</span><span class="o">=</span><span class="n">frame_info</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span>
+                    <span class="p">)</span>
 
                     <span class="k">try</span><span class="p">:</span>
                         <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
