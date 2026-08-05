@@ -13,7 +13,7 @@ import threading
 from fastapi import APIRouter, HTTPException, Request
 
 from pyro_camera_api.camera.focus_manager import cancel_focus_and_wait
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, FOCUS_CANCEL_EVENTS
 from pyro_camera_api.core.config import RAW_CONFIG, STREAMS
 from pyro_camera_api.services.anonymizer_rtsp import EncoderWorker, RTSPDecoderWorker
 from pyro_camera_api.services.stream import (
@@ -72,67 +72,74 @@ def start_stream(camera_ip: str, request: Request):
             detail=f"Focus operation still running on {camera_ip}, retry in a few seconds",
         )
 
-    cfg_stream = STREAMS[camera_ip]
-    input_url: str = cfg_stream["input_url"]
-    output_url: str = cfg_stream["output_url"]
+    # The cancel event stays set after cancel_focus_and_wait so no new focus
+    # search can sneak in before the pipeline below is registered as active.
+    # It must be cleared on every exit path once the stream is visible (or
+    # startup failed), otherwise autofocus would be blocked forever.
+    try:
+        cfg_stream = STREAMS[camera_ip]
+        input_url: str = cfg_stream["input_url"]
+        output_url: str = cfg_stream["output_url"]
 
-    anonym_cfg = RAW_CONFIG.get(camera_ip, {})
-    anonym_enabled: bool = bool(anonym_cfg.get("anonymizer", False))
+        anonym_cfg = RAW_CONFIG.get(camera_ip, {})
+        anonym_enabled: bool = bool(anonym_cfg.get("anonymizer", False))
 
-    # anonymizer mode
-    if anonym_enabled:
-        frames, boxes, anonym = get_stores(app)
+        # anonymizer mode
+        if anonym_enabled:
+            frames, boxes, anonym = get_stores(app)
 
-        width: int = int(cfg_stream.get("width", 640))
-        height: int = int(cfg_stream.get("height", 360))
-        fps: int = int(cfg_stream.get("fps", 10))
-        rtsp_transport: str = cfg_stream.get("rtsp_transport", "tcp")
+            width: int = int(cfg_stream.get("width", 640))
+            height: int = int(cfg_stream.get("height", 360))
+            fps: int = int(cfg_stream.get("fps", 10))
+            rtsp_transport: str = cfg_stream.get("rtsp_transport", "tcp")
 
-        try:
-            anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))
-        except Exception as exc:
-            logger.warning("Failed to parse conf from stream config, using default: %s", exc)
+            try:
+                anonym._conf = float(cfg_stream.get("conf", getattr(anonym, "_conf", 0.35)))
+            except Exception as exc:
+                logger.warning("Failed to parse conf from stream config, using default: %s", exc)
 
-        decoder = RTSPDecoderWorker(
-            rtsp_url=input_url,
-            width=width,
-            height=height,
-            fps=fps,
-            rtsp_transport=rtsp_transport,
-            store=frames,
-        )
-        encoder = EncoderWorker(
-            frame_store=frames,
-            box_store=boxes,
-            width=width,
-            height=height,
-            srt_out=output_url,
-            target_fps=fps,
-        )
+            decoder = RTSPDecoderWorker(
+                rtsp_url=input_url,
+                width=width,
+                height=height,
+                fps=fps,
+                rtsp_transport=rtsp_transport,
+                store=frames,
+            )
+            encoder = EncoderWorker(
+                frame_store=frames,
+                box_store=boxes,
+                width=width,
+                height=height,
+                srt_out=output_url,
+                target_fps=fps,
+            )
 
-        workers[camera_ip] = Pipeline(decoder=decoder, encoder=encoder)
-        logger.info("[%s] start pipeline, rtsp %s, srt %s", camera_ip, input_url, output_url)
-        decoder.start()
-        encoder.start()
+            workers[camera_ip] = Pipeline(decoder=decoder, encoder=encoder)
+            logger.info("[%s] start pipeline, rtsp %s, srt %s", camera_ip, input_url, output_url)
+            decoder.start()
+            encoder.start()
+
+            return {
+                "message": f"Stream started for {camera_ip}",
+                "previous_stream": stopped_cam or "None",
+                "mode": "anonymizer",
+            }
+
+        # restream mode
+        cmd = build_ffmpeg_restream_cmd(input_url=input_url, output_url=output_url)
+        logger.info("[%s] Running ffmpeg command, %s", camera_ip, " ".join(cmd))
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        procs[camera_ip] = proc
+        threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
 
         return {
             "message": f"Stream started for {camera_ip}",
             "previous_stream": stopped_cam or "None",
-            "mode": "anonymizer",
+            "mode": "restream",
         }
-
-    # restream mode
-    cmd = build_ffmpeg_restream_cmd(input_url=input_url, output_url=output_url)
-    logger.info("[%s] Running ffmpeg command, %s", camera_ip, " ".join(cmd))
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    procs[camera_ip] = proc
-    threading.Thread(target=log_ffmpeg_output, args=(proc, camera_ip), daemon=True).start()
-
-    return {
-        "message": f"Stream started for {camera_ip}",
-        "previous_stream": stopped_cam or "None",
-        "mode": "restream",
-    }
+    finally:
+        FOCUS_CANCEL_EVENTS[camera_ip].clear()
 
 
 @router.post("/stop_stream")

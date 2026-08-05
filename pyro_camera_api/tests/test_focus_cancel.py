@@ -65,7 +65,10 @@ def fast_sleep(monkeypatch):
 def test_cancel_focus_and_wait_free_camera():
     cam_id = "cancel-free"
     assert cancel_focus_and_wait(cam_id, timeout=0.2)
-    assert not FOCUS_CANCEL_EVENTS[cam_id].is_set()
+    # The event stays set so no focus search can start before the stream
+    # pipeline is registered; the caller clears it afterwards.
+    assert FOCUS_CANCEL_EVENTS[cam_id].is_set()
+    FOCUS_CANCEL_EVENTS[cam_id].clear()
 
 
 def test_cancel_focus_and_wait_busy_camera():
@@ -115,6 +118,18 @@ def test_reolink_focus_finder_aborts_and_restores_focus(monkeypatch):
     # Lens back on the pre-search position, reference untouched
     assert cam.focus_history[-1] == 700
     assert cam.focus_position == 700
+
+
+def test_reolink_focus_finder_abort_restores_unclamped_focus():
+    # A configured focus outside the [600, 900] search interval must be
+    # restored as-is, not clamped, so the lens matches the cached reference
+    cam = OfflineReolink(focus_position=950)
+
+    with pytest.raises(FocusAbortedError):
+        cam.focus_finder(should_abort=lambda: True)
+
+    assert cam.focus_history[-1] == 950
+    assert cam.focus_position == 950
 
 
 def test_reolink_focus_finder_abort_without_prior_reference():

@@ -338,7 +338,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             current_focus = self.focus_position
             logger.info("[%s] Using existing focus position: %s", self.ip_address, current_focus)
 
-        start_focus = clamp_focus(int(current_focus))
+        # Kept unclamped: a configured focus outside the search interval must
+        # be restored as-is when the search is aborted
+        pre_search_focus = int(current_focus)
+        start_focus = clamp_focus(pre_search_focus)
 
         try:
             best_focus = start_focus
@@ -384,11 +387,11 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                             improved = True
                             break
         except FocusAbortedError:
-            logger.info("[%s] Focus search aborted, restoring pre-search focus %s", self.ip_address, start_focus)
+            logger.info("[%s] Focus search aborted, restoring pre-search focus %s", self.ip_address, pre_search_focus)
             try:
-                self.set_manual_focus(start_focus)
+                self.set_manual_focus(pre_search_focus)
             except Exception as exc:
-                logger.warning("[%s] Could not restore focus %s: %s", self.ip_address, start_focus, exc)
+                logger.warning("[%s] Could not restore focus %s: %s", self.ip_address, pre_search_focus, exc)
             # An aborted search must not leave a partial-sweep position as the
             # reference the patrol restores after every round
             self.focus_position = initial_reference

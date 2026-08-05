@@ -46,6 +46,11 @@ def cancel_focus_and_wait(camera_id: str, timeout: float = FOCUS_CANCEL_TIMEOUT)
     Sets the per-camera cancel event (polled between steps by the focus
     search) then waits for MOVE_LOCKS to be free, which also covers the final
     focus restoration. Returns True when the camera is free.
+
+    On success the cancel event stays set so no new focus search can start
+    before the stream pipeline is registered as active: the caller must clear
+    FOCUS_CANCEL_EVENTS[camera_id] once the stream is visible (or on failure).
+    On timeout the event is cleared here, since the stream is being refused.
     """
     event = FOCUS_CANCEL_EVENTS[camera_id]
     event.set()
@@ -53,5 +58,6 @@ def cancel_focus_and_wait(camera_id: str, timeout: float = FOCUS_CANCEL_TIMEOUT)
     acquired = lock.acquire(timeout=timeout)
     if acquired:
         lock.release()
-    event.clear()
+    else:
+        event.clear()
     return acquired
