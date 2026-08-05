@@ -11,7 +11,7 @@ import operator
 import pathlib
 import time
 from io import BytesIO
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 import cv2
 import numpy as np
@@ -19,7 +19,7 @@ import requests
 import urllib3
 from PIL import Image
 
-from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 __all__ = ["ReolinkCamera"]
 
@@ -282,9 +282,18 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         laplacian = cv2.Laplacian(arr, cv2.CV_64F)
         return float(laplacian.var())
 
-    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
         """
         Perform adaptive exponential hill climb to find best manual focus.
+
+        should_abort is polled before each focus move; when it fires the
+        search stops, the pre-search focus is restored and FocusAbortedError
+        is raised so the caller does not treat a partial sweep as a result.
         """
         _ = retry_depth  # unused, kept for signature compatibility
 
@@ -296,6 +305,8 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
 
         def capture_and_score(pos: int) -> float:
             pos = clamp_focus(pos)
+            if should_abort is not None and should_abort():
+                raise FocusAbortedError
             self.set_manual_focus(pos)
             time.sleep(2)
             image = self.capture()
@@ -313,6 +324,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         if self.cam_type == "static":
             return 720
 
+        # set_manual_focus records every probed position in focus_position, so
+        # the pre-search reference must be captured before the first probe
+        initial_reference = self.focus_position
+
         if self.focus_position is None:
             self.start_zoom_focus(0)
             time.sleep(0.5)
@@ -323,48 +338,64 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             current_focus = self.focus_position
             logger.info("[%s] Using existing focus position: %s", self.ip_address, current_focus)
 
-        best_focus = clamp_focus(int(current_focus))
-        best_score = capture_and_score(best_focus)
+        # Kept unclamped: a configured focus outside the search interval must
+        # be restored as-is when the search is aborted
+        pre_search_focus = int(current_focus)
+        start_focus = clamp_focus(pre_search_focus)
 
-        forward_score = capture_and_score(best_focus + 1)
-        backward_score = capture_and_score(best_focus - 1)
+        try:
+            best_focus = start_focus
+            best_score = capture_and_score(best_focus)
 
-        if forward_score > backward_score:
-            direction = 1
-            next_focus = best_focus + 1
-            next_score = forward_score
-        else:
-            direction = -1
-            next_focus = best_focus - 1
-            next_score = backward_score
+            forward_score = capture_and_score(best_focus + 1)
+            backward_score = capture_and_score(best_focus - 1)
 
-        step = 2
-        history = [(best_focus, best_score), (next_focus, next_score)]
-
-        while True:
-            test_focus = clamp_focus(next_focus + direction * step)
-            score = capture_and_score(test_focus)
-            history.append((test_focus, score))
-            if score > next_score:
-                next_focus = test_focus
-                next_score = score
-                step *= 2
+            if forward_score > backward_score:
+                direction = 1
+                next_focus = best_focus + 1
+                next_score = forward_score
             else:
-                break
+                direction = -1
+                next_focus = best_focus - 1
+                next_score = backward_score
 
-        best_focus, best_score = max(history, key=operator.itemgetter(1))
-        for fine_step in [3, 1]:
-            improved = True
-            while improved:
-                improved = False
-                for offset in (-fine_step, fine_step):
-                    candidate = clamp_focus(best_focus + offset)
-                    score = capture_and_score(candidate)
-                    if score > best_score:
-                        best_score = score
-                        best_focus = candidate
-                        improved = True
-                        break
+            step = 2
+            history = [(best_focus, best_score), (next_focus, next_score)]
+
+            while True:
+                test_focus = clamp_focus(next_focus + direction * step)
+                score = capture_and_score(test_focus)
+                history.append((test_focus, score))
+                if score > next_score:
+                    next_focus = test_focus
+                    next_score = score
+                    step *= 2
+                else:
+                    break
+
+            best_focus, best_score = max(history, key=operator.itemgetter(1))
+            for fine_step in [3, 1]:
+                improved = True
+                while improved:
+                    improved = False
+                    for offset in (-fine_step, fine_step):
+                        candidate = clamp_focus(best_focus + offset)
+                        score = capture_and_score(candidate)
+                        if score > best_score:
+                            best_score = score
+                            best_focus = candidate
+                            improved = True
+                            break
+        except FocusAbortedError:
+            logger.info("[%s] Focus search aborted, restoring pre-search focus %s", self.ip_address, pre_search_focus)
+            try:
+                self.set_manual_focus(pre_search_focus)
+            except Exception as exc:
+                logger.warning("[%s] Could not restore focus %s: %s", self.ip_address, pre_search_focus, exc)
+            # An aborted search must not leave a partial-sweep position as the
+            # reference the patrol restores after every round
+            self.focus_position = initial_reference
+            raise
 
         self.focus_position = best_focus
         self.set_manual_focus(best_focus)

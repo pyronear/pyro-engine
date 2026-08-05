@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import logging
 from io import BytesIO
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 __all__ = ["MockCamera"]
 
@@ -111,9 +111,17 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         self.focus_position = position
         logger.info("MockCamera %s set_manual_focus(%s) (no op)", self.camera_id, position)
 
-    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
         _ = save_images
         _ = retry_depth
+        if should_abort is not None and should_abort():
+            logger.info("MockCamera %s focus_finder aborted (fake)", self.camera_id)
+            raise FocusAbortedError
         if self.focus_position is None:
             self.focus_position = 720
         logger.info("MockCamera %s focus_finder -> %s (fake)", self.camera_id, self.focus_position)
