@@ -12,6 +12,7 @@ import threading
 
 from fastapi import APIRouter, HTTPException, Request
 
+from pyro_camera_api.camera.focus_manager import cancel_focus_and_wait
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG, STREAMS
 from pyro_camera_api.services.anonymizer_rtsp import EncoderWorker, RTSPDecoderWorker
@@ -62,6 +63,14 @@ def start_stream(camera_ip: str, request: Request):
         return {"message": f"Stream for {camera_ip} already running"}
 
     stopped_cam = stop_any_running_stream(app)
+
+    # Abort any running focus search on this camera and wait for it to release
+    # the move lock, so the viewer never sees a sweep or a lens restoration.
+    if not cancel_focus_and_wait(camera_ip):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Focus operation still running on {camera_ip}, retry in a few seconds",
+        )
 
     cfg_stream = STREAMS[camera_ip]
     input_url: str = cfg_stream["input_url"]
