@@ -69,10 +69,10 @@ def start_stream(camera_ip: str, request: Request):
             logger.info("Stream for %s already running", camera_ip)
             return {"message": f"Stream for {camera_ip} already running"}
 
-        stopped_cam = stop_any_running_stream(app)
-
         # Abort any running focus search on this camera and wait for it to release
         # the move lock, so the viewer never sees a sweep or a lens restoration.
+        # Done before stopping the current stream: on timeout we return 409 without
+        # having torn down a stream that was working on another camera.
         if not cancel_focus_and_wait(camera_ip):
             raise HTTPException(
                 status_code=409,
@@ -84,6 +84,7 @@ def start_stream(camera_ip: str, request: Request):
         # It must be cleared on every exit path once the stream is visible (or
         # startup failed), otherwise autofocus would be blocked forever.
         try:
+            stopped_cam = stop_any_running_stream(app)
             cfg_stream = STREAMS[camera_ip]
             input_url: str = cfg_stream["input_url"]
             output_url: str = cfg_stream["output_url"]
