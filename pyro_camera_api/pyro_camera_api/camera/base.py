@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from PIL import Image
 
@@ -50,12 +50,33 @@ class BaseCamera(ABC):
         ...
 
 
+# Continuous operations that involve the pan axis. Starting one of these makes
+# a dead-reckoned azimuth stale until the caller computes the displacement or a
+# preset move provides a fresh reference.
+PAN_OPERATIONS = frozenset({"Left", "Right", "UpLeft", "UpRight", "DownLeft", "DownRight"})
+
+
 class PTZMixin(ABC):
     """
     Capability mixin for cameras that support pan tilt zoom controls.
 
     Use isinstance(camera, PTZMixin) to check support.
     """
+
+    # "tracked": azimuth is dead-reckoned server-side from commanded moves.
+    # "hardware": azimuth is read back from the camera itself.
+    azimuth_source: str = "tracked"
+
+    # Local pose presets and their real-world azimuths, index-aligned. The
+    # azimuths come from credentials.json (legacy) or are fetched from the
+    # platform API at startup (see camera.pose_azimuths).
+    cam_poses: List[int]
+    cam_azimuths: List[float]
+
+    # Seconds the API keeps the camera locked after a fire-and-forget preset
+    # move so concurrent commands get rejected while the camera travels.
+    # 0 when the adapter blocks (or completes instantly) on preset moves.
+    preset_move_hold_s: float = 0.0
 
     @abstractmethod
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
@@ -67,6 +88,14 @@ class PTZMixin(ABC):
                        examples "Left", "Right", "Up", "Down", "Stop", "ToPos".
             speed: adapter specific speed value.
             idx: Preset index for operations that use a preset.
+        """
+        ...
+
+    @abstractmethod
+    def get_azimuth(self) -> Optional[float]:
+        """
+        Return the camera's current real-world azimuth in degrees [0, 360),
+        or None when unknown (e.g. after boot, before any preset move).
         """
         ...
 

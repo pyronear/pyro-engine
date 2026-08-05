@@ -17,7 +17,7 @@ import requests
 import urllib3
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 from pyro_camera_api.utils.image_utils import measure_sharpness
 
 __all__ = ["ReolinkCamera"]
@@ -32,6 +32,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     A controller class for interacting with Reolink cameras.
     """
 
+    # ToPos is fire-and-forget with no completion feedback: hold the per-camera
+    # lock for a conservative travel time so concurrent commands get a 409.
+    preset_move_hold_s = 5.0
+
     def __init__(
         self,
         camera_id: str,
@@ -40,7 +44,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
-        cam_azimuths: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
         protocol: str = "https",
         focus_position: Optional[int] = None,
     ):
@@ -53,6 +57,19 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.protocol = protocol
         self.focus_position = focus_position
+        # Dead-reckoned real-world azimuth; None until a preset move gives a reference.
+        self.current_azimuth: Optional[float] = None
+        # An empty azimuth list is normal at boot: the mapping is fetched from
+        # the platform API by camera.pose_azimuths. A non-empty mismatched list
+        # is a config error that silently disables tracking, hence the warning.
+        if self.cam_type == "ptz" and self.cam_azimuths and len(self.cam_poses) != len(self.cam_azimuths):
+            logger.warning(
+                "[%s] poses (%d) and azimuths (%d) differ in credentials.json; "
+                "azimuth tracking will stay unknown until fixed",
+                self.ip_address,
+                len(self.cam_poses),
+                len(self.cam_azimuths),
+            )
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -96,13 +113,43 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0):
         """
         Sends a command to move the camera.
+
+        Raises RuntimeError when the camera rejects the command, so callers
+        (and the dead-reckoned azimuth) never assume a move that did not start.
         """
+        if operation in PAN_OPERATIONS:
+            # Untimed pan motion starts: azimuth is unknown until the caller
+            # computes the displacement or a preset move resyncs it.
+            self.current_azimuth = None
         url = self._build_url("PtzCtrl")
         data: Any = [
             {"cmd": "PtzCtrl", "action": 0, "param": {"channel": 0, "op": operation, "id": idx, "speed": speed}}
         ]
         response = requests.post(url, json=data, verify=False)  # nosec: B501
-        self._handle_response(response, "PTZ operation successful.")
+        response_data = self._handle_response(response, "PTZ operation successful.")
+        try:
+            ok = bool(response_data) and response_data[0]["code"] == 0
+        except (KeyError, IndexError, TypeError):
+            ok = False
+        if not ok:
+            raise RuntimeError(f"PTZ command '{operation}' rejected by camera {self.ip_address}")
+        if operation == "ToPos":
+            self._sync_azimuth_from_pose(int(idx))
+
+    def _sync_azimuth_from_pose(self, pose_id: int) -> None:
+        """Resync the dead-reckoned azimuth from the pose mapping after an accepted ToPos.
+
+        An accepted preset outside the configured mapping still moves the
+        camera, so the previous reference becomes stale and is dropped.
+        """
+        if pose_id in self.cam_poses and len(self.cam_poses) == len(self.cam_azimuths):
+            self.current_azimuth = float(self.cam_azimuths[self.cam_poses.index(pose_id)]) % 360.0
+        else:
+            self.current_azimuth = None
+
+    def get_azimuth(self) -> Optional[float]:
+        """Return the dead-reckoned azimuth, or None when unknown."""
+        return self.current_azimuth
 
     def move_in_seconds(self, s: float, operation: str = "Right", speed: int = 20, save_path: str = "im.jpg"):
         """

@@ -13,7 +13,7 @@ from typing import Callable, Optional
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 __all__ = ["MockCamera"]
 
@@ -38,7 +38,7 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         image_url: str = DEFAULT_FAKE_IMAGE_URL,
         cam_type: str = "static",
         cam_poses: Optional[list[int]] = None,
-        cam_azimuths: Optional[list[int]] = None,
+        cam_azimuths: Optional[list[float]] = None,
         focus_position: Optional[int] = None,
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)
@@ -48,6 +48,8 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
         self.cam_poses = cam_poses or []
         self.cam_azimuths = cam_azimuths or []
         self.focus_position = focus_position
+        # Same dead-reckoned azimuth behavior as Reolink, for tests and demos.
+        self.current_azimuth: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -83,6 +85,13 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
     # ------------------------------------------------------------------
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
+        if operation in PAN_OPERATIONS:
+            self.current_azimuth = None
+        elif operation == "ToPos":
+            if idx in self.cam_poses and len(self.cam_poses) == len(self.cam_azimuths):
+                self.current_azimuth = float(self.cam_azimuths[self.cam_poses.index(idx)]) % 360.0
+            else:
+                self.current_azimuth = None
         logger.info(
             "MockCamera %s move_camera called, op=%s speed=%s idx=%s (no op)",
             self.camera_id,
@@ -90,6 +99,9 @@ class MockCamera(BaseCamera, PTZMixin, FocusMixin):
             speed,
             idx,
         )
+
+    def get_azimuth(self) -> Optional[float]:
+        return self.current_azimuth
 
     # ------------------------------------------------------------------
     # FocusMixin implementation (fake but compatible)
