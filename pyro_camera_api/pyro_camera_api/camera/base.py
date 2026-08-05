@@ -12,6 +12,10 @@ from typing import Dict, List, Optional
 from PIL import Image
 
 
+class FocusAbortedError(Exception):
+    """Raised inside focus_finder when the caller requests an early abort."""
+
+
 class BaseCamera(ABC):
     """
     Abstract base class for all camera types.
