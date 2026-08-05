@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException
 
-from pyro_camera_api.camera.base import FocusMixin, PTZMixin
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.camera.focus_manager import focus_abort_requested, stream_is_active
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
@@ -108,6 +109,11 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     preset before the optimization step when available.
     The optional `save_images` parameter allows storing captured frames generated
     during the autofocus process.
+
+    Live streaming has priority: the search is refused (409) while a stream is
+    active, and a stream started mid-search aborts it (409). The per-camera
+    move lock is held for the whole search so stream startup can wait for a
+    clean abort (409 when the camera is already busy).
     """
     update_command_time()
 
@@ -121,17 +127,35 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     if getattr(cam, "cam_type", "static") == "static":
         raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
 
-    if isinstance(cam, PTZMixin):
-        cam_poses = getattr(cam, "cam_poses", None)
-        if cam_poses and len(cam_poses) > 1:
-            pose1 = cam_poses[1]
-            try:
-                cam.move_camera("ToPos", idx=pose1, speed=50)
-                time.sleep(1)
-            except Exception as exc:
-                logger.warning("Could not move camera to pose %s before focus: %s", pose1, exc)
+    if stream_is_active(camera_ip):
+        raise HTTPException(status_code=409, detail="Stream active, focus optimization refused")
 
-    best_position = cam.focus_finder(save_images=save_images)
+    lock = MOVE_LOCKS[camera_ip]
+    if not lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Camera busy, focus optimization refused")
+    try:
+        # Re-check under the lock: a stream may have started in between
+        if focus_abort_requested(camera_ip):
+            raise HTTPException(status_code=409, detail="Stream active, focus optimization refused")
+
+        if isinstance(cam, PTZMixin):
+            cam_poses = getattr(cam, "cam_poses", None)
+            if cam_poses and len(cam_poses) > 1:
+                pose1 = cam_poses[1]
+                try:
+                    cam.move_camera("ToPos", idx=pose1, speed=50)
+                    time.sleep(1)
+                except Exception as exc:
+                    logger.warning("Could not move camera to pose %s before focus: %s", pose1, exc)
+
+        best_position = cam.focus_finder(
+            save_images=save_images,
+            should_abort=lambda: focus_abort_requested(camera_ip),
+        )
+    except FocusAbortedError:
+        raise HTTPException(status_code=409, detail="Focus search aborted, stream has priority")
+    finally:
+        lock.release()
 
     return {
         "camera_ip": camera_ip,

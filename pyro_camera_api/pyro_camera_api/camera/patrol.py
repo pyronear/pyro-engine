@@ -12,12 +12,16 @@ import time
 from typing import Any, Dict
 
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.services.stream import is_camera_streaming
 
 logger = logging.getLogger(__name__)
 
 # backoff settings for static cameras
 MAX_FAILS_BEFORE_SKIP = 2  # skip after 2 consecutive failures
 SKIP_DURATION = 30 * 60.0  # skip for 30 minutes
+
+# seconds between stream re-checks while the patrol is paused by a live stream
+STREAM_CHECK_INTERVAL = 5.0
 
 # per camera state for the static loop
 FAILURE_COUNT: Dict[str, int] = {}
@@ -75,10 +79,17 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     logger.info("[%s] Starting patrol cycle with %d poses", camera_ip, len(poses))
 
     while not stop_flag.is_set():
+        # Live stream has priority: hold the patrol while a stream is active
+        # so the camera never moves under the viewer, and resume automatically
+        # once the stream stops (the thread keeps running, patrol stays "on").
+        if is_camera_streaming(camera_ip):
+            stop_flag.wait(STREAM_CHECK_INTERVAL)
+            continue
+
         start_time = time.time()
 
         for pose in poses:
-            if stop_flag.is_set():
+            if stop_flag.is_set() or is_camera_streaming(camera_ip):
                 break
 
             try:
@@ -94,6 +105,11 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             except Exception as exc:
                 logger.error("[%s] Error at pose %s: %s", camera_ip, pose, exc)
                 continue
+
+        if is_camera_streaming(camera_ip):
+            # Skip the return-to-pose-0 move and focus restore during a
+            # stream, the pause at the top of the loop takes over
+            continue
 
         try:
             cam.move_camera("ToPos", idx=poses[0], speed=50)
