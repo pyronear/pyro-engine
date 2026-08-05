@@ -1013,6 +1013,14 @@ def zoom_camera(camera_ip: str, level: int):
     if not hasattr(cam, "start_zoom_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support zoom control")
 
+    # hasattr only proves the adapter has the method, not that this camera can
+    # act on it: the Reolink adapter drops the command for a fixed lens and
+    # returns None, so without this the route would answer 200 for a zoom that
+    # never happened.
+    has_motorised_lens = getattr(cam, "has_motorised_lens", None)
+    if has_motorised_lens is not None and not has_motorised_lens():
+        raise HTTPException(status_code=400, detail="Camera does not have a motorised lens")
+
     lock = _acquire_or_409(camera_ip)
 
     try:

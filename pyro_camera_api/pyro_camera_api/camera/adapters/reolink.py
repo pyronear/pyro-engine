@@ -73,6 +73,32 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             )
         self._has_motorised_lens: Optional[bool] = None
 
+    def _probe_zoom_support(self) -> Optional[bool]:
+        """Ask the camera whether it reports a zoom position.
+
+        Returns None only when the camera could not be asked, so the caller can
+        tell a transport failure apart from a device that answered. A camera
+        replying with a non-zero Reolink code has answered: it does not serve
+        GetZoomFocus, which settles the question.
+        """
+        try:
+            response = requests.post(
+                self._build_url("GetZoomFocus"),
+                json=[{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}],
+                verify=False,  # nosec: B501
+            )
+        except Exception as exc:
+            logger.warning("[%s] lens probe could not reach the camera: %s", self.ip_address, exc)
+            return None
+        if response.status_code != 200:
+            logger.warning("[%s] lens probe got HTTP %s", self.ip_address, response.status_code)
+            return None
+        payload = response.json()
+        if payload[0].get("code") != 0:
+            logger.info("[%s] camera does not serve GetZoomFocus: fixed lens", self.ip_address)
+            return False
+        return payload[0]["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
+
     def has_motorised_lens(self) -> bool:
         """Whether this camera's lens can be driven.
 
@@ -81,27 +107,15 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         nothing about zoom: Reolink bullets such as the RLC-811A or the P430 sit
         fixed on their mast and still ship a motorised varifocal lens.
 
-        Rather than infer it, ask the camera. ``GetZoomFocus`` reports a zoom
-        position only on models that can move the lens, so the answer comes from
-        the device itself and holds for any model. The result is cached: it
-        cannot change while the camera is running, and this saves a request on
-        every zoom or focus command.
+        The answer is cached once the camera gives one, since a lens cannot grow
+        a motor at runtime and zoom commands are frequent. Only an unanswered
+        probe is retried: caching that would strand a camera over one bad
+        request, and re-probing a camera that already said no would cost a
+        request on every command for the rest of the process.
         """
         if self._has_motorised_lens is None:
-            try:
-                lens = self.get_focus_level()
-            except Exception as exc:
-                logger.warning("[%s] could not probe lens capability: %s", self.ip_address, exc)
-                return False
-            if lens is None:
-                # The camera did not answer, which says nothing about its optics.
-                # Caching this would strand a PTZ camera as fixed-lens for the
-                # rest of the process over one failed request, so try again next
-                # time and skip the command for now.
-                logger.warning("[%s] lens capability probe was inconclusive", self.ip_address)
-                return False
-            self._has_motorised_lens = lens.get("zoom") is not None
-        return self._has_motorised_lens
+            self._has_motorised_lens = self._probe_zoom_support()
+        return self._has_motorised_lens is True
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""

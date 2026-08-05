@@ -103,7 +103,7 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     """
     Run the autofocus search algorithm and return the optimal focus position.
 
-    Supported on any camera with a motorised lens, whether or not it pans.
+    This operation is supported only on PTZ cameras implementing FocusMixin.
     If the camera exposes PTZ presets the algorithm tries moving to the second
     preset before the optimization step when available.
     The optional `save_images` parameter allows storing captured frames generated
@@ -118,11 +118,8 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
     if not isinstance(cam, FocusMixin):
         raise HTTPException(status_code=400, detail="Camera does not support autofocus")
 
-    # Mounting type says nothing about the optics: a bullet camera that does not
-    # pan can still carry a motorised lens. Ask the camera when it can tell us.
-    has_motorised_lens = getattr(cam, "has_motorised_lens", None)
-    if has_motorised_lens is not None and not has_motorised_lens():
-        raise HTTPException(status_code=400, detail="Camera does not have a motorised lens")
+    if getattr(cam, "cam_type", "static") == "static":
+        raise HTTPException(status_code=400, detail="Autofocus is not supported for static cameras")
 
     if isinstance(cam, PTZMixin):
         cam_poses = getattr(cam, "cam_poses", None)
