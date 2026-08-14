@@ -146,14 +146,16 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def _continuous_move(self, pan: float, tilt: float, zoom: float, speed: int) -> None:
         self._ensure_onvif()
+
+        move_speed = self._clamp(speed / 64.0, 0.1, 1.0)
+
         request = self._ptz_service.create_type("ContinuousMove")
         request.ProfileToken = self.onvif_profile_token
-        request.Velocity = self._ptz_service.create_type("PTZSpeed")
-        request.Velocity.PanTilt = self._ptz_service.create_type("Vector")
-        request.Velocity.PanTilt.x = pan * self._clamp(speed / 64.0, 0.1, 1.0)
-        request.Velocity.PanTilt.y = tilt * self._clamp(speed / 64.0, 0.1, 1.0)
-        request.Velocity.Zoom = self._ptz_service.create_type("Vector")
-        request.Velocity.Zoom.x = zoom * self._clamp(speed / 64.0, 0.1, 1.0)
+        request.Velocity = {
+            "PanTilt": {"x": pan * move_speed, "y": tilt * move_speed},
+            "Zoom": {"x": zoom * move_speed},
+        }
+
         self._ptz_service.ContinuousMove(request)
 
     def _preset_token(self, preset_id: int) -> str:

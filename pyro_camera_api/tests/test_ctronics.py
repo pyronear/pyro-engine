@@ -83,6 +83,14 @@ from PIL import Image
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
 
+class DictToAttr:
+    """Convertit récursivement un dictionnaire en objet avec accès par attribut."""
+    def __init__(self, data):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                setattr(self, key, DictToAttr(value))
+            else:
+                setattr(self, key, value)
 
 class FakeOnvifService:
     def __init__(self):
@@ -97,6 +105,8 @@ class FakeOnvifService:
         return [SimpleNamespace(token="profile-1", VideoSourceConfiguration=SimpleNamespace(SourceToken="video-1"))]
 
     def ContinuousMove(self, request):
+        if isinstance(request.Velocity, dict):
+            request.Velocity = DictToAttr(request.Velocity)
         self.calls.append(("ContinuousMove", request))
 
     def Stop(self, request):
@@ -231,7 +241,6 @@ def test_move_camera_maps_operations_to_onvif(fake_onvif, operation, axis):
     assert request.Velocity.PanTilt.x == (-0.5 if operation in {"Left", "UpLeft", "DownLeft"} else 0.5 if "Right" in operation else 0)
     assert request.Velocity.PanTilt.y == (0.5 if operation in {"Up", "UpLeft", "UpRight"} else -0.5 if operation in {"Down", "DownLeft", "DownRight"} else 0)
     assert request.Velocity.Zoom.x == (-0.5 if operation == "ZoomOut" else 0.5 if operation == "ZoomIn" else 0)
-
 
 def test_stop_preset_and_azimuth_tracking(fake_onvif):
     camera = CTronicsCamera(
