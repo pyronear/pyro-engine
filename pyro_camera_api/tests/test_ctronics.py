@@ -175,7 +175,7 @@ def test_stop_preset_and_azimuth_tracking(fake_onvif):
     camera.move_camera("Stop")
 
     assert camera.get_azimuth() == 90.0
-    assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GotoPreset", "Stop"}] == ["GetPresets", "GotoPreset", "Stop"]
+    assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GetPresets", "GotoPreset", "Stop"}] == ["GetPresets", "GotoPreset", "Stop"]
 
 
 def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
@@ -197,7 +197,7 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
 
 
 def test_focus_finder_honors_abort_without_hardware(fake_onvif):
-    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz", focus_position=500)
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera.focus_position = 500
 
     with pytest.raises(FocusAbortedError):
