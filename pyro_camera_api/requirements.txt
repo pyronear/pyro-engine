@@ -52,6 +52,8 @@ numpy==1.26.4
     #   opencv-python
     #   opencv-python-headless
     #   pyro-camera-api
+onvif-zeep==0.2.12
+    # via pyro-camera-api
 onnxruntime==1.19.2
     # via pyro-camera-api
     # via ncnn

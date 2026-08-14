@@ -7,20 +7,24 @@
 from __future__ import annotations
 
 import logging
+import pathlib
+import time
 from io import BytesIO
-from typing import Optional
+from typing import Any, Callable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
+import cv2
+import numpy as np
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
 logger = logging.getLogger(__name__)
 
 
-class CTronicsCamera(BaseCamera):
-    """CTronics camera using an authenticated HTTP snapshot endpoint."""
+class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
+    """CTronics camera using HTTP snapshots and ONVIF PTZ/Imaging services."""
 
     def __init__(
         self,
@@ -35,6 +39,14 @@ class CTronicsCamera(BaseCamera):
         timeout: float = 5.0,
         model: Optional[str] = None,
         cam_type: str = "static",
+        cam_poses: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
+        onvif_port: int = 8080,
+        onvif_protocol: str = "http",
+        onvif_wsdl_dir: Optional[str] = None,
+        onvif_profile_token: Optional[str] = None,
+        focus_min: int = 0,
+        focus_max: int = 1000,
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.ip_address = ip_address
@@ -46,6 +58,21 @@ class CTronicsCamera(BaseCamera):
         self.snapshot_command = snapshot_command
         self.timeout = timeout
         self.model = model
+        self.cam_poses = cam_poses if cam_poses is not None else []
+        self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
+        self.onvif_port = onvif_port
+        self.onvif_protocol = onvif_protocol
+        self.onvif_wsdl_dir = onvif_wsdl_dir
+        self.onvif_profile_token = onvif_profile_token
+        self.focus_min = focus_min
+        self.focus_max = focus_max
+        self.focus_position: Optional[int] = None
+        self.current_azimuth: Optional[float] = None
+        self._onvif_camera: Any = None
+        self._media_service: Any = None
+        self._ptz_service: Any = None
+        self._imaging_service: Any = None
+        self._profile: Any = None
 
     @property
     def snapshot_url(self) -> str:
@@ -86,3 +113,215 @@ class CTronicsCamera(BaseCamera):
 
         logger.info("CTronics capture OK for %s, size=%s", redacted_url, image.size)
         return image
+
+    def _ensure_onvif(self) -> None:
+        if self._ptz_service is not None:
+            return
+        try:
+            from onvif import ONVIFCamera
+        except ImportError as exc:
+            raise RuntimeError("Install onvif-zeep to use CTronics PTZ and focus controls") from exc
+
+        args = [self.ip_address, self.onvif_port, self.username, self.password]
+        if self.onvif_wsdl_dir:
+            args.append(self.onvif_wsdl_dir)
+        self._onvif_camera = ONVIFCamera(*args)
+        self._media_service = self._onvif_camera.create_media_service()
+        profiles = self._media_service.GetProfiles()
+        if not profiles:
+            raise RuntimeError(f"No ONVIF media profile found for {self.ip_address}:{self.onvif_port}")
+        self._profile = next(
+            (profile for profile in profiles if profile.token == self.onvif_profile_token), profiles[0]
+        )
+        self.onvif_profile_token = self._profile.token
+        self._ptz_service = self._onvif_camera.create_ptz_service()
+        try:
+            self._imaging_service = self._onvif_camera.create_imaging_service()
+        except Exception as exc:
+            logger.warning("ONVIF Imaging unavailable for %s: %s", self.ip_address, exc)
+
+    @staticmethod
+    def _clamp(value: float, low: float, high: float) -> float:
+        return max(low, min(high, value))
+
+    def _continuous_move(self, pan: float, tilt: float, zoom: float, speed: int) -> None:
+        self._ensure_onvif()
+        request = self._ptz_service.create_type("ContinuousMove")
+        request.ProfileToken = self.onvif_profile_token
+        request.Velocity = self._ptz_service.create_type("PTZSpeed")
+        request.Velocity.PanTilt = self._ptz_service.create_type("Vector")
+        request.Velocity.PanTilt.x = pan * self._clamp(speed / 64.0, 0.1, 1.0)
+        request.Velocity.PanTilt.y = tilt * self._clamp(speed / 64.0, 0.1, 1.0)
+        request.Velocity.Zoom = self._ptz_service.create_type("Vector")
+        request.Velocity.Zoom.x = zoom * self._clamp(speed / 64.0, 0.1, 1.0)
+        self._ptz_service.ContinuousMove(request)
+
+    def _preset_token(self, preset_id: int) -> str:
+        self._ensure_onvif()
+        request = self._ptz_service.create_type("GetPresets")
+        request.ProfileToken = self.onvif_profile_token
+        presets = self._ptz_service.GetPresets(request) or []
+        for preset in presets:
+            if str(getattr(preset, "token", "")) == str(preset_id):
+                return str(preset.token)
+        if 0 <= preset_id < len(presets):
+            return str(presets[preset_id].token)
+        raise ValueError(f"ONVIF preset {preset_id} was not found on {self.ip_address}")
+
+    def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
+        if self.cam_type == "static":
+            return
+        operation = operation.strip()
+        if operation == "ToPos":
+            self._ensure_onvif()
+            request = self._ptz_service.create_type("GotoPreset")
+            request.ProfileToken = self.onvif_profile_token
+            request.PresetToken = self._preset_token(int(idx))
+            self._ptz_service.GotoPreset(request)
+            self._sync_azimuth_from_pose(int(idx))
+            return
+        if operation == "Stop":
+            self._ensure_onvif()
+            request = self._ptz_service.create_type("Stop")
+            request.ProfileToken = self.onvif_profile_token
+            request.PanTilt = True
+            request.Zoom = True
+            self._ptz_service.Stop(request)
+            return
+
+        vectors = {
+            "Left": (-1, 0, 0),
+            "Right": (1, 0, 0),
+            "Up": (0, 1, 0),
+            "Down": (0, -1, 0),
+            "UpLeft": (-1, 1, 0),
+            "UpRight": (1, 1, 0),
+            "DownLeft": (-1, -1, 0),
+            "DownRight": (1, -1, 0),
+            "ZoomIn": (0, 0, 1),
+            "ZoomOut": (0, 0, -1),
+        }
+        if operation not in vectors:
+            raise ValueError(f"Unsupported PTZ operation: {operation}")
+        if operation in PAN_OPERATIONS:
+            self.current_azimuth = None
+        self._continuous_move(*vectors[operation], speed=speed)
+
+    def _sync_azimuth_from_pose(self, pose_id: int) -> None:
+        if pose_id in self.cam_poses and len(self.cam_poses) == len(self.cam_azimuths):
+            self.current_azimuth = float(self.cam_azimuths[self.cam_poses.index(pose_id)]) % 360.0
+        else:
+            self.current_azimuth = None
+
+    def get_azimuth(self) -> Optional[float]:
+        return self.current_azimuth
+
+    def get_ptz_preset(self) -> Optional[list]:
+        self._ensure_onvif()
+        request = self._ptz_service.create_type("GetPresets")
+        request.ProfileToken = self.onvif_profile_token
+        return self._ptz_service.GetPresets(request)
+
+    def set_ptz_preset(self, idx: Optional[int] = None, name: Optional[str] = None) -> Any:
+        self._ensure_onvif()
+        request = self._ptz_service.create_type("SetPreset")
+        request.ProfileToken = self.onvif_profile_token
+        request.PresetName = name or f"pos{idx if idx is not None else ''}"
+        if idx is not None:
+            request.PresetToken = str(idx)
+        return self._ptz_service.SetPreset(request)
+
+    def save_preset(self, idx: int, name: Optional[str] = None) -> Any:
+        return self.set_ptz_preset(idx=idx, name=name)
+
+    def reboot_camera(self) -> bool:
+        self._ensure_onvif()
+        self._onvif_camera.devicemgmt.SystemReboot()
+        return True
+
+    def _focus_request(self, position: int) -> Any:
+        if self._imaging_service is None:
+            raise RuntimeError("ONVIF Imaging service is unavailable")
+        request = self._imaging_service.create_type("Move")
+        request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
+        request.Focus = self._imaging_service.create_type("FocusMove")
+        request.Focus.Absolute = self._imaging_service.create_type("AbsoluteFocus")
+        request.Focus.Absolute.Position = self._clamp(
+            (position - self.focus_min) / max(1, self.focus_max - self.focus_min), 0.0, 1.0
+        )
+        return request
+
+    def set_manual_focus(self, position: int) -> None:
+        self._ensure_onvif()
+        self._imaging_service.Move(self._focus_request(position))
+        self.focus_position = int(position)
+
+    def get_focus_level(self) -> Optional[dict]:
+        self._ensure_onvif()
+        if self._imaging_service is None:
+            return None
+        request = self._imaging_service.create_type("GetStatus")
+        request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
+        status = self._imaging_service.GetStatus(request)
+        raw_focus = getattr(getattr(status, "FocusStatus20", None), "Position", None)
+        focus = None
+        if raw_focus is not None:
+            focus = round(self.focus_min + float(raw_focus) * (self.focus_max - self.focus_min))
+            self.focus_position = focus
+        return {"focus": focus, "zoom": None}
+
+    def get_auto_focus(self) -> Optional[dict]:
+        self._ensure_onvif()
+        if self._imaging_service is None:
+            return None
+        request = self._imaging_service.create_type("GetImagingSettings")
+        request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
+        settings = self._imaging_service.GetImagingSettings(request)
+        return {"mode": getattr(getattr(settings, "Focus", None), "AutoFocusMode", None)}
+
+    def set_auto_focus(self, disable: bool) -> None:
+        self._ensure_onvif()
+        if self._imaging_service is None:
+            raise RuntimeError("ONVIF Imaging service is unavailable")
+        request = self._imaging_service.create_type("SetImagingSettings")
+        request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
+        request.ImagingSettings = self._imaging_service.create_type("ImagingSettings20")
+        request.ImagingSettings.Focus = self._imaging_service.create_type("FocusConfiguration20")
+        request.ImagingSettings.Focus.AutoFocusMode = "MANUAL" if disable else "AUTO"
+        self._imaging_service.SetImagingSettings(request)
+
+    def start_zoom_focus(self, position: int) -> None:
+        self.set_manual_focus(position)
+
+    @staticmethod
+    def _measure_sharpness(image: Image.Image) -> float:
+        return float(cv2.Laplacian(np.array(image.convert("L")), cv2.CV_64F).var())
+
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
+        _ = retry_depth
+        if self.cam_type == "static":
+            return self.focus_position or 0
+        initial = self.focus_position if self.focus_position is not None else (self.focus_min + self.focus_max) // 2
+        candidates = range(max(self.focus_min, initial - 50), min(self.focus_max, initial + 50) + 1, 10)
+        scores = []
+        for position in candidates:
+            if should_abort is not None and should_abort():
+                self.set_manual_focus(initial)
+                raise FocusAbortedError
+            self.set_manual_focus(position)
+            time.sleep(1)
+            image = self.capture()
+            score = self._measure_sharpness(image) if image is not None else 0.0
+            scores.append((position, score))
+            if save_images and image is not None:
+                folder = pathlib.Path("focus_debug") / self.ip_address.replace(".", "_")
+                folder.mkdir(exist_ok=True, parents=True)
+                image.save(folder / f"focus_{position}.jpg")
+        best_focus = max(scores, key=lambda item: item[1])[0]
+        self.set_manual_focus(best_focus)
+        return best_focus

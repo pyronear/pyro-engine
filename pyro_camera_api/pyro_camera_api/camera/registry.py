@@ -189,7 +189,15 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             snapshot_command=conf.get("snapshot_command"),
             timeout=conf.get("timeout", 5.0),
             model=conf.get("model"),
-            cam_type="static",
+            cam_type=cam_type,
+            cam_poses=conf.get("poses", []),
+            cam_azimuths=conf.get("azimuths", []),
+            onvif_port=conf.get("onvif_port", 8080),
+            onvif_protocol=conf.get("onvif_protocol", "http"),
+            onvif_wsdl_dir=conf.get("onvif_wsdl_dir"),
+            onvif_profile_token=conf.get("onvif_profile_token"),
+            focus_min=conf.get("focus_min", 0),
+            focus_max=conf.get("focus_max", 1000),
         )
         logger.info("Registered CTronics camera %s (model=%s)", key, conf.get("model", "generic"))
         return cam

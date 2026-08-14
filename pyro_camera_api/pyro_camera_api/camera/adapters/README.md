@@ -31,7 +31,7 @@ cover many cameras without a single line of Python.
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url`                                  |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` with embedded credentials             |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url`; headers/path/encoding as needed      |
-| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | no  | no    | `ip_address`; HTTP snapshot defaults       |
+| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | yes | yes   | `ip_address`; HTTP snapshot and ONVIF       |
 | `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos         |
 
 Pick the generic adapter that matches:
@@ -55,14 +55,17 @@ endpoint. See [CTronics adapter](#ctronics-adapter) for its configuration.
 
 ## CTronics adapter
 
-The `ctronics` adapter is a capture-only integration for the tested CTronics firmware, which
-exposes `/tmpfs/snap.jpg` and accepts `usr` and `pwd` query parameters. If a model exposes a
-plain snapshot URL or an RTSP stream, prefer `url` or `rtsp`. If another CTronics firmware uses
-a different endpoint, set `snapshot_path`; set `snapshot_command` only when that endpoint also
-requires a `cmd` query parameter.
+The `ctronics` adapter supports the tested CTronics firmware's authenticated
+`/tmpfs/snap.jpg` snapshot endpoint and ONVIF PTZ/Imaging controls. RTSP remains configured
+separately for streaming. If another CTronics firmware uses a different snapshot endpoint, set
+`snapshot_path`; set `snapshot_command` only when that endpoint also requires a `cmd` query
+parameter.
 
 The optional `model` field records the camera variant and leaves room for future model-specific
-profiles. It has no effect on capture yet.
+profiles. `onvif_port` defaults to `8080`, and `onvif_profile_token` can select a specific ONVIF
+media profile. Set `type` to `ptz` to enable movement. `poses` and `azimuths` are parallel lists
+used to keep the project's real-world azimuth tracking after a preset move. Focus values default
+to the range `0..1000` and can be changed with `focus_min` and `focus_max`.
 
 Example configuration for the tested CTronics firmware:
 
@@ -74,7 +77,10 @@ Example configuration for the tested CTronics firmware:
     "username": "admin",
     "password": "change-me",
     "model": "5mp",
-    "type": "static",
+    "type": "ptz",
+    "onvif_port": 8080,
+    "poses": [0, 1, 2, 3],
+    "azimuths": [0, 90, 180, 270],
     "rtsp_path": "/11"
   }
 }

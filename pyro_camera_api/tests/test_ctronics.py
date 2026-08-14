@@ -10,6 +10,15 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
+from pyro_camera_api.camera.base import FocusMixin, PTZMixin
+
+
+def test_ctronics_exposes_ptz_and_focus_capabilities():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz", onvif_port=8080)
+
+    assert isinstance(camera, PTZMixin)
+    assert isinstance(camera, FocusMixin)
+    assert camera.onvif_port == 8080
 
 
 def test_capture_builds_tmpfs_snapshot_url_and_returns_rgb_image():
