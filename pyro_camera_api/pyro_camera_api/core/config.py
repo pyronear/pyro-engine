@@ -71,7 +71,8 @@ if RAW_CONFIG:
             path = cfg.get("rtsp_path", f"/Streaming/Channels/{channel}")
             input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554{path}"
         else:
-            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554/h264Preview_01_sub"
+            path = cfg.get("rtsp_path", "/h264Preview_01_sub")
+            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554{path}"
 
         if id_or_name.startswith(("#!::", "publish:")) or ":" in id_or_name:
             streamid = id_or_name

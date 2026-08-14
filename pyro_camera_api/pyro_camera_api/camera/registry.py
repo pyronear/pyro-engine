@@ -13,6 +13,7 @@ import threading
 from collections import defaultdict
 from typing import Dict, Optional
 
+from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
@@ -81,7 +82,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
 
     Expected keys in conf:
       adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url",
-                "rest" (alias "api"), "mock".
+                "rest" (alias "api"), "ctronics" (alias "ctronic"), "mock".
                 Generic "reolink" is still accepted by the registry (it builds
                 a ReolinkCamera from any string containing "reolink"), but the
                 PTZ routes require a specific model for the calibrated speed
@@ -92,6 +93,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
       url (if adapter=url, rest or mock)
       headers, response, json_path, encoding, timeout, retries (if adapter=rest).
         Header/URL values may reference environment variables as ${VAR}.
+      username, password, port, protocol, snapshot_path, snapshot_command, model
+        (if adapter=ctronics)
       poses, azimuths, focus_position (PTZ adapters)
     """
     adapter = conf.get("adapter", "").lower()
@@ -164,6 +167,31 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             cam_type="static",
         )
         logger.info("Registered URL snapshot camera %s", key)
+        return cam
+
+    # CTronics CGI snapshot camera (capture only)
+    if adapter in ("ctronics", "ctronic"):
+        try:
+            username = _resolve_env(str(conf.get("username", CAM_USER or "")))
+            password = _resolve_env(str(conf.get("password", CAM_PWD or "")))
+        except KeyError as exc:
+            logger.error("Camera %s references unset environment variable %s", key, exc)
+            return None
+
+        cam = CTronicsCamera(
+            camera_id=key,
+            ip_address=ip_addr,
+            username=username,
+            password=password,
+            port=conf.get("port", 80),
+            protocol=conf.get("protocol", "http"),
+            snapshot_path=conf.get("snapshot_path", "/cgi-bin/CGIProxy.fcgi"),
+            snapshot_command=conf.get("snapshot_command", "snapPicture2"),
+            timeout=conf.get("timeout", 5.0),
+            model=conf.get("model"),
+            cam_type="static",
+        )
+        logger.info("Registered CTronics camera %s (model=%s)", key, conf.get("model", "generic"))
         return cam
 
     # Generic REST / HTTP-API snapshot camera (capture only).
