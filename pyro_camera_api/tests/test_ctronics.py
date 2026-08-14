@@ -3,6 +3,73 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
+"""CTronics adapter tests.
+
+Real-camera test procedure
+===========================
+
+The default tests use a fake ONVIF client and do not contact a camera. They are
+safe to run in CI or on Vercel. To run the integration tests against a real
+camera, follow these steps from the ``pyro_camera_api`` directory:
+
+1. Install the project and test dependencies::
+
+    uv sync
+
+2. Set the camera connection variables. The ONVIF port defaults to 8080::
+
+    export CTRONICS_IP="192.168.1.XX"
+    export CTRONICS_USER="admin"
+    export CTRONICS_PASSWORD="your-password"
+    export CTRONICS_ONVIF_PORT="8080"
+
+   Optional variables are ``CTRONICS_HTTP_PORT`` (default ``80``),
+   ``CTRONICS_ONVIF_PROTOCOL`` (default ``http``),
+   ``CTRONICS_ONVIF_PROFILE``, and ``CTRONICS_SNAPSHOT_PATH`` (default
+   ``/tmpfs/snap.jpg``).
+
+3. Run the safe real-camera smoke test. It checks snapshot capture, ONVIF
+   discovery, and preset listing without moving the camera::
+
+    CTRONICS_TEST_REAL=1 pytest tests/test_ctronics.py -v
+
+4. Test a short PTZ movement followed immediately by Stop. This physically
+   moves the camera::
+
+    CTRONICS_TEST_PTZ=1 \\
+    CTRONICS_TEST_DIRECTION=Right \\
+    pytest tests/test_ctronics.py -v
+
+   Valid directions are ``Left``, ``Right``, ``Up``, ``Down``, ``UpLeft``,
+   ``UpRight``, ``DownLeft``, ``DownRight``, ``ZoomIn``, and ``ZoomOut``.
+
+5. Test a preset move. Replace ``1`` with an existing ONVIF preset token or
+   index configured on the camera::
+
+    CTRONICS_TEST_PRESET=1 \\
+    CTRONICS_TEST_PRESET_ID=1 \\
+    pytest tests/test_ctronics.py -v
+
+6. Test manual focus and restore autofocus afterwards if needed::
+
+    CTRONICS_TEST_FOCUS=1 \\
+    CTRONICS_TEST_FOCUS_POSITION=500 \\
+    pytest tests/test_ctronics.py -v
+
+7. Run the focus finder only when a focus sweep is acceptable. It moves the
+   focus through several positions and may take a while::
+
+    CTRONICS_TEST_FOCUS_FINDER=1 pytest tests/test_ctronics.py -v
+
+8. Test reboot separately. The camera will restart and temporarily disconnect::
+
+    CTRONICS_TEST_REBOOT=1 pytest tests/test_ctronics.py -v
+
+Run the complete local test file without hardware with::
+
+    pytest tests/test_ctronics.py -v
+"""
+
 
 import os
 import sys
