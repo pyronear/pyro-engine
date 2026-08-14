@@ -169,7 +169,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered URL snapshot camera %s", key)
         return cam
 
-    # CTronics CGI snapshot camera (capture only)
+    # CTronics HTTP snapshot camera (capture only)
     if adapter in ("ctronics", "ctronic"):
         try:
             username = _resolve_env(str(conf.get("username", CAM_USER or "")))
@@ -185,8 +185,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             password=password,
             port=conf.get("port", 80),
             protocol=conf.get("protocol", "http"),
-            snapshot_path=conf.get("snapshot_path", "/cgi-bin/CGIProxy.fcgi"),
-            snapshot_command=conf.get("snapshot_command", "snapPicture2"),
+            snapshot_path=conf.get("snapshot_path", "/tmpfs/snap.jpg"),
+            snapshot_command=conf.get("snapshot_command"),
             timeout=conf.get("timeout", 5.0),
             model=conf.get("model"),
             cam_type="static",

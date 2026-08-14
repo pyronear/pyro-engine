@@ -20,12 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class CTronicsCamera(BaseCamera):
-    """CTronics camera using the CGI snapshot endpoint.
-
-    CTronics models commonly expose the Foscam-compatible ``CGIProxy.fcgi``
-    endpoint. The endpoint and query parameters are configurable because
-    firmware differs between models and hardware generations.
-    """
+    """CTronics camera using an authenticated HTTP snapshot endpoint."""
 
     def __init__(
         self,
@@ -35,8 +30,8 @@ class CTronicsCamera(BaseCamera):
         password: str,
         port: int = 80,
         protocol: str = "http",
-        snapshot_path: str = "/cgi-bin/CGIProxy.fcgi",
-        snapshot_command: str = "snapPicture2",
+        snapshot_path: str = "/tmpfs/snap.jpg",
+        snapshot_command: Optional[str] = None,
         timeout: float = 5.0,
         model: Optional[str] = None,
         cam_type: str = "static",
@@ -54,16 +49,13 @@ class CTronicsCamera(BaseCamera):
 
     @property
     def snapshot_url(self) -> str:
-        """Build the authenticated CGI URL without putting credentials in its authority."""
+        """Build the authenticated snapshot URL without putting credentials in its authority."""
         base = f"{self.protocol}://{self.ip_address}:{self.port}/"
         path = self.snapshot_path.lstrip("/")
-        query = urlencode(
-            {
-                "cmd": self.snapshot_command,
-                "usr": self.username,
-                "pwd": self.password,
-            }
-        )
+        query_params = {"usr": self.username, "pwd": self.password}
+        if self.snapshot_command:
+            query_params = {"cmd": self.snapshot_command, **query_params}
+        query = urlencode(query_params)
         return urljoin(base, f"{path}?{query}")
 
     @staticmethod

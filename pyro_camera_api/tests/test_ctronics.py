@@ -12,7 +12,7 @@ from PIL import Image
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 
 
-def test_capture_builds_cgi_url_and_returns_rgb_image():
+def test_capture_builds_tmpfs_snapshot_url_and_returns_rgb_image():
     payload = BytesIO()
     Image.new("RGB", (8, 8), (10, 20, 30)).save(payload, format="JPEG")
     response = MagicMock(content=payload.getvalue())
@@ -26,7 +26,7 @@ def test_capture_builds_cgi_url_and_returns_rgb_image():
     assert image.mode == "RGB"
     assert get.call_args.kwargs["timeout"] == 5.0
     assert get.call_args.args[0] == (
-        "http://192.0.2.10:80/cgi-bin/CGIProxy.fcgi?cmd=snapPicture2&usr=user&pwd=secret"
+        "http://192.0.2.10:80/tmpfs/snap.jpg?usr=user&pwd=secret"
     )
 
 

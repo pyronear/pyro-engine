@@ -31,7 +31,7 @@ cover many cameras without a single line of Python.
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url`                                  |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` with embedded credentials             |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url`; headers/path/encoding as needed      |
-| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | no  | no    | `ip_address`; CGI snapshot defaults         |
+| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | no  | no    | `ip_address`; HTTP snapshot defaults       |
 | `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos         |
 
 Pick the generic adapter that matches:
@@ -50,20 +50,21 @@ integration removes repeated, secret-bearing configuration from deployments. It 
 remain thin: do not add an adapter when `url`, `rtsp` or `rest` already expresses the camera's
 behavior without special handling.
 
-The `ctronics` adapter is available for CTronics firmware exposing the Foscam-compatible CGI
-snapshot endpoint. See [CTronics adapter](#ctronics-adapter) for its configuration.
+The `ctronics` adapter is available for CTronics firmware exposing an authenticated HTTP snapshot
+endpoint. See [CTronics adapter](#ctronics-adapter) for its configuration.
 
 ## CTronics adapter
 
-The `ctronics` adapter is a capture-only integration for CTronics firmware exposing the
-Foscam-compatible CGI snapshot endpoint. If a model exposes a plain snapshot URL or an RTSP
-stream, prefer `url` or `rtsp`. If the CGI endpoint differs, set `snapshot_path` and
-`snapshot_command` rather than adding model-specific code immediately.
+The `ctronics` adapter is a capture-only integration for the tested CTronics firmware, which
+exposes `/tmpfs/snap.jpg` and accepts `usr` and `pwd` query parameters. If a model exposes a
+plain snapshot URL or an RTSP stream, prefer `url` or `rtsp`. If another CTronics firmware uses
+a different endpoint, set `snapshot_path`; set `snapshot_command` only when that endpoint also
+requires a `cmd` query parameter.
 
 The optional `model` field records the camera variant and leaves room for future model-specific
 profiles. It has no effect on capture yet.
 
-Example configuration for the default CTronics CGI firmware:
+Example configuration for the tested CTronics firmware:
 
 ```json
 {
@@ -79,10 +80,10 @@ Example configuration for the default CTronics CGI firmware:
 }
 ```
 
-The credentials are placed in the query string because that is how this specific CTronics CGI
-endpoint authenticates. They may be written as `${CTRONICS_USER}` and `${CTRONICS_PASSWORD}` and
-resolved from the environment at registration time. Do not commit real credentials; use the
-mounted `data/credentials.json` and the deployment secret mechanism.
+The credentials are placed in the query string because that is how this specific CTronics
+snapshot endpoint authenticates. They may be written as `${CTRONICS_USER}` and
+`${CTRONICS_PASSWORD}` and resolved from the environment at registration time. Do not commit
+real credentials; use the mounted `data/credentials.json` and the deployment secret mechanism.
 
 ## Streaming configuration
 
