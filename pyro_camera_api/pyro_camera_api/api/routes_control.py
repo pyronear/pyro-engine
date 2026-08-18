@@ -227,8 +227,10 @@ def click_to_move(
                 pan_deg,
                 tilt_deg,
             )
-            # Positive tilt_deg = click below center = camera must look down = elevation decreases.
-            target = cam.move_relative_deg(pan_deg, -tilt_deg)
+            # Positive tilt_deg = click below center = camera must look down.
+            # Dome convention (field-checked): elevation increases downward
+            # (0 = horizon, 90 = straight down), so pass tilt_deg as-is.
+            target = cam.move_relative_deg(pan_deg, tilt_deg)
             return {
                 "status": "ok",
                 "camera_ip": camera_ip,

@@ -52,5 +52,5 @@ def test_click_to_move_relative_hardware_path(monkeypatch):
     assert result["h_fov"] < 54.2 / 1.5
     d_az, d_el = cam.last_relative
     assert d_az > 0  # click right → pan right → azimuth increases
-    assert d_el > 0  # click above center → camera looks up → elevation increases
+    assert d_el < 0  # click above center → camera looks up → elevation decreases (0 = horizon, 90 = down)
     assert result["moves"][0]["mode"] == "relative"
