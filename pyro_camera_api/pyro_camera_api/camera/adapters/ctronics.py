@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
@@ -340,6 +341,18 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             raise ValueError(f"Unsupported CTronics focus authentication: {self.focus_auth}")
         try:
             response = requests.get(url, auth=auth, timeout=self.timeout)
+            if response.status_code == 401 and self.focus_auth == "digest":
+                challenge = response.headers.get("WWW-Authenticate", "")
+                logger.warning(
+                    "CTronics focus Digest authentication rejected (WWW-Authenticate=%r); "
+                    "retrying with Basic authentication",
+                    challenge,
+                )
+                response = requests.get(
+                    url,
+                    auth=HTTPBasicAuth(self.username, self.password),
+                    timeout=self.timeout,
+                )
             response.raise_for_status()
         except requests.RequestException as exc:
             logger.error("CTronics focus %s failed: %s", normalized_action, exc)
