@@ -70,11 +70,13 @@ class Api:
     def pan(self, direction: str, degrees: float) -> None:
         self._req("POST", "/control/move_by_degrees", direction=direction, degrees=degrees, speed=10)
 
-    def stop_patrol(self) -> None:
+    def stop_patrol(self) -> bool:
+        """Signal patrol stop. Returns True if a patrol was running."""
         resp = requests.post(f"{self.base}/patrol/stop_patrol", params={"camera_ip": self.ip}, timeout=30)
-        if resp.status_code not in (200, 404):  # 404 = no patrol running
-            resp.raise_for_status()
-        time.sleep(2)
+        if resp.status_code == 404:  # no patrol running
+            return False
+        resp.raise_for_status()
+        return True
 
     def start_patrol(self) -> None:
         requests.post(f"{self.base}/patrol/start_patrol", params={"camera_ip": self.ip}, timeout=30).raise_for_status()
@@ -108,6 +110,24 @@ def signed_delta(az_from: float, az_to: float) -> float:
     return (az_to - az_from + 180.0) % 360.0 - 180.0
 
 
+def focal_from_pan(x1: float, x2: float, d_az_deg: float) -> float:
+    """Solve atan(x1/f) - atan(x2/f) = d_az for the focal length f.
+
+    x1/x2 are QR center offsets from the image center (px, positive right),
+    before/after a pan of d_az degrees (positive = camera panned right).
+    Exact off-axis solution of tan(d_az) = (x1-x2)·f / (f² + x1·x2), which the
+    naive Δpx/tan(Δaz) only approximates when the QR is not centered.
+    """
+    if d_az_deg < 0:  # mirror to the pan-right case
+        x1, x2, d_az_deg = -x1, -x2, -d_az_deg
+    t = math.tan(math.radians(d_az_deg))
+    dx = x1 - x2
+    disc = dx * dx - 4 * t * t * x1 * x2
+    if disc <= 0 or dx <= 0:
+        return abs(dx) / t  # degenerate geometry: small-angle fallback
+    return (dx + math.sqrt(disc)) / (2 * t)
+
+
 def measure_anchor(api: Api, pan_deg: float, repeats: int) -> dict:
     """Absolute h_fov at current zoom via pan + hardware azimuth + QR center shift."""
     got = capture_qr(api)
@@ -123,8 +143,9 @@ def measure_anchor(api: Api, pan_deg: float, repeats: int) -> dict:
         _, corners = got
         cx = float(corners[:, 0].mean())
         az0 = api.azimuth()
-        # Pan away from the closest edge so the QR stays in frame.
-        direction = "Right" if cx < w / 2 else "Left"
+        # Pan toward the QR side: the scene shifts the opposite way, so the QR
+        # moves toward the image center instead of out of frame.
+        direction = "Left" if cx < w / 2 else "Right"
         api.pan(direction, pan_deg)
         time.sleep(1)
         az1 = api.azimuth()
@@ -133,12 +154,13 @@ def measure_anchor(api: Api, pan_deg: float, repeats: int) -> dict:
         if got is None:
             raise SystemExit("QR lost after anchor pan. Reduce --anchor-pan.")
         _, corners_b = got
-        d_px = float(corners_b[:, 0].mean()) - cx
         if abs(d_az) < 1.0:
             raise SystemExit(f"Anchor pan only moved {d_az:.2f}° (hardware). Increase --anchor-pan.")
-        f_px = abs(d_px) / math.tan(math.radians(abs(d_az)))
+        x1 = cx - w / 2
+        x2 = float(corners_b[:, 0].mean()) - w / 2
+        f_px = focal_from_pan(x1, x2, d_az)
         f_px_samples.append(f_px)
-        print(f"  anchor rep {rep + 1}: Δaz={d_az:+.2f}° Δpx={d_px:+.1f} → f_px={f_px:.1f}")
+        print(f"  anchor rep {rep + 1}: Δaz={d_az:+.2f}° x {x1:+.1f}px → {x2:+.1f}px → f_px={f_px:.1f}")
         # Pan back for the next repetition.
         api.pan("Left" if direction == "Right" else "Right", pan_deg)
         time.sleep(1)
@@ -162,13 +184,24 @@ def main() -> None:
     parser.add_argument("--anchor-pan", type=float, default=8.0, help="Anchor pan command in degrees")
     parser.add_argument("--anchor-repeats", type=int, default=3)
     parser.add_argument("--settle", type=float, default=4.0, help="Seconds to wait after a zoom change")
+    parser.add_argument(
+        "--stop-wait",
+        type=float,
+        default=20.0,
+        help="Seconds to wait after stopping the patrol (the worker may still finish an in-flight preset move)",
+    )
     parser.add_argument("--out", default="fov_linovision.json")
     parser.add_argument("--no-restart-patrol", action="store_true")
     args = parser.parse_args()
 
     api = Api(args.api, args.ip)
     print("Stopping patrol...")
-    api.stop_patrol()
+    patrol_was_running = api.stop_patrol()
+    if patrol_was_running:
+        # The API only signals the stop; the worker may still finish an
+        # in-flight preset move before exiting.
+        print(f"Waiting {args.stop_wait:.0f}s for the patrol worker to finish...")
+        time.sleep(args.stop_wait)
 
     try:
         print(f"Zooming to {args.zoom_min} (anchor)...")
@@ -225,7 +258,7 @@ def main() -> None:
     finally:
         print(f"Restoring zoom {args.zoom_min}...")
         api.zoom(args.zoom_min)
-        if not args.no_restart_patrol:
+        if patrol_was_running and not args.no_restart_patrol:
             print("Restarting patrol...")
             api.start_patrol()
 
