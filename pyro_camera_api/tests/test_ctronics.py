@@ -76,6 +76,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from onvif.exceptions import ONVIFError
 from PIL import Image
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
@@ -359,7 +360,16 @@ def test_real_ctronics_focus():
     position = int(os.getenv("CTRONICS_TEST_FOCUS_POSITION", "500"))
     camera.set_manual_focus(position)
     assert camera.get_focus_level() is not None
-    camera.set_auto_focus(disable=False)
+    try:
+        camera.set_auto_focus(disable=False)
+    except ONVIFError as exc:
+        if "Action Not Support" not in str(exc):
+            raise
+        print(
+            "[CTronics test] Manual focus works, but this camera does not support "
+            f"ONVIF SetImagingSettings/autofocus: {exc}",
+            flush=True,
+        )
 
 
 @pytest.mark.skipif(
