@@ -71,8 +71,8 @@ _DEFAULT_ADAPTER = "reolink-823S2"
 
 # Wide-end FOV (h, v) in degrees for adapters using the hardware relative-move
 # path, where FOV at zoom ratio Z derives optically: fov(Z) = 2·atan(tan(fov0/2)/Z).
-# linovision: 4GPTZ 544D datasheet (H 55°-2.4°, V 33°-1.4°, 25x) — the tele end
-# matches the formula exactly, confirming zoom_raw is the true optical ratio.
+# linovision: IPTZ544D-25X datasheet (H 55°-2.4°, V 33°-1.4°, 25x) — the tele
+# end matches the formula exactly, so no per-zoom FOV table is needed.
 WIDE_FOV = {"linovision": (55.0, 33.0)}
 
 
@@ -176,8 +176,9 @@ def click_to_move(
     Move a PTZ camera to center on a click in the image.
 
     click_x / click_y are normalized coordinates in [0, 1] (0 = left/top,
-    1 = right/bottom). The current zoom level is read from the camera and
-    the FOV is looked up from the calibrated table for the camera's adapter.
+    1 = right/bottom). The current zoom is read from the camera and the FOV
+    comes from the calibrated table for the adapter, or from the optical
+    wide-end model for adapters with hardware relative moves (linovision).
     Returns 409 if another blocking PTZ command is already running on this camera.
     """
     update_command_time()
@@ -272,8 +273,8 @@ def click_to_move(
         tilt_speeds = TILT_SPEEDS.get(adapter, {})
         tilt_bias = TILT_BIAS.get(adapter, {})
 
-        # Uncalibrated adapter (e.g. linovision): rough "speed≈°/s" proxy, no bias,
-        # same convention as /move and move_to_azimuth.
+        # Uncalibrated adapter without hardware relative moves: rough "speed≈°/s"
+        # proxy, no bias, same convention as /move and move_to_azimuth.
         proxy_speeds = {s: float(s) for s in range(1, 6)}
         if not pan_speeds:
             pan_speeds = proxy_speeds
