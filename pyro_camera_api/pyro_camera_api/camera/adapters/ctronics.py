@@ -318,6 +318,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             "minus": "focusout",
             "out": "focusout",
             "focusout": "focusout",
+            "stop": "stop",
         }
         normalized_action = actions.get(action.strip().lower())
         if normalized_action is None:
@@ -367,6 +368,10 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
     def focus_minus(self, speed: Optional[int] = None) -> bool:
         """Move focus outward by one camera-defined step."""
         return self.move_focus("focusout", speed=speed)
+
+    def stop_focus(self, speed: Optional[int] = None) -> bool:
+        """Stop the current relative focus movement."""
+        return self.move_focus("stop", speed=speed)
 
     def get_focus_level(self) -> Optional[dict]:
         self._ensure_onvif()

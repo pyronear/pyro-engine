@@ -52,6 +52,17 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS=1 CTRONICS_TEST_FOCUS_ACTION=focusout CTRONICS_TEST_FOCUS_SPEED=45 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
+     * ``CTRONICS_TEST_FOCUS_ACTION``: ``focusin`` moves focus toward near and
+         ``focusout`` moves it toward far. The test sends ``focusstop`` immediately
+         afterward to stop the movement.
+     * ``CTRONICS_TEST_FOCUS_SPEED``: integer speed sent as ``-speed``.
+
+     The HTTP endpoint is configurable with ``focus_path`` and defaults to
+     ``/web/cgi-bin/hi3510/ptzctrl.cgi``. Authentication defaults to HTTP
+     Digest and can be changed with ``CTRONICS_FOCUS_AUTH`` to ``basic`` or
+     ``none``. The focus action is relative, so there is no absolute focus
+     minimum or maximum value in this API; repeat the command to move farther.
+
 7. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
 
@@ -284,12 +295,16 @@ def test_ctronics_focus_plus_and_minus_use_hi3510_cgi(mock_get):
 
     assert camera.focus_plus() is True
     assert camera.focus_minus(speed=30) is True
+    assert camera.stop_focus() is True
 
     assert mock_get.call_args_list[0].args[0] == (
         "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusin&-speed=45"
     )
     assert mock_get.call_args_list[1].args[0] == (
         "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusout&-speed=30"
+    )
+    assert mock_get.call_args_list[2].args[0] == (
+        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=stop&-speed=45"
     )
 
 
@@ -392,7 +407,11 @@ def test_real_ctronics_focus():
     action = os.getenv("CTRONICS_TEST_FOCUS_ACTION", "focusout")
     speed = int(os.getenv("CTRONICS_TEST_FOCUS_SPEED", "45"))
     print(f"[CTronics test] Sending focus action={action}, speed={speed}", flush=True)
-    assert camera.move_focus(action, speed=speed) is True
+    try:
+        assert camera.move_focus(action, speed=speed) is True
+        time.sleep(1)
+    finally:
+        assert camera.stop_focus(speed=speed) is True
 
 
 @pytest.mark.skipif(
