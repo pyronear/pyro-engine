@@ -163,10 +163,33 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         request = self._ptz_service.create_type("GetPresets")
         request.ProfileToken = self.onvif_profile_token
         presets = self._ptz_service.GetPresets(request) or []
+        logger.info(
+            "CTronics ONVIF presets for %s, profile=%s, requested_id=%s: %s",
+            self.ip_address,
+            self.onvif_profile_token,
+            preset_id,
+            [
+                {
+                    "token": getattr(preset, "token", None),
+                    "name": getattr(preset, "Name", getattr(preset, "name", None)),
+                }
+                for preset in presets
+            ],
+        )
         for preset in presets:
             if str(getattr(preset, "token", "")) == str(preset_id):
+                logger.info(
+                    "CTronics preset id=%s matched ONVIF token=%s directly",
+                    preset_id,
+                    preset.token,
+                )
                 return str(preset.token)
         if 0 <= preset_id < len(presets):
+            logger.info(
+                "CTronics preset id=%s treated as list index, resolved ONVIF token=%s",
+                preset_id,
+                presets[preset_id].token,
+            )
             return str(presets[preset_id].token)
         raise ValueError(f"ONVIF preset {preset_id} was not found on {self.ip_address}")
 
@@ -176,10 +199,23 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         operation = operation.strip()
         if operation == "ToPos":
             self._ensure_onvif()
+            logger.info(
+                "CTronics GotoPreset requested: camera=%s profile=%s idx=%s",
+                self.ip_address,
+                self.onvif_profile_token,
+                idx,
+            )
             request = self._ptz_service.create_type("GotoPreset")
             request.ProfileToken = self.onvif_profile_token
             request.PresetToken = self._preset_token(int(idx))
-            self._ptz_service.GotoPreset(request)
+            logger.info(
+                "CTronics GotoPreset sending: camera=%s profile=%s token=%s",
+                self.ip_address,
+                request.ProfileToken,
+                request.PresetToken,
+            )
+            response = self._ptz_service.GotoPreset(request)
+            logger.info("CTronics GotoPreset response: camera=%s response=%r", self.ip_address, response)
             self._sync_azimuth_from_pose(int(idx))
             return
         if operation == "Stop":

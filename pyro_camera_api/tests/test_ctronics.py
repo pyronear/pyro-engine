@@ -70,6 +70,7 @@ Run the complete local test file without hardware with::
 import os
 import time
 import sys
+import logging
 from io import BytesIO
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -324,7 +325,24 @@ def test_real_ctronics_ptz_move_and_stop():
 def test_real_ctronics_preset_and_azimuth():
     camera = _real_camera()
     preset_id = int(os.environ["CTRONICS_TEST_PRESET_ID"])
+    logging.basicConfig(level=logging.INFO)
+    print(f"[CTronics test] Requesting preset id/index={preset_id}", flush=True)
+    presets = camera.get_ptz_preset() or []
+    print(
+        "[CTronics test] Available presets: "
+        + repr(
+            [
+                {
+                    "token": getattr(preset, "token", None),
+                    "name": getattr(preset, "Name", getattr(preset, "name", None)),
+                }
+                for preset in presets
+            ]
+        ),
+        flush=True,
+    )
     camera.move_camera("ToPos", idx=preset_id)
+    print(f"[CTronics test] GotoPreset completed for id/index={preset_id}", flush=True)
     assert camera.get_azimuth() is None or 0 <= camera.get_azimuth() < 360
 
 
