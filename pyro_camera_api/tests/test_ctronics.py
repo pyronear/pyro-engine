@@ -358,7 +358,11 @@ def test_real_ctronics_preset_and_azimuth():
 def test_real_ctronics_focus():
     camera = _real_camera()
     position = int(os.getenv("CTRONICS_TEST_FOCUS_POSITION", "500"))
+    options = camera.get_focus_options()
+    print(f"[CTronics test] ONVIF focus options: {options}", flush=True)
+    print(f"[CTronics test] Focus status before move: {camera.get_focus_level()}", flush=True)
     camera.set_manual_focus(position)
+    print(f"[CTronics test] Focus status after move to {position}: {camera.get_focus_level()}", flush=True)
     assert camera.get_focus_level() is not None
     try:
         camera.set_auto_focus(disable=False)

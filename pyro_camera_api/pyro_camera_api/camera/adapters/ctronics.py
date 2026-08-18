@@ -312,7 +312,25 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         if raw_focus is not None:
             focus = round(self.focus_min + float(raw_focus) * (self.focus_max - self.focus_min))
             self.focus_position = focus
-        return {"focus": focus, "zoom": None}
+        return {"focus": focus, "focus_raw": raw_focus, "zoom": None}
+
+    def get_focus_options(self) -> Optional[dict]:
+        """Return the focus range advertised by the camera's ONVIF Imaging service."""
+        self._ensure_onvif()
+        if self._imaging_service is None:
+            return None
+        request = self._imaging_service.create_type("GetOptions")
+        request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
+        options = self._imaging_service.GetOptions(request)
+        focus_options = getattr(options, "Focus", None)
+        absolute = getattr(focus_options, "Absolute", None)
+        focus_range = getattr(absolute, "Range", None)
+        return {
+            "raw": options,
+            "absolute_min": getattr(focus_range, "Min", None),
+            "absolute_max": getattr(focus_range, "Max", None),
+            "focus_options": focus_options,
+        }
 
     def get_auto_focus(self) -> Optional[dict]:
         self._ensure_onvif()
