@@ -212,6 +212,14 @@ def click_to_move(
         tilt_speeds = TILT_SPEEDS.get(adapter, {})
         tilt_bias = TILT_BIAS.get(adapter, {})
 
+        # Uncalibrated adapter: rough "speed≈°/s" proxy, no bias,
+        # same convention as /move and move_to_azimuth.
+        proxy_speeds = {s: float(s) for s in range(1, 6)}
+        if not pan_speeds:
+            pan_speeds = proxy_speeds
+        if not tilt_speeds:
+            tilt_speeds = proxy_speeds
+
         if zoom > 0:
             logger.warning("[%s] click_to_move: zoom=%s > 0, speed limited to 1", camera_ip, zoom)
 
