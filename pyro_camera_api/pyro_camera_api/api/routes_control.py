@@ -1104,13 +1104,15 @@ def zoom_camera(camera_ip: str, level: int):
                     current = int(z)
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
-        if ratio_units and current is not None:
-            settle = 2.0 + 3.6 * abs(min(level, 25) - current) / 24.0
+        ret = cam.start_zoom_focus(level)
+        target_ratio = ret.get("zoom_ratio") if isinstance(ret, dict) else None
+        if ratio_units and current is not None and target_ratio is not None:
+            # Ratio units (linovision): settle sized on the datasheet zoom
+            # speed, ~3.6 s for the full 24x sweep.
+            settle = 2.0 + 3.6 * abs(float(target_ratio) - current) / 24.0
         else:
             delta = abs(level - current) if current is not None else 41
             settle = 2.0 + 0.2 * delta
-
-        cam.start_zoom_focus(level)
         logger.info("[%s] Zoom %s→%s, holding lock %.1fs", camera_ip, current, level, settle)
         interrupted = _interruptible_sleep(camera_ip, settle)
         resp: dict = {

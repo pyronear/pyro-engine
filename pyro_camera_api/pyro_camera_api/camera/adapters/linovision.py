@@ -536,7 +536,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
     ) -> Optional[dict]:
         """
         Linovision uses absoluteZoom inside PTZ absoluteEx.
-        position is the optical zoom ratio, valid range 1..25 (25x block).
+        position is Reolink-style (0-64), mapped to the optical ratio 1-25
+        (25x block, 4.8-120 mm per datasheet) so the API zoom contract stays
+        uniform across adapters.
 
         This method keeps current azimuth and elevation, and only changes zoom.
         """
@@ -547,7 +549,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         az = float(st0["azimuth_deg"])
         el = float(st0["elevation_deg"])
 
-        z = self._clamp(float(position), 1.0, 25.0)
+        z = self._clamp(self._map_range(float(position), 0.0, 64.0, 1.0, 25.0), 1.0, 25.0)
 
         self.move_absolute(
             azimuth_deg=az,

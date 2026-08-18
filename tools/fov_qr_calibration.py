@@ -110,6 +110,16 @@ def signed_delta(az_from: float, az_to: float) -> float:
     return (az_to - az_from + 180.0) % 360.0 - 180.0
 
 
+# The API zoom endpoint takes Reolink-style levels (0-64); the linovision
+# adapter maps them linearly to the optical ratio 1-25.
+def level_for_ratio(ratio: float) -> int:
+    return max(0, min(64, round((ratio - 1.0) * 64.0 / 24.0)))
+
+
+def ratio_for_level(level: int) -> float:
+    return 1.0 + level * 24.0 / 64.0
+
+
 def focal_from_pan(x1: float, x2: float, d_az_deg: float) -> float:
     """Solve atan(x1/f) - atan(x2/f) = d_az for the focal length f.
 
@@ -179,8 +189,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--api", required=True, help="Camera API base URL, e.g. http://192.168.255.58:8082")
     parser.add_argument("--ip", required=True, help="Camera IP as known by the API, e.g. 192.168.1.11")
-    parser.add_argument("--zoom-min", type=int, default=1)
-    parser.add_argument("--zoom-max", type=int, default=25)
+    parser.add_argument("--zoom-min", type=int, default=1, help="Lowest optical zoom ratio to measure")
+    parser.add_argument("--zoom-max", type=int, default=25, help="Highest optical zoom ratio to measure")
     parser.add_argument("--anchor-pan", type=float, default=8.0, help="Anchor pan command in degrees")
     parser.add_argument("--anchor-repeats", type=int, default=3)
     parser.add_argument("--settle", type=float, default=4.0, help="Seconds to wait after a zoom change")
@@ -204,8 +214,9 @@ def main() -> None:
         time.sleep(args.stop_wait)
 
     try:
-        print(f"Zooming to {args.zoom_min} (anchor)...")
-        api.zoom(args.zoom_min)
+        anchor_ratio = ratio_for_level(level_for_ratio(args.zoom_min))
+        print(f"Zooming to ratio {anchor_ratio:.2f}x (anchor)...")
+        api.zoom(level_for_ratio(args.zoom_min))
         time.sleep(args.settle)
 
         print("Measuring anchor FOV via hardware azimuth...")
@@ -221,8 +232,10 @@ def main() -> None:
 
         table: dict[int, Optional[dict[str, float]]] = {}
         for z in range(args.zoom_min, args.zoom_max + 1):
-            print(f"Zoom {z}...")
-            api.zoom(z)
+            level = level_for_ratio(z)
+            achieved = ratio_for_level(level)
+            print(f"Zoom ratio {achieved:.2f}x (level {level})...")
+            api.zoom(level)
             time.sleep(args.settle)
             got = capture_qr(api)
             if got is None:
@@ -234,7 +247,12 @@ def main() -> None:
             ratio = anchor_qr_px / size
             h_fov = math.degrees(2 * math.atan(tan_half_h * ratio))
             v_fov = math.degrees(2 * math.atan(tan_half_v * ratio))
-            table[z] = {"h_fov": round(h_fov, 3), "v_fov": round(v_fov, 3), "qr_px": round(size, 1)}
+            table[z] = {
+                "zoom_ratio": round(achieved, 3),
+                "h_fov": round(h_fov, 3),
+                "v_fov": round(v_fov, 3),
+                "qr_px": round(size, 1),
+            }
             print(f"  qr={size:.0f}px → h_fov={h_fov:.2f}° v_fov={v_fov:.2f}°")
             if size > 0.8 * img.shape[1]:
                 print("  QR nearly fills the frame, stopping here")
@@ -245,7 +263,7 @@ def main() -> None:
         for z, row in table.items():
             if row is None:
                 continue
-            model_h = math.degrees(2 * math.atan(tan_half_h * args.zoom_min / z))
+            model_h = math.degrees(2 * math.atan(tan_half_h * anchor_ratio / row["zoom_ratio"]))
             model_check[z] = {"measured_h": row["h_fov"], "model_h": round(model_h, 3)}
 
         report = {"camera_ip": args.ip, "anchor": anchor, "table": table, "optical_model_check": model_check}
@@ -256,8 +274,8 @@ def main() -> None:
         print("and only the anchor wide FOV needs to go into the code.")
 
     finally:
-        print(f"Restoring zoom {args.zoom_min}...")
-        api.zoom(args.zoom_min)
+        print(f"Restoring zoom ratio {args.zoom_min}x...")
+        api.zoom(level_for_ratio(args.zoom_min))
         if patrol_was_running and not args.no_restart_patrol:
             print("Restarting patrol...")
             api.start_patrol()
