@@ -31,14 +31,12 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 3. Run the safe real-camera smoke test. It checks snapshot capture, ONVIF
    discovery, and preset listing without moving the camera::
 
-    CTRONICS_TEST_REAL=1 pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_REAL=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 4. Test a short PTZ movement followed immediately by Stop. This physically
    moves the camera::
 
-    CTRONICS_TEST_PTZ=1 \\
-    CTRONICS_TEST_DIRECTION=Right \\
-    pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_PTZ=1 CTRONICS_TEST_DIRECTION=Right uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
    Valid directions are ``Left``, ``Right``, ``Up``, ``Down``, ``UpLeft``,
    ``UpRight``, ``DownLeft``, ``DownRight``, ``ZoomIn``, and ``ZoomOut``.
@@ -46,9 +44,7 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 5. Test a preset move. Replace ``1`` with an existing ONVIF preset token or
    index configured on the camera::
 
-    CTRONICS_TEST_PRESET=1 \\
-    CTRONICS_TEST_PRESET_ID=1 \\
-    pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_ID=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 6. Test manual focus and restore autofocus afterwards if needed::
 
@@ -72,6 +68,7 @@ Run the complete local test file without hardware with::
 
 
 import os
+import time
 import sys
 from io import BytesIO
 from types import ModuleType, SimpleNamespace
@@ -316,6 +313,7 @@ def test_real_ctronics_capture_and_onvif_discovery():
 def test_real_ctronics_ptz_move_and_stop():
     camera = _real_camera()
     camera.move_camera(os.getenv("CTRONICS_TEST_DIRECTION", "Right"), speed=1)
+    time.sleep(1)
     camera.move_camera("Stop")
 
 
