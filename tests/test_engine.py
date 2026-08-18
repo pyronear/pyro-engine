@@ -12,7 +12,7 @@ import pytest
 from dotenv import load_dotenv
 from PIL import Image
 
-from pyroengine.engine import CONTEXT_MAX_SIDE, PLACEHOLDER_BBOX, ContextCrop, Engine
+from pyroengine.engine import CONTEXT_MAX_SIDE, ContextCrop, Engine
 
 
 def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
@@ -225,45 +225,6 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
     if len(engine._alerts) > 0:
         pytest.skip("Detection upload failed, alert left in cache")
     assert len(engine._alerts) == 0
-
-
-def test_fill_empty_bboxes(tmp_path):
-    """fill_empty_bboxes stamps a placeholder bbox at conf=0 on any empty alert
-    and leaves non-empty alerts untouched."""
-    engine = Engine(cache_folder=str(tmp_path))
-
-    cam_id = "169.254.7.3_3"
-    bboxes_seq = [
-        [(0.436, 0.609, 0.44, 0.62, 0.089)],
-        [(0.436, 0.609, 0.44, 0.62, 0.589)],
-        [(0.436, 0.609, 0.44, 0.62, 0.489)],
-        [],  # empty middle frame
-        [(0.436, 0.609, 0.44, 0.62, 0.689)],
-        [(0.436, 0.609, 0.44, 0.62, 0.389)],
-    ]
-    for i, bboxes in enumerate(bboxes_seq):
-        engine._stage_alert(None, cam_id, i, bboxes=bboxes)
-
-    engine.fill_empty_bboxes()
-
-    assert all(alert["bboxes"] for alert in engine._alerts)
-    # Previously-empty frame gets the placeholder bbox at conf=0
-    assert engine._alerts[3]["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)]
-    # Non-empty frames untouched
-    assert engine._alerts[0]["bboxes"][0][4] == pytest.approx(0.089)
-    assert engine._alerts[5]["bboxes"][0][4] == pytest.approx(0.389)
-
-
-def test_fill_empty_bboxes_all_empty_for_cam(tmp_path):
-    """Even when every alert for a cam_id is empty, each one gets the placeholder."""
-    engine = Engine(cache_folder=str(tmp_path))
-
-    for i in range(3):
-        engine._stage_alert(None, "169.254.7.3_3", i, bboxes=[])
-
-    engine.fill_empty_bboxes()
-
-    assert all(alert["bboxes"] == [(0.0, 0.0, 0.0001, 0.0001, 0.0)] for alert in engine._alerts)
 
 
 def test_build_context_crop(tmp_path):
@@ -503,33 +464,6 @@ def test_encode_detection_crops_one_per_bbox(tmp_path):
     assert engine._encode_detection_crops(None, bboxes, crop_boxes) is None
 
 
-def test_encode_detection_crops_placeholder_returns_none(tmp_path):
-    engine = Engine(cache_folder=str(tmp_path))
-    frame = Image.new("RGB", (640, 480))
-    context = engine._build_context_crop(frame, np.array([[0.5, 0.5, 0.7, 0.7, 0.6]]))
-    box = engine._compute_crop_box([PLACEHOLDER_BBOX], 640, 480)
-
-    assert engine._encode_detection_crops(context, [PLACEHOLDER_BBOX], [box]) is None
-    assert engine._encode_detection_crops(context, [], None) is None
-    # List-form placeholder (not a tuple) must still be treated as placeholder-only
-    assert engine._encode_detection_crops(context, [list(PLACEHOLDER_BBOX)], [box]) is None
-
-
-def test_encode_detection_crops_mixed_placeholder_and_real_bbox(tmp_path):
-    """A placeholder mixed with a real bbox still yields one crop per bbox, not None."""
-    engine = Engine(cache_folder=str(tmp_path))
-    frame = Image.new("RGB", (640, 480))
-    bboxes = [PLACEHOLDER_BBOX, (0.5, 0.5, 0.7, 0.7, 0.6)]
-    context = engine._build_context_crop(frame, np.array([list(b) for b in bboxes]))
-    crop_boxes = [engine._compute_crop_box([b], 640, 480) for b in bboxes]
-
-    crops = engine._encode_detection_crops(context, bboxes, crop_boxes)
-
-    assert crops is not None
-    assert len(crops) == len(bboxes)
-    assert all(isinstance(c, bytes) for c in crops)
-
-
 def _build_engine_with_fake_client(tmp_path):
     cam_id = "169.254.7.3_3"
     engine = Engine(cache_folder=str(tmp_path))
@@ -561,16 +495,17 @@ def test_process_alerts_sends_one_crop_per_bbox(tmp_path):
     assert len(engine._alerts) == 0
 
 
-def test_process_alerts_placeholder_bbox_sends_no_crop(tmp_path):
+def test_process_alerts_empty_bboxes_uploaded_as_is(tmp_path):
+    """A frame with no detection is uploaded with an empty bbox list and no crop."""
     engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
     buf = io.BytesIO()
     Image.new("RGB", (640, 480)).save(buf, format="JPEG")
-    # Empty bboxes -> fill_empty_bboxes stamps the placeholder; no context crop / crop boxes.
     engine._stage_alert(None, cam_id, "2026-07-21T12:00:00.000000+00:00", bboxes=[], jpeg_bytes=buf.getvalue())
 
     engine._process_alerts()
 
     assert fake_client.create_detection.call_count == 1
+    assert fake_client.create_detection.call_args.args[1] == []
     assert fake_client.create_detection.call_args.kwargs["crops"] is None
     assert len(engine._alerts) == 0
 
