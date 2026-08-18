@@ -171,19 +171,19 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         request = self._ptz_service.create_type("GetPresets")
         request.ProfileToken = self.onvif_profile_token
         presets = self._ptz_service.GetPresets(request) or []
-        logger.info(
-            "CTronics ONVIF presets for %s, profile=%s, requested_id=%s: %s",
-            self.ip_address,
-            self.onvif_profile_token,
-            preset_id,
-            [
-                {
-                    "token": getattr(preset, "token", None),
-                    "name": getattr(preset, "Name", getattr(preset, "name", None)),
-                }
-                for preset in presets
-            ],
-        )
+        # logger.info(
+        #     "CTronics ONVIF presets for %s, profile=%s, requested_id=%s: %s",
+        #     self.ip_address,
+        #     self.onvif_profile_token,
+        #     preset_id,
+        #     [
+        #         {
+        #             "token": getattr(preset, "token", None),
+        #             "name": getattr(preset, "Name", getattr(preset, "name", None)),
+        #         }
+        #         for preset in presets
+        #     ],
+        # )
         for preset in presets:
             if str(getattr(preset, "token", "")) == str(preset_id):
                 logger.info(

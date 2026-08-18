@@ -33,6 +33,8 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_REAL=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
+   add "-s --log-cli-level=INFO" for more log infos during test
+
 4. Test a short PTZ movement followed immediately by Stop. This physically
    moves the camera::
 
@@ -48,10 +50,7 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
 6. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
 
-    CTRONICS_TEST_FOCUS=1 \\
-    CTRONICS_TEST_FOCUS_ACTION=focusout \\
-    CTRONICS_TEST_FOCUS_SPEED=45 \\
-    pytest pyro_camera_api/tests/test_ctronics.py -v -s
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS=1 CTRONICS_TEST_FOCUS_ACTION=focusout CTRONICS_TEST_FOCUS_SPEED=45 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 7. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
@@ -366,19 +365,19 @@ def test_real_ctronics_preset_and_azimuth():
     logging.basicConfig(level=logging.INFO)
     print(f"[CTronics test] Requesting preset id/index={preset_id}", flush=True)
     presets = camera.get_ptz_preset() or []
-    print(
-        "[CTronics test] Available presets: "
-        + repr(
-            [
-                {
-                    "token": getattr(preset, "token", None),
-                    "name": getattr(preset, "Name", getattr(preset, "name", None)),
-                }
-                for preset in presets
-            ]
-        ),
-        flush=True,
-    )
+    # print(
+    #     "[CTronics test] Available presets: "
+    #     + repr(
+    #         [
+    #             {
+    #                 "token": getattr(preset, "token", None),
+    #                 "name": getattr(preset, "Name", getattr(preset, "name", None)),
+    #             }
+    #             for preset in presets
+    #         ]
+    #     ),
+    #     flush=True,
+    # )
     camera.move_camera("ToPos", idx=preset_id)
     print(f"[CTronics test] GotoPreset completed for id/index={preset_id}", flush=True)
     assert camera.get_azimuth() is None or 0 <= camera.get_azimuth() < 360
