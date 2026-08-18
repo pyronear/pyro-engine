@@ -77,30 +77,32 @@ Run the complete local test file without hardware with::
     PYTHONPATH=pyro_camera_api uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 """
 
-
-import os
-import time
-import sys
 import logging
+import os
+import sys
+import time
 from io import BytesIO
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests.auth import HTTPDigestAuth
 from PIL import Image
+from requests.auth import HTTPDigestAuth
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
 
+
 class DictToAttr:
     """Convertit récursivement un dictionnaire en objet avec accès par attribut."""
+
     def __init__(self, data):
         for key, value in data.items():
             if isinstance(value, dict):
                 setattr(self, key, DictToAttr(value))
             else:
                 setattr(self, key, value)
+
 
 class FakeOnvifService:
     def __init__(self):
@@ -200,9 +202,7 @@ def test_capture_builds_tmpfs_snapshot_url_and_returns_rgb_image():
     assert image is not None
     assert image.mode == "RGB"
     assert get.call_args.kwargs["timeout"] == 5.0
-    assert get.call_args.args[0] == (
-        "http://192.0.2.10:80/tmpfs/snap.jpg?usr=user&pwd=secret"
-    )
+    assert get.call_args.args[0] == ("http://192.0.2.10:80/tmpfs/snap.jpg?usr=user&pwd=secret")
 
 
 def test_snapshot_path_and_command_are_configurable_per_model():
@@ -252,9 +252,18 @@ def test_move_camera_maps_operations_to_onvif(fake_onvif, operation, axis):
     call_name, request = camera._ptz_service.calls[-1]
     assert call_name == "ContinuousMove"
     assert request.ProfileToken == "profile-1"
-    assert request.Velocity.PanTilt.x == (-0.5 if operation in {"Left", "UpLeft", "DownLeft"} else 0.5 if "Right" in operation else 0)
-    assert request.Velocity.PanTilt.y == (0.5 if operation in {"Up", "UpLeft", "UpRight"} else -0.5 if operation in {"Down", "DownLeft", "DownRight"} else 0)
+    assert request.Velocity.PanTilt.x == (
+        -0.5 if operation in {"Left", "UpLeft", "DownLeft"} else 0.5 if "Right" in operation else 0
+    )
+    assert request.Velocity.PanTilt.y == (
+        0.5
+        if operation in {"Up", "UpLeft", "UpRight"}
+        else -0.5
+        if operation in {"Down", "DownLeft", "DownRight"}
+        else 0
+    )
     assert request.Velocity.Zoom.x == (-0.5 if operation == "ZoomOut" else 0.5 if operation == "ZoomIn" else 0)
+
 
 def test_stop_preset_and_azimuth_tracking(fake_onvif):
     camera = CTronicsCamera(
@@ -265,7 +274,11 @@ def test_stop_preset_and_azimuth_tracking(fake_onvif):
     camera.move_camera("Stop")
 
     assert camera.get_azimuth() == 90.0
-    assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GetPresets", "GotoPreset", "Stop"}] == ["GetPresets", "GotoPreset", "Stop"]
+    assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GetPresets", "GotoPreset", "Stop"}] == [
+        "GetPresets",
+        "GotoPreset",
+        "Stop",
+    ]
 
 
 def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):

@@ -159,7 +159,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         snapshot_url = conf.get("url")
         if not snapshot_url:
             logger.error("Camera %s declared as URL adapter but missing 'url'", key)
-            focus_auth=conf.get("focus_auth", "digest"),
+            focus_auth = (conf.get("focus_auth", "digest"),)
             return None
 
         cam = URLCamera(
