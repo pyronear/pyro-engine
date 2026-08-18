@@ -66,15 +66,15 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 7. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
 
-    CTRONICS_TEST_FOCUS_FINDER=1 pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS_FINDER=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 8. Test reboot separately. The camera will restart and temporarily disconnect::
 
-    CTRONICS_TEST_REBOOT=1 pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_REBOOT=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 Run the complete local test file without hardware with::
 
-    pytest tests/test_ctronics.py -v
+    PYTHONPATH=pyro_camera_api uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 """
 
 
