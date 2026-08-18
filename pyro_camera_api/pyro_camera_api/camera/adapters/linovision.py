@@ -316,7 +316,14 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         new_el = st["elevation_deg"] + float(delta_elevation_deg)
         new_el = self._clamp(new_el, -10.0, 90.0)
         self.move_absolute(new_az, elevation_deg=new_el)
-        return {"azimuth_deg": new_az, "elevation_deg": new_el}
+        converged = True
+        try:
+            self.wait_reached_azimuth_raw(new_az, timeout_s=10.0)
+        except RuntimeError as exc:
+            # The move was issued; a readback mismatch should not fail the caller.
+            logger.warning("[%s] move_relative_deg: azimuth readback did not converge: %s", self.ip_address, exc)
+            converged = False
+        return {"azimuth_deg": new_az, "elevation_deg": new_el, "converged": converged}
 
     def move_to_pose(
         self,

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +68,12 @@ _V_FOV_TABLE: dict[str, list[float]] = _FOV_DATA["v_fov"]
 
 # Default adapter when model is unknown
 _DEFAULT_ADAPTER = "reolink-823S2"
+
+# Wide-end FOV (h, v) in degrees for adapters using the hardware relative-move
+# path, where FOV at zoom ratio Z derives optically: fov(Z) = 2·atan(tan(fov0/2)/Z).
+# linovision: 4GPTZ 544D datasheet (H 55°-2.4°, V 33°-1.4°, 25x) — the tele end
+# matches the formula exactly, confirming zoom_raw is the true optical ratio.
+WIDE_FOV = {"linovision": (55.0, 33.0)}
 
 
 def _resolve_adapter(adapter: str) -> str:
@@ -182,6 +189,53 @@ def click_to_move(
         conf = RAW_CONFIG.get(camera_ip, {})
         adapter = _resolve_adapter(conf.get("adapter", "unknown"))
 
+        # Hardware closed-loop path (linovision/ISAPI): the camera moves by
+        # absolute angles itself, no timed moves or speed calibration needed.
+        # FOV at optical zoom ratio Z derives from the wide-end FOV:
+        # fov(Z) = 2·atan(tan(fov0/2) / Z).
+        if hasattr(cam, "move_relative_deg"):
+            zoom_ratio = 1.0
+            try:
+                z_raw = cam.get_ptz_status().get("zoom_raw")
+                if z_raw:
+                    zoom_ratio = max(1.0, float(z_raw))
+            except Exception as exc:
+                logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
+
+            h0, v0 = WIDE_FOV.get(adapter, fov_at_zoom(0, adapter))
+            h_fov = math.degrees(2 * math.atan(math.tan(math.radians(h0) / 2) / zoom_ratio))
+            v_fov = math.degrees(2 * math.atan(math.tan(math.radians(v0) / 2) / zoom_ratio))
+            # Exact pinhole projection (a click at x maps to atan of the image-plane
+            # offset, not to a linear fraction of the FOV).
+            pan_deg = math.degrees(math.atan((2 * click_x - 1) * math.tan(math.radians(h_fov) / 2)))
+            tilt_deg = math.degrees(math.atan((2 * click_y - 1) * math.tan(math.radians(v_fov) / 2)))
+            logger.info(
+                "[%s] click_to_move relative: click=(%.3f,%.3f) zoom=%.0fx h_fov=%.2f v_fov=%.2f pan=%.2f° tilt=%.2f°",
+                camera_ip,
+                click_x,
+                click_y,
+                zoom_ratio,
+                h_fov,
+                v_fov,
+                pan_deg,
+                tilt_deg,
+            )
+            # Positive tilt_deg = click below center = camera must look down = elevation decreases.
+            target = cam.move_relative_deg(pan_deg, -tilt_deg)
+            return {
+                "status": "ok",
+                "camera_ip": camera_ip,
+                "adapter": adapter,
+                "zoom_ratio": zoom_ratio,
+                "h_fov": round(h_fov, 3),
+                "v_fov": round(v_fov, 3),
+                "pan_deg": round(pan_deg, 3),
+                "tilt_deg": round(tilt_deg, 3),
+                "moves": [
+                    {"mode": "relative", **{k: round(v, 3) if isinstance(v, float) else v for k, v in target.items()}}
+                ],
+            }
+
         zoom = 0
         if hasattr(cam, "get_focus_level"):
             try:
@@ -212,7 +266,7 @@ def click_to_move(
         tilt_speeds = TILT_SPEEDS.get(adapter, {})
         tilt_bias = TILT_BIAS.get(adapter, {})
 
-        # Uncalibrated adapter: rough "speed≈°/s" proxy, no bias,
+        # Uncalibrated adapter (e.g. linovision): rough "speed≈°/s" proxy, no bias,
         # same convention as /move and move_to_azimuth.
         proxy_speeds = {s: float(s) for s in range(1, 6)}
         if not pan_speeds:

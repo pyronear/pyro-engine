@@ -25,3 +25,32 @@ def test_click_to_move_uncalibrated_adapter_moves(monkeypatch):
     assert all("skipped" not in m for m in result["moves"])
     assert ("Right", result["moves"][0]["speed"]) in calls
     assert ("Stop", 20) in calls
+
+
+class _RelativeMockCamera(MockCamera):
+    """Mimics the linovision adapter: hardware relative moves + PTZ status."""
+
+    def get_ptz_status(self):
+        return {"azimuth_deg": 100.0, "elevation_deg": 5.0, "zoom_raw": 2}
+
+    def move_relative_deg(self, delta_azimuth_deg, delta_elevation_deg=0.0):
+        self.last_relative = (delta_azimuth_deg, delta_elevation_deg)
+        return {"azimuth_deg": 100.0 + delta_azimuth_deg, "elevation_deg": 5.0 + delta_elevation_deg}
+
+
+def test_click_to_move_relative_hardware_path(monkeypatch):
+    ip = "203.0.113.10"
+    cam = _RelativeMockCamera(camera_id=ip, cam_type="ptz", cam_poses=[0], cam_azimuths=[0])
+    monkeypatch.setitem(CAMERA_REGISTRY, ip, cam)
+
+    # Click right of center and above center.
+    result = click_to_move(camera_ip=ip, click_x=0.75, click_y=0.25)
+
+    assert result["status"] == "ok"
+    assert result["zoom_ratio"] == 2.0
+    # FOV must shrink with zoom: at 2x it is well below the wide-end value.
+    assert result["h_fov"] < 54.2 / 1.5
+    d_az, d_el = cam.last_relative
+    assert d_az > 0  # click right → pan right → azimuth increases
+    assert d_el > 0  # click above center → camera looks up → elevation increases
+    assert result["moves"][0]["mode"] == "relative"
