@@ -123,7 +123,11 @@ class FakeOnvifService:
 
     def Move(self, request):
         self.calls.append(("Move", request))
-        self.focus_position = request.Focus.Absolute.Position
+        focus = request.Focus
+        if isinstance(focus, dict):
+            self.focus_position = focus["Absolute"]["Position"]
+        else:
+            self.focus_position = focus.Absolute.Position
 
     def GetStatus(self, request):
         self.calls.append(("GetStatus", request))

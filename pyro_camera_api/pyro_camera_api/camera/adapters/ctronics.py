@@ -282,11 +282,17 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             raise RuntimeError("ONVIF Imaging service is unavailable")
         request = self._imaging_service.create_type("Move")
         request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
-        request.Focus = self._imaging_service.create_type("FocusMove")
-        request.Focus.Absolute = self._imaging_service.create_type("AbsoluteFocus")
-        request.Focus.Absolute.Position = self._clamp(
-            (position - self.focus_min) / max(1, self.focus_max - self.focus_min), 0.0, 1.0
-        )
+        # FocusMove and AbsoluteFocus are nested ONVIF common-schema types,
+        # not global elements in the Imaging WSDL. Zeep accepts nested dicts
+        # here and creates the correct tt:FocusMove structure from Move's
+        # schema definition.
+        request.Focus = {
+            "Absolute": {
+                "Position": self._clamp(
+                    (position - self.focus_min) / max(1, self.focus_max - self.focus_min), 0.0, 1.0
+                )
+            }
+        }
         return request
 
     def set_manual_focus(self, position: int) -> None:
@@ -323,9 +329,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             raise RuntimeError("ONVIF Imaging service is unavailable")
         request = self._imaging_service.create_type("SetImagingSettings")
         request.VideoSourceToken = self._profile.VideoSourceConfiguration.SourceToken
-        request.ImagingSettings = self._imaging_service.create_type("ImagingSettings20")
-        request.ImagingSettings.Focus = self._imaging_service.create_type("FocusConfiguration20")
-        request.ImagingSettings.Focus.AutoFocusMode = "MANUAL" if disable else "AUTO"
+        request.ImagingSettings = {"Focus": {"AutoFocusMode": "MANUAL" if disable else "AUTO"}}
         self._imaging_service.SetImagingSettings(request)
 
     def start_zoom_focus(self, position: int) -> None:
