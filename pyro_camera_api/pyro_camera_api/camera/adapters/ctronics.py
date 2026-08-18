@@ -48,6 +48,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         focus_path: str = "/web/cgi-bin/hi3510/ptzctrl.cgi",
         focus_step: int = 0,
         focus_speed: int = 45,
+        focus_auth: str = "digest",
         focus_min: int = 0,
         focus_max: int = 1000,
     ) -> None:
@@ -72,6 +73,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self.focus_speed = focus_speed
         self.focus_min = focus_min
         self.focus_max = focus_max
+        self.focus_auth = focus_auth.lower()
         self.focus_position: Optional[int] = None
         self.current_azimuth: Optional[float] = None
         self._onvif_camera: Any = None
@@ -329,8 +331,15 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         base = f"{self.protocol}://{self.ip_address}:{self.port}/"
         url = urljoin(base, f"{self.focus_path.lstrip('/')}?{query}")
         logger.info("CTronics focus %s request: %s", normalized_action, self._redact_url(url))
+        auth = None
+        if self.focus_auth == "digest":
+            auth = HTTPDigestAuth(self.username, self.password)
+        elif self.focus_auth == "basic":
+            auth = HTTPBasicAuth(self.username, self.password)
+        elif self.focus_auth != "none":
+            raise ValueError(f"Unsupported CTronics focus authentication: {self.focus_auth}")
         try:
-            response = requests.get(url, timeout=self.timeout)
+            response = requests.get(url, auth=auth, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as exc:
             logger.error("CTronics focus %s failed: %s", normalized_action, exc)

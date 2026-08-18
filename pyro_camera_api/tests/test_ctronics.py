@@ -77,6 +77,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests.auth import HTTPDigestAuth
 from PIL import Image
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
@@ -280,7 +281,7 @@ def test_ctronics_focus_plus_and_minus_use_hi3510_cgi(mock_get):
     response = MagicMock(status_code=200, text="OK")
     response.raise_for_status.return_value = None
     mock_get.return_value = response
-    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", focus_speed=45)
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", focus_speed=45, focus_auth="none")
 
     assert camera.focus_plus() is True
     assert camera.focus_minus(speed=30) is True
@@ -291,6 +292,19 @@ def test_ctronics_focus_plus_and_minus_use_hi3510_cgi(mock_get):
     assert mock_get.call_args_list[1].args[0] == (
         "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusout&-speed=30"
     )
+
+
+@patch("pyro_camera_api.camera.adapters.ctronics.requests.get")
+def test_ctronics_focus_uses_digest_auth_by_default(mock_get):
+    response = MagicMock(status_code=200, text="OK")
+    response.raise_for_status.return_value = None
+    mock_get.return_value = response
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret")
+
+    camera.focus_minus()
+
+    auth = mock_get.call_args.kwargs["auth"]
+    assert isinstance(auth, HTTPDigestAuth)
 
 
 def test_focus_finder_honors_abort_without_hardware(fake_onvif):
@@ -312,6 +326,7 @@ def _real_camera() -> CTronicsCamera:
         onvif_port=int(os.getenv("CTRONICS_ONVIF_PORT", "8080")),
         onvif_protocol=os.getenv("CTRONICS_ONVIF_PROTOCOL", "http"),
         onvif_profile_token=os.getenv("CTRONICS_ONVIF_PROFILE"),
+        focus_auth=os.getenv("CTRONICS_FOCUS_AUTH", "digest"),
         snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),
     )
     return camera
