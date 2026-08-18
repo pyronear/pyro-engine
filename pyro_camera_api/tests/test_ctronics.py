@@ -50,10 +50,7 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
 6. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
 
-    CTRONICS_TEST_FOCUS=1 \\
-    CTRONICS_TEST_FOCUS_ACTION=focusout \\
-    CTRONICS_TEST_FOCUS_SPEED=45 \\
-    pytest pyro_camera_api/tests/test_ctronics.py -v -s
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS=1 CTRONICS_TEST_FOCUS_ACTION=focusout CTRONICS_TEST_FOCUS_SPEED=45 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 7. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
