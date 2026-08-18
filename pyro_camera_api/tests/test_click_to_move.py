@@ -31,7 +31,7 @@ class _RelativeMockCamera(MockCamera):
     """Mimics the linovision adapter: hardware relative moves + PTZ status."""
 
     def get_ptz_status(self):
-        return {"azimuth_deg": 100.0, "elevation_deg": 5.0, "zoom_raw": 2}
+        return {"azimuth_deg": 100.0, "elevation_deg": 5.0, "zoom_raw": 20, "zoom_ratio": 2.0}
 
     def move_relative_deg(self, delta_azimuth_deg, delta_elevation_deg=0.0):
         self.last_relative = (delta_azimuth_deg, delta_elevation_deg)

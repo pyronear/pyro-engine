@@ -192,6 +192,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             "azimuth_raw": az10,
             "elevation_raw": el10,
             "zoom_raw": zoom,
+            # ISAPI status values are all in tenths: absoluteZoom=10 means 1.0x.
+            "zoom_ratio": zoom / 10.0 if zoom is not None else None,
             "real_azimuth_deg": self._camera_to_real_azimuth(az10 / 10.0),
         }
 
@@ -226,7 +228,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         self,
         azimuth_deg: float,
         elevation_deg: Optional[float] = None,
-        zoom: Optional[int] = None,
+        zoom: Optional[float] = None,
         horizontal_speed: float = 64.0,
         vertical_speed: float = 64.0,
         prefer_current_elevation: bool = False,
@@ -254,8 +256,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         z = None
         if zoom is not None:
-            # Accept zoom in Reolink-style 0-64 and map to device range
-            z = int(self._clamp(self._map_range(zoom, 0.0, 64.0, 1.0, 25.0), 1.0, 25.0))
+            # zoom is the optical ratio (1-25); ISAPI absoluteZoom is in tenths (10 = 1.0x).
+            z = int(round(self._clamp(float(zoom), 1.0, 25.0) * 10))
 
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/absoluteEx"
 
@@ -532,10 +534,9 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
     ) -> Optional[dict]:
         """
         Linovision uses absoluteZoom inside PTZ absoluteEx.
-        position is the absoluteZoom value, valid range is usually 1..25 on your device.
+        position is the optical zoom ratio, valid range 1..25 (25x block).
 
         This method keeps current azimuth and elevation, and only changes zoom.
-        If wait is True, it blocks until zoom_raw equals the requested value.
         """
         if self.cam_type == "static":
             return None
@@ -544,7 +545,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         az = float(st0["azimuth_deg"])
         el = float(st0["elevation_deg"])
 
-        z = int(self._clamp(float(position), 1.0, 25.0))
+        z = self._clamp(float(position), 1.0, 25.0)
 
         self.move_absolute(
             azimuth_deg=az,
@@ -552,7 +553,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             zoom=z,
             prefer_current_elevation=True,
         )
-        return {"zoom_raw": z}
+        return {"zoom_raw": int(round(z * 10)), "zoom_ratio": z}
 
     def focus_finder(
         self,

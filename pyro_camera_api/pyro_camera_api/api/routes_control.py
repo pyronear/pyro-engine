@@ -196,9 +196,9 @@ def click_to_move(
         if hasattr(cam, "move_relative_deg"):
             zoom_ratio = 1.0
             try:
-                z_raw = cam.get_ptz_status().get("zoom_raw")
-                if z_raw:
-                    zoom_ratio = max(1.0, float(z_raw))
+                z = cam.get_ptz_status().get("zoom_ratio")
+                if z:
+                    zoom_ratio = max(1.0, float(z))
             except Exception as exc:
                 logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
 
