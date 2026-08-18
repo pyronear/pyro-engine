@@ -45,6 +45,9 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         onvif_protocol: str = "http",
         onvif_wsdl_dir: Optional[str] = None,
         onvif_profile_token: Optional[str] = None,
+        focus_path: str = "/web/cgi-bin/hi3510/ptzctrl.cgi",
+        focus_step: int = 0,
+        focus_speed: int = 45,
         focus_min: int = 0,
         focus_max: int = 1000,
     ) -> None:
@@ -64,6 +67,9 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self.onvif_protocol = onvif_protocol
         self.onvif_wsdl_dir = onvif_wsdl_dir
         self.onvif_profile_token = onvif_profile_token
+        self.focus_path = focus_path
+        self.focus_step = focus_step
+        self.focus_speed = focus_speed
         self.focus_min = focus_min
         self.focus_max = focus_max
         self.focus_position: Optional[int] = None
@@ -299,6 +305,46 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._ensure_onvif()
         self._imaging_service.Move(self._focus_request(position))
         self.focus_position = int(position)
+
+    def move_focus(self, action: str, speed: Optional[int] = None) -> bool:
+        """Move the focus one relative step using the camera's Hi3510 CGI endpoint."""
+        actions = {
+            "plus": "focusin",
+            "in": "focusin",
+            "focusin": "focusin",
+            "minus": "focusout",
+            "out": "focusout",
+            "focusout": "focusout",
+        }
+        normalized_action = actions.get(action.strip().lower())
+        if normalized_action is None:
+            raise ValueError(f"Unsupported CTronics focus action: {action}")
+        query = urlencode(
+            {
+                "-step": self.focus_step,
+                "-act": normalized_action,
+                "-speed": self.focus_speed if speed is None else speed,
+            }
+        )
+        base = f"{self.protocol}://{self.ip_address}:{self.port}/"
+        url = urljoin(base, f"{self.focus_path.lstrip('/')}?{query}")
+        logger.info("CTronics focus %s request: %s", normalized_action, self._redact_url(url))
+        try:
+            response = requests.get(url, timeout=self.timeout)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            logger.error("CTronics focus %s failed: %s", normalized_action, exc)
+            raise RuntimeError(f"CTronics focus command {normalized_action!r} failed") from exc
+        logger.info("CTronics focus %s response: status=%s body=%s", normalized_action, response.status_code, response.text[:200])
+        return True
+
+    def focus_plus(self, speed: Optional[int] = None) -> bool:
+        """Move focus inward by one camera-defined step."""
+        return self.move_focus("focusin", speed=speed)
+
+    def focus_minus(self, speed: Optional[int] = None) -> bool:
+        """Move focus outward by one camera-defined step."""
+        return self.move_focus("focusout", speed=speed)
 
     def get_focus_level(self) -> Optional[dict]:
         self._ensure_onvif()

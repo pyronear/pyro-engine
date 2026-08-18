@@ -46,11 +46,12 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_ID=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
-6. Test manual focus and restore autofocus afterwards if needed::
+6. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
 
     CTRONICS_TEST_FOCUS=1 \\
-    CTRONICS_TEST_FOCUS_POSITION=500 \\
-    pytest tests/test_ctronics.py -v
+    CTRONICS_TEST_FOCUS_ACTION=focusout \\
+    CTRONICS_TEST_FOCUS_SPEED=45 \\
+    pytest pyro_camera_api/tests/test_ctronics.py -v -s
 
 7. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
@@ -76,7 +77,6 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from onvif.exceptions import ONVIFError
 from PIL import Image
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
@@ -275,6 +275,24 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
     camera._onvif_camera.devicemgmt.SystemReboot.assert_called_once_with()
 
 
+@patch("pyro_camera_api.camera.adapters.ctronics.requests.get")
+def test_ctronics_focus_plus_and_minus_use_hi3510_cgi(mock_get):
+    response = MagicMock(status_code=200, text="OK")
+    response.raise_for_status.return_value = None
+    mock_get.return_value = response
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", focus_speed=45)
+
+    assert camera.focus_plus() is True
+    assert camera.focus_minus(speed=30) is True
+
+    assert mock_get.call_args_list[0].args[0] == (
+        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusin&-speed=45"
+    )
+    assert mock_get.call_args_list[1].args[0] == (
+        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusout&-speed=30"
+    )
+
+
 def test_focus_finder_honors_abort_without_hardware(fake_onvif):
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera.focus_position = 500
@@ -357,23 +375,10 @@ def test_real_ctronics_preset_and_azimuth():
 )
 def test_real_ctronics_focus():
     camera = _real_camera()
-    position = int(os.getenv("CTRONICS_TEST_FOCUS_POSITION", "500"))
-    options = camera.get_focus_options()
-    print(f"[CTronics test] ONVIF focus options: {options}", flush=True)
-    print(f"[CTronics test] Focus status before move: {camera.get_focus_level()}", flush=True)
-    camera.set_manual_focus(position)
-    print(f"[CTronics test] Focus status after move to {position}: {camera.get_focus_level()}", flush=True)
-    assert camera.get_focus_level() is not None
-    try:
-        camera.set_auto_focus(disable=False)
-    except ONVIFError as exc:
-        if "Action Not Support" not in str(exc):
-            raise
-        print(
-            "[CTronics test] Manual focus works, but this camera does not support "
-            f"ONVIF SetImagingSettings/autofocus: {exc}",
-            flush=True,
-        )
+    action = os.getenv("CTRONICS_TEST_FOCUS_ACTION", "focusout")
+    speed = int(os.getenv("CTRONICS_TEST_FOCUS_SPEED", "45"))
+    print(f"[CTronics test] Sending focus action={action}, speed={speed}", flush=True)
+    assert camera.move_focus(action, speed=speed) is True
 
 
 @pytest.mark.skipif(
