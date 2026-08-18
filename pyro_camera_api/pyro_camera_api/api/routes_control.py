@@ -1086,7 +1086,17 @@ def zoom_camera(camera_ip: str, level: int):
     try:
         # Read current zoom to estimate travel time; fall back to a generous delta.
         current = None
-        if hasattr(cam, "get_focus_level"):
+        ratio_units = False
+        if hasattr(cam, "get_ptz_status"):
+            # Hardware zoom readback (linovision): ratio units, full 25x sweep ~3.6 s.
+            try:
+                z_ratio = cam.get_ptz_status().get("zoom_ratio")
+                if z_ratio:
+                    current = int(round(float(z_ratio)))
+                    ratio_units = True
+            except Exception as exc:
+                logger.warning("[%s] zoom: failed to read zoom ratio: %s", camera_ip, exc)
+        if current is None and hasattr(cam, "get_focus_level"):
             try:
                 info = cam.get_focus_level() or {}
                 z = info.get("zoom")
@@ -1094,8 +1104,11 @@ def zoom_camera(camera_ip: str, level: int):
                     current = int(z)
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
-        delta = abs(level - current) if current is not None else 41
-        settle = 2.0 + 0.2 * delta
+        if ratio_units:
+            settle = 2.0 + 3.6 * abs(min(level, 25) - current) / 24.0
+        else:
+            delta = abs(level - current) if current is not None else 41
+            settle = 2.0 + 0.2 * delta
 
         cam.start_zoom_focus(level)
         logger.info("[%s] Zoom %s→%s, holding lock %.1fs", camera_ip, current, level, settle)
