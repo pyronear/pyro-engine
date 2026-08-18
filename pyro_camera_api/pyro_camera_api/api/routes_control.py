@@ -202,7 +202,13 @@ def click_to_move(
             except Exception as exc:
                 logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
 
-            h0, v0 = WIDE_FOV.get(adapter, fov_at_zoom(0, adapter))
+            # Match aliases the same way the registry does ("hikvision" and any
+            # case/model variant of "linovision" instantiate LinovisionCamera).
+            raw_adapter = str(conf.get("adapter", "")).lower()
+            if "linovision" in raw_adapter or "hikvision" in raw_adapter:
+                h0, v0 = WIDE_FOV["linovision"]
+            else:
+                h0, v0 = fov_at_zoom(0, adapter)
             h_fov = math.degrees(2 * math.atan(math.tan(math.radians(h0) / 2) / zoom_ratio))
             v_fov = math.degrees(2 * math.atan(math.tan(math.radians(v0) / 2) / zoom_ratio))
             # Exact pinhole projection (a click at x maps to atan of the image-plane
