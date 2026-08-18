@@ -256,8 +256,10 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         z = None
         if zoom is not None:
-            # zoom is the optical ratio (1-25); ISAPI absoluteZoom is in tenths (10 = 1.0x).
-            z = int(round(self._clamp(float(zoom), 1.0, 25.0) * 10))
+            # zoom is the optical ratio. Asymmetric ISAPI units: the absoluteEx
+            # command takes the ratio directly ([1, 25], camera-enforced), while
+            # the status reports absoluteZoom in tenths (10 = 1.0x).
+            z = self._clamp(float(zoom), 1.0, 25.0)
 
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/absoluteEx"
 
