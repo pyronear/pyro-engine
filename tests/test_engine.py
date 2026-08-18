@@ -551,6 +551,19 @@ def test_process_alerts_drops_alert_on_client_side_value_error(tmp_path):
     assert len(engine._alerts) == 0
 
 
+def test_process_alerts_keeps_alert_on_success_without_detection_id(tmp_path):
+    """A 2xx whose body carries no detection id means nothing was stored: keep the alert."""
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    fake_client.create_detection.return_value = MagicMock(
+        status_code=200, text="<html>proxy</html>", json=MagicMock(side_effect=ValueError)
+    )
+    _stage_dummy_alert(engine, cam_id)
+
+    engine._process_alerts()
+
+    assert len(engine._alerts) == 1
+
+
 @pytest.mark.parametrize("status_code", [503, 429])
 def test_process_alerts_keeps_alert_on_retryable_error(tmp_path, status_code):
     """Retryable statuses keep the alert cached and stop the loop until the next pass."""

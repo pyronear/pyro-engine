@@ -711,13 +711,20 @@ class Engine(Predictor):
                     if response.status_code >= 500 or response.status_code in RETRYABLE_STATUS:
                         raise RequestException(f"API error {response.status_code}: {response.text}")
 
-                    # Anything else is final: either the alert was stored (201, or 204 for a frame
-                    # with no detection extending no sequence) or the API rejected it for good.
-                    # Keeping a rejected alert would only replay the same failure and block the
-                    # whole queue behind it.
                     if 200 <= response.status_code < 300:
+                        # A 204 answers a frame with no detection that extended no sequence:
+                        # nothing was stored, so there is no detection id to look for.
+                        if response.status_code != 204:
+                            try:
+                                response.json()["id"]
+                            except (ValueError, KeyError, TypeError):
+                                raise RequestException(
+                                    f"success {response.status_code} without a detection id: {response.text}"
+                                ) from None
                         logger.info(f"Camera '{cam_id}' - alert sent")
                     else:
+                        # Rejected for good: keeping the alert would only replay the same failure
+                        # and block the whole queue behind it.
                         logger.error(f"Camera '{cam_id}' - alert rejected ({response.status_code}): {response.text}")
                     self._alerts.popleft()
 
