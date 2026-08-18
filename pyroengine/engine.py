@@ -25,6 +25,9 @@ from requests.models import Response
 
 __all__ = ["ContextCrop", "Engine"]
 
+# Client errors worth retrying later; every other 4xx is a permanent rejection of the payload.
+RETRYABLE_STATUS = frozenset({408, 425, 429})
+
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
@@ -705,17 +708,26 @@ class Engine(Predictor):
                         jpeg_bytes, bboxes, pose_id, crops=crops, recorded_at=frame_info["ts"]
                     )
 
-                    try:
-                        response.json()["id"]
-                    except ValueError:
-                        logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
-                        raise
+                    if response.status_code >= 500 or response.status_code in RETRYABLE_STATUS:
+                        raise RequestException(f"API error {response.status_code}: {response.text}")
 
-                    # Clear
+                    # Anything else is final: either the alert was stored (201, or 204 for a frame
+                    # with no detection extending no sequence) or the API rejected it for good.
+                    # Keeping a rejected alert would only replay the same failure and block the
+                    # whole queue behind it.
+                    if 200 <= response.status_code < 300:
+                        logger.info(f"Camera '{cam_id}' - alert sent")
+                    else:
+                        logger.error(f"Camera '{cam_id}' - alert rejected ({response.status_code}): {response.text}")
                     self._alerts.popleft()
-                    logger.info(f"Camera '{cam_id}' - alert sent")
 
-                except (KeyError, RequestsConnectionError, ValueError) as e:
+                except ValueError as e:
+                    # The client refused to serialize the payload, so a retry cannot help either.
+                    logger.error(f"Camera '{cam_id}' - invalid alert payload, dropping it")
+                    logger.error(e)
+                    self._alerts.popleft()
+
+                except (KeyError, RequestException) as e:
                     logger.error(f"Camera '{cam_id}' - unable to upload cache")
                     logger.error(e)
                     break

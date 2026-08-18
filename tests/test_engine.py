@@ -469,7 +469,7 @@ def _build_engine_with_fake_client(tmp_path):
     engine = Engine(cache_folder=str(tmp_path))
     engine.cam_creds = {cam_id: ("dummy_token", 3)}
     fake_client = MagicMock()
-    fake_client.create_detection.return_value = MagicMock(json=MagicMock(return_value={"id": 1}))
+    fake_client.create_detection.return_value = MagicMock(status_code=201)
     engine.api_client = {"169.254.7.3": fake_client}
     return engine, fake_client, cam_id
 
@@ -508,6 +508,59 @@ def test_process_alerts_empty_bboxes_uploaded_as_is(tmp_path):
     assert fake_client.create_detection.call_args.args[1] == []
     assert fake_client.create_detection.call_args.kwargs["crops"] is None
     assert len(engine._alerts) == 0
+
+
+def _stage_dummy_alert(engine, cam_id, ts="2026-07-21T12:00:00.000000+00:00"):
+    buf = io.BytesIO()
+    Image.new("RGB", (640, 480)).save(buf, format="JPEG")
+    engine._stage_alert(None, cam_id, ts, bboxes=[], jpeg_bytes=buf.getvalue())
+
+
+def test_process_alerts_no_content_response_clears_alert(tmp_path):
+    """204 (frame with no detection extending no sequence) has no body and must not block."""
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    fake_client.create_detection.return_value = MagicMock(status_code=204)
+    _stage_dummy_alert(engine, cam_id)
+
+    engine._process_alerts()
+
+    assert len(engine._alerts) == 0
+
+
+def test_process_alerts_drops_alert_on_rejection(tmp_path):
+    """A rejected alert is dropped so the alerts queued behind it still get uploaded."""
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    fake_client.create_detection.return_value = MagicMock(status_code=422, text="invalid bbox")
+    _stage_dummy_alert(engine, cam_id)
+    _stage_dummy_alert(engine, cam_id, "2026-07-21T12:00:01.000000+00:00")
+
+    engine._process_alerts()
+
+    assert fake_client.create_detection.call_count == 2
+    assert len(engine._alerts) == 0
+
+
+def test_process_alerts_drops_alert_on_client_side_value_error(tmp_path):
+    """A payload the client refuses to serialize can never be uploaded, so it is dropped."""
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    fake_client.create_detection.side_effect = ValueError("coordinates are expected to be relative")
+    _stage_dummy_alert(engine, cam_id)
+
+    engine._process_alerts()
+
+    assert len(engine._alerts) == 0
+
+
+@pytest.mark.parametrize("status_code", [503, 429])
+def test_process_alerts_keeps_alert_on_retryable_error(tmp_path, status_code):
+    """Retryable statuses keep the alert cached and stop the loop until the next pass."""
+    engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)
+    fake_client.create_detection.return_value = MagicMock(status_code=status_code, text="try later")
+    _stage_dummy_alert(engine, cam_id)
+
+    engine._process_alerts()
+
+    assert len(engine._alerts) == 1
 
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):
