@@ -33,6 +33,7 @@ dependencies = [
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
+    "onvif-zeep>=0.2.12",
 ]
 
 [project.urls]
