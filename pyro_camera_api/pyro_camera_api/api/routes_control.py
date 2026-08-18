@@ -1104,7 +1104,7 @@ def zoom_camera(camera_ip: str, level: int):
                     current = int(z)
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
-        if ratio_units:
+        if ratio_units and current is not None:
             settle = 2.0 + 3.6 * abs(min(level, 25) - current) / 24.0
         else:
             delta = abs(level - current) if current is not None else 41
