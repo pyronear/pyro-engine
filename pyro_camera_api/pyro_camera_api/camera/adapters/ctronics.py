@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image
-from requests.auth import HTTPBasicAuth, HTTPDigestAuth
+from requests.auth import AuthBase, HTTPBasicAuth, HTTPDigestAuth
 
 from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
@@ -97,12 +97,10 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
     @staticmethod
     def _redact_url(url: str) -> str:
         parsed = urlparse(url)
-        query = urlencode(
-            [
-                (key, "***" if key.lower() in {"usr", "user", "pwd", "password"} else value)
-                for key, value in parse_qsl(parsed.query)
-            ]
-        )
+        query = urlencode([
+            (key, "***" if key.lower() in {"usr", "user", "pwd", "password"} else value)
+            for key, value in parse_qsl(parsed.query)
+        ])
         return urlunparse(parsed._replace(query=query))
 
     def capture(self, patrol_id: Optional[int] = None) -> Optional[Image.Image]:
@@ -297,9 +295,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         # schema definition.
         request.Focus = {
             "Absolute": {
-                "Position": self._clamp(
-                    (position - self.focus_min) / max(1, self.focus_max - self.focus_min), 0.0, 1.0
-                )
+                "Position": self._clamp((position - self.focus_min) / max(1, self.focus_max - self.focus_min), 0.0, 1.0)
             }
         }
         return request
@@ -323,17 +319,15 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         normalized_action = actions.get(action.strip().lower())
         if normalized_action is None:
             raise ValueError(f"Unsupported CTronics focus action: {action}")
-        query = urlencode(
-            {
-                "-step": self.focus_step,
-                "-act": normalized_action,
-                "-speed": self.focus_speed if speed is None else speed,
-            }
-        )
+        query = urlencode({
+            "-step": self.focus_step,
+            "-act": normalized_action,
+            "-speed": self.focus_speed if speed is None else speed,
+        })
         base = f"{self.protocol}://{self.ip_address}:{self.port}/"
         url = urljoin(base, f"{self.focus_path.lstrip('/')}?{query}")
         logger.info("CTronics focus %s request: %s", normalized_action, self._redact_url(url))
-        auth = None
+        auth: AuthBase | None = None
         if self.focus_auth == "digest":
             auth = HTTPDigestAuth(self.username, self.password)
         elif self.focus_auth == "basic":
@@ -358,7 +352,12 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         except requests.RequestException as exc:
             logger.error("CTronics focus %s failed: %s", normalized_action, exc)
             raise RuntimeError(f"CTronics focus command {normalized_action!r} failed") from exc
-        logger.info("CTronics focus %s response: status=%s body=%s", normalized_action, response.status_code, response.text[:200])
+        logger.info(
+            "CTronics focus %s response: status=%s body=%s",
+            normalized_action,
+            response.status_code,
+            response.text[:200],
+        )
         return True
 
     def focus_plus(self, speed: Optional[int] = None) -> bool:
