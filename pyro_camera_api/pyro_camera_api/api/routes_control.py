@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +68,12 @@ _V_FOV_TABLE: dict[str, list[float]] = _FOV_DATA["v_fov"]
 
 # Default adapter when model is unknown
 _DEFAULT_ADAPTER = "reolink-823S2"
+
+# Wide-end FOV (h, v) in degrees for adapters using the hardware relative-move
+# path, where FOV at zoom ratio Z derives optically: fov(Z) = 2·atan(tan(fov0/2)/Z).
+# linovision: IPTZ544D-25X datasheet (H 55°-2.4°, V 33°-1.4°, 25x) — the tele
+# end matches the formula exactly, so no per-zoom FOV table is needed.
+WIDE_FOV = {"linovision": (55.0, 33.0)}
 
 
 def _resolve_adapter(adapter: str) -> str:
@@ -169,8 +176,9 @@ def click_to_move(
     Move a PTZ camera to center on a click in the image.
 
     click_x / click_y are normalized coordinates in [0, 1] (0 = left/top,
-    1 = right/bottom). The current zoom level is read from the camera and
-    the FOV is looked up from the calibrated table for the camera's adapter.
+    1 = right/bottom). The current zoom is read from the camera and the FOV
+    comes from the calibrated table for the adapter, or from the optical
+    wide-end model for adapters with hardware relative moves (linovision).
     Returns 409 if another blocking PTZ command is already running on this camera.
     """
     update_command_time()
@@ -181,6 +189,61 @@ def click_to_move(
     try:
         conf = RAW_CONFIG.get(camera_ip, {})
         adapter = _resolve_adapter(conf.get("adapter", "unknown"))
+
+        # Hardware closed-loop path (linovision/ISAPI): the camera moves by
+        # absolute angles itself, no timed moves or speed calibration needed.
+        # FOV at optical zoom ratio Z derives from the wide-end FOV:
+        # fov(Z) = 2·atan(tan(fov0/2) / Z).
+        if hasattr(cam, "move_relative_deg"):
+            zoom_ratio = 1.0
+            try:
+                z = cam.get_ptz_status().get("zoom_ratio")
+                if z:
+                    zoom_ratio = max(1.0, float(z))
+            except Exception as exc:
+                logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
+
+            # Match aliases the same way the registry does ("hikvision" and any
+            # case/model variant of "linovision" instantiate LinovisionCamera).
+            raw_adapter = str(conf.get("adapter", "")).lower()
+            if "linovision" in raw_adapter or "hikvision" in raw_adapter:
+                h0, v0 = WIDE_FOV["linovision"]
+            else:
+                h0, v0 = fov_at_zoom(0, adapter)
+            h_fov = math.degrees(2 * math.atan(math.tan(math.radians(h0) / 2) / zoom_ratio))
+            v_fov = math.degrees(2 * math.atan(math.tan(math.radians(v0) / 2) / zoom_ratio))
+            # Exact pinhole projection (a click at x maps to atan of the image-plane
+            # offset, not to a linear fraction of the FOV).
+            pan_deg = math.degrees(math.atan((2 * click_x - 1) * math.tan(math.radians(h_fov) / 2)))
+            tilt_deg = math.degrees(math.atan((2 * click_y - 1) * math.tan(math.radians(v_fov) / 2)))
+            logger.info(
+                "[%s] click_to_move relative: click=(%.3f,%.3f) zoom=%.0fx h_fov=%.2f v_fov=%.2f pan=%.2f° tilt=%.2f°",
+                camera_ip,
+                click_x,
+                click_y,
+                zoom_ratio,
+                h_fov,
+                v_fov,
+                pan_deg,
+                tilt_deg,
+            )
+            # Positive tilt_deg = click below center = camera must look down.
+            # Dome convention (field-checked): elevation increases downward
+            # (0 = horizon, 90 = straight down), so pass tilt_deg as-is.
+            target = cam.move_relative_deg(pan_deg, tilt_deg)
+            return {
+                "status": "ok",
+                "camera_ip": camera_ip,
+                "adapter": adapter,
+                "zoom_ratio": zoom_ratio,
+                "h_fov": round(h_fov, 3),
+                "v_fov": round(v_fov, 3),
+                "pan_deg": round(pan_deg, 3),
+                "tilt_deg": round(tilt_deg, 3),
+                "moves": [
+                    {"mode": "relative", **{k: round(v, 3) if isinstance(v, float) else v for k, v in target.items()}}
+                ],
+            }
 
         zoom = 0
         if hasattr(cam, "get_focus_level"):
@@ -211,6 +274,14 @@ def click_to_move(
         pan_bias = PAN_BIAS.get(adapter, {})
         tilt_speeds = TILT_SPEEDS.get(adapter, {})
         tilt_bias = TILT_BIAS.get(adapter, {})
+
+        # Uncalibrated adapter without hardware relative moves: rough "speed≈°/s"
+        # proxy, no bias, same convention as /move and move_to_azimuth.
+        proxy_speeds = {s: float(s) for s in range(1, 6)}
+        if not pan_speeds:
+            pan_speeds = proxy_speeds
+        if not tilt_speeds:
+            tilt_speeds = proxy_speeds
 
         if zoom > 0:
             logger.warning("[%s] click_to_move: zoom=%s > 0, speed limited to 1", camera_ip, zoom)
@@ -1018,7 +1089,17 @@ def zoom_camera(camera_ip: str, level: int):
     try:
         # Read current zoom to estimate travel time; fall back to a generous delta.
         current = None
-        if hasattr(cam, "get_focus_level"):
+        ratio_units = False
+        if hasattr(cam, "get_ptz_status"):
+            # Hardware zoom readback (linovision): ratio units, full 25x sweep ~3.6 s.
+            try:
+                z_ratio = cam.get_ptz_status().get("zoom_ratio")
+                if z_ratio:
+                    current = int(round(float(z_ratio)))
+                    ratio_units = True
+            except Exception as exc:
+                logger.warning("[%s] zoom: failed to read zoom ratio: %s", camera_ip, exc)
+        if current is None and hasattr(cam, "get_focus_level"):
             try:
                 info = cam.get_focus_level() or {}
                 z = info.get("zoom")
@@ -1026,10 +1107,15 @@ def zoom_camera(camera_ip: str, level: int):
                     current = int(z)
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
-        delta = abs(level - current) if current is not None else 41
-        settle = 2.0 + 0.2 * delta
-
-        cam.start_zoom_focus(level)
+        ret = cam.start_zoom_focus(level)
+        target_ratio = ret.get("zoom_ratio") if isinstance(ret, dict) else None
+        if ratio_units and current is not None and target_ratio is not None:
+            # Ratio units (linovision): settle sized on the datasheet zoom
+            # speed, ~3.6 s for the full 24x sweep.
+            settle = 2.0 + 3.6 * abs(float(target_ratio) - current) / 24.0
+        else:
+            delta = abs(level - current) if current is not None else 41
+            settle = 2.0 + 0.2 * delta
         logger.info("[%s] Zoom %s→%s, holding lock %.1fs", camera_ip, current, level, settle)
         interrupted = _interruptible_sleep(camera_ip, settle)
         resp: dict = {
