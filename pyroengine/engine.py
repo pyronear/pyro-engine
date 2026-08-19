@@ -25,8 +25,8 @@ from requests.models import Response
 
 __all__ = ["ContextCrop", "Engine"]
 
-# Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.
-PLACEHOLDER_BBOX = (0.0, 0.0, 0.0001, 0.0001, 0.0)
+# Client errors worth retrying later; every other 4xx is a permanent rejection of the payload.
+RETRYABLE_STATUS = frozenset({408, 425, 429})
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
@@ -593,9 +593,6 @@ class Engine(Predictor):
         """Cut one 224x224 JPEG per bbox out of the context crop, using the frozen event crop boxes."""
         if context_crop is None or not bboxes or not crop_boxes or len(crop_boxes) != len(bboxes):
             return None
-        # Placeholder-only alerts carry no real detection, so they upload no crops.
-        if all(tuple(bbox) == PLACEHOLDER_BBOX for bbox in bboxes):
-            return None
         region = Image.open(io.BytesIO(context_crop.jpeg))
         region_w, region_h = region.size
         # The stored region may be downscaled, so map full-frame crop boxes through the actual
@@ -675,16 +672,8 @@ class Engine(Predictor):
             "crop_boxes": crop_boxes,
         })
 
-    def fill_empty_bboxes(self) -> None:
-        # Stamp a tiny placeholder bbox at conf=0 on any alert with none,
-        # so the upload guard always sees a non-empty payload.
-        for alert in self._alerts:
-            if not alert["bboxes"]:
-                alert["bboxes"] = [PLACEHOLDER_BBOX]
-
     def _process_alerts(self) -> None:
         if self.cam_creds is not None:
-            self.fill_empty_bboxes()
             for _ in range(len(self._alerts)):
                 # try to upload the oldest element
                 frame_info = self._alerts[0]
@@ -700,12 +689,9 @@ class Engine(Predictor):
                     )
 
                 try:
-                    # Detection creation
+                    # Detection creation. An empty bbox list is a frame with no detection: the
+                    # API attaches it to the ongoing sequences of the pose, or answers 204.
                     bboxes = self._alerts[0]["bboxes"]
-                    if not bboxes:
-                        logger.warning(f"Camera '{cam_id}' - skipping alert with empty bboxes")
-                        self._alerts.popleft()
-                        continue
                     jpeg_bytes = frame_info.get("jpeg_bytes")
                     if jpeg_bytes is None:
                         # The full frame is no longer kept in RAM, so there is nothing to re-encode.
@@ -722,17 +708,33 @@ class Engine(Predictor):
                         jpeg_bytes, bboxes, pose_id, crops=crops, recorded_at=frame_info["ts"]
                     )
 
-                    try:
-                        response.json()["id"]
-                    except ValueError:
-                        logger.error(f"Camera '{cam_id}' - non-JSON response body: {response.text}")
-                        raise
+                    if response.status_code >= 500 or response.status_code in RETRYABLE_STATUS:
+                        raise RequestException(f"API error {response.status_code}: {response.text}")
 
-                    # Clear
+                    if 200 <= response.status_code < 300:
+                        # A 204 answers a frame with no detection that extended no sequence:
+                        # nothing was stored, so there is no detection id to look for.
+                        if response.status_code != 204:
+                            try:
+                                response.json()["id"]
+                            except (ValueError, KeyError, TypeError):
+                                raise RequestException(
+                                    f"success {response.status_code} without a detection id: {response.text}"
+                                ) from None
+                        logger.info(f"Camera '{cam_id}' - alert sent")
+                    else:
+                        # Rejected for good: keeping the alert would only replay the same failure
+                        # and block the whole queue behind it.
+                        logger.error(f"Camera '{cam_id}' - alert rejected ({response.status_code}): {response.text}")
                     self._alerts.popleft()
-                    logger.info(f"Camera '{cam_id}' - alert sent")
 
-                except (KeyError, RequestsConnectionError, ValueError) as e:
+                except ValueError as e:
+                    # The client refused to serialize the payload, so a retry cannot help either.
+                    logger.error(f"Camera '{cam_id}' - invalid alert payload, dropping it")
+                    logger.error(e)
+                    self._alerts.popleft()
+
+                except (KeyError, RequestException) as e:
                     logger.error(f"Camera '{cam_id}' - unable to upload cache")
                     logger.error(e)
                     break
