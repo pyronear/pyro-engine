@@ -76,10 +76,9 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     def _probe_zoom_support(self) -> Optional[bool]:
         """Ask the camera whether it reports a zoom position.
 
-        Returns None only when the camera could not be asked, so the caller can
-        tell a transport failure apart from a device that answered. A camera
-        replying with a non-zero Reolink code has answered: it does not serve
-        GetZoomFocus, which settles the question.
+        Returns None whenever the probe is inconclusive, so the caller can
+        distinguish transport, HTTP, and Reolink API failures from a successful
+        response that establishes whether a zoom position is available.
         """
         try:
             response = requests.post(
@@ -95,8 +94,8 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
             return None
         payload = response.json()
         if payload[0].get("code") != 0:
-            logger.info("[%s] camera does not serve GetZoomFocus: fixed lens", self.ip_address)
-            return False
+            logger.warning("[%s] lens probe was rejected by the camera", self.ip_address)
+            return None
         return payload[0]["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
 
     def has_motorised_lens(self) -> bool:
@@ -107,11 +106,10 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         nothing about zoom: Reolink bullets such as the RLC-811A or the P430 sit
         fixed on their mast and still ship a motorised varifocal lens.
 
-        The answer is cached once the camera gives one, since a lens cannot grow
-        a motor at runtime and zoom commands are frequent. Only an unanswered
-        probe is retried: caching that would strand a camera over one bad
-        request, and re-probing a camera that already said no would cost a
-        request on every command for the rest of the process.
+        A definitive answer from a successful response is cached, since a lens
+        cannot grow a motor at runtime and zoom commands are frequent. Failed
+        probes are retried so one transient error cannot strand a capable camera
+        until the service restarts.
         """
         if self._has_motorised_lens is None:
             self._has_motorised_lens = self._probe_zoom_support()
