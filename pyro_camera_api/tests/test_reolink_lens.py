@@ -43,14 +43,13 @@ def test_fixed_lens_camera_reports_no_zoom_position():
         assert cam.has_motorised_lens() is False
 
 
-def test_a_camera_that_rejects_the_command_is_a_settled_answer():
-    """A non-zero Reolink code is the camera answering that it does not serve
-    GetZoomFocus. Re-probing it would cost a request on every command forever."""
+def test_a_rejected_probe_is_not_cached():
+    """A non-zero Reolink code is not evidence about the camera's optics."""
     cam = _camera(cam_type="static")
-    with patch(POST, return_value=_reply(code=-9)) as post:
+    with patch(POST, side_effect=[_reply(code=-9), _reply(zoom_pos=0)]) as post:
         assert cam.has_motorised_lens() is False
-        assert cam.has_motorised_lens() is False
-        assert post.call_count == 1
+        assert cam.has_motorised_lens() is True
+        assert post.call_count == 2
 
 
 def test_unreachable_camera_is_treated_as_fixed_lens():
