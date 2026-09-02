@@ -3,9 +3,8 @@
 ## What is an adapter for?
 
 Every camera brand speaks its own protocol: HTTP CGI on Reolink, ISAPI on Linovision, raw RTSP,
-or some in-house JSON API. An adapter translates that dialect into a small set of common
-methods. Above it, the REST API knows nothing about brands, and the same routes work for every
-camera.
+or an in-house JSON API. An adapter translates that dialect into a small set of common methods,
+so the REST API above it knows nothing about brands and the same routes work everywhere.
 
 ```
 credentials.json          registry.py                adapters/              api/
@@ -15,41 +14,44 @@ credentials.json          registry.py                adapters/              api/
                                                                          /focus/...
 ```
 
-Paths below are given from the package root, `pyro_camera_api/pyro_camera_api/`. The contract
-lives in `camera/base.py`, the dispatch in `camera/registry.py`, and the implementations in
-`camera/adapters/` (this directory).
+Paths below are relative to the package root, `pyro_camera_api/pyro_camera_api/`: the contract is
+`camera/base.py`, the dispatch `camera/registry.py`, the implementations `camera/adapters/` (this
+directory).
 
 ## Is my camera already supported?
 
-Check this table before writing any code. The `rtsp`, `url` and `rest` adapters are generic and
-cover many cameras without a single line of Python.
+`rtsp`, `url` and `rest` are generic and cover many cameras with configuration alone.
 
-| `adapter`                          | Class                | Capture | PTZ | Focus | Required configuration                      |
-| ---------------------------------- | -------------------- | ------- | --- | ----- | ------------------------------------------- |
-| `reolink-823S2`, `reolink-823A16`  | `ReolinkCamera`      | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`           |
-| `linovision` (alias `hikvision`)   | `LinovisionCamera`   | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`           |
-| `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url`                                  |
-| `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` with embedded credentials             |
-| `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url`, `headers`, `json_path`, `encoding`   |
-| `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos         |
+| `adapter`                          | Class                | Capture | PTZ | Focus | Configuration you normally set                                        |
+| ---------------------------------- | -------------------- | ------- | --- | ----- | --------------------------------------------------------------------- |
+| `reolink-823S2`, `reolink-823A16`  | `ReolinkCamera`      | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`                                     |
+| `linovision` (alias `hikvision`)   | `LinovisionCamera`   | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`                                     |
+| `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url` (**required**)                                             |
+| `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` (**required**) with embedded credentials                        |
+| `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url` (**required**), `headers`, `response`, `json_path`, `encoding`  |
+| `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos                                   |
 
-Pick the generic adapter that matches:
+Only the fields marked **required** block registration; the others have fallbacks (`ip_address`
+defaults to the `credentials.json` key, `poses` and `azimuths` to empty lists), so a typo there
+gives you a camera that registers and then misbehaves.
 
-- The camera exposes an RTSP stream, use `rtsp`.
-- It exposes a snapshot URL returning an image directly, use `url`. Note that this adapter
-  expects credentials inside the URL, either as Foscam-style query parameters
-  (`?usr=...&pwd=...`) or as `user:pass@host`, in which case it switches to HTTP Digest
-  authentication.
-- It exposes an HTTP endpoint that needs authentication headers, or that wraps the image in
-  JSON (base64 or a nested URL), use `rest`. Header and URL values accept `${VAR}` to read an
-  environment variable, which keeps secrets out of `credentials.json`.
+Picking between the generic three:
 
-A new adapter is only justified when the camera has a proprietary control protocol, typically
-PTZ or focus, which the three generic adapters cannot drive.
+- RTSP stream: `rtsp`.
+- Snapshot URL: `url`, but check the auth first. `URLCamera.capture()` branches on the literal
+  string `CGIProxy.fcgi`: Foscam URLs carrying `?usr=...&pwd=...` are sent as is, everything else
+  goes down the HTTP Digest branch and needs `user:pass@host` in the URL. A credential-free URL
+  fails there rather than just working, use `rest` instead.
+- HTTP endpoint with auth headers, or an image wrapped in JSON: `rest`. `json_path` and `encoding`
+  are only read when `response` is `"json"`, so leaving `response` at its `"image"` default
+  silently ignores them. Header and URL values accept `${VAR}` to keep secrets in `.env`.
 
-## What every adapter must implement
+Write a new adapter only for a proprietary control protocol, typically PTZ or focus, that none of
+the three can drive.
 
-Exactly one method, whatever the camera:
+## The capture() contract
+
+One method is mandatory, whatever the camera:
 
 ```python
 class BaseCamera(ABC):
@@ -57,24 +59,17 @@ class BaseCamera(ABC):
     def capture(self, **kwargs) -> Optional[Image.Image]: ...
 ```
 
-Three rules:
-
-- Return an RGB Pillow image, or `None` on failure. Never let an exception escape, because the
-  patrol and inference loops run continuously and treat `None` as "no image this time".
+- Return an RGB Pillow image, or `None` on failure. Never let an exception escape: the patrol and
+  inference loops run continuously and read `None` as "no image this time".
 - Log the failure before returning `None`, masking credentials and tokens.
-- Always set a timeout on network calls, and accept `**kwargs`, since routes sometimes pass
-  `patrol_id`, which static adapters ignore.
+- Set a timeout on every network call, and accept `**kwargs`, since routes sometimes pass
+  `patrol_id` that static adapters ignore.
 
-That is the whole mandatory surface: a static camera implementing only `capture()` is complete
-and needs nothing below. Everything that follows is opt-in, and how far to go is answered in
-[How far to go](#how-far-to-go).
+## Capabilities
 
-## Adding capabilities
+Capabilities are mixins; routes check `isinstance()` and return 400 when the camera lacks them.
 
-Capabilities are mixins. Routes check `isinstance()` and return an explicit 400 when the camera
-does not implement them, so there is nothing to declare anywhere else.
-
-**`PTZMixin`**, pan/tilt/zoom control:
+`PTZMixin`, pan/tilt/zoom:
 
 | Member                 | Purpose                                                                |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -85,82 +80,64 @@ does not implement them, so there is nothing to declare anywhere else.
 | `azimuth_source`       | `"tracked"` (dead-reckoned server-side) or `"hardware"` (read back)     |
 | `preset_move_hold_s`   | Lock held after a fire-and-forget move; `0` when the call blocks        |
 
-**`FocusMixin`**, manual focus: `set_manual_focus(position)` and `get_focus_level()`, which
-returns `{"focus": int | None, "zoom": int | None}`.
+`FocusMixin`, manual focus: `set_manual_focus(position)` and `get_focus_level()`, returning
+`{"focus": int | None, "zoom": int | None}`.
 
-**Optional methods.** Beyond the mixins, some routes look methods up with `hasattr()` and
-degrade gracefully when they are missing. These are declared nowhere in `base.py`, so this is
-the implicit contract you need to know about:
+Beyond the mixins, some routes resolve methods with `hasattr()`. These are declared nowhere in
+`base.py`, so this is the implicit half of the contract:
 
-| Method              | Route or service using it                             |
-| ------------------- | ----------------------------------------------------- |
-| `set_auto_focus()`  | `POST /focus/set_autofocus`                           |
-| `focus_finder()`    | `POST /focus/focus_finder` (sharpness search)         |
-| `start_zoom_focus()`| `POST /control/zoom`, zoom reset when a stream ends   |
-| `get_ptz_preset()`  | `GET /control/preset/list`                            |
-| `set_ptz_preset()`  | `POST /control/preset/set`                            |
-| `reboot_camera()`   | `POST /control/reboot`, stuck-camera detector         |
+| Method              | Route or service using it                                          | Missing |
+| ------------------- | ------------------------------------------------------------------ | ------- |
+| `set_auto_focus()`  | `POST /focus/set_autofocus`                                        | 400     |
+| `start_zoom_focus()`| `POST /control/zoom/{camera_ip}/{level}`, zoom reset after a stream | 400     |
+| `get_ptz_preset()`  | `GET /control/preset/list`                                         | 400     |
+| `set_ptz_preset()`  | `POST /control/preset/set`                                         | 400     |
+| `reboot_camera()`   | `POST /control/reboot/{camera_ip}`, stuck-camera detector          | 501     |
 
-One optional attribute plays the same role: when `focus_position` is set, the patrol loop calls
-`set_manual_focus()` with that value on every pass over a preset.
+The `focus_position` attribute works the same way: when set, the patrol loop calls
+`set_manual_focus()` with it once per cycle, after the return to the first pose, and skips it
+while a stream runs.
 
-Implement these case by case, only for the routes you actually need. A PTZ camera without
-`reboot_camera()` works fine, it is simply left out of the stuck detector at startup.
+`focus_finder()` is the exception. `POST /focus/focus_finder` gates on `isinstance(cam, FocusMixin)`
+and then calls it unguarded, so inheriting `FocusMixin` commits you to implementing it: without it
+the route raises `AttributeError` and returns 500. It takes `save_images` and `should_abort`, polls
+`should_abort()` before each focus move, and raises `FocusAbortedError` when it fires.
 
-Since these methods have no reference signature, **use `reolink.py` and `linovision.py` as your
-model** (both in this directory). They are the two complete implementations, and comparing them
-shows what is imposed
-(the name, the arguments, the return type) and what is free (the entire protocol).
-`reboot_camera()`, for instance, on Reolink:
+These methods have no reference signature, so copy `reolink.py` and `linovision.py` (both here).
+Comparing them shows what is fixed (name, arguments, return type) and what is not:
 
 ```python
+# reolink.py
 def reboot_camera(self) -> bool:
     url = self._build_url("Reboot")
     response = requests.post(url, json=[{"cmd": "Reboot"}], verify=False)
     ...
-```
 
-and on Linovision:
-
-```python
+# linovision.py
 def reboot_camera(self) -> bool:
     resp = self._request("PUT", "/ISAPI/System/reboot")
     return self._handle_response(resp, "Reboot requested") is not None
 ```
 
-Same name, same `-> bool`, two unrelated protocols. Your adapter does the same with its own.
+`LinovisionCamera.set_auto_focus()` shows a third option: a stub that logs a warning, so the route
+answers 200 doing nothing instead of a clean 400. Only worth it when a 400 would break an existing
+caller.
 
-A third option, shown by `LinovisionCamera.set_auto_focus()`, is to declare the method but leave
-it as a stub that logs a warning. The route then answers 200 while doing nothing, instead of the
-clear 400 you get by not declaring the method at all. Keep this for cases where a 400 would
-break an existing caller; otherwise, leaving the method out is the better answer.
+### How much you actually need
 
-### How far to go
+A static camera needs `capture()` and nothing else. A PTZ camera needs `capture()` plus a
+`move_camera()` handling `"ToPos"`, because the patrol loop does nothing more than
+`move_camera("ToPos", idx=pose, speed=50)`, wait, `capture()`, for each pose in `cam_poses`.
+`get_azimuth()` is abstract on `PTZMixin` so it must exist, but returning `None` is fine until you
+need azimuth tracking.
 
-Nothing above is required beyond `capture()`, so the real question is how much of it earns its
-place. Two targets are enough to make a camera usable by the detection pipeline, and everything
-else can be added later, on demand.
-
-**Static camera: `capture()` only.** The inference loop runs, images flow, no mixin needed.
-
-**PTZ camera: `capture()` plus a `move_camera()` handling at least `"ToPos"`.** The patrol loop
-does nothing more than this: for each pose in `cam_poses` it calls
-`move_camera("ToPos", idx=pose, speed=50)`, waits, then calls `capture()`. With those two
-methods, patrol and multi-pose detection work end to end.
-
-That leaves presets, which must exist on the camera before `"ToPos"` means anything. Two paths:
-create them by hand in the vendor's interface, or implement `set_ptz_preset()` and
-`get_ptz_preset()` to drive them from the API (`POST /control/preset/set`, see also the scripts
-in `setup_presets/`). The second is strongly recommended as soon as several cameras are to be
-deployed, since it is the difference between a reproducible install and a configuration clicked
-site by site.
-
-`get_azimuth()` is required by `PTZMixin` and must therefore exist, but it can simply return
-`None` for as long as azimuth tracking is not needed.
+Presets have to exist on the camera before `"ToPos"` means anything: create them by hand in the
+vendor's interface, or implement `set_ptz_preset()` and `get_ptz_preset()` and drive them from the
+API (see `setup_presets/`). The second is worth it as soon as you deploy more than one camera.
 
 ## Writing an adapter
 
-**1. Create the class** in `camera/adapters/my_camera.py` (this directory):
+**1.** Create the class in `camera/adapters/my_camera.py`:
 
 ```python
 class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
@@ -190,8 +167,9 @@ class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
         return self.current_azimuth  # None until a reference is known
 ```
 
-**2. Wire the dispatch** in `build_camera_object()` (`camera/registry.py`), before the final
-error branch:
+**2.** Wire the dispatch in `build_camera_object()` (`camera/registry.py`), before the final error
+branch. Return `None` with an error log when a required field is missing, so the camera is skipped
+and the rest of the fleet still starts.
 
 ```python
 if adapter == "my-camera":
@@ -206,33 +184,23 @@ if adapter == "my-camera":
     )
 ```
 
-Return `None` with an error log when a required field is missing: the camera is skipped and the
-rest of the fleet still starts.
+**3.** Export it in `camera/adapters/__init__.py`. Convention rather than wiring, since the
+registry imports adapter modules directly and that file currently lists four of the six.
 
-**3. Export** the class in `camera/adapters/__init__.py`.
-
-**4. Test** by adding a test under `pyro_camera_api/tests/` that builds the camera with mocked
-HTTP requests and checks `capture()`. See `test_rest_snapshot.py` as a model.
+**4.** Add a test under `pyro_camera_api/tests/` building the camera with mocked HTTP and checking
+`capture()`. `test_rest_snapshot.py` is the model.
 
 ## Pitfalls
 
-- **Reolink speed tables are keyed by exact model name.** `"reolink-823S2"` and
-  `"reolink-823A16"` have different calibrations. A generic `adapter: "reolink"` still builds
-  the camera, but the PTZ routes fall back to `"reolink-823S2"` with a warning, which silently
-  skews degree-based moves.
-- **Streaming is outside the adapter scope, at this stage.** It was built separately: stream
-  URLs are assembled in `core/config.py` from the IP, assuming RTSP on port 554 with a Reolink
-  path by default, or a Linovision one. An adapter therefore has nothing to implement for
-  streaming, but it also has no say in it, and a camera that does not follow that convention
-  captures correctly yet cannot stream. Moving URL construction down into the adapters would be
-  consistent with the rest of the design; it is not done today, and it is worth keeping in mind
-  before integrating a camera whose stream does not look like `rtsp://<ip>:554/...`.
-- **`type: "ptz"` starts background tasks.** At startup, the patrol loop and the stuck detector
-  are launched for every camera marked `ptz`. An incomplete PTZ adapter will make those loops
-  fail continuously.
-- **`azimuth_source` changes what `get_azimuth()` means.** Under `"tracked"`, the azimuth is
-  dead-reckoned server-side from commanded moves, and any continuous rotation makes it stale
-  until the next preset. Under `"hardware"`, it is read from the camera and always trustworthy.
-- **The registry is built at import time.** An exception in `__init__` is caught and logged, and
-  the camera is simply absent from the registry. Check the startup logs, not just
-  `GET /cameras_list`.
+- Reolink speed tables are keyed by exact model name, so a generic `adapter: "reolink"` builds the
+  camera but falls back to the `823S2` calibration with only a warning, skewing degree-based moves.
+- Streaming is outside the adapter scope: stream URLs are assembled in `core/config.py` from the
+  IP, assuming RTSP on 554 with a Reolink or Linovision path. An adapter has nothing to implement
+  and no say, so a camera off that convention captures fine and cannot stream. Moving URL
+  construction into the adapters would be more consistent; it is not done today.
+- `type: "ptz"` starts the patrol loop and the stuck detector at startup, so an incomplete PTZ
+  adapter makes them fail continuously.
+- `azimuth_source` changes what `get_azimuth()` means: `"tracked"` is dead-reckoned server-side and
+  goes stale on any continuous rotation until the next preset, `"hardware"` is read from the camera.
+- The registry is built at import time, and an exception in `__init__` is caught and logged, so a
+  broken camera is simply absent. Check startup logs, not just `GET /cameras_list`.
