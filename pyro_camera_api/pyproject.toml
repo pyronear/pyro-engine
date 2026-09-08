@@ -19,6 +19,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+test = [
+    "pytest>=8.0.0",
+]
 quality = [
     "ruff==0.11.9",
     "mypy==1.10.0",
