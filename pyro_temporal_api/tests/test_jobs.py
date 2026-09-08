@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from pyro_temporal_api import main
+from pyro_temporal_api import jobs, main
 from pyro_temporal_api.jobs import JobStore, _to_frame_detections
 
 
@@ -122,3 +122,18 @@ def test_to_frame_detections_keeps_empty_frames():
     dets = _to_frame_detections(frames, [[], [[0, 0, 1, 1, 0.5]]])
     assert dets["a"].detections == []
     assert len(dets["b"].detections) == 1
+
+
+def test_oversized_frame_is_rejected(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setattr(main, "MAX_FRAME_BYTES", 100)
+    r = _submit(c, n_frames=1)
+    assert r.status_code == 413
+
+
+def test_full_queue_returns_503(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setattr(jobs, "MAX_PENDING", 0)
+    r = _submit(c, n_frames=1)
+    assert r.status_code == 503
+    assert "pending" in r.json()["detail"]
