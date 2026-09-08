@@ -47,6 +47,9 @@ _session = requests.Session()
 # Cameras live on the local network: ignore HTTPS_PROXY and friends, whose
 # proxy pools would bypass the adapter's TLS context.
 _session.trust_env = False
+# Reolink CGI drops idle connections; close after each call so the pool never
+# hands back a stale socket (matches the per-call behaviour of requests.get).
+_session.headers["Connection"] = "close"
 _session.mount("https://", _LegacyTLSAdapter())
 
 
