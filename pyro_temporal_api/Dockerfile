@@ -22,4 +22,5 @@ WORKDIR /usr/src/app
 COPY pyproject.toml ./pyproject.toml
 COPY pyro_temporal_api ./pyro_temporal_api
 
-CMD ["uvicorn", "pyro_temporal_api.main:app", "--host", "0.0.0.0", "--port", "8082"]
+# host network mode: bind to loopback, only the engine on the same box talks to this service
+CMD ["uvicorn", "pyro_temporal_api.main:app", "--host", "127.0.0.1", "--port", "8082"]

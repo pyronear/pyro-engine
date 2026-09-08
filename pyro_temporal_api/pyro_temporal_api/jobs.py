@@ -22,6 +22,12 @@ from temporal_model.core import Detection, FrameDetections
 logger = logging.getLogger(__name__)
 
 MAX_JOBS_KEPT = 100
+# One job per camera pose per round is the normal load; more means a stuck worker or a flood.
+MAX_PENDING = 16
+
+
+class QueueFullError(RuntimeError):
+    """Raised by submit() when too many jobs are still waiting to be scored."""
 
 
 @dataclass
@@ -99,6 +105,8 @@ class JobStore:
         self._worker.start()
 
     def submit(self, cam_id: str, frames: list[tuple[str, bytes]], boxes: list[list[list[float]]]) -> Job:
+        if self._queue.qsize() >= MAX_PENDING:
+            raise QueueFullError(f"{MAX_PENDING} jobs already pending")
         job = Job(job_id=uuid.uuid4().hex, cam_id=cam_id, frames=frames, boxes=boxes)
         with self._lock:
             self._jobs[job.job_id] = job

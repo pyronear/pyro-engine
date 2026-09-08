@@ -113,15 +113,15 @@ CAM_USER=my_dummy_login
 CAM_PWD=my_dummy_pwd
 MEDIAMTX_SERVER_IP=1.2.3.4
 PYRO_ENGINE_VERSION=latest
-TEMPORAL_API_URL=http://localhost:8082
 ```
 
 `PYRO_ENGINE_VERSION` controls which Docker image tag is pulled for the services (defaults to `latest` if unset).
 
-`TEMPORAL_API_URL` enables the optional temporal validation: while an alert is ongoing, the engine sends the last
-frames and boxes of that camera pose to `pyro_temporal_api` and only uploads the alert once the temporal smoke
-model confirms it. Leave it unset to send alerts as before. The service needs `data/model_onnx.zip`, exported from
-a [temporal-model](https://github.com/pyronear/temporal-model) release with `temporal-export-onnx`.
+Optional temporal validation of alerts: with `COMPOSE_PROFILES=temporal` and `TEMPORAL_API_URL=http://localhost:8082`
+in `.env`, the stack also starts `pyro_temporal_api`. While an alert is ongoing, the engine sends the last frames and
+boxes of that camera pose to it and only uploads the alert once the temporal smoke model confirms it. Leave both unset
+to send alerts as before. The service needs `data/model_onnx.zip`, exported from a
+[temporal-model](https://github.com/pyronear/temporal-model) release with `temporal-export-onnx`.
 
 ### Data directory
 

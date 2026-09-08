@@ -30,7 +30,9 @@ services:
         max-file: "5"
 
 
+  # Optional: started only with COMPOSE_PROFILES=temporal (needs data/model_onnx.zip)
   pyro-temporal-api:
+    profiles: ["temporal"]
     build:
       context: ./pyro_temporal_api
     image: pyronear/pyro-temporal-api:${PYRO_ENGINE_VERSION:-latest}

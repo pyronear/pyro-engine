@@ -22,13 +22,15 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from temporal_model.core.onnx_model import OnnxTemporalModel
 
-from pyro_temporal_api.jobs import JobStore
+from pyro_temporal_api.jobs import JobStore, QueueFullError
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
 MAX_FRAMES = 20
+# Inference frames are a few hundred KB; anything larger is not an engine frame.
+MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 
 @asynccontextmanager
@@ -78,8 +80,16 @@ async def submit_job(
         if any(not isinstance(b, list) or len(b) != 5 for b in fb):
             raise HTTPException(status_code=422, detail="each box must be [x1, y1, x2, y2, conf]")
 
-    payload = [(Path(f.filename or "frame").stem, await f.read()) for f in frames]
-    job = request.app.state.jobs.submit(cam_id, payload, parsed)
+    payload = []
+    for f in frames:
+        data = await f.read(MAX_FRAME_BYTES + 1)
+        if len(data) > MAX_FRAME_BYTES:
+            raise HTTPException(status_code=413, detail=f"frame {f.filename} exceeds {MAX_FRAME_BYTES} bytes")
+        payload.append((Path(f.filename or "frame").stem, data))
+    try:
+        job = request.app.state.jobs.submit(cam_id, payload, parsed)
+    except QueueFullError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"job_id": job.job_id}
 
 

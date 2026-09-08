@@ -84,7 +84,7 @@ For each `cam_id`, the engine periodically fetches a JSON file at `{bbox_mask_ur
 
 ### Temporal validation (optional)
 
-When `TEMPORAL_API_URL` is set, `Engine` keeps the last `temporal_window` (10) inference JPEGs and their YOLO boxes per `cam_id`. Once an alert is ongoing, `Engine._temporal_gate` submits that window to `pyro_temporal_api` (`POST /jobs`, returns immediately) and reads the verdict on the next round (`GET /jobs/{id}`). Frames are only staged for upload after a positive verdict; a negative verdict resubmits the window with the new frame; a pending job holds the alert one more round. Service errors fail open (alert sent unvalidated). The service loads `data/model_onnx.zip` (`TEMPORAL_MODEL_PATH`), exported from a temporal-model release with `temporal-export-onnx`.
+The service is behind the compose profile `temporal` (`COMPOSE_PROFILES=temporal` in `.env`). When `TEMPORAL_API_URL` is set, `Engine` keeps the last `temporal_window` (10) inference JPEGs and their YOLO boxes per `cam_id`. Once an alert is ongoing, `Engine._temporal_gate` submits that window to `pyro_temporal_api` (`POST /jobs`, returns immediately) and reads the verdict on the next round (`GET /jobs/{id}`). Frames are only staged for upload after a positive verdict; a negative verdict resubmits the window with the new frame; a pending job holds the alert one more round. Service errors fail open (alert sent unvalidated). The service loads `data/model_onnx.zip` (`TEMPORAL_MODEL_PATH`), exported from a temporal-model release with `temporal-export-onnx`.
 
 ### Stream-awareness
 
@@ -96,7 +96,7 @@ Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max
 
 ### Environment Variables (`.env`)
 
-Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `TEMPORAL_API_URL` (e.g. `http://localhost:8082`, unset = no temporal validation), `TEMPORAL_MODEL_PATH`.
+Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `COMPOSE_PROFILES=temporal` + `TEMPORAL_API_URL` (e.g. `http://localhost:8082`; both unset = no temporal validation), `TEMPORAL_MODEL_PATH`.
 
 ### Legacy direct-camera module
 
