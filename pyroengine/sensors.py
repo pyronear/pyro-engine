@@ -33,13 +33,18 @@ class _LegacyTLSAdapter(HTTPAdapter):
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
-        ctx.options |= 0x4  # ssl.OP_LEGACY_SERVER_CONNECT, named only in Python 3.12+
+        ctx.set_ciphers("DEFAULT")
         kwargs["ssl_context"] = ctx
         super().init_poolmanager(*args, **kwargs)
 
 
 _session = requests.Session()
+# Cameras live on the local network: ignore HTTPS_PROXY and friends, whose
+# proxy pools would bypass the adapter's TLS context.
+_session.trust_env = False
+# Reolink CGI drops idle connections; close after each call so the pool never
+# hands back a stale socket (matches the per-call behaviour of requests.get).
+_session.headers["Connection"] = "close"
 _session.mount("https://", _LegacyTLSAdapter())
 
 
