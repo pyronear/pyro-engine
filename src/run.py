@@ -29,6 +29,10 @@ def main(args):
 
     setup_logging()
     logger.info("Starting engine with %s", vars(args))
+    # The heartbeat lives on the persisted data mount: a stale file from a previous run
+    # must not report this boot as healthy before the first real capture.
+    if args.heartbeat_file:
+        pathlib.Path(args.heartbeat_file).unlink(missing_ok=True)
     api_url = os.environ.get("API_URL")
     assert isinstance(api_url, str)
     cam_user = os.environ.get("CAM_USER")
