@@ -1,5 +1,5 @@
 # ---- Builder: only used for git-based deps (needs git) ----
-FROM python:3.11.13-slim-bullseye AS git-deps
+FROM python:3.11.13-slim-bookworm AS git-deps
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git \
@@ -12,7 +12,7 @@ COPY ./requirements-git.txt /tmp/requirements-git.txt
 RUN uv pip install --no-cache --target=/tmp/git-packages -r /tmp/requirements-git.txt
 
 # ---- Runtime ----
-FROM python:3.11.13-slim-bullseye
+FROM python:3.11.13-slim-bookworm
 
 ENV LANG="C.UTF-8" \
     PYTHONUNBUFFERED=1 \
