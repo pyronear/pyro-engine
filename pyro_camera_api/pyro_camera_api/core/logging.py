@@ -10,6 +10,8 @@ import logging
 import os
 import sys
 
+from pyro_camera_api.utils.redact import RedactSecretsFilter
+
 
 def setup_logging() -> None:
     """
@@ -24,10 +26,14 @@ def setup_logging() -> None:
     level = getattr(logging, level_name, logging.INFO)
 
     # force=True clears existing handlers (FastAPI reload, uvicorn own config)
+    handler = logging.StreamHandler(sys.stdout)
+    # Credentials are scrubbed at the handler so lines relayed from subprocesses
+    # (ffmpeg stderr) and third-party loggers are covered too, not only our own calls.
+    handler.addFilter(RedactSecretsFilter())
     logging.basicConfig(
         level=level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[handler],
         force=True,
     )
 
