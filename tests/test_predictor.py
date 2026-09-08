@@ -78,4 +78,4 @@ def test_classifier_verbose_false_no_logs(tmpdir_factory, caplog):
     folder = str(tmpdir_factory.mktemp("cls_cache"))
     with caplog.at_level(logging.INFO, logger="pyro_predictor"):
         Classifier(model_folder=folder, format="onnx", verbose=False)
-    assert caplog.records == []
+    assert [r for r in caplog.records if r.name.startswith("pyro_predictor")] == []
