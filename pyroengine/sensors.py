@@ -5,6 +5,7 @@
 
 import logging
 import pathlib
+import ssl
 import time
 from io import BytesIO
 from typing import Any, List, Optional
@@ -14,6 +15,7 @@ import numpy as np
 import requests
 import urllib3
 from PIL import Image
+from requests.adapters import HTTPAdapter
 
 __all__ = ["ReolinkCamera"]
 
@@ -21,6 +23,24 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+class _LegacyTLSAdapter(HTTPAdapter):
+    """Old Reolink firmwares only offer RSA-key-exchange TLS ciphers, which
+    Python 3.10+ dropped from its default cipher list: restore OpenSSL's own."""
+
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        ctx.options |= 0x4  # ssl.OP_LEGACY_SERVER_CONNECT, named only in Python 3.12+
+        kwargs["ssl_context"] = ctx
+        super().init_poolmanager(*args, **kwargs)
+
+
+_session = requests.Session()
+_session.mount("https://", _LegacyTLSAdapter())
 
 
 class ReolinkCamera:
@@ -110,7 +130,7 @@ class ReolinkCamera:
         logger.debug("Start capture")
 
         try:
-            response = requests.get(url, verify=False, timeout=timeout)  # nosec: B501
+            response = _session.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
                 image_data = BytesIO(response.content)
                 return Image.open(image_data).convert("RGB")
@@ -136,7 +156,7 @@ class ReolinkCamera:
                 "param": {"channel": 0, "op": operation, "id": idx, "speed": speed},
             }
         ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = _session.post(url, json=data, verify=False)  # nosec: B501
         self._handle_response(response, "PTZ operation successful.")
 
     def move_in_seconds(
@@ -172,7 +192,7 @@ class ReolinkCamera:
         """
         url = self._build_url("GetPtzPreset")
         data: Any = [{"cmd": "GetPtzPreset", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = _session.post(url, json=data, verify=False)  # nosec: B501
         response_data = self._handle_response(response, "Presets retrieved successfully.")
         if response_data and response_data[0]["code"] == 0:
             return response_data[0].get("value", {}).get("PtzPreset", [])
@@ -206,20 +226,20 @@ class ReolinkCamera:
                 "param": {"PtzPreset": {"channel": 0, "enable": 1, "id": idx, "name": name}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)  # nosec: B501
+        response = _session.post(url, json=data, verify=False)  # nosec: B501
         # Utilizing the shared response handling method
         self._handle_response(response, f"Preset {name} set successfully.")
 
     def reboot_camera(self):
         url = self._build_url("Reboot")
         data = [{"cmd": "Reboot"}]
-        response = requests.post(url, json=data, verify=False)
+        response = _session.post(url, json=data, verify=False)
         return self._handle_response(response, "Camera reboot initiated successfully.")
 
     def get_auto_focus(self):
         url = self._build_url("GetAutoFocus")
         data: Any = [{"cmd": "GetAutoFocus", "action": 1, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)
+        response = _session.post(url, json=data, verify=False)
         return self._handle_response(response, "Fetched AutoFocus settings successfully.")
 
     def set_auto_focus(self, disable: bool):
@@ -231,7 +251,7 @@ class ReolinkCamera:
                 "param": {"AutoFocus": {"channel": 0, "disable": int(disable)}},
             }
         ]
-        response = requests.post(url, json=data, verify=False)
+        response = _session.post(url, json=data, verify=False)
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
@@ -244,7 +264,7 @@ class ReolinkCamera:
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
                 }
             ]
-            response = requests.post(url, json=data, verify=False)
+            response = _session.post(url, json=data, verify=False)
             return self._handle_response(response, "Started ZoomFocus successfully.")
         return None
 
@@ -264,7 +284,7 @@ class ReolinkCamera:
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "FocusPos"}},
                 }
             ]
-            response = requests.post(url, json=data, verify=False)
+            response = _session.post(url, json=data, verify=False)
             return self._handle_response(response, f"Manual focus set at position {position}")
         return None
 
@@ -272,7 +292,7 @@ class ReolinkCamera:
         """Retrieve the current manual focus and zoom positions."""
         url = self._build_url("GetZoomFocus")
         data: Any = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
-        response = requests.post(url, json=data, verify=False)
+        response = _session.post(url, json=data, verify=False)
         result = self._handle_response(response, "Got zoom/focus values")
         if result and result[0]["code"] == 0:
             zoom_focus = result[0]["value"]["ZoomFocus"]
