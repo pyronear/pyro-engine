@@ -13,3 +13,5 @@ def test_https_session_offers_rsa_key_exchange_ciphers():
     ctx = adapter.poolmanager.connection_pool_kw["ssl_context"]
     names = {c["name"] for c in ctx.get_ciphers()}
     assert "AES128-GCM-SHA256" in names
+    # Proxy env vars must not reroute camera calls around the TLS adapter
+    assert not _session.trust_env

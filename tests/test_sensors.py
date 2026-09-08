@@ -247,3 +247,15 @@ def test_focus_finder_success():
 
     assert isinstance(best_focus, int)
     assert best_focus == 724  # Peak sharpness
+
+
+def test_https_session_offers_rsa_key_exchange_ciphers():
+    from pyroengine.sensors import _session
+
+    adapter = _session.get_adapter("https://192.168.99.99")
+    ctx = adapter.poolmanager.connection_pool_kw["ssl_context"]
+    names = {c["name"] for c in ctx.get_ciphers()}
+    # RSA key exchange, dropped from Python 3.10+ defaults but required by old Reolink firmwares
+    assert "AES128-GCM-SHA256" in names
+    # Proxy env vars must not reroute camera calls around the TLS adapter
+    assert not _session.trust_env
