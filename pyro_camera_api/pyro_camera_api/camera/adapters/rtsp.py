@@ -15,19 +15,9 @@ import numpy as np
 from PIL import Image
 
 from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.utils.redact import redact_url as _safe_url
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_url(u: str) -> str:
-    try:
-        if "://" in u and "@" in u:
-            scheme, rest = u.split("://", 1)
-            after_at = rest.split("@", 1)[1]
-            return f"{scheme}://***:***@{after_at}"
-    except Exception as exc:
-        logger.debug("Could not redact credentials from URL: %s", exc)
-    return u
 
 
 class RTSPCamera(BaseCamera):

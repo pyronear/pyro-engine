@@ -13,6 +13,7 @@ services:
       CAM_PWD: ${CAM_PWD}
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
       ENABLE_STUCK_DETECTOR: ${ENABLE_STUCK_DETECTOR:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
     restart: always
@@ -39,20 +40,25 @@ services:
       API_URL: ${API_URL}
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
-    command: >
-      sh -c '
-        truncate -s 0 engine.log &&
-        python run.py 2>&1 | tee -a engine.log
-      '
+    # The json-file driver below is the single rotated log sink; nothing reads a log
+    # file inside the container anymore.
+    command: python run.py
     restart: always
     network_mode: host
     healthcheck:
-      test: ["CMD-SHELL", "grep -q 'confidence\\|Nighttime detected' engine.log || exit 1"]
+      # Liveness comes from the heartbeat file, touched only on real progress (a
+      # successful capture, night sleep, autofocus on a responsive camera), so a blind
+      # engine goes unhealthy while LOG_LEVEL changes cannot affect the verdict.
+      # 10 min tolerates the slowest legitimate gaps (hourly autofocus with unreachable
+      # cameras at 2 min each, long alert-cache flushes on a slow uplink).
+      test: ["CMD-SHELL", "[ -n \"$$(find data/heartbeat -mmin -10 2>/dev/null)\" ] || exit 1"]
       interval: 30s
       retries: 3
-      start_period: 20s
+      # Covers the first-boot model download plus the camera API and first-frame waits.
+      start_period: 300s
       timeout: 5s
     logging:
       driver: json-file

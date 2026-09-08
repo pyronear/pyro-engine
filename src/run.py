@@ -16,18 +16,23 @@ from pyroclient import client
 
 from pyroengine import SystemController
 from pyroengine.engine import Engine
+from pyroengine.logs import setup_logging
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
 
 
 def main(args):
-    print(args)
-
     # .env loading
     load_dotenv(".env")
+
+    setup_logging()
+    logger.info("Starting engine with %s", vars(args))
+    # The heartbeat lives on the persisted data mount: a stale file from a previous run
+    # must not report this boot as healthy before the first real capture.
+    if args.heartbeat_file:
+        pathlib.Path(args.heartbeat_file).unlink(missing_ok=True)
     api_url = os.environ.get("API_URL")
     assert isinstance(api_url, str)
     cam_user = os.environ.get("CAM_USER")
@@ -83,7 +88,12 @@ def main(args):
         save_detections_frames=args.save_detections_frames,
     )
 
-    sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
+    sys_controller = SystemController(
+        engine,
+        camera_data,
+        args.pyro_camera_api_url,
+        heartbeat_file=args.heartbeat_file,
+    )
 
     sys_controller.main_loop(args.period, args.send_alerts)
 
@@ -103,6 +113,12 @@ if __name__ == "__main__":
     parser.add_argument("--pyro_camera_api_url", type=str, default="http://127.0.0.1:8081", help="Camera api url")
     parser.add_argument("--creds", type=str, default="data/credentials.json", help="Camera credentials")
     parser.add_argument("--cache", type=str, default="./data", help="Cache folder")
+    parser.add_argument(
+        "--heartbeat-file",
+        type=str,
+        default="data/heartbeat",
+        help="File refreshed on every loop, used by the container healthcheck",
+    )
     parser.add_argument(
         "--frame-size",
         type=tuple,

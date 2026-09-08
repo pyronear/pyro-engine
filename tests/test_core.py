@@ -1,4 +1,6 @@
+import logging
 import pathlib
+from collections import defaultdict
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +21,10 @@ def fast_sleep(monkeypatch):
 @pytest.fixture
 def mock_engine():
     engine = MagicMock()
-    engine.predict.return_value = None
+    engine.predict.return_value = 0.0
+    engine.conf_thresh = 0.25
+    # The summary reads the predictor's per-camera verdict, not the raw confidence.
+    engine._states = defaultdict(lambda: {"ongoing": False})
     return engine
 
 
@@ -81,6 +86,42 @@ def test_inference_loop_triggers_predict(mock_client_class, mock_engine, mock_ca
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_quiet_round_logs_single_line(mock_client_class, mock_engine, mock_camera_data, caplog):
+    """A round with no detection reports one INFO summary, not one line per pose."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.inference_loop()
+
+    info_lines = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert len(info_lines) == 1
+    assert "analyzed=2" in info_lines[0]
+    assert "positive=0" in info_lines[0]
+    assert "max_confidence" in info_lines[0]
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_summary_counts_failures(mock_client_class, mock_engine, mock_camera_data, caplog):
+    """Poses that fail to capture are reported in the round summary."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.side_effect = Exception("camera down")
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.inference_loop()
+
+    summary = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO][-1]
+    assert "analyzed=0" in summary
+    assert "failed=2" in summary
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
@@ -109,6 +150,71 @@ def test_inference_loop_handles_generic_error(mock_client_class, mock_engine, mo
 
     assert mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_heartbeat_file_is_written(mock_client_class, mock_engine, mock_camera_data, tmp_path):
+    """The healthcheck relies on this file, so it must be refreshed independently of log level."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    heartbeat = tmp_path / "heartbeat"
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url", heartbeat_file=str(heartbeat))
+    heartbeat.unlink(missing_ok=True)
+
+    controller.inference_loop()
+
+    assert heartbeat.exists()
+    assert heartbeat.read_text()
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_heartbeat_not_written_when_no_capture_succeeds(mock_client_class, mock_engine, mock_camera_data, tmp_path):
+    """A blind engine must go stale so the healthcheck reports it, not stay fresh."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = None
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    heartbeat = tmp_path / "heartbeat"
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url", heartbeat_file=str(heartbeat))
+    heartbeat.unlink(missing_ok=True)
+
+    controller.inference_loop()
+
+    assert not heartbeat.exists()
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_summary_counts_ongoing_events_as_positive(mock_client_class, mock_engine, mock_camera_data, caplog):
+    """The positive count follows the predictor's hysteresis verdict, not the raw threshold."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    # Ongoing event whose confidence dipped below conf_thresh: still a positive.
+    mock_engine.predict.return_value = 0.22
+    mock_engine._states = defaultdict(lambda: {"ongoing": True})
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.inference_loop()
+
+    summary = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO][-1]
+    assert "positive=2" in summary
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_heartbeat_write_failure_does_not_raise(mock_client_class, mock_engine, mock_camera_data, tmp_path):
+    """A broken heartbeat path must not stop detection."""
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    unwritable = tmp_path / "missing_dir" / "heartbeat"
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url", heartbeat_file=str(unwritable))
+
+    controller._write_heartbeat()  # must not raise
+    assert not unwritable.exists()
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
