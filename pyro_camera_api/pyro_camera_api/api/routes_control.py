@@ -73,6 +73,8 @@ _DEFAULT_ADAPTER = "reolink-823S2"
 # path, where FOV at zoom ratio Z derives optically: fov(Z) = 2·atan(tan(fov0/2)/Z).
 # linovision: IPTZ544D-25X datasheet (H 55°-2.4°, V 33°-1.4°, 25x) — the tele
 # end matches the formula exactly, so no per-zoom FOV table is needed.
+# Adapters may instead expose a ``wide_fov_deg`` attribute (Hikvision does, so
+# the value can be set per camera in credentials.json); that takes precedence.
 WIDE_FOV = {"linovision": (55.0, 33.0)}
 
 
@@ -203,10 +205,14 @@ def click_to_move(
             except Exception as exc:
                 logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
 
-            # Match aliases the same way the registry does ("hikvision" and any
-            # case/model variant of "linovision" instantiate LinovisionCamera).
+            # Adapters that know their own optics win; otherwise match aliases
+            # the same way the registry does (any case/model variant of
+            # "linovision" instantiates LinovisionCamera).
             raw_adapter = str(conf.get("adapter", "")).lower()
-            if "linovision" in raw_adapter or "hikvision" in raw_adapter:
+            cam_wide_fov = getattr(cam, "wide_fov_deg", None)
+            if cam_wide_fov:
+                h0, v0 = float(cam_wide_fov[0]), float(cam_wide_fov[1])
+            elif "linovision" in raw_adapter:
                 h0, v0 = WIDE_FOV["linovision"]
             else:
                 h0, v0 = fov_at_zoom(0, adapter)

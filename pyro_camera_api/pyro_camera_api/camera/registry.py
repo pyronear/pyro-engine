@@ -13,6 +13,7 @@ import threading
 from collections import defaultdict
 from typing import Dict, Optional
 
+from pyro_camera_api.camera.adapters.hikvision import HikvisionCamera
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
@@ -80,7 +81,8 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Build the appropriate camera object based on configuration.
 
     Expected keys in conf:
-      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "rtsp", "url",
+      adapter:  "reolink-823S2", "reolink-823A16", "linovision", "hikvision",
+                "rtsp", "url",
                 "rest" (alias "api"), "mock".
                 Generic "reolink" is still accepted by the registry (it builds
                 a ReolinkCamera from any string containing "reolink"), but the
@@ -113,8 +115,32 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered Reolink camera %s", key)
         return cam
 
+    # Hikvision ISAPI cameras (validated on DS-2DE7A432IWG1-E)
+    if "hikvision" in adapter:
+        cam = HikvisionCamera(
+            camera_id=key,
+            ip_address=ip_addr,
+            username=conf.get("username", CAM_USER or ""),
+            password=conf.get("password", CAM_PWD or ""),
+            cam_type=cam_type,
+            cam_poses=conf.get("poses", []),
+            cam_azimuths=conf.get("azimuths", []),
+            protocol=conf.get("protocol", "http"),
+            verify_tls=conf.get("verify_tls", False),
+            snapshot_channel=conf.get("snapshot_channel", "101"),
+            ptz_channel=conf.get("ptz_channel", "1"),
+            focus_position=conf.get("focus_position"),
+            timeout=conf.get("timeout", 3.0),
+            azimuth_offset_deg=conf.get("azimuth_offset_deg", conf.get("azimuth_offset", 0.0)),
+            default_elevation_deg=conf.get("default_elevation_deg", 0.0),
+            zoom_max=conf.get("zoom_max", 32.0),
+            wide_fov_deg=tuple(conf.get("wide_fov_deg", (57.6, 34.5))),
+        )
+        logger.info("Registered Hikvision camera %s", key)
+        return cam
+
     # Linovision / ISAPI cameras
-    if "linovision" in adapter or "hikvision" in adapter:
+    if "linovision" in adapter:
         cam = LinovisionCamera(
             camera_id=key,
             ip_address=ip_addr,

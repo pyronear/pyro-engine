@@ -4,6 +4,10 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import math
+
+import pytest
+
 from pyro_camera_api.api.routes_control import click_to_move
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
@@ -54,3 +58,67 @@ def test_click_to_move_relative_hardware_path(monkeypatch):
     assert d_az > 0  # click right → pan right → azimuth increases
     assert d_el < 0  # click above center → camera looks up → elevation decreases (0 = horizon, 90 = down)
     assert result["moves"][0]["mode"] == "relative"
+
+
+def test_click_to_move_uses_the_adapter_wide_fov(monkeypatch):
+    # Hikvision advertises its own optics via wide_fov_deg, which must win over
+    # the linovision table and the reolink calibration.
+    from unittest.mock import MagicMock
+
+    from pyro_camera_api.api.routes_control import WIDE_FOV
+    from pyro_camera_api.camera.adapters.hikvision import HikvisionCamera
+    from pyro_camera_api.core.config import RAW_CONFIG
+
+    ip = "203.0.113.11"
+    cam = HikvisionCamera(
+        camera_id=ip,
+        ip_address=ip,
+        username="admin",
+        password="pwd",  # noqa: S106
+        cam_type="ptz",
+        wide_fov_deg=(57.6, 34.5),
+        disable_osd=False,
+    )
+    cam.get_ptz_status = MagicMock(return_value={"azimuth_deg": 100.0, "elevation_deg": 5.0, "zoom_ratio": 1.0})
+    cam.move_relative_deg = MagicMock(return_value={"azimuth_deg": 100.0, "elevation_deg": 5.0})
+    monkeypatch.setitem(CAMERA_REGISTRY, ip, cam)
+    monkeypatch.setitem(RAW_CONFIG, ip, {"adapter": "hikvision"})
+
+    result = click_to_move(camera_ip=ip, click_x=1.0, click_y=0.5)
+
+    assert result["status"] == "ok"
+    # At 1x the horizontal FOV is the datasheet wide end, not linovision's 55°.
+    assert result["h_fov"] == pytest.approx(57.6)
+    assert result["h_fov"] != pytest.approx(WIDE_FOV["linovision"][0])
+    # A click on the right edge pans by half the FOV.
+    d_az, _ = cam.move_relative_deg.call_args[0]
+    assert d_az == pytest.approx(57.6 / 2)
+
+
+def test_click_to_move_hikvision_fov_shrinks_with_zoom(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from pyro_camera_api.camera.adapters.hikvision import HikvisionCamera
+    from pyro_camera_api.core.config import RAW_CONFIG
+
+    ip = "203.0.113.12"
+    cam = HikvisionCamera(
+        camera_id=ip,
+        ip_address=ip,
+        username="admin",
+        password="pwd",  # noqa: S106
+        cam_type="ptz",
+        wide_fov_deg=(57.6, 34.5),
+        disable_osd=False,
+    )
+    cam.get_ptz_status = MagicMock(return_value={"azimuth_deg": 0.0, "elevation_deg": 0.0, "zoom_ratio": 8.0})
+    cam.move_relative_deg = MagicMock(return_value={"azimuth_deg": 0.0, "elevation_deg": 0.0})
+    monkeypatch.setitem(CAMERA_REGISTRY, ip, cam)
+    monkeypatch.setitem(RAW_CONFIG, ip, {"adapter": "hikvision"})
+
+    result = click_to_move(camera_ip=ip, click_x=0.75, click_y=0.5)
+
+    # fov(8x) = 2*atan(tan(57.6°/2)/8); the route rounds to 3 decimals.
+    expected = math.degrees(2 * math.atan(math.tan(math.radians(57.6) / 2) / 8))
+    assert result["h_fov"] == pytest.approx(expected, abs=1e-3)
+    assert result["h_fov"] < 8.0
