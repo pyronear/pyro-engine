@@ -9,7 +9,10 @@ from pyroengine.sensors import ReolinkCamera
 
 def test_reolinkcamera_connect_timeout():
     # Mock the requests.get method to raise a ConnectTimeout exception
-    with patch("requests.get", side_effect=ConnectTimeout), patch("requests.post"):
+    with (
+        patch("pyroengine.sensors._session.get", side_effect=ConnectTimeout),
+        patch("pyroengine.sensors._session.post"),
+    ):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "static")
         result = camera.capture()
         # Assert that the capture method returns None when a ConnectTimeout occurs
@@ -25,7 +28,10 @@ def test_reolinkcamera_success(mock_wildfire_stream):
     mock_post.status_code = 200
     mock_post.json.return_value = [{"code": 0}]
 
-    with patch("requests.get", return_value=mock_get), patch("requests.post", return_value=mock_post):
+    with (
+        patch("pyroengine.sensors._session.get", return_value=mock_get),
+        patch("pyroengine.sensors._session.post", return_value=mock_post),
+    ):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "static")
         result = camera.capture()
         assert isinstance(result, Image.Image)
@@ -37,7 +43,7 @@ def test_move_camera_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         camera.move_camera("Left", speed=2, idx=1)
         # Assert that a successful operation logs the correct message
@@ -50,7 +56,7 @@ def test_move_camera_failure():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 1, "error": "Some error"}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         camera.move_camera("Left", speed=2, idx=1)
         # Assert that a failed operation logs an error message
@@ -63,7 +69,7 @@ def test_get_ptz_preset_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         presets = camera.get_ptz_preset()
         # Assert that the get_ptz_preset method returns the correct presets
@@ -76,7 +82,7 @@ def test_set_ptz_preset_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         camera.set_ptz_preset(idx=1)
         # Assert that the set_ptz_preset method was called successfully
@@ -89,7 +95,7 @@ def test_set_ptz_preset_no_slots():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0, "value": {"PtzPreset": [{"id": 1, "name": "preset1", "enable": 1}]}}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         with pytest.raises(ValueError, match=r"No available slots for new presets\."):
             camera.set_ptz_preset()
@@ -102,7 +108,7 @@ def test_move_in_seconds():
     mock_response.json.return_value = [{"code": 0}]
 
     with (
-        patch("requests.post", return_value=mock_response),
+        patch("pyroengine.sensors._session.post", return_value=mock_response),
         patch.object(ReolinkCamera, "move_camera") as mock_move_camera,
     ):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
@@ -118,7 +124,7 @@ def test_reboot_camera_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "static")
         response = camera.reboot_camera()
         # Assert that the reboot_camera method was called successfully
@@ -132,7 +138,7 @@ def test_get_auto_focus_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0, "value": {"AutoFocus": [{"channel": 0, "disable": 0}]}}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "static")
         response = camera.get_auto_focus()
         # Assert that the get_auto_focus method returns the correct data
@@ -145,7 +151,7 @@ def test_set_auto_focus_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "static")
         response = camera.set_auto_focus(disable=True)
         # Assert that the set_auto_focus method was called successfully
@@ -159,7 +165,7 @@ def test_start_zoom_focus_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "login", "pwd", "ptz")
         response = camera.start_zoom_focus(position=100)
         # Assert that the start_zoom_focus method was called successfully
@@ -172,7 +178,7 @@ def test_set_manual_focus_success():
     mock_response.status_code = 200
     mock_response.json.return_value = [{"code": 0}]
 
-    with patch("requests.post", return_value=mock_response) as mock_post:
+    with patch("pyroengine.sensors._session.post", return_value=mock_response) as mock_post:
         camera = ReolinkCamera("192.168.99.99", "user", "pass")
         response = camera.set_manual_focus(position=300)
 
@@ -191,7 +197,7 @@ def test_get_focus_level_success():
         }
     ]
 
-    with patch("requests.post", return_value=mock_response):
+    with patch("pyroengine.sensors._session.post", return_value=mock_response):
         camera = ReolinkCamera("192.168.99.99", "user", "pass")
         result = camera.get_focus_level()
 
