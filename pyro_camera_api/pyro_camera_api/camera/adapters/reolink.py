@@ -71,6 +71,49 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 len(self.cam_poses),
                 len(self.cam_azimuths),
             )
+        self._has_motorised_lens: Optional[bool] = None
+
+    def _probe_zoom_support(self) -> Optional[bool]:
+        """Ask the camera whether it reports a zoom position.
+
+        Returns None whenever the probe is inconclusive, so the caller can
+        distinguish transport, HTTP, and Reolink API failures from a successful
+        response that establishes whether a zoom position is available.
+        """
+        try:
+            response = requests.post(
+                self._build_url("GetZoomFocus"),
+                json=[{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}],
+                verify=False,  # nosec: B501
+            )
+        except Exception as exc:
+            logger.warning("[%s] lens probe could not reach the camera: %s", self.ip_address, exc)
+            return None
+        if response.status_code != 200:
+            logger.warning("[%s] lens probe got HTTP %s", self.ip_address, response.status_code)
+            return None
+        payload = response.json()
+        if payload[0].get("code") != 0:
+            logger.warning("[%s] lens probe was rejected by the camera", self.ip_address)
+            return None
+        return payload[0]["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
+
+    def has_motorised_lens(self) -> bool:
+        """Whether this camera's lens can be driven.
+
+        ``cam_type`` describes how the camera is mounted, not what optics it
+        carries. A "static" camera is one that does not pan or tilt, which says
+        nothing about zoom: Reolink bullets such as the RLC-811A or the P430 sit
+        fixed on their mast and still ship a motorised varifocal lens.
+
+        A definitive answer from a successful response is cached, since a lens
+        cannot grow a motor at runtime and zoom commands are frequent. Failed
+        probes are retried so one transient error cannot strand a capable camera
+        until the service restarts.
+        """
+        if self._has_motorised_lens is None:
+            self._has_motorised_lens = self._probe_zoom_support()
+        return self._has_motorised_lens is True
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -232,7 +275,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             url = self._build_url("StartZoomFocus")
             data: Any = [
                 {
@@ -249,7 +292,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         Set manual focus to a specific position.
         """
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             self.focus_position = position
             url = self._build_url("StartZoomFocus")
             data: Any = [
@@ -321,7 +364,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 image.save(f"{folder}/focus_{pos}.jpg")
             return score_local
 
-        if self.cam_type == "static":
+        if not self.has_motorised_lens():
             return 720
 
         # set_manual_focus records every probed position in focus_position, so
