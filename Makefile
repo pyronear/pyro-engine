@@ -37,6 +37,12 @@ build-api:
 	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 
 # Build the engine Docker image
+build-temporal:
+	cd pyro_temporal_api && \
+		uv lock && \
+		uv export --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements.txt
+	docker build -f pyro_temporal_api/Dockerfile pyro_temporal_api -t pyronear/pyro-temporal-api:latest
+
 build-app:
 	docker build . -t pyronear/pyro-engine:latest
 
@@ -53,7 +59,7 @@ run:
 	docker compose up -d
 
 # Build images locally and run the stack
-run_local: build-api build-app
+run_local: build-api build-temporal build-app
 	docker compose up -d
 
 # Get log from engine wrapper

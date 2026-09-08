@@ -30,6 +30,29 @@ services:
         max-file: "5"
 
 
+  pyro-temporal-api:
+    build:
+      context: ./pyro_temporal_api
+    image: pyronear/pyro-temporal-api:${PYRO_ENGINE_VERSION:-latest}
+    container_name: pyro-temporal-api
+    environment:
+      TEMPORAL_MODEL_PATH: ${TEMPORAL_MODEL_PATH:-data/model_onnx.zip}
+    volumes:
+      - ./data:/usr/src/app/data
+    restart: always
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/health || exit 1"]
+      interval: 30s
+      retries: 3
+      start_period: 30s
+      timeout: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
   engine:
     build:
       context: ./engine
@@ -39,6 +62,7 @@ services:
       API_URL: ${API_URL}
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
+      TEMPORAL_API_URL: ${TEMPORAL_API_URL:-}
     volumes:
       - ./data:/usr/src/app/data
     command: >

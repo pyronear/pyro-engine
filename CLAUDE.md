@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PyroEngine is a wildfire detection system for edge devices (Raspberry Pi, etc.). It has two main packages:
+PyroEngine is a wildfire detection system for edge devices (Raspberry Pi, etc.). It has three packages:
 
 - **`pyroengine/`** — Core detection engine: runs YOLO model inference on camera images, manages alert states, communicates with the PyroNear API.
 - **`pyro_camera_api/`** — FastAPI service: unified REST interface for controlling heterogeneous cameras (Reolink, Linovision/Hikvision, RTSP, HTTP URL, generic REST/JSON snapshot API).
+- **`pyro_temporal_api/`** — Optional FastAPI service: validates ongoing alerts with the temporal smoke model (`pyronear/temporal-model`, ONNX runtime, no torch) before the engine sends them to the PyroNear API.
 
-These two services run as separate Docker containers and communicate over localhost (host network mode). The engine calls the camera API to capture frames and manage PTZ patrols.
+These services run as separate Docker containers and communicate over localhost (host network mode). The engine calls the camera API to capture frames and manage PTZ patrols.
 
 ## Common Commands
 
@@ -81,6 +82,10 @@ pytest tests/test_engine.py -v
 
 For each `cam_id`, the engine periodically fetches a JSON file at `{bbox_mask_url}_{pose_id}.json` from a remote URL to get a dict of bounding boxes marking permanently occluded regions. Predictions with IoU > 0.1 against any occlusion box are dropped before confidence scoring.
 
+### Temporal validation (optional)
+
+When `TEMPORAL_API_URL` is set, `Engine` keeps the last `temporal_window` (10) inference JPEGs and their YOLO boxes per `cam_id`. Once an alert is ongoing, `Engine._temporal_gate` submits that window to `pyro_temporal_api` (`POST /jobs`, returns immediately) and reads the verdict on the next round (`GET /jobs/{id}`). Frames are only staged for upload after a positive verdict; a negative verdict resubmits the window with the new frame; a pending job holds the alert one more round. Service errors fail open (alert sent unvalidated). The service loads `data/model_onnx.zip` (`TEMPORAL_MODEL_PATH`), exported from a temporal-model release with `temporal-export-onnx`.
+
 ### Stream-awareness
 
 `SystemController.inference_loop` calls `_any_stream_active()` before and during every camera loop. If an active RTSP/SRT pipeline is detected (via `/stream/status`), the entire inference pass is skipped to avoid interfering with live streaming.
@@ -91,7 +96,7 @@ Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max
 
 ### Environment Variables (`.env`)
 
-Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`.
+Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `TEMPORAL_API_URL` (e.g. `http://localhost:8082`, unset = no temporal validation), `TEMPORAL_MODEL_PATH`.
 
 ### Legacy direct-camera module
 
