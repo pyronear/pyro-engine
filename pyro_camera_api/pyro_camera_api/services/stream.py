@@ -49,6 +49,25 @@ def set_app_for_stream(app: "FastAPI") -> None:
     _APP = app
 
 
+def is_camera_streaming(camera_id: str, app: Optional["FastAPI"] = None) -> bool:
+    """
+    True if a live pipeline or ffmpeg restream is running for this camera.
+
+    Single source of truth for stream-activity checks. Uses the app stored by
+    set_app_for_stream when none is passed, so it works outside request context.
+    """
+    app = app if app is not None else _APP
+    if app is None:
+        return False
+    try:
+        if is_pipeline_running(get_workers(app).get(camera_id)):
+            return True
+        return is_process_running(get_processes(app).get(camera_id))
+    except Exception as exc:
+        logger.debug("Could not check stream state for %s: %s", camera_id, exc)
+        return False
+
+
 def get_workers(app: "FastAPI") -> dict[str, Pipeline]:
     """Return the mapping camera_id -> Pipeline from app.state."""
     return cast(dict[str, Pipeline], getattr(app.state, "stream_workers", {}))

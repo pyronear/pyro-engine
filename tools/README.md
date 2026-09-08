@@ -144,6 +144,17 @@ Repeat steps 3-5 for tilt axis (3 speed levels instead of 5).
 
 ## Important Notes
 
+### Linovision FOV per zoom
+
+Linovision click-to-move does not use the calibrated FOV tables: the FOV at
+zoom ratio Z is derived optically from the datasheet wide-end FOV (55°×33°,
+25x) as `fov(Z) = 2·atan(tan(fov0/2)/Z)`, with Z read back from the camera's
+PTZ status (`absoluteZoom` is in tenths: 10 = 1.0x). If mid-zoom clicks ever
+look systematically off, the real curve can be measured on the installed
+camera with a printed QR code: anchor the absolute FOV via the hardware
+azimuth readback plus the QR pixel shift after a small pan, then chain the QR
+apparent sizes across zoom levels.
+
 ### Zoom-speed limitation
 
 Reolink cameras internally cap PTZ speed when zoomed in. All speeds collapse to ~1.5 deg/s at zoom > 0. Only speed 1 is useful when zoomed in. See `ptz_zoom_speed_calibration_report.md` for research data.

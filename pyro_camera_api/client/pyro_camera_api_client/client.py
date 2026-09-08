@@ -199,7 +199,11 @@ class PyroCameraAPIClient:
         if duration is not None:
             params["duration"] = duration
 
-        resp = self._request("POST", "/control/move", params=params)
+        # Preset moves block server-side while the camera travels (lock hold),
+        # and duration/degrees modes sleep for the move time: use a timeout
+        # that covers the longest server-side wait.
+        req_timeout = self.timeout if (pose_id is None and duration is None and degrees is None) else 30.0
+        resp = self._request("POST", "/control/move", params=params, timeout=req_timeout)
         return resp.json()
 
     # ------------------------------------------------------------------
@@ -207,9 +211,13 @@ class PyroCameraAPIClient:
     # ------------------------------------------------------------------
 
     def goto_preset(self, camera_ip: str, pose_id: int, speed: int = 50) -> Dict[str, Any]:
-        """Move to a configured preset pose. Returns immediately."""
+        """Move to a configured preset pose.
+
+        Blocks until the camera has settled: the server holds the per-camera
+        lock while fire-and-forget adapters (Reolink) travel to the pose.
+        """
         params = {"camera_ip": camera_ip, "pose_id": pose_id, "speed": speed}
-        resp = self._request("POST", "/control/goto_preset", params=params)
+        resp = self._request("POST", "/control/goto_preset", params=params, timeout=30.0)
         return resp.json()
 
     def start_move(self, camera_ip: str, direction: str, speed: int = 10) -> Dict[str, Any]:
@@ -280,6 +288,23 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/control/click_to_move", params=params, timeout=30.0)
         return resp.json()
 
+    def get_azimuth(self, camera_ip: str) -> Dict[str, Any]:
+        """Return the camera's current real-world azimuth.
+
+        Response: {"camera_ip", "azimuth_deg" (null when unknown),
+        "source" ("hardware" or "tracked"), "moving", "zoom",
+        "h_fov_deg" (calibrated horizontal FOV at the current zoom)}.
+
+        When "moving" is true and "source" is "tracked", "azimuth_deg" is the
+        destination of the in-flight preset move rather than the current
+        position ("hardware" reads back the actual mid-travel position).
+        "moving" only reflects the server-side PTZ lock, so a camera moving
+        under patrol reports false.
+        """
+        params = {"camera_ip": camera_ip}
+        resp = self._request("GET", "/control/azimuth", params=params)
+        return resp.json()
+
     def get_speed_tables(self, camera_ip: str) -> Dict[str, Any]:
         params = {"camera_ip": camera_ip}
         resp = self._request("GET", "/control/speed_tables", params=params)
@@ -302,7 +327,8 @@ class PyroCameraAPIClient:
         return resp.json()
 
     def zoom(self, camera_ip: str, level: int) -> Dict[str, Any]:
-        resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}")
+        # The server holds the per-camera lock while the zoom settles (~2-10 s).
+        resp = self._request("POST", f"/control/zoom/{camera_ip}/{level}", timeout=30.0)
         return resp.json()
 
     def reboot_camera(self, camera_ip: str) -> Dict[str, Any]:

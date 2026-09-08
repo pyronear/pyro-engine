@@ -21,6 +21,7 @@ from pyro_camera_api.api.routes_health import router as health_router
 from pyro_camera_api.api.routes_patrol import router as patrol_router
 from pyro_camera_api.api.routes_stream import router as stream_router
 from pyro_camera_api.camera.patrol import patrol_loop, static_loop
+from pyro_camera_api.camera.pose_azimuths import azimuth_sync_loop
 from pyro_camera_api.camera.registry import (
     CAMERA_REGISTRY,
     PATROL_FLAGS,
@@ -92,9 +93,16 @@ async def lifespan(app: FastAPI):
 
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
+    # Resolve pose azimuths from the platform API in the background (retries
+    # until the API is reachable; azimuth stays unknown in the meantime).
+    azimuth_sync_stop = threading.Event()
+    threading.Thread(target=azimuth_sync_loop, args=(azimuth_sync_stop,), daemon=True).start()
+
     try:
         yield
     finally:
+        azimuth_sync_stop.set()
+
         for cam_id, flag in PATROL_FLAGS.items():
             logger.info("Stopping loop for camera %s", cam_id)
             flag.set()

@@ -10,7 +10,7 @@ import logging
 import time
 import xml.etree.ElementTree as ET
 from io import BytesIO
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import requests
 import urllib3
@@ -37,6 +37,8 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
       camera_command_az = (real_az + azimuth_offset_deg) % 360
     """
 
+    azimuth_source = "hardware"
+
     def __init__(
         self,
         camera_id: str,
@@ -45,7 +47,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         cam_type: str = "ptz",
         cam_poses: Optional[List[int]] = None,
-        cam_azimuths: Optional[List[int]] = None,
+        cam_azimuths: Optional[List[float]] = None,
         protocol: str = "http",
         verify_tls: bool = False,
         snapshot_channel: str = "101",
@@ -190,8 +192,18 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             "azimuth_raw": az10,
             "elevation_raw": el10,
             "zoom_raw": zoom,
+            # ISAPI status values are all in tenths: absoluteZoom=10 means 1.0x.
+            "zoom_ratio": zoom / 10.0 if zoom is not None else None,
             "real_azimuth_deg": self._camera_to_real_azimuth(az10 / 10.0),
         }
+
+    def get_azimuth(self) -> Optional[float]:
+        """Read the current real-world azimuth from the camera's PTZ status."""
+        try:
+            return float(self.get_ptz_status()["real_azimuth_deg"])
+        except Exception as exc:
+            logger.warning("[%s] Failed to read azimuth: %s", self.ip_address, exc)
+            return None
 
     def wait_reached_azimuth_raw(
         self,
@@ -216,7 +228,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         self,
         azimuth_deg: float,
         elevation_deg: Optional[float] = None,
-        zoom: Optional[int] = None,
+        zoom: Optional[float] = None,
         horizontal_speed: float = 64.0,
         vertical_speed: float = 64.0,
         prefer_current_elevation: bool = False,
@@ -244,8 +256,10 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         z = None
         if zoom is not None:
-            # Accept zoom in Reolink-style 0-64 and map to device range
-            z = int(self._clamp(self._map_range(zoom, 0.0, 64.0, 1.0, 25.0), 1.0, 25.0))
+            # zoom is the optical ratio. Asymmetric ISAPI units: the absoluteEx
+            # command takes the ratio directly ([1, 25], camera-enforced), while
+            # the status reports absoluteZoom in tenths (10 = 1.0x).
+            z = self._clamp(float(zoom), 1.0, 25.0)
 
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/absoluteEx"
 
@@ -306,7 +320,22 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         new_el = st["elevation_deg"] + float(delta_elevation_deg)
         new_el = self._clamp(new_el, -10.0, 90.0)
         self.move_absolute(new_az, elevation_deg=new_el)
-        return {"azimuth_deg": new_az, "elevation_deg": new_el}
+        # Wait for both axes (wait_reached_azimuth_raw only tracks azimuth, which
+        # would return immediately on a pure-tilt move). A readback mismatch after
+        # the timeout should not fail the caller: the move was issued.
+        converged = False
+        deadline = time.time() + 10.0
+        while time.time() < deadline:
+            st = self.get_ptz_status()
+            az_err = abs((st["azimuth_deg"] - new_az + 180.0) % 360.0 - 180.0)
+            el_err = abs(st["elevation_deg"] - new_el)
+            if az_err <= 0.2 and el_err <= 0.2:
+                converged = True
+                break
+            time.sleep(0.15)
+        if not converged:
+            logger.warning("[%s] move_relative_deg: position readback did not converge", self.ip_address)
+        return {"azimuth_deg": new_az, "elevation_deg": new_el, "converged": converged}
 
     def move_to_pose(
         self,
@@ -507,10 +536,11 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
     ) -> Optional[dict]:
         """
         Linovision uses absoluteZoom inside PTZ absoluteEx.
-        position is the absoluteZoom value, valid range is usually 1..25 on your device.
+        position is Reolink-style (0-64), mapped to the optical ratio 1-25
+        (25x block, 4.8-120 mm per datasheet) so the API zoom contract stays
+        uniform across adapters.
 
         This method keeps current azimuth and elevation, and only changes zoom.
-        If wait is True, it blocks until zoom_raw equals the requested value.
         """
         if self.cam_type == "static":
             return None
@@ -519,7 +549,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
         az = float(st0["azimuth_deg"])
         el = float(st0["elevation_deg"])
 
-        z = int(self._clamp(float(position), 1.0, 25.0))
+        z = self._clamp(self._map_range(float(position), 0.0, 64.0, 1.0, 25.0), 1.0, 25.0)
 
         self.move_absolute(
             azimuth_deg=az,
@@ -527,11 +557,17 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             zoom=z,
             prefer_current_elevation=True,
         )
-        return {"zoom_raw": z}
+        return {"zoom_raw": int(round(z * 10)), "zoom_ratio": z}
 
-    def focus_finder(self, save_images: bool = False, retry_depth: int = 0) -> int:
+    def focus_finder(
+        self,
+        save_images: bool = False,
+        retry_depth: int = 0,
+        should_abort: Optional[Callable[[], bool]] = None,
+    ) -> int:
         _ = save_images
         _ = retry_depth
+        _ = should_abort
         logger.debug("Focus finder not implemented for Linovision")
         return self.focus_position if self.focus_position is not None else -1
 
