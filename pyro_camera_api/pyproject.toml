@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "FastAPI service to control cameras"
 authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
 readme = "README.md"
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.11,<4.0"
 dependencies = [
     "fastapi>=0.110.0,<0.111",
     "uvicorn[standard]>=0.30.0,<0.31",
