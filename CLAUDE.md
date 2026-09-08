@@ -95,11 +95,11 @@ Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM
 
 ### Logging
 
-Both services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/main.py` calls `core.logging.setup_logging`), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
+Both services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/pyro_camera_api/main.py` calls `core.logging.setup_logging`), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
 
 Convention: camera-scoped messages start with `[cam_id]`, use `%`-style lazy args, and INFO is reserved for events an operator should see (one summary per inference round and per patrol cycle, detections, alerts, failures). Per-pose and per-frame detail belongs at DEBUG.
 
-The engine container healthcheck reads the freshness of the heartbeat file (`--heartbeat-file`, default `data/heartbeat`) refreshed by the main loop, so it is independent of log level and log wording.
+The engine container healthcheck reads the freshness of the heartbeat file (`--heartbeat-file`, default `data/heartbeat`), so it is independent of log level and log wording. The file is deleted at startup and touched only on real progress (successful capture, night sleep, autofocus on a responsive camera): an engine that captures nothing goes unhealthy after the 10 min window.
 
 ### Legacy direct-camera module
 

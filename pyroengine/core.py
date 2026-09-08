@@ -134,6 +134,9 @@ class SystemController:
                         continue
                     pose = poses[-1]
                     if self._safe_get_latest_image(ip, pose) is not None:
+                        # The camera answers, so the 2 min per-camera optimization timeout
+                        # must not read as a dead engine.
+                        self._write_heartbeat()
                         try:
                             self.camera_api_client.stop_patrol(ip)
                             time.sleep(0.5)
@@ -210,19 +213,23 @@ class SystemController:
                     return
 
                 cam_id = f"{ip}_{pose}" if is_ptz else ip
-                # A round over many poses can outlast the healthcheck window on slow hardware.
-                self._write_heartbeat()
                 try:
                     frame = self._safe_get_latest_image(ip, pose)
                     if frame is None:
                         failed += 1
                         continue
                     logger.debug("[%s] Captured image from %s", cam_id, camera_name)
+                    # Written only on real progress, so an engine that captures nothing
+                    # goes stale and the healthcheck reports it instead of a fresh file.
+                    self._write_heartbeat()
                     self.is_day = is_day_time(None, frame, "ir")
                     conf = float(self.engine.predict(frame, cam_id))
                     analyzed += 1
                     max_conf = max(max_conf, conf)
-                    if conf > self.engine.conf_thresh:
+                    # The predictor applies hysteresis (0.8x threshold while an event is
+                    # ongoing), so read its verdict instead of re-deriving the threshold:
+                    # the summary must not say "quiet" while alerts are being staged.
+                    if self.engine._states[cam_id]["ongoing"]:
                         positive += 1
                 except requests.HTTPError as e:
                     failed += 1
@@ -300,7 +307,6 @@ class SystemController:
         """
         while True:
             start_ts = time.time()
-            self._write_heartbeat()
 
             if not self.is_day:
                 for ip in self.camera_data:
@@ -344,4 +350,6 @@ class SystemController:
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)
                 logger.debug("Loop ran in %.2fs, sleeping for %.2fs", loop_time, sleep_time)
-                self._sleep_with_heartbeat(sleep_time)
+                # Plain sleep: liveness during the day comes from successful captures, so a
+                # blind engine must go stale here rather than keep the heartbeat fresh.
+                time.sleep(sleep_time)
