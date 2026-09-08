@@ -1137,6 +1137,7 @@ name = "pyro-predictor"
 version = "1.0.0"
 source = { editable = "pyro-predictor" }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "ncnn" },
     { name = "numpy" },
     { name = "onnxruntime" },
@@ -1147,6 +1148,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.23.1" },
     { name = "ncnn", specifier = "==1.0.20240410" },
     { name = "numpy", specifier = ">=1.26,<3" },
     { name = "onnxruntime", specifier = "==1.22.1" },
@@ -1167,7 +1169,6 @@ dependencies = [
 name = "pyroengine"
 source = { editable = "." }
 dependencies = [
-    { name = "huggingface-hub" },
     { name = "pyro-camera-api-client" },
     { name = "pyro-predictor" },
     { name = "pyroclient" },
@@ -1205,7 +1206,6 @@ quality = [
 
 [package.metadata]
 requires-dist = [
-    { name = "huggingface-hub", specifier = "==0.23.1" },
     { name = "pyro-camera-api-client", editable = "pyro_camera_api/client" },
     { name = "pyro-predictor", editable = "pyro-predictor" },
     { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main" },
