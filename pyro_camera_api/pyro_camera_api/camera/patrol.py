@@ -175,7 +175,11 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 if opened_at:
                     settle_until = opened_at + 1.0
 
-                if image and now >= settle_until:
+                if image and now < settle_until:
+                    # The capture worked, the frame is just too close to the reconnect to
+                    # trust: discard it without counting a failure.
+                    logger.debug("[%s] Discarding frame captured during settle window", camera_ip)
+                elif image:
                     cam.last_images[-1] = image
                     # Steady state is silent, only the recovery is worth an INFO line.
                     if FAILURE_COUNT[camera_ip]:
