@@ -9,7 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0,<0.31",
     "python-multipart>=0.0.9,<0.1",
     "pyyaml>=6.0",
-    "temporal-model-core[onnx] @ git+https://github.com/pyronear/temporal-model.git@daaf239792797abe0fe76b5d5d0b5a6812f0d1fe#subdirectory=core",
+    "temporal-model-core[onnx] @ git+https://github.com/pyronear/temporal-model.git@ef76860863e737dbb67e961e5015c79441e8f9da#subdirectory=core",
 ]
 
 [dependency-groups]
