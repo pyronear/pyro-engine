@@ -419,7 +419,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0,<0.111" },
     { name = "python-multipart", specifier = ">=0.0.9,<0.1" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "temporal-model-core", extras = ["onnx"], git = "https://github.com/pyronear/temporal-model.git?subdirectory=core&rev=daaf239792797abe0fe76b5d5d0b5a6812f0d1fe" },
+    { name = "temporal-model-core", extras = ["onnx"], git = "https://github.com/pyronear/temporal-model.git?subdirectory=core&rev=ef76860863e737dbb67e961e5015c79441e8f9da" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0,<0.31" },
 ]
 
@@ -505,7 +505,7 @@ wheels = [
 [[package]]
 name = "temporal-model-core"
 version = "0.1.0"
-source = { git = "https://github.com/pyronear/temporal-model.git?subdirectory=core&rev=daaf239792797abe0fe76b5d5d0b5a6812f0d1fe#daaf239792797abe0fe76b5d5d0b5a6812f0d1fe" }
+source = { git = "https://github.com/pyronear/temporal-model.git?subdirectory=core&rev=ef76860863e737dbb67e961e5015c79441e8f9da#ef76860863e737dbb67e961e5015c79441e8f9da" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "numpy" },
