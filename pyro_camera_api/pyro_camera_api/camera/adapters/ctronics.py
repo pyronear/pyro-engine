@@ -17,7 +17,6 @@ import cv2
 import numpy as np
 import requests
 from PIL import Image
-from requests.auth import AuthBase, HTTPBasicAuth, HTTPDigestAuth
 
 from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
 
@@ -46,10 +45,6 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         onvif_port: int = 8080,
         onvif_wsdl_dir: Optional[str] = None,
         onvif_profile_token: Optional[str] = None,
-        focus_path: str = "/web/cgi-bin/hi3510/ptzctrl.cgi",
-        focus_step: int = 0,
-        focus_speed: int = 45,
-        focus_auth: str = "digest",
         focus_min: int = 0,
         focus_max: int = 1000,
     ) -> None:
@@ -67,12 +62,8 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self.onvif_port = onvif_port
         self.onvif_wsdl_dir = onvif_wsdl_dir
         self.onvif_profile_token = onvif_profile_token
-        self.focus_path = focus_path
-        self.focus_step = focus_step
-        self.focus_speed = focus_speed
         self.focus_min = focus_min
         self.focus_max = focus_max
-        self.focus_auth = focus_auth.lower()
         self.focus_position: Optional[int] = None
         self.current_azimuth: Optional[float] = None
         self._onvif_camera: Any = None
@@ -308,73 +299,6 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         clamped_position = round(self._clamp(position, self.focus_min, self.focus_max))
         self._imaging_service.Move(self._focus_request(clamped_position))
         self.focus_position = clamped_position
-
-    def move_focus(self, action: str, speed: Optional[int] = None) -> bool:
-        """Move the focus one relative step using the camera's Hi3510 CGI endpoint."""
-        actions = {
-            "plus": "focusin",
-            "in": "focusin",
-            "focusin": "focusin",
-            "minus": "focusout",
-            "out": "focusout",
-            "focusout": "focusout",
-            "stop": "stop",
-        }
-        normalized_action = actions.get(action.strip().lower())
-        if normalized_action is None:
-            raise ValueError(f"Unsupported CTronics focus action: {action}")
-        query = urlencode({
-            "-step": self.focus_step,
-            "-act": normalized_action,
-            "-speed": self.focus_speed if speed is None else speed,
-        })
-        base = f"{self.protocol}://{self.ip_address}:{self.port}/"
-        url = urljoin(base, f"{self.focus_path.lstrip('/')}?{query}")
-        logger.info("CTronics focus %s request: %s", normalized_action, self._redact_url(url))
-        auth: AuthBase | None = None
-        if self.focus_auth == "digest":
-            auth = HTTPDigestAuth(self.username, self.password)
-        elif self.focus_auth == "basic":
-            auth = HTTPBasicAuth(self.username, self.password)
-        elif self.focus_auth != "none":
-            raise ValueError(f"Unsupported CTronics focus authentication: {self.focus_auth}")
-        try:
-            response = requests.get(url, auth=auth, timeout=self.timeout)
-            if response.status_code == 401 and self.focus_auth == "digest":
-                challenge = response.headers.get("WWW-Authenticate", "")
-                logger.warning(
-                    "CTronics focus Digest authentication rejected (WWW-Authenticate=%r); "
-                    "retrying with Basic authentication",
-                    challenge,
-                )
-                response = requests.get(
-                    url,
-                    auth=HTTPBasicAuth(self.username, self.password),
-                    timeout=self.timeout,
-                )
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            logger.error("CTronics focus %s failed: %s", normalized_action, exc)
-            raise RuntimeError(f"CTronics focus command {normalized_action!r} failed") from exc
-        logger.info(
-            "CTronics focus %s response: status=%s body=%s",
-            normalized_action,
-            response.status_code,
-            response.text[:200],
-        )
-        return True
-
-    def focus_plus(self, speed: Optional[int] = None) -> bool:
-        """Move focus inward by one camera-defined step."""
-        return self.move_focus("focusin", speed=speed)
-
-    def focus_minus(self, speed: Optional[int] = None) -> bool:
-        """Move focus outward by one camera-defined step."""
-        return self.move_focus("focusout", speed=speed)
-
-    def stop_focus(self, speed: Optional[int] = None) -> bool:
-        """Stop the current relative focus movement."""
-        return self.move_focus("stop", speed=speed)
 
     def get_focus_level(self) -> Optional[dict]:
         self._ensure_onvif()
