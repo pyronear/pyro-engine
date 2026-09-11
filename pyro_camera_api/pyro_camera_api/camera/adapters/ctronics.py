@@ -193,13 +193,6 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
                     preset.token,
                 )
                 return str(preset.token)
-        if 0 <= preset_id < len(presets):
-            logger.info(
-                "CTronics preset id=%s treated as list index, resolved ONVIF token=%s",
-                preset_id,
-                presets[preset_id].token,
-            )
-            return str(presets[preset_id].token)
         raise ValueError(f"ONVIF preset {preset_id} was not found on {self.ip_address}")
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
