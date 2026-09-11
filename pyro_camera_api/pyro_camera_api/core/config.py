@@ -59,20 +59,27 @@ if CREDENTIALS_PATH.exists():
 USER_ENC = quote(CAM_USER, safe="")
 PWD_ENC = quote(CAM_PWD, safe="")
 
+
+def build_rtsp_input_url(ip: str, cfg: dict) -> str:
+    username = quote(str(cfg.get("username", CAM_USER)), safe="")
+    password = quote(str(cfg.get("password", CAM_PWD)), safe="")
+    adapter = (cfg.get("adapter") or cfg.get("brand") or "").lower()
+
+    if "linovision" in adapter:
+        channel = str(cfg.get("rtsp_channel", cfg.get("channel", "102")))
+        path = cfg.get("rtsp_path", f"/Streaming/Channels/{channel}")
+    else:
+        path = cfg.get("rtsp_path", "/h264Preview_01_sub")
+
+    return f"rtsp://{username}:{password}@{ip}:554/{str(path).lstrip('/')}"
+
+
 STREAMS: dict[str, dict] = {}
 
 if RAW_CONFIG:
     for ip, cfg in RAW_CONFIG.items():
         id_or_name = cfg.get("streamid") or cfg.get("stream_name") or cfg.get("name", "stream")
-        adapter = (cfg.get("adapter") or cfg.get("brand") or "").lower()
-
-        if "linovision" in adapter:
-            channel = str(cfg.get("rtsp_channel", cfg.get("channel", "102")))
-            path = cfg.get("rtsp_path", f"/Streaming/Channels/{channel}")
-            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554{path}"
-        else:
-            path = cfg.get("rtsp_path", "/h264Preview_01_sub")
-            input_url = f"rtsp://{USER_ENC}:{PWD_ENC}@{ip}:554{path}"
+        input_url = build_rtsp_input_url(ip, cfg)
 
         if id_or_name.startswith(("#!::", "publish:")) or ":" in id_or_name:
             streamid = id_or_name
