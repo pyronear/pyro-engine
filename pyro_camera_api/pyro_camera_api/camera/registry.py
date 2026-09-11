@@ -93,7 +93,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
       url (if adapter=url, rest or mock)
       headers, response, json_path, encoding, timeout, retries (if adapter=rest).
         Header/URL values may reference environment variables as ${VAR}.
-      username, password, port, protocol, snapshot_path, snapshot_command, model
+      username, password, port, protocol, snapshot_path, snapshot_command
         (if adapter=ctronics)
       poses, azimuths, focus_position (PTZ adapters)
     """
@@ -188,12 +188,10 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             snapshot_path=conf.get("snapshot_path", "/tmpfs/snap.jpg"),
             snapshot_command=conf.get("snapshot_command"),
             timeout=conf.get("timeout", 5.0),
-            model=conf.get("model"),
             cam_type=cam_type,
             cam_poses=conf.get("poses", []),
             cam_azimuths=conf.get("azimuths", []),
             onvif_port=conf.get("onvif_port", 8080),
-            onvif_protocol=conf.get("onvif_protocol", "http"),
             onvif_wsdl_dir=conf.get("onvif_wsdl_dir"),
             onvif_profile_token=conf.get("onvif_profile_token"),
             focus_path=conf.get("focus_path", "/web/cgi-bin/hi3510/ptzctrl.cgi"),
@@ -203,7 +201,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             focus_min=conf.get("focus_min", 0),
             focus_max=conf.get("focus_max", 1000),
         )
-        logger.info("Registered CTronics camera %s (model=%s)", key, conf.get("model", "generic"))
+        logger.info("Registered CTronics camera %s", key)
         return cam
 
     # Generic REST / HTTP-API snapshot camera (capture only).

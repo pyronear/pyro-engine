@@ -40,12 +40,10 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         snapshot_path: str = "/tmpfs/snap.jpg",
         snapshot_command: Optional[str] = None,
         timeout: float = 5.0,
-        model: Optional[str] = None,
         cam_type: str = "static",
         cam_poses: Optional[List[int]] = None,
         cam_azimuths: Optional[List[float]] = None,
         onvif_port: int = 8080,
-        onvif_protocol: str = "http",
         onvif_wsdl_dir: Optional[str] = None,
         onvif_profile_token: Optional[str] = None,
         focus_path: str = "/web/cgi-bin/hi3510/ptzctrl.cgi",
@@ -64,11 +62,9 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self.snapshot_path = snapshot_path
         self.snapshot_command = snapshot_command
         self.timeout = timeout
-        self.model = model
         self.cam_poses = cam_poses if cam_poses is not None else []
         self.cam_azimuths = cam_azimuths if cam_azimuths is not None else []
         self.onvif_port = onvif_port
-        self.onvif_protocol = onvif_protocol
         self.onvif_wsdl_dir = onvif_wsdl_dir
         self.onvif_profile_token = onvif_profile_token
         self.focus_path = focus_path
