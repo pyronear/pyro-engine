@@ -302,6 +302,17 @@ def test_preset_tokens_are_cached_between_moves(fake_onvif):
     assert [call[0] for call in camera._ptz_service.calls].count("GetPresets") == 1
 
 
+def test_preset_cache_accepts_capitalized_onvif_fields(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._ptz_service.presets = [SimpleNamespace(Token="7", Name="tower")]
+    camera._preset_tokens = None
+    camera._presets = None
+
+    assert camera._preset_token(7) == "7"
+    assert camera.get_ptz_preset() == [{"token": "7", "name": "tower"}]
+
+
 def test_preset_token_must_match_before_moving_or_updating_azimuth(fake_onvif):
     camera = CTronicsCamera(
         "cam", "192.0.2.10", "user", "secret", cam_type="ptz", cam_poses=[10, 20], cam_azimuths=[0, 90]
@@ -477,18 +488,10 @@ def test_real_ctronics_preset_and_azimuth():
     preset_id = int(os.environ["CTRONICS_TEST_PRESET_ID"])
     logging.basicConfig(level=logging.INFO)
     print(f"[CTronics test] Requesting preset id/index={preset_id}", flush=True)
-    presets = camera.get_ptz_preset() or []
+    # presets = camera.get_ptz_preset() or []
     # print(
     #     "[CTronics test] Available presets: "
-    #     + repr(
-    #         [
-    #             {
-    #                 "token": getattr(preset, "token", None),
-    #                 "name": getattr(preset, "Name", getattr(preset, "name", None)),
-    #             }
-    #             for preset in presets
-    #         ]
-    #     ),
+    #     + repr(presets),
     #     flush=True,
     # )
     camera.move_camera("ToPos", idx=preset_id)
