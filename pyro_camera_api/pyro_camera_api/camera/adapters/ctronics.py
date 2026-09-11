@@ -71,6 +71,8 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._ptz_service: Any = None
         self._imaging_service: Any = None
         self._profile: Any = None
+        self._preset_tokens: Optional[dict[str, str]] = None
+        self._presets: Optional[list[Any]] = None
 
     @property
     def snapshot_url(self) -> str:
@@ -107,7 +109,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             logger.error("CTronics capture failed for %s: %s", redacted_url, exc)
             return None
 
-        logger.info("CTronics capture OK for %s, size=%s", redacted_url, image.size)
+        logger.debug("CTronics capture OK for %s, size=%s", redacted_url, image.size)
         return image
 
     def _ensure_onvif(self) -> None:
@@ -132,6 +134,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             )
             self.onvif_profile_token = self._profile.token
             self._ptz_service = self._onvif_camera.create_ptz_service()
+            self._refresh_preset_cache()
         except Exception as exc:
             raise RuntimeError(f"CTronics ONVIF is unavailable for {self.ip_address}:{self.onvif_port}") from exc
         try:
@@ -157,32 +160,25 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
 
         self._ptz_service.ContinuousMove(request)
 
-    def _preset_token(self, preset_id: int) -> str:
-        self._ensure_onvif()
+    def _refresh_preset_cache(self) -> None:
         request = self._ptz_service.create_type("GetPresets")
         request.ProfileToken = self.onvif_profile_token
         presets = self._ptz_service.GetPresets(request) or []
-        # logger.info(
-        #     "CTronics ONVIF presets for %s, profile=%s, requested_id=%s: %s",
-        #     self.ip_address,
-        #     self.onvif_profile_token,
-        #     preset_id,
-        #     [
-        #         {
-        #             "token": getattr(preset, "token", None),
-        #             "name": getattr(preset, "Name", getattr(preset, "name", None)),
-        #         }
-        #         for preset in presets
-        #     ],
-        # )
-        for preset in presets:
-            if str(getattr(preset, "token", "")) == str(preset_id):
-                logger.info(
-                    "CTronics preset id=%s matched ONVIF token=%s directly",
-                    preset_id,
-                    preset.token,
-                )
-                return str(preset.token)
+        self._preset_tokens = {
+            str(getattr(preset, "token", "")): str(getattr(preset, "token", ""))
+            for preset in presets
+            if getattr(preset, "token", None) is not None
+        }
+        self._presets = list(presets)
+
+    def _preset_token(self, preset_id: int) -> str:
+        self._ensure_onvif()
+        if self._preset_tokens is None:
+            self._refresh_preset_cache()
+        token = self._preset_tokens.get(str(preset_id))
+        if token is not None:
+            logger.debug("CTronics preset id=%s matched ONVIF token=%s", preset_id, token)
+            return token
         raise ValueError(f"ONVIF preset {preset_id} was not found on {self.ip_address}")
 
     def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
@@ -191,7 +187,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         operation = operation.strip()
         if operation == "ToPos":
             self._ensure_onvif()
-            logger.info(
+            logger.debug(
                 "CTronics GotoPreset requested: camera=%s profile=%s idx=%s",
                 self.ip_address,
                 self.onvif_profile_token,
@@ -200,14 +196,14 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             request = self._ptz_service.create_type("GotoPreset")
             request.ProfileToken = self.onvif_profile_token
             request.PresetToken = self._preset_token(int(idx))
-            logger.info(
+            logger.debug(
                 "CTronics GotoPreset sending: camera=%s profile=%s token=%s",
                 self.ip_address,
                 request.ProfileToken,
                 request.PresetToken,
             )
             response = self._ptz_service.GotoPreset(request)
-            logger.info("CTronics GotoPreset response: camera=%s response=%r", self.ip_address, response)
+            logger.debug("CTronics GotoPreset response: camera=%s response=%r", self.ip_address, response)
             self._sync_azimuth_from_pose(int(idx))
             return
         if operation == "Stop":
@@ -248,9 +244,9 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def get_ptz_preset(self) -> Optional[list]:
         self._ensure_onvif()
-        request = self._ptz_service.create_type("GetPresets")
-        request.ProfileToken = self.onvif_profile_token
-        presets = self._ptz_service.GetPresets(request) or []
+        if self._presets is None:
+            self._refresh_preset_cache()
+        presets = self._presets
         return [
             {
                 "token": str(getattr(preset, "token", "")),
@@ -266,7 +262,10 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         request.PresetName = name or f"pos{idx if idx is not None else ''}"
         if idx is not None:
             request.PresetToken = str(idx)
-        return self._ptz_service.SetPreset(request)
+        response = self._ptz_service.SetPreset(request)
+        self._preset_tokens = None
+        self._presets = None
+        return response
 
     def save_preset(self, idx: int, name: Optional[str] = None) -> Any:
         return self.set_ptz_preset(idx=idx, name=name)
