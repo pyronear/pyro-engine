@@ -294,6 +294,20 @@ def test_stop_preset_and_azimuth_tracking(fake_onvif):
     ]
 
 
+def test_preset_token_must_match_before_moving_or_updating_azimuth(fake_onvif):
+    camera = CTronicsCamera(
+        "cam", "192.0.2.10", "user", "secret", cam_type="ptz", cam_poses=[10, 20], cam_azimuths=[0, 90]
+    )
+    camera._ensure_onvif()
+    camera._ptz_service.presets = [SimpleNamespace(token="101"), SimpleNamespace(token="202")]
+
+    with pytest.raises(ValueError, match="ONVIF preset 1 was not found"):
+        camera.move_camera("ToPos", idx=1)
+
+    assert camera.get_azimuth() is None
+    assert [call[0] for call in camera._ptz_service.calls] == ["GetPresets"]
+
+
 def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
 
