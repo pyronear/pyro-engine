@@ -24,7 +24,6 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
     export CTRONICS_ONVIF_PORT="8080"
 
    Optional variables are ``CTRONICS_HTTP_PORT`` (default ``80``),
-   ``CTRONICS_ONVIF_PROTOCOL`` (default ``http``),
    ``CTRONICS_ONVIF_PROFILE``, and ``CTRONICS_SNAPSHOT_PATH`` (default
    ``/tmpfs/snap.jpg``).
 
@@ -201,6 +200,12 @@ def test_ctronics_exposes_ptz_and_focus_capabilities():
     assert camera.onvif_port == 8080
 
 
+@pytest.mark.parametrize("unsupported_option", [{"model": "future-ctronics-model"}, {"onvif_protocol": "https"}])
+def test_ctronics_rejects_unused_configuration_options(unsupported_option):
+    with pytest.raises(TypeError):
+        CTronicsCamera("cam", "192.0.2.10", "user", "secret", **unsupported_option)
+
+
 def test_capture_builds_tmpfs_snapshot_url_and_returns_rgb_image():
     payload = BytesIO()
     Image.new("RGB", (8, 8), (10, 20, 30)).save(payload, format="JPEG")
@@ -226,7 +231,6 @@ def test_snapshot_path_and_command_are_configurable_per_model():
         port=8080,
         snapshot_path="/api/snapshot",
         snapshot_command="image",
-        model="future-ctronics-model",
     )
 
     assert camera.snapshot_url == "http://192.0.2.10:8080/api/snapshot?cmd=image&usr=user&pwd=secret"
@@ -420,7 +424,6 @@ def _real_camera() -> CTronicsCamera:
         port=int(os.getenv("CTRONICS_HTTP_PORT", "80")),
         cam_type="ptz",
         onvif_port=int(os.getenv("CTRONICS_ONVIF_PORT", "8080")),
-        onvif_protocol=os.getenv("CTRONICS_ONVIF_PROTOCOL", "http"),
         onvif_profile_token=os.getenv("CTRONICS_ONVIF_PROFILE"),
         focus_auth=os.getenv("CTRONICS_FOCUS_AUTH", "digest"),
         snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),
