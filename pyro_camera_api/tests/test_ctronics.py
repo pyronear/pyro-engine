@@ -285,6 +285,7 @@ def test_stop_preset_and_azimuth_tracking(fake_onvif):
     camera.move_camera("ToPos", idx=1)
     camera.move_camera("Stop")
 
+    assert camera.preset_move_hold_s == 5.0
     assert camera.get_azimuth() == 90.0
     assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GetPresets", "GotoPreset", "Stop"}] == [
         "GetPresets",
