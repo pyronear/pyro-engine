@@ -311,6 +311,18 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
     camera._onvif_camera.devicemgmt.SystemReboot.assert_called_once_with()
 
 
+def test_ctronics_manual_focus_clamps_position(fake_onvif):
+    camera = CTronicsCamera(
+        "cam", "192.0.2.10", "user", "secret", cam_type="ptz", focus_min=0, focus_max=1000
+    )
+
+    camera.set_manual_focus(2000)
+
+    assert camera.focus_position == 1000
+    move_request = camera._imaging_service.calls[-1][1]
+    assert move_request.Focus["Absolute"]["Position"] == 1.0
+
+
 def test_ctronics_zoom_does_not_move_focus(fake_onvif):
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera.focus_position = 250
@@ -365,6 +377,23 @@ def test_focus_finder_honors_abort_without_hardware(fake_onvif):
 
     with pytest.raises(FocusAbortedError):
         camera.focus_finder(should_abort=lambda: True)
+
+
+def test_focus_finder_seeds_from_current_focus_level(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    positions = []
+    image = Image.new("RGB", (8, 8), (10, 20, 30))
+
+    with (
+        patch.object(camera, "get_focus_level", return_value={"focus": 900}),
+        patch.object(camera, "set_manual_focus", side_effect=positions.append),
+        patch.object(camera, "capture", return_value=image),
+        patch.object(camera, "_measure_sharpness", return_value=1.0),
+    ):
+        camera.focus_finder()
+
+    assert positions[0] == 850
+    assert all(0 <= position <= 1000 for position in positions)
 
 
 def _real_camera() -> CTronicsCamera:
