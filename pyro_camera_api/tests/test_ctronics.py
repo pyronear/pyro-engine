@@ -43,12 +43,19 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
    Valid directions are ``Left``, ``Right``, ``Up``, ``Down``, ``UpLeft``,
    ``UpRight``, ``DownLeft``, ``DownRight``, ``ZoomIn``, and ``ZoomOut``.
 
-5. Test a preset move. Replace ``1`` with an existing ONVIF preset token or
+5. Test an absolute zoom position. This physically changes the lens position::
+
+     PYTHONPATH=pyro_camera_api CTRONICS_TEST_ZOOM=1 CTRONICS_ZOOM_POSITION=32 \
+          uv run pytest pyro_camera_api/tests/test_ctronics.py::test_real_ctronics_zoom -v -s
+
+    ``CTRONICS_ZOOM_POSITION`` accepts values from 0 to 64 and defaults to 32.
+
+6. Test a preset move. Replace ``1`` with an existing ONVIF preset token or
    index configured on the camera::
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_ID=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
-6. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
+7. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS=1 CTRONICS_TEST_FOCUS_ACTION=focusout CTRONICS_TEST_FOCUS_SPEED=45 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
@@ -63,12 +70,12 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
      ``none``. The focus action is relative, so there is no absolute focus
      minimum or maximum value in this API; repeat the command to move farther.
 
-7. Run the focus finder only when a focus sweep is acceptable. It moves the
+8. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS_FINDER=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
-8. Test reboot separately. The camera will restart and temporarily disconnect::
+9. Test reboot separately. The camera will restart and temporarily disconnect::
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_REBOOT=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
@@ -399,6 +406,20 @@ def test_real_ctronics_ptz_move_and_stop():
     camera.move_camera(os.getenv("CTRONICS_TEST_DIRECTION", "Right"), speed=1)
     time.sleep(1)
     camera.move_camera("Stop")
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_ZOOM") != "1",
+    reason="Set CTRONICS_TEST_ZOOM=1 to change absolute zoom on a physical camera",
+)
+def test_real_ctronics_zoom():
+    position = int(os.getenv("CTRONICS_ZOOM_POSITION", "32"))
+    assert 0 <= position <= 64, "CTRONICS_ZOOM_POSITION must be between 0 and 64"
+
+    camera = _real_camera()
+    logging.basicConfig(level=logging.INFO)
+    print(f"[CTronics test] Setting absolute zoom position={position}", flush=True)
+    camera.start_zoom_focus(position)
 
 
 @pytest.mark.skipif(
