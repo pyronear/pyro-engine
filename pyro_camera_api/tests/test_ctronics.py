@@ -245,6 +245,14 @@ def test_onvif_connection_uses_configured_port_and_profile(fake_onvif):
     assert camera.onvif_profile_token == "profile-1"
 
 
+def test_onvif_connection_errors_are_exposed_as_runtime_errors(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    with patch.object(FakeOnvifCamera, "__init__", side_effect=OSError("connection refused")):
+        with pytest.raises(RuntimeError, match="CTronics ONVIF is unavailable"):
+            camera._ensure_onvif()
+
+
 @pytest.mark.parametrize(
     ("operation", "axis"),
     [
@@ -324,7 +332,7 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
     camera.start_zoom_focus(32)
     assert camera.reboot_camera() is True
 
-    assert len(presets) == 2
+    assert presets == [{"token": "0", "name": "home"}, {"token": "1", "name": "west"}]
     assert focus["focus"] == 250
     assert autofocus["mode"] == "AUTO"
     camera._onvif_camera.devicemgmt.SystemReboot.assert_called_once_with()
@@ -340,6 +348,15 @@ def test_ctronics_manual_focus_clamps_position(fake_onvif):
     assert camera.focus_position == 1000
     move_request = camera._imaging_service.calls[-1][1]
     assert move_request.Focus["Absolute"]["Position"] == 1.0
+
+
+def test_ctronics_manual_focus_rejects_unavailable_imaging(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._imaging_service = None
+
+    with pytest.raises(RuntimeError, match="ONVIF Imaging service is unavailable"):
+        camera.set_manual_focus(250)
 
 
 def test_ctronics_zoom_does_not_move_focus(fake_onvif):
