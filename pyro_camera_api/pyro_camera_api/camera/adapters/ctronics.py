@@ -302,8 +302,9 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def set_manual_focus(self, position: int) -> None:
         self._ensure_onvif()
-        self._imaging_service.Move(self._focus_request(position))
-        self.focus_position = int(position)
+        clamped_position = round(self._clamp(position, self.focus_min, self.focus_max))
+        self._imaging_service.Move(self._focus_request(clamped_position))
+        self.focus_position = clamped_position
 
     def move_focus(self, action: str, speed: Optional[int] = None) -> bool:
         """Move the focus one relative step using the camera's Hi3510 CGI endpoint."""
@@ -443,8 +444,21 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         _ = retry_depth
         if self.cam_type == "static":
             return self.focus_position or 0
-        initial = self.focus_position if self.focus_position is not None else (self.focus_min + self.focus_max) // 2
-        candidates = range(max(self.focus_min, initial - 50), min(self.focus_max, initial + 50) + 1, 10)
+        initial = self.focus_position
+        try:
+            focus_level = self.get_focus_level()
+            if focus_level is not None and focus_level.get("focus") is not None:
+                initial = int(focus_level["focus"])
+        except Exception as exc:
+            logger.warning("Unable to read current CTronics focus before search: %s", exc)
+        if initial is None:
+            initial = (self.focus_min + self.focus_max) // 2
+        initial = round(self._clamp(initial, self.focus_min, self.focus_max))
+        start = max(self.focus_min, initial - 50)
+        stop = min(self.focus_max, initial + 50)
+        candidates = list(range(start, stop + 1, 10))
+        if initial not in candidates:
+            candidates.append(initial)
         scores = []
         for position in candidates:
             if should_abort is not None and should_abort():
