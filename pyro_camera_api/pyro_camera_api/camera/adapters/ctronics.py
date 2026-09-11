@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
     """CTronics camera using HTTP snapshots and ONVIF PTZ/Imaging services."""
 
+    preset_move_hold_s = 5.0
+
     def __init__(
         self,
         camera_id: str,
