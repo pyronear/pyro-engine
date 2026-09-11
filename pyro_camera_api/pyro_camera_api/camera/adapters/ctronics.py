@@ -164,12 +164,25 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         request = self._ptz_service.create_type("GetPresets")
         request.ProfileToken = self.onvif_profile_token
         presets = self._ptz_service.GetPresets(request) or []
-        self._preset_tokens = {
-            str(getattr(preset, "token", "")): str(getattr(preset, "token", ""))
-            for preset in presets
-            if getattr(preset, "token", None) is not None
-        }
+        self._preset_tokens = {}
+        for preset in presets:
+            token = self._preset_value(preset, "token", "Token")
+            if token is not None and str(token):
+                self._preset_tokens[str(token)] = str(token)
         self._presets = list(presets)
+
+    @staticmethod
+    def _preset_value(preset: Any, *names: str) -> Any:
+        values = getattr(preset, "__values__", None)
+        for name in names:
+            if isinstance(preset, dict) and name in preset:
+                return preset[name]
+            if isinstance(values, dict) and name in values:
+                return values[name]
+            value = getattr(preset, name, None)
+            if value is not None:
+                return value
+        return None
 
     def _preset_token(self, preset_id: int) -> str:
         self._ensure_onvif()
@@ -249,8 +262,8 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         presets = self._presets
         return [
             {
-                "token": str(getattr(preset, "token", "")),
-                "name": getattr(preset, "Name", getattr(preset, "name", None)),
+                "token": str(self._preset_value(preset, "token", "Token") or ""),
+                "name": self._preset_value(preset, "Name", "name"),
             }
             for preset in presets
         ]
