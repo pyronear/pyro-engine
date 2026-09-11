@@ -127,19 +127,22 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         except ImportError as exc:
             raise RuntimeError("Install onvif-zeep to use CTronics PTZ and focus controls") from exc
 
-        args = [self.ip_address, self.onvif_port, self.username, self.password]
-        if self.onvif_wsdl_dir:
-            args.append(self.onvif_wsdl_dir)
-        self._onvif_camera = ONVIFCamera(*args)
-        self._media_service = self._onvif_camera.create_media_service()
-        profiles = self._media_service.GetProfiles()
-        if not profiles:
-            raise RuntimeError(f"No ONVIF media profile found for {self.ip_address}:{self.onvif_port}")
-        self._profile = next(
-            (profile for profile in profiles if profile.token == self.onvif_profile_token), profiles[0]
-        )
-        self.onvif_profile_token = self._profile.token
-        self._ptz_service = self._onvif_camera.create_ptz_service()
+        try:
+            args = [self.ip_address, self.onvif_port, self.username, self.password]
+            if self.onvif_wsdl_dir:
+                args.append(self.onvif_wsdl_dir)
+            self._onvif_camera = ONVIFCamera(*args)
+            self._media_service = self._onvif_camera.create_media_service()
+            profiles = self._media_service.GetProfiles()
+            if not profiles:
+                raise RuntimeError(f"No ONVIF media profile found for {self.ip_address}:{self.onvif_port}")
+            self._profile = next(
+                (profile for profile in profiles if profile.token == self.onvif_profile_token), profiles[0]
+            )
+            self.onvif_profile_token = self._profile.token
+            self._ptz_service = self._onvif_camera.create_ptz_service()
+        except Exception as exc:
+            raise RuntimeError(f"CTronics ONVIF is unavailable for {self.ip_address}:{self.onvif_port}") from exc
         try:
             self._imaging_service = self._onvif_camera.create_imaging_service()
         except Exception as exc:
@@ -256,7 +259,14 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._ensure_onvif()
         request = self._ptz_service.create_type("GetPresets")
         request.ProfileToken = self.onvif_profile_token
-        return self._ptz_service.GetPresets(request)
+        presets = self._ptz_service.GetPresets(request) or []
+        return [
+            {
+                "token": str(getattr(preset, "token", "")),
+                "name": getattr(preset, "Name", getattr(preset, "name", None)),
+            }
+            for preset in presets
+        ]
 
     def set_ptz_preset(self, idx: Optional[int] = None, name: Optional[str] = None) -> Any:
         self._ensure_onvif()
@@ -293,6 +303,8 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
 
     def set_manual_focus(self, position: int) -> None:
         self._ensure_onvif()
+        if self._imaging_service is None:
+            raise RuntimeError("ONVIF Imaging service is unavailable")
         clamped_position = round(self._clamp(position, self.focus_min, self.focus_max))
         self._imaging_service.Move(self._focus_request(clamped_position))
         self.focus_position = clamped_position

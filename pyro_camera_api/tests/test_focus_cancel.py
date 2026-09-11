@@ -10,7 +10,8 @@ from fastapi import HTTPException
 from PIL import Image
 
 from pyro_camera_api.api import routes_focus
-from pyro_camera_api.api.routes_focus import run_focus_optimization
+from pyro_camera_api.api.routes_focus import get_focus_status, manual_focus, run_focus_optimization
+from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
 from pyro_camera_api.camera.base import FocusAbortedError
@@ -206,3 +207,32 @@ def test_route_runs_and_releases_lock(registered_mock_camera):
     result = run_focus_optimization(cam_id)
     assert result["best_focus_position"] == 700
     assert not MOVE_LOCKS[cam_id].locked()
+
+
+@pytest.fixture
+def unavailable_focus_camera():
+    cam_id = "unavailable-focus"
+    cam = CTronicsCamera(cam_id, "192.0.2.10", "user", "pwd", cam_type="ptz")
+    CAMERA_REGISTRY[cam_id] = cam
+    yield cam_id, cam
+    CAMERA_REGISTRY.pop(cam_id, None)
+
+
+@pytest.mark.parametrize("route", [manual_focus, get_focus_status])
+def test_focus_routes_return_503_when_onvif_is_unavailable(unavailable_focus_camera, route, monkeypatch):
+    cam_id, cam = unavailable_focus_camera
+    if route is manual_focus:
+        def fail_manual_focus(_position):
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr(cam, "set_manual_focus", fail_manual_focus)
+        with pytest.raises(HTTPException) as exc:
+            route(cam_id, 250)
+    else:
+        def fail_get_focus_level():
+            raise RuntimeError("connection refused")
+
+        monkeypatch.setattr(cam, "get_focus_level", fail_get_focus_level)
+        with pytest.raises(HTTPException) as exc:
+            route(cam_id)
+    assert exc.value.status_code == 503

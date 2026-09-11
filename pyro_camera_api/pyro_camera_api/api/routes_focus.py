@@ -38,7 +38,11 @@ def manual_focus(camera_ip: str, position: int):
     if not isinstance(cam, FocusMixin):
         raise HTTPException(status_code=400, detail="Camera does not support manual focus")
 
-    result = cam.set_manual_focus(position)
+    try:
+        result = cam.set_manual_focus(position)
+    except RuntimeError as exc:
+        logger.warning("Manual focus unavailable for %s: %s", camera_ip, exc)
+        raise HTTPException(status_code=503, detail="Focus service unavailable") from exc
 
     return {
         "status": "manual_focus",
@@ -92,7 +96,11 @@ def get_focus_status(camera_ip: str):
     if not hasattr(cam, "get_focus_level"):
         raise HTTPException(status_code=400, detail="Camera does not expose focus status")
 
-    data = cam.get_focus_level()
+    try:
+        data = cam.get_focus_level()
+    except RuntimeError as exc:
+        logger.warning("Focus status unavailable for %s: %s", camera_ip, exc)
+        raise HTTPException(status_code=503, detail="Focus service unavailable") from exc
     if not data:
         raise HTTPException(status_code=500, detail="Could not retrieve focus level")
 
