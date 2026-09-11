@@ -159,7 +159,6 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         snapshot_url = conf.get("url")
         if not snapshot_url:
             logger.error("Camera %s declared as URL adapter but missing 'url'", key)
-            focus_auth = (conf.get("focus_auth", "digest"),)
             return None
 
         cam = URLCamera(
@@ -200,6 +199,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             focus_path=conf.get("focus_path", "/web/cgi-bin/hi3510/ptzctrl.cgi"),
             focus_step=conf.get("focus_step", 0),
             focus_speed=conf.get("focus_speed", 45),
+            focus_auth=conf.get("focus_auth", "digest"),
             focus_min=conf.get("focus_min", 0),
             focus_max=conf.get("focus_max", 1000),
         )
