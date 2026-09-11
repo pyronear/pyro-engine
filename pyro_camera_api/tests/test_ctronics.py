@@ -14,7 +14,7 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
 1. Install the project and test dependencies::
 
-    uv sync
+    uv sync --all-groups
 
 2. Set the camera connection variables. The ONVIF port defaults to 8080::
 
@@ -120,6 +120,11 @@ class FakeOnvifService:
         if isinstance(request.Velocity, dict):
             request.Velocity = DictToAttr(request.Velocity)
         self.calls.append(("ContinuousMove", request))
+
+    def AbsoluteMove(self, request):
+        if isinstance(request.Position, dict):
+            request.Position = DictToAttr(request.Position)
+        self.calls.append(("AbsoluteMove", request))
 
     def Stop(self, request):
         self.calls.append(("Stop", request))
@@ -290,13 +295,26 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
     focus = camera.get_focus_level()
     autofocus = camera.get_auto_focus()
     camera.set_auto_focus(disable=True)
-    camera.start_zoom_focus(300)
+    camera.start_zoom_focus(32)
     assert camera.reboot_camera() is True
 
     assert len(presets) == 2
     assert focus["focus"] == 250
     assert autofocus["mode"] == "AUTO"
     camera._onvif_camera.devicemgmt.SystemReboot.assert_called_once_with()
+
+
+def test_ctronics_zoom_does_not_move_focus(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera.focus_position = 250
+
+    camera.start_zoom_focus(32)
+
+    call_name, request = camera._ptz_service.calls[-1]
+    assert call_name == "AbsoluteMove"
+    assert request.ProfileToken == "profile-1"
+    assert request.Position.Zoom.x == 0.5
+    assert camera.focus_position == 250
 
 
 @patch("pyro_camera_api.camera.adapters.ctronics.requests.get")
