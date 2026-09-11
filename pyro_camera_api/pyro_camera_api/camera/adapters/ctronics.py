@@ -424,7 +424,12 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._imaging_service.SetImagingSettings(request)
 
     def start_zoom_focus(self, position: int) -> None:
-        self.set_manual_focus(position)
+        self._ensure_onvif()
+
+        request = self._ptz_service.create_type("AbsoluteMove")
+        request.ProfileToken = self.onvif_profile_token
+        request.Position = {"Zoom": {"x": self._clamp(position / 64.0, 0.0, 1.0)}}
+        self._ptz_service.AbsoluteMove(request)
 
     @staticmethod
     def _measure_sharpness(image: Image.Image) -> float:
