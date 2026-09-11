@@ -293,18 +293,30 @@ def test_stop_preset_and_azimuth_tracking(fake_onvif):
     ]
 
 
+def test_preset_tokens_are_cached_between_moves(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    camera.move_camera("ToPos", idx=0)
+    camera.move_camera("ToPos", idx=1)
+
+    assert [call[0] for call in camera._ptz_service.calls].count("GetPresets") == 1
+
+
 def test_preset_token_must_match_before_moving_or_updating_azimuth(fake_onvif):
     camera = CTronicsCamera(
         "cam", "192.0.2.10", "user", "secret", cam_type="ptz", cam_poses=[10, 20], cam_azimuths=[0, 90]
     )
+    camera._ptz_service = None
     camera._ensure_onvif()
+    camera._preset_tokens = None
+    camera._presets = None
     camera._ptz_service.presets = [SimpleNamespace(token="101"), SimpleNamespace(token="202")]
 
     with pytest.raises(ValueError, match="ONVIF preset 1 was not found"):
         camera.move_camera("ToPos", idx=1)
 
     assert camera.get_azimuth() is None
-    assert [call[0] for call in camera._ptz_service.calls] == ["GetPresets"]
+    assert [call[0] for call in camera._ptz_service.calls] == ["GetPresets", "GetPresets"]
 
 
 def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
@@ -312,6 +324,7 @@ def test_preset_focus_autofocus_and_reboot_use_onvif(fake_onvif):
 
     presets = camera.get_ptz_preset()
     camera.set_ptz_preset(idx=2, name="tower")
+    assert camera._preset_tokens is None
     camera.set_manual_focus(250)
     focus = camera.get_focus_level()
     autofocus = camera.get_auto_focus()
