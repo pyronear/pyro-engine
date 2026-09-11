@@ -54,20 +54,9 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
     PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_ID=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
-7. Test one relative focus step. Use ``focusin`` for ``+`` and ``focusout`` for ``-``::
+7. Test absolute ONVIF focus at two positions. This physically changes the lens position::
 
-    PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS=1 CTRONICS_TEST_FOCUS_ACTION=focusout CTRONICS_TEST_FOCUS_SPEED=45 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
-
-     * ``CTRONICS_TEST_FOCUS_ACTION``: ``focusin`` moves focus toward near and
-         ``focusout`` moves it toward far. The test sends ``focusstop`` immediately
-         afterward to stop the movement.
-     * ``CTRONICS_TEST_FOCUS_SPEED``: integer speed sent as ``-speed``.
-
-     The HTTP endpoint is configurable with ``focus_path`` and defaults to
-     ``/web/cgi-bin/hi3510/ptzctrl.cgi``. Authentication defaults to HTTP
-     Digest and can be changed with ``CTRONICS_FOCUS_AUTH`` to ``basic`` or
-     ``none``. The focus action is relative, so there is no absolute focus
-     minimum or maximum value in this API; repeat the command to move farther.
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_ABSOLUTE_FOCUS=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v -s
 
 8. Run the focus finder only when a focus sweep is acceptable. It moves the
    focus through several positions and may take a while::
@@ -93,8 +82,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
-from requests.auth import HTTPDigestAuth
-
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
 from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
 
@@ -372,39 +359,22 @@ def test_ctronics_zoom_does_not_move_focus(fake_onvif):
     assert camera.focus_position == 250
 
 
-@patch("pyro_camera_api.camera.adapters.ctronics.requests.get")
-def test_ctronics_focus_plus_and_minus_use_hi3510_cgi(mock_get):
-    response = MagicMock(status_code=200, text="OK")
-    response.raise_for_status.return_value = None
-    mock_get.return_value = response
-    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", focus_speed=45, focus_auth="none")
+def test_ctronics_focus_absolute_move_uses_onvif(fake_onvif):
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", cam_type="ptz")
 
-    assert camera.focus_plus() is True
-    assert camera.focus_minus(speed=30) is True
-    assert camera.stop_focus() is True
+    camera.set_manual_focus(250)
 
-    assert mock_get.call_args_list[0].args[0] == (
-        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusin&-speed=45"
-    )
-    assert mock_get.call_args_list[1].args[0] == (
-        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=focusout&-speed=30"
-    )
-    assert mock_get.call_args_list[2].args[0] == (
-        "http://192.168.1.2:80/web/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=stop&-speed=45"
-    )
+    call_name, request = camera._imaging_service.calls[-1]
+    assert call_name == "Move"
+    assert request.Focus["Absolute"]["Position"] == 0.25
+    assert camera.focus_position == 250
 
 
-@patch("pyro_camera_api.camera.adapters.ctronics.requests.get")
-def test_ctronics_focus_uses_digest_auth_by_default(mock_get):
-    response = MagicMock(status_code=200, text="OK")
-    response.raise_for_status.return_value = None
-    mock_get.return_value = response
-    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret")
+def test_ctronics_focus_status_reads_absolute_onvif_position(fake_onvif):
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", cam_type="ptz")
+    camera.set_manual_focus(750)
 
-    camera.focus_minus()
-
-    auth = mock_get.call_args.kwargs["auth"]
-    assert isinstance(auth, HTTPDigestAuth)
+    assert camera.get_focus_level() == {"focus": 750, "focus_raw": 0.75, "zoom": None}
 
 
 def test_focus_finder_honors_abort_without_hardware(fake_onvif):
@@ -442,7 +412,6 @@ def _real_camera() -> CTronicsCamera:
         cam_type="ptz",
         onvif_port=int(os.getenv("CTRONICS_ONVIF_PORT", "8080")),
         onvif_profile_token=os.getenv("CTRONICS_ONVIF_PROFILE"),
-        focus_auth=os.getenv("CTRONICS_FOCUS_AUTH", "digest"),
         snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),
     )
     return camera
@@ -515,19 +484,26 @@ def test_real_ctronics_preset_and_azimuth():
 
 
 @pytest.mark.skipif(
-    os.getenv("CTRONICS_TEST_FOCUS") != "1",
-    reason="Set CTRONICS_TEST_FOCUS=1 to change focus on a physical camera",
+    os.getenv("CTRONICS_TEST_ABSOLUTE_FOCUS") != "1",
+    reason="Set CTRONICS_TEST_ABSOLUTE_FOCUS=1 to change focus on a physical camera",
 )
-def test_real_ctronics_focus():
+def test_real_ctronics_absolute_focus():
     camera = _real_camera()
-    action = os.getenv("CTRONICS_TEST_FOCUS_ACTION", "focusout")
-    speed = int(os.getenv("CTRONICS_TEST_FOCUS_SPEED", "45"))
-    print(f"[CTronics test] Sending focus action={action}, speed={speed}", flush=True)
-    try:
-        assert camera.move_focus(action, speed=speed) is True
-        time.sleep(1)
-    finally:
-        assert camera.stop_focus(speed=speed) is True
+    camera.set_manual_focus(100)
+    time.sleep(2)
+    near_status = camera.get_focus_level()
+    near_image = camera.capture()
+
+    camera.set_manual_focus(900)
+    time.sleep(2)
+    far_status = camera.get_focus_level()
+    far_image = camera.capture()
+
+    print(f"[CTronics test] near={near_status}, far={far_status}", flush=True)
+    assert near_image is not None
+    assert far_image is not None
+    assert near_status["focus"] == 100
+    assert far_status["focus"] == 900
 
 
 @pytest.mark.skipif(

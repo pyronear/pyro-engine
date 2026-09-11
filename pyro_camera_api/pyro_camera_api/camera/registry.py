@@ -194,10 +194,6 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             onvif_port=conf.get("onvif_port", 8080),
             onvif_wsdl_dir=conf.get("onvif_wsdl_dir"),
             onvif_profile_token=conf.get("onvif_profile_token"),
-            focus_path=conf.get("focus_path", "/web/cgi-bin/hi3510/ptzctrl.cgi"),
-            focus_step=conf.get("focus_step", 0),
-            focus_speed=conf.get("focus_speed", 45),
-            focus_auth=conf.get("focus_auth", "digest"),
             focus_min=conf.get("focus_min", 0),
             focus_max=conf.get("focus_max", 1000),
         )
