@@ -184,7 +184,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
                 return value
         return None
 
-    def _preset_token(self, preset_id: int) -> str:
+    def _preset_token(self, preset_id: int | str) -> str:
         self._ensure_onvif()
         if self._preset_tokens is None:
             self._refresh_preset_cache()
@@ -194,7 +194,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             return token
         raise ValueError(f"ONVIF preset {preset_id} was not found on {self.ip_address}")
 
-    def move_camera(self, operation: str, speed: int = 20, idx: int = 0) -> None:
+    def move_camera(self, operation: str, speed: int = 20, idx: int | str = 0) -> None:
         if self.cam_type == "static":
             return
         operation = operation.strip()
@@ -208,7 +208,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             )
             request = self._ptz_service.create_type("GotoPreset")
             request.ProfileToken = self.onvif_profile_token
-            request.PresetToken = self._preset_token(int(idx))
+            request.PresetToken = self._preset_token(idx)
             logger.debug(
                 "CTronics GotoPreset sending: camera=%s profile=%s token=%s",
                 self.ip_address,
@@ -217,7 +217,8 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             )
             response = self._ptz_service.GotoPreset(request)
             logger.debug("CTronics GotoPreset response: camera=%s response=%r", self.ip_address, response)
-            self._sync_azimuth_from_pose(int(idx))
+            if isinstance(idx, int):
+                self._sync_azimuth_from_pose(idx)
             return
         if operation == "Stop":
             self._ensure_onvif()

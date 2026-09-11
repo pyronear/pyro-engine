@@ -49,10 +49,10 @@ camera, follow these steps from the ``pyro_camera_api`` directory:
 
     ``CTRONICS_ZOOM_POSITION`` accepts values from 0 to 64 and defaults to 32.
 
-6. Test a preset move. Replace ``1`` with an existing ONVIF preset token or
-   index configured on the camera::
+6. Test a preset move with the exact token returned by ONVIF (for example
+    ``Preset1``)::
 
-    PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_ID=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+     PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_TOKEN=Preset1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
 
 7. Test absolute ONVIF focus at two positions. This physically changes the lens position::
 
@@ -302,6 +302,19 @@ def test_preset_tokens_are_cached_between_moves(fake_onvif):
     assert [call[0] for call in camera._ptz_service.calls].count("GetPresets") == 1
 
 
+def test_move_camera_accepts_exact_string_preset_token(fake_onvif):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._ptz_service.presets = [SimpleNamespace(token="Preset1", Name="Preset1")]
+    camera._preset_tokens = None
+    camera._presets = None
+
+    camera.move_camera("ToPos", idx="Preset1")
+
+    goto_request = next(request for operation, request in camera._ptz_service.calls if operation == "GotoPreset")
+    assert goto_request.PresetToken == "Preset1"
+
+
 def test_preset_cache_accepts_capitalized_onvif_fields(fake_onvif):
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera._ensure_onvif()
@@ -485,17 +498,13 @@ def test_real_ctronics_zoom():
 )
 def test_real_ctronics_preset_and_azimuth():
     camera = _real_camera()
-    preset_id = int(os.environ["CTRONICS_TEST_PRESET_ID"])
+    preset_token = os.environ.get("CTRONICS_TEST_PRESET_TOKEN")
+    if not preset_token:
+        pytest.fail("Set CTRONICS_TEST_PRESET_TOKEN to an exact ONVIF token, such as Preset1")
     logging.basicConfig(level=logging.INFO)
-    print(f"[CTronics test] Requesting preset id/index={preset_id}", flush=True)
-    # presets = camera.get_ptz_preset() or []
-    # print(
-    #     "[CTronics test] Available presets: "
-    #     + repr(presets),
-    #     flush=True,
-    # )
-    camera.move_camera("ToPos", idx=preset_id)
-    print(f"[CTronics test] GotoPreset completed for id/index={preset_id}", flush=True)
+    print(f"[CTronics test] Requesting preset token={preset_token}", flush=True)
+    camera.move_camera("ToPos", idx=preset_token)
+    print(f"[CTronics test] GotoPreset completed for token={preset_token}", flush=True)
     assert camera.get_azimuth() is None or 0 <= camera.get_azimuth() < 360
 
 
