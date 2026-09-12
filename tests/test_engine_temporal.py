@@ -136,3 +136,36 @@ def test_disabled_without_url(tmp_path, mock_wildfire_image):
     state = _fire(engine, mock_wildfire_image, n=2)
     assert state["ongoing"]
     assert len(state["temporal_frames"]) == 0
+
+
+EMPTY = np.empty((5, 0))
+DONE = lambda positive: {"status": "done", "verdict": {"is_positive": positive, "probability": 0.5, "n_tubes": 1}}
+
+
+def test_event_ending_during_validation_still_uploads_on_positive(tmp_path, mock_wildfire_image, mock_forest_image):
+    temporal = FakeTemporal([{"status": "pending"}, {"status": "pending"}, DONE(True)])
+    engine = _engine(tmp_path, temporal)
+    state = _fire(engine, mock_wildfire_image)  # submitted, held
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # still ongoing (hysteresis), pending
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # event over, verdict still pending: kept
+    assert state["ongoing"] is False
+    assert state["temporal_job"] == "job1"
+    assert len(engine._alerts) == 0
+
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # positive verdict: held frames go out
+    assert len(engine._alerts) > 0
+    assert state["temporal_job"] is None
+    assert state["temporal_validated"] is False  # event closed after staging
+    assert not temporal.results
+
+
+def test_event_ending_during_validation_dropped_on_negative(tmp_path, mock_wildfire_image, mock_forest_image):
+    temporal = FakeTemporal([{"status": "pending"}, {"status": "pending"}, DONE(False)])
+    engine = _engine(tmp_path, temporal)
+    state = _fire(engine, mock_wildfire_image)
+    for _ in range(3):
+        engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
+    assert state["ongoing"] is False
+    assert state["temporal_job"] is None  # no resubmission for an ended event
+    assert len(temporal.submitted) == 1
+    assert len(engine._alerts) == 0
