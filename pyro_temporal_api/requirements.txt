@@ -77,7 +77,7 @@ pyyaml==6.0.3
     #   uvicorn
 starlette==0.37.2
     # via fastapi
-temporal-model-core @ git+https://github.com/pyronear/temporal-model.git@ef76860863e737dbb67e961e5015c79441e8f9da#subdirectory=core
+temporal-model-core @ git+https://github.com/pyronear/temporal-model.git@fb7f6ca855cafa8a2ca0981ac54487c63892f6ad#subdirectory=core
     # via pyro-temporal-api
 tqdm==4.70.0
     # via huggingface-hub
