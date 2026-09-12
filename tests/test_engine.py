@@ -576,6 +576,33 @@ def test_process_alerts_keeps_alert_on_retryable_error(tmp_path, status_code):
     assert len(engine._alerts) == 1
 
 
+def test_heartbeat_once_per_camera_per_period(tmp_path, mock_forest_image):
+    """Poses of one camera share a heartbeat; cameras are throttled independently."""
+    cam_creds = {"10.0.0.1_0": ("tok", 0), "10.0.0.1_1": ("tok", 1), "10.0.0.2_0": ("tok", 0)}
+    fake_client = MagicMock()
+    fake_client.update_last_image.return_value = MagicMock(text="ok")
+    fake_client.list_pose_masks.return_value = MagicMock(raise_for_status=MagicMock(), json=MagicMock(return_value=[]))
+    clock = [1000.0]
+
+    with (
+        patch("pyroengine.engine.client.Client", return_value=fake_client),
+        patch("time.monotonic", side_effect=lambda: clock[0]),
+    ):
+        engine = Engine(api_url="http://stub", cache_folder=str(tmp_path), cam_creds=cam_creds, heartbeat_period=60)
+
+        for cam_id in cam_creds:
+            engine.predict(mock_forest_image, cam_id)
+        assert fake_client.heartbeat.call_count == 2  # one per camera ip
+
+        clock[0] += 30
+        engine.predict(mock_forest_image, "10.0.0.1_0")
+        assert fake_client.heartbeat.call_count == 2  # still within the period
+
+        clock[0] += 31
+        engine.predict(mock_forest_image, "10.0.0.1_1")
+        assert fake_client.heartbeat.call_count == 3  # period elapsed for 10.0.0.1 only
+
+
 def _build_engine_with_pose_stub(tmp_path, init_clock):
     """Build an Engine with the api_client stubbed and datetime.now() pinned to init_clock."""
     cam_id = "169.254.7.3_3"
