@@ -44,7 +44,7 @@ services:
     command: >
       sh -c '
         truncate -s 0 engine.log &&
-        python run.py --save_captured_frames 1 2>&1 | tee -a engine.log
+        python run.py --save_captured_frames 1 --backup-size 3000 2>&1 | tee -a engine.log
       '
     restart: always
     network_mode: host
