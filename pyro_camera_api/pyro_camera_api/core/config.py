@@ -56,9 +56,6 @@ if CREDENTIALS_PATH.exists():
     except Exception:
         RAW_CONFIG = {}
 
-USER_ENC = quote(CAM_USER, safe="")
-PWD_ENC = quote(CAM_PWD, safe="")
-
 
 def build_rtsp_input_url(ip: str, cfg: dict) -> str:
     username = quote(str(cfg.get("username", CAM_USER)), safe="")

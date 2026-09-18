@@ -33,7 +33,7 @@ class OfflineReolink(ReolinkCamera):
             camera_id=kwargs.pop("camera_id", "reolink-test"),
             ip_address="192.0.2.1",
             username="user",
-            password="pwd",  # noqa: S106
+            password="pwd",  # ruff: ignore[hardcoded-password-func-arg]
             **kwargs,
         )
         self.focus_history = []

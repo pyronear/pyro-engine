@@ -28,6 +28,7 @@ cover many cameras without a single line of Python.
 | ---------------------------------- | -------------------- | ------- | --- | ----- | ------------------------------------------- |
 | `reolink-823S2`, `reolink-823A16`  | `ReolinkCamera`      | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`           |
 | `linovision` (alias `hikvision`)   | `LinovisionCamera`   | yes     | yes | yes   | `ip_address`, `poses`, `azimuths`           |
+| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | yes | yes   | `ip_address`                                |
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url`                                  |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` with embedded credentials             |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url`, `headers`, `json_path`, `encoding`   |
