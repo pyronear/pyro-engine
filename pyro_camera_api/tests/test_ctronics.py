@@ -178,7 +178,10 @@ class FakeOnvifCamera:
 
 
 @pytest.fixture(autouse=True)
-def fake_onvif():
+def fake_onvif(request):
+    if request.node.name.startswith("test_real_ctronics_"):
+        yield
+        return
     module = ModuleType("onvif")
     module.ONVIFCamera = FakeOnvifCamera  # type: ignore[attr-defined]
     with patch.dict(sys.modules, {"onvif": module}):
