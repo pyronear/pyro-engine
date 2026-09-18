@@ -136,6 +136,13 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             self._ptz_service = self._onvif_camera.create_ptz_service()
             self._refresh_preset_cache()
         except Exception as exc:
+            self._onvif_camera = None
+            self._media_service = None
+            self._ptz_service = None
+            self._imaging_service = None
+            self._profile = None
+            self._preset_tokens = None
+            self._presets = None
             raise RuntimeError(f"CTronics ONVIF is unavailable for {self.ip_address}:{self.onvif_port}") from exc
         try:
             self._imaging_service = self._onvif_camera.create_imaging_service()
