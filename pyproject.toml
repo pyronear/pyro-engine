@@ -30,7 +30,7 @@ dependencies = [
     "requests>=2.33.0,<3",
     "huggingface_hub==0.23.1",
     "python-dotenv==1.1.0",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@361d7a61d75ee7fd7256b4aa118291f20619a2c7#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
 ]
