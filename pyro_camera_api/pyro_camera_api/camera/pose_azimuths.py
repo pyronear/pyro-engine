@@ -110,10 +110,7 @@ def azimuth_sync_loop(stop_flag: threading.Event) -> None:
                 logger.info(
                     "[%s] Pose azimuths resolved from platform API: %s",
                     key,
-                    # No zip(strict=): the runtime is Python 3.9 (Docker image)
-                    # and resolve_camera_azimuths already refuses partial
-                    # mappings, so the lists are same-length here.
-                    dict(zip(cam.cam_poses, cam.cam_azimuths)),  # noqa: B905
+                    dict(zip(cam.cam_poses, cam.cam_azimuths, strict=True)),
                 )
 
         stop_flag.wait(RETRY_INTERVAL_S)
