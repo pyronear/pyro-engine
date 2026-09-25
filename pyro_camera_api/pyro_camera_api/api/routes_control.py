@@ -131,6 +131,38 @@ def fov_at_zoom(zoom: int, adapter: str | None = None) -> tuple[float, float]:
     return h, v
 
 
+def _read_zoom_ratio(cam, camera_ip: str, caller: str) -> float:
+    """Current optical zoom ratio of a hardware-PTZ camera, 1x if it cannot be read."""
+    try:
+        z = cam.get_ptz_status().get("zoom_ratio")
+        if z:
+            return max(1.0, float(z))
+    except Exception as exc:
+        logger.warning("[%s] %s: failed to read zoom ratio, assuming 1x: %s", camera_ip, caller, exc)
+    return 1.0
+
+
+def optical_fov(cam, conf: dict, adapter: str, zoom_ratio: float) -> tuple[float, float]:
+    """(h_fov, v_fov) in degrees at an optical zoom ratio, for hardware-PTZ adapters.
+
+    FOV derives from the wide-end FOV: fov(Z) = 2·atan(tan(fov0/2) / Z).
+    Adapters that know their own optics (``wide_fov_deg``) win; otherwise match
+    aliases the same way the registry does (any case/model variant of
+    "linovision" instantiates LinovisionCamera).
+    """
+    raw_adapter = str(conf.get("adapter", "")).lower()
+    cam_wide_fov = getattr(cam, "wide_fov_deg", None)
+    if cam_wide_fov:
+        h0, v0 = float(cam_wide_fov[0]), float(cam_wide_fov[1])
+    elif "linovision" in raw_adapter:
+        h0, v0 = WIDE_FOV["linovision"]
+    else:
+        h0, v0 = fov_at_zoom(0, adapter)
+    h_fov = math.degrees(2 * math.atan(math.tan(math.radians(h0) / 2) / zoom_ratio))
+    v_fov = math.degrees(2 * math.atan(math.tan(math.radians(v0) / 2) / zoom_ratio))
+    return h_fov, v_fov
+
+
 def _pick_speed(
     target_deg: float,
     speeds: dict,
@@ -197,27 +229,8 @@ def click_to_move(
         # FOV at optical zoom ratio Z derives from the wide-end FOV:
         # fov(Z) = 2·atan(tan(fov0/2) / Z).
         if hasattr(cam, "move_relative_deg"):
-            zoom_ratio = 1.0
-            try:
-                z = cam.get_ptz_status().get("zoom_ratio")
-                if z:
-                    zoom_ratio = max(1.0, float(z))
-            except Exception as exc:
-                logger.warning("[%s] click_to_move: failed to read zoom ratio, assuming 1x: %s", camera_ip, exc)
-
-            # Adapters that know their own optics win; otherwise match aliases
-            # the same way the registry does (any case/model variant of
-            # "linovision" instantiates LinovisionCamera).
-            raw_adapter = str(conf.get("adapter", "")).lower()
-            cam_wide_fov = getattr(cam, "wide_fov_deg", None)
-            if cam_wide_fov:
-                h0, v0 = float(cam_wide_fov[0]), float(cam_wide_fov[1])
-            elif "linovision" in raw_adapter:
-                h0, v0 = WIDE_FOV["linovision"]
-            else:
-                h0, v0 = fov_at_zoom(0, adapter)
-            h_fov = math.degrees(2 * math.atan(math.tan(math.radians(h0) / 2) / zoom_ratio))
-            v_fov = math.degrees(2 * math.atan(math.tan(math.radians(v0) / 2) / zoom_ratio))
+            zoom_ratio = _read_zoom_ratio(cam, camera_ip, "click_to_move")
+            h_fov, v_fov = optical_fov(cam, conf, adapter, zoom_ratio)
             # Exact pinhole projection (a click at x maps to atan of the image-plane
             # offset, not to a linear fraction of the FOV).
             pan_deg = math.degrees(math.atan((2 * click_x - 1) * math.tan(math.radians(h_fov) / 2)))
@@ -945,13 +958,33 @@ def get_camera_azimuth(camera_ip: str):
 
     ``zoom`` and ``h_fov_deg`` describe the current field of view: the zoom
     level is read from the camera and the horizontal FOV comes from the
-    calibrated tables (fov_at_zoom). For adapters without calibration
-    (e.g. Linovision) h_fov_deg falls back to the default table and is only
-    indicative.
+    calibrated tables (fov_at_zoom). Hardware-PTZ adapters (Hikvision,
+    Linovision) report an optical ratio instead: ``zoom_ratio`` carries it,
+    h_fov_deg derives from it optically (as in click_to_move), and ``zoom`` is
+    the equivalent 0-64 level when the adapter exposes ``zoom_max``, so it
+    matches what /zoom/{level} accepts.
     """
     cam = _require_ptz(camera_ip)
     conf = RAW_CONFIG.get(camera_ip, {})
     adapter = _resolve_adapter(conf.get("adapter", "unknown"))
+
+    if hasattr(cam, "move_relative_deg"):
+        zoom_ratio = _read_zoom_ratio(cam, camera_ip, "azimuth")
+        h_fov, _ = optical_fov(cam, conf, adapter, zoom_ratio)
+        zoom_max = getattr(cam, "zoom_max", None)
+        level = 0
+        if zoom_max and zoom_max > 1:
+            level = round(max(0.0, min(1.0, (zoom_ratio - 1.0) / (zoom_max - 1.0))) * 64)
+        azimuth = cam.get_azimuth()
+        return {
+            "camera_ip": camera_ip,
+            "azimuth_deg": None if azimuth is None else round(azimuth, 2),
+            "source": cam.azimuth_source,
+            "moving": MOVE_LOCKS[camera_ip].locked(),
+            "zoom": level,
+            "zoom_ratio": round(zoom_ratio, 2),
+            "h_fov_deg": round(h_fov, 2),
+        }
 
     zoom = 0
     if hasattr(cam, "get_focus_level"):

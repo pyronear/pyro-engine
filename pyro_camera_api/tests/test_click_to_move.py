@@ -122,3 +122,37 @@ def test_click_to_move_hikvision_fov_shrinks_with_zoom(monkeypatch):
     expected = math.degrees(2 * math.atan(math.tan(math.radians(57.6) / 2) / 8))
     assert result["h_fov"] == pytest.approx(expected, abs=1e-3)
     assert result["h_fov"] < 8.0
+
+
+def test_azimuth_route_reports_hikvision_zoom_and_fov(monkeypatch):
+    # Hikvision reports an optical ratio, not a 0-64 level: /azimuth must read
+    # it from get_ptz_status instead of reporting zoom 0 and the wide FOV.
+    from unittest.mock import MagicMock
+
+    from pyro_camera_api.api.routes_control import get_camera_azimuth
+    from pyro_camera_api.camera.adapters.hikvision import HikvisionCamera
+    from pyro_camera_api.core.config import RAW_CONFIG
+
+    ip = "203.0.113.13"
+    cam = HikvisionCamera(
+        camera_id=ip,
+        ip_address=ip,
+        username="admin",
+        password="pwd",  # noqa: S106
+        cam_type="ptz",
+        zoom_max=33.0,
+        wide_fov_deg=(57.6, 34.5),
+        disable_osd=False,
+    )
+    cam.get_ptz_status = MagicMock(return_value={"real_azimuth_deg": 120.0, "elevation_deg": 0.0, "zoom_ratio": 17.0})
+    monkeypatch.setitem(CAMERA_REGISTRY, ip, cam)
+    monkeypatch.setitem(RAW_CONFIG, ip, {"adapter": "hikvision"})
+
+    result = get_camera_azimuth(camera_ip=ip)
+
+    expected = math.degrees(2 * math.atan(math.tan(math.radians(57.6) / 2) / 17))
+    assert result["zoom_ratio"] == pytest.approx(17.0)
+    assert result["h_fov_deg"] == pytest.approx(expected, abs=1e-2)
+    # 17x on a 1x-33x range is halfway, i.e. level 32 on the 0-64 scale.
+    assert result["zoom"] == 32
+    assert result["azimuth_deg"] == pytest.approx(120.0)
