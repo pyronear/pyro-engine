@@ -133,7 +133,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             timeout=conf.get("timeout", 3.0),
             azimuth_offset_deg=conf.get("azimuth_offset_deg", conf.get("azimuth_offset", 0.0)),
             default_elevation_deg=conf.get("default_elevation_deg", 0.0),
-            zoom_max=conf.get("zoom_max", 32.0),
+            zoom_max=conf.get("zoom_max"),
             wide_fov_deg=tuple(conf.get("wide_fov_deg", (57.6, 34.5))),
         )
         logger.info("Registered Hikvision camera %s", key)

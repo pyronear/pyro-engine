@@ -59,6 +59,10 @@ REOLINK_SPEED_MAX = 64.0
 REOLINK_ZOOM_MIN = 0.0
 REOLINK_ZOOM_MAX = 64.0
 
+# Optical zoom ratio assumed when neither credentials.json nor the camera's
+# PTZ capabilities give one. 32x is the DS-2DE7A432IWG1-E datasheet value.
+DEFAULT_ZOOM_MAX = 32.0
+
 
 class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
     """
@@ -117,15 +121,17 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
         timeout: float = 3.0,
         azimuth_offset_deg: float = 0.0,
         default_elevation_deg: Optional[float] = 0.0,
-        zoom_max: float = 32.0,
+        zoom_max: Optional[float] = None,
         wide_fov_deg: Tuple[float, float] = (57.6, 34.5),
         azimuth_tolerance_deg: float = 0.5,
         disable_osd: bool = True,
     ) -> None:
         """
         Args:
-            zoom_max: Maximum optical zoom ratio of the model. 32 on the
-                DS-2DE7A432IWG1-E ("432" = 32x).
+            zoom_max: Maximum zoom ratio. When None, it is read from the
+                camera's PTZ capabilities on first use, falling back to
+                DEFAULT_ZOOM_MAX if the camera cannot be queried. Set it in
+                credentials.json only to force a value.
             wide_fov_deg: (horizontal, vertical) field of view at 1x, from the
                 model datasheet. Used by click_to_move, which derives the FOV
                 at ratio Z as ``2*atan(tan(fov0/2)/Z)``. Override per camera in
@@ -152,7 +158,8 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
 
         self.azimuth_offset_deg = float(azimuth_offset_deg) % 360.0
         self.default_elevation_deg = default_elevation_deg
-        self.zoom_max = float(zoom_max)
+        # None until resolved, see the zoom_max property.
+        self._zoom_max: Optional[float] = float(zoom_max) if zoom_max is not None else None
         self.wide_fov_deg = (float(wide_fov_deg[0]), float(wide_fov_deg[1]))
         self.azimuth_tolerance_deg = float(azimuth_tolerance_deg)
 
@@ -238,6 +245,76 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
             if tag == name:
                 return el.text
         return None
+
+    @property
+    def zoom_max(self) -> float:
+        """Maximum zoom ratio: configured value, else camera capabilities, else DEFAULT_ZOOM_MAX.
+
+        A transient failure (network error, 5xx) is not cached, so a camera
+        that is offline at startup gets its real range once it comes back.
+        Any other failure (404, 401, missing or malformed range) will not fix
+        itself, so DEFAULT_ZOOM_MAX is cached and the camera is not asked again.
+        """
+        if self._zoom_max is not None:
+            return self._zoom_max
+        zmax, transient = self._read_zoom_max()
+        if zmax is not None:
+            logger.info("[%s] Zoom range read from PTZ capabilities: up to %gx", self.ip_address, zmax)
+            self._zoom_max = zmax
+            return zmax
+        if transient:
+            logger.warning(
+                "[%s] PTZ capabilities unreachable, assuming %gx until the next try",
+                self.ip_address,
+                DEFAULT_ZOOM_MAX,
+            )
+        else:
+            logger.warning(
+                "[%s] No usable zoom range in PTZ capabilities, using %gx (set zoom_max in credentials.json to override)",
+                self.ip_address,
+                DEFAULT_ZOOM_MAX,
+            )
+            self._zoom_max = DEFAULT_ZOOM_MAX
+        return DEFAULT_ZOOM_MAX
+
+    def _read_zoom_max(self) -> Tuple[Optional[float], bool]:
+        """Read the max zoom ratio from /ISAPI/PTZCtrl/channels/{ch}/capabilities.
+
+        ``AbsoluteZoomPositionSpace/ZRange`` is in tenths on the tested unit
+        (10-420 for 1x-42x), unlike absoluteEx which carries the ratio itself.
+        Since the range always starts at 1x, Max / Min gives the ratio
+        whatever the unit.
+
+        Returns:
+            (ratio, transient): ratio is None on failure, and transient tells
+            whether the failure is worth retrying later.
+        """
+        path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/capabilities"
+        try:
+            resp = self._request("GET", path, headers={"Accept": "application/xml"})
+        except requests.RequestException as exc:
+            logger.debug("[%s] PTZ capabilities read failed, %s", self.ip_address, exc)
+            return None, True
+        if resp.status_code != 200:
+            logger.debug("[%s] PTZ capabilities read failed, status %s", self.ip_address, resp.status_code)
+            return None, resp.status_code >= 500
+        try:
+            root = ET.fromstring(resp.content)
+        except ET.ParseError as exc:
+            logger.debug("[%s] PTZ capabilities are not valid XML, %s", self.ip_address, exc)
+            return None, False
+
+        for el in root.iter():
+            if el.tag.rsplit("}", 1)[-1] == "AbsoluteZoomPositionSpace":
+                zmin, zmax = self._find_text(el, "Min"), self._find_text(el, "Max")
+                try:
+                    lo, hi = float(zmin or ""), float(zmax or "")
+                except ValueError:
+                    return None, False
+                if lo <= 0 or hi <= lo:
+                    return None, False
+                return hi / lo, False
+        return None, False
 
     def _clamp_elevation(self, elevation_deg: float) -> float:
         return self._clamp(float(elevation_deg), ELEVATION_MIN_DEG, ELEVATION_MAX_DEG)
