@@ -763,15 +763,15 @@ class Engine(Predictor):
         """
         if img is None and encoded_bytes is None:
             return
-        # The root is never created here, so an unmounted USB key does not fill the SD card
-        if not self._backup_folder.is_dir():
-            if not self._backup_missing:
-                logger.warning(f"Backup folder {self._backup_folder} is missing, frames are not saved")
-            self._backup_missing = True
-            return
-        self._backup_missing = False
         folder = "alerts" if is_alert else "save"
         try:
+            # The root is never created here, so an unmounted USB key does not fill the SD card
+            if not self._backup_folder.is_dir():
+                if not self._backup_missing:
+                    logger.warning(f"Backup folder {self._backup_folder} is missing, frames are not saved")
+                self._backup_missing = True
+                return
+            self._backup_missing = False
             backup_cache = self._backup_folder / folder
             backup_cache.mkdir(exist_ok=True)
             # Size scan walks the whole folder, so only run it once per hour

@@ -253,6 +253,8 @@ def test_local_backup_folder(tmp_path):
     # Dying key: write error is logged, not raised
     with patch.object(Path, "write_bytes", side_effect=OSError("I/O error")):
         engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+    with patch.object(Path, "is_dir", side_effect=OSError("I/O error")):
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
 
 
 def test_build_context_crop(tmp_path):
