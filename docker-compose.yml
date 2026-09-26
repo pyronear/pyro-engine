@@ -48,9 +48,17 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
+      # Saved frames go to a USB key mounted on /mnt/usb (see README).
+      # rslave lets the container see the key when it is mounted after start.
+      - type: bind
+        source: /mnt/usb
+        target: /usr/src/app/usb
+        bind:
+          propagation: rslave
+          create_host_path: true
     # The json-file driver below is the single rotated log sink; nothing reads a log
     # file inside the container anymore.
-    command: python run.py
+    command: python run.py --backup-dir /usr/src/app/usb/frames --backup-size 100000
     read_only: true
     cap_drop:
       - ALL
