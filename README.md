@@ -128,6 +128,19 @@ A `./data` directory is expected with at least:
 * optionally `model.onnx` to override weights from Hugging Face
 * optionally `config.json` to override model configuration
 
+### Saving frames on a USB key
+
+With `--save_captured_frames` or `--save_detections_frames`, frames are saved in `/mnt/usb/frames` on the host, so they
+do not fill the SD card. The engine never creates that folder: if the key is missing or fails, it keeps running and
+just does not save frames. To set up the key (this erases it):
+
+```bash
+sudo mkfs.ext4 -L pyro-usb /dev/sda1
+sudo mkdir -p /mnt/usb
+echo "LABEL=pyro-usb /mnt/usb ext4 defaults,nofail,x-systemd.device-timeout=10s 0 2" | sudo tee -a /etc/fstab
+sudo mount /mnt/usb && sudo mkdir /mnt/usb/frames
+```
+
 ---
 
 ## Camera configuration and adapters

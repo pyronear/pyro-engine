@@ -41,10 +41,18 @@ services:
       CAM_PWD: ${CAM_PWD}
     volumes:
       - ./data:/usr/src/app/data
+      # Saved frames go to a USB key mounted on /mnt/usb (see README).
+      # rslave lets the container see the key when it is mounted after start.
+      - type: bind
+        source: /mnt/usb
+        target: /usr/src/app/usb
+        bind:
+          propagation: rslave
+          create_host_path: true
     command: >
       sh -c '
         truncate -s 0 engine.log &&
-        python run.py 2>&1 | tee -a engine.log
+        python run.py --backup-dir /usr/src/app/usb/frames --backup-size 100000 2>&1 | tee -a engine.log
       '
     restart: always
     network_mode: host
