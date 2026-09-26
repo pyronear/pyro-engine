@@ -81,6 +81,7 @@ def main(args):
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
+        backup_folder=args.backup_dir,
     )
 
     sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
@@ -141,6 +142,12 @@ if __name__ == "__main__":
         type=int,
         default=10000,
         help="Local backup can't be bigger than 10Go",
+    )
+    parser.add_argument(
+        "--backup-dir",
+        type=str,
+        default=None,
+        help="Folder for saved frames (default: <cache>/backup), frames are not saved when it is missing",
     )
 
     # Debug

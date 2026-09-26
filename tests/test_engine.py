@@ -227,6 +227,34 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
     assert len(engine._alerts) == 0
 
 
+def test_local_backup_folder(tmp_path):
+    """Frames go to the backup folder, never recreate it when missing, and write errors do not raise."""
+    backup = tmp_path / "usb" / "frames"
+    engine = Engine(cache_folder=str(tmp_path), backup_folder=str(backup))
+
+    # Missing root (unmounted key): nothing saved, nothing created
+    engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+    assert not backup.exists()
+
+    # Root present: frame saved under save/<day>/<cam_id>/
+    backup.mkdir(parents=True)
+    engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+    saved = list(backup.glob("save/*/cam/*.jpg"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == b"jpg"
+
+    # Cleanup runs at most once per hour per folder
+    with patch.object(engine, "_clean_local_backup") as mock_clean:
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+        assert mock_clean.call_count == 0
+        engine._local_backup(None, "cam", is_alert=True, encoded_bytes=b"jpg")
+        assert mock_clean.call_count == 1
+
+    # Dying key: write error is logged, not raised
+    with patch.object(Path, "write_bytes", side_effect=OSError("I/O error")):
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+
+
 def test_build_context_crop(tmp_path):
     """_build_context_crop keeps a compact JPEG region covering all raw preds, or None without preds."""
     engine = Engine(cache_folder=str(tmp_path))
