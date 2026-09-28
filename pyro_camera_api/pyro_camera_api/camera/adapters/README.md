@@ -26,7 +26,8 @@ contract is `camera/base.py`, the dispatch `camera/registry.py`, the implementat
 | ---------------------------------- | -------------------- | ------- | --- | ----- | --------------------------------------------------------------------- |
 | `reolink-823S2`, `reolink-823A16`  | `ReolinkCamera`      | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
 | `reolink` (any string containing it)| `ReolinkCamera`     | yes     | yes | yes   | same, but see Pitfalls: PTZ speeds fall back to the 823S2 tables      |
-| `linovision` (alias `hikvision`)   | `LinovisionCamera`   | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
+| `linovision`                       | `LinovisionCamera`   | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
+| `hikvision`                        | `HikvisionCamera`    | yes     | yes | no    | `type`, `ip_address`, `poses`, `azimuths`, `wide_fov_deg`, `rtsp_channel` |
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url` (**required**)                                             |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` (**required**) with embedded credentials                        |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url` (**required**), `headers`, `response`, `json_path`, `encoding`  |
@@ -212,6 +213,8 @@ registry imports adapter modules directly and that file currently lists four of 
   IP, assuming RTSP on 554 with a Reolink or Linovision path. An adapter has nothing to implement
   and no say, so a camera off that convention captures fine and cannot stream. Moving URL
   construction into the adapters would be more consistent; it is not done today.
+  On Hikvision the default sub-stream (`102`) may only offer 4:3 resolutions; configure the third
+  stream (`103`) in 16:9 on the camera and set `rtsp_channel: "103"`.
 - `type: "ptz"` picks the patrol loop over the static loop at startup, and arms the stuck detector.
   A patrol with no `poses` logs one warning and exits, leaving the camera with no images at all.
 - `azimuth_source` changes what `get_azimuth()` means: `"tracked"` is dead-reckoned server-side and
