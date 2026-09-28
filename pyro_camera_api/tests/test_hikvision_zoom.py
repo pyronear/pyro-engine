@@ -8,9 +8,13 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from pyro_camera_api.camera.adapters.hikvision import DEFAULT_ZOOM_MAX, HikvisionCamera
+from pyro_camera_api.camera.adapters.hikvision import (
+    DEFAULT_ZOOM_MAX,
+    FALLBACK_RESERVED_PRESET_IDS,
+    HikvisionCamera,
+)
 
-# Excerpt of GET /ISAPI/PTZCtrl/channels/1/capabilities on a Hikvision dome.
+# Excerpt of GET /ISAPI/PTZCtrl/channels/1/capabilities on a DS-2SF8C442MXG1-ELWY/26.
 # ZRange is in tenths: 10-420 means 1x-42x.
 CAPABILITIES_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <PTZChanelCap version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
@@ -24,6 +28,10 @@ CAPABILITIES_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <ContinuousZoomSpace>
 <ZRange><Min>-100</Min><Max>100</Max></ZRange>
 </ContinuousZoomSpace>
+<PresetNameCap version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<presetNameSupport>true</presetNameSupport>
+<specialNo opt="33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,90,92,93,94,95,96,97,98,99,100,101,102,103,104,105"/>
+</PresetNameCap>
 </PTZChanelCap>
 """
 
@@ -118,3 +126,53 @@ def test_zoom_level_64_maps_to_camera_max():
     cam.move_absolute = MagicMock()
 
     assert cam.start_zoom_focus(64) == {"zoom_raw": pytest.approx(42.0), "zoom_ratio": pytest.approx(42.0)}
+
+
+def test_reserved_presets_read_from_capabilities():
+    cam = _make_cam()
+    cam._request = MagicMock(return_value=_response(200, CAPABILITIES_XML))
+
+    reserved = cam.reserved_preset_ids
+    # Declared by the camera, and absent from the old hardcoded list.
+    assert {90, 92, 93, 95} <= reserved
+    assert 50 not in reserved
+    assert 1 not in reserved
+
+    with pytest.raises(ValueError, match="reserves it"):
+        cam._reject_reserved_preset(95, "move to")
+    cam._reject_reserved_preset(5, "move to")
+
+
+def test_capabilities_fetched_once_for_zoom_and_presets():
+    cam = _make_cam()
+    cam._request = MagicMock(return_value=_response(200, CAPABILITIES_XML))
+
+    assert cam.zoom_max == pytest.approx(42.0)
+    assert 95 in cam.reserved_preset_ids
+    assert cam._request.call_count == 1
+
+
+def test_reserved_presets_fallback_retries_while_unreachable():
+    cam = _make_cam()
+    cam._request = MagicMock(side_effect=requests.ConnectionError("offline"))
+
+    assert cam.reserved_preset_ids == FALLBACK_RESERVED_PRESET_IDS
+
+    cam._request = MagicMock(return_value=_response(200, CAPABILITIES_XML))
+    assert 50 not in cam.reserved_preset_ids
+
+
+def test_reserved_presets_fallback_cached_when_capabilities_missing():
+    cam = _make_cam()
+    cam._request = MagicMock(return_value=_response(404))
+
+    assert cam.reserved_preset_ids == FALLBACK_RESERVED_PRESET_IDS
+    assert cam.reserved_preset_ids == FALLBACK_RESERVED_PRESET_IDS
+    assert cam._request.call_count == 1
+
+
+def test_wide_fov_defaults_when_not_configured():
+    from pyro_camera_api.camera.adapters.hikvision import DEFAULT_WIDE_FOV_DEG
+
+    assert _make_cam().wide_fov_deg == DEFAULT_WIDE_FOV_DEG
+    assert _make_cam(wide_fov_deg=[59.0, 34.2]).wide_fov_deg == (59.0, 34.2)

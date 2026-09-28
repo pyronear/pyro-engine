@@ -26,24 +26,34 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
-# Hikvision ISAPI XML namespace, as returned by the DS-2DE7A432IWG1-E.
+# Hardware this adapter was developed and validated on:
+#   * DS-2DE7A432IWG1-E        (4 MP, 32x PTZ dome)
+#   * DS-2SF8C442MXG1-ELWY/26  (TandemVu: 4 MP 42x PTZ on channel 1 plus a
+#                               190 deg panoramic lens on channel 2)
+# Both speak the same ISAPI dialect described in HikvisionCamera.
+
+# Hikvision ISAPI XML namespace, as returned by both validated models.
 # (Linovision domes answer on the same paths but with the std-cgi namespace,
 # which is one of several reasons the two adapters stay separate for now.)
 HIKVISION_NS = "http://www.hikvision.com/ver20/XMLSchema"
 
-# Physical tilt range of the DS-2DE7A432IWG1-E, in the dome elevation
-# convention used by absoluteEx: 0 = horizon, positive = looking down,
-# so -15 is 15 degrees above the horizon and 90 is straight down.
+# Tilt range, in the dome elevation convention used by absoluteEx:
+# 0 = horizon, positive = looking down, so -15 is 15 degrees above the horizon
+# and 90 is straight down. -15 is the DS-2DE7A432IWG1-E limit; the
+# DS-2SF8C442MXG1 goes to -20, but the narrower range is kept so one clamp is
+# safe on both.
 ELEVATION_MIN_DEG = -15.0
 ELEVATION_MAX_DEG = 90.0
 
 # Preset ids Hikvision reserves for device functions rather than positions.
 # Calling one runs the function (33 = Auto-flip, 94 = Remote reboot,
 # 99 = Start auto scan, ...) and writing to one can break the camera's own
-# controls. Enumerated from a DS-2DE7A432IWG1-E; Hikvision documents the
-# reserved space loosely as 33-64 and 90-105, but only these were present on
-# the tested unit, so the block list stays evidence-based.
-RESERVED_PRESET_IDS = frozenset({*range(33, 49), 50, 94, *range(96, 106)})
+# controls. The camera declares its own list in the PTZ capabilities
+# (PresetNameCap/specialNo), which is what the adapter uses. This is only the
+# fallback when that list cannot be read: the union of what both validated
+# models reserve (33-48, 50, 94 and 96-105 enumerated on the DS-2DE7A432IWG1-E,
+# 33-48, 90 and 92-105 declared by the DS-2SF8C442MXG1).
+FALLBACK_RESERVED_PRESET_IDS = frozenset({*range(33, 49), 50, 90, *range(92, 106)})
 
 # Continuous PTZ speed range accepted by ISAPI /continuous.
 CONTINUOUS_SPEED_MAX = 100.0
@@ -60,15 +70,22 @@ REOLINK_ZOOM_MIN = 0.0
 REOLINK_ZOOM_MAX = 64.0
 
 # Optical zoom ratio assumed when neither credentials.json nor the camera's
-# PTZ capabilities give one. 32x is the DS-2DE7A432IWG1-E datasheet value.
+# PTZ capabilities give one. 32x (DS-2DE7A432IWG1-E) is the lower of the two
+# validated models, so the fallback never drives a camera past its range.
 DEFAULT_ZOOM_MAX = 32.0
+
+# (horizontal, vertical) field of view at 1x, from the datasheets:
+# DS-2DE7A432IWG1-E 57.6 x 34.5, DS-2SF8C442MXG1 59 x 34.2. Set wide_fov_deg
+# in credentials.json to match the deployed model.
+DEFAULT_WIDE_FOV_DEG = (57.6, 34.5)
 
 
 class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
     """
-    Controller for Hikvision PTZ domes over ISAPI, validated on a DS-2DE7A432IWG1-E.
+    Controller for Hikvision PTZ domes over ISAPI, validated on the
+    DS-2DE7A432IWG1-E and the DS-2SF8C442MXG1-ELWY/26 (PTZ channel).
 
-    Verified behaviour of this model, which differs from the Linovision domes:
+    Verified behaviour of these models, which differs from the Linovision domes:
 
     * ``GET /ISAPI/PTZCtrl/channels/{ch}/absoluteEx`` reports the live position
       as ``PTZAbsoluteEx`` with ``azimuth`` and ``elevation`` in **decimal
@@ -82,11 +99,12 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
     real-world azimuths, and the camera's own reference frame is reached with
     ``camera_az = (real_az + azimuth_offset_deg) % 360``.
 
-    Verified on a DS-2DE7A432IWG1-E: snapshot, PTZ status, azimuth readback,
+    Verified on the DS-2DE7A432IWG1-E: snapshot, PTZ status, azimuth readback,
     absolute moves, relative moves with convergence (settles ~0.15 deg off the
     request, hence the tolerance rather than an equality check), pose moves
-    through the azimuth mapping, preset listing, and zoom over the full 32x
-    range.
+    through the azimuth mapping, preset listing, and zoom over its 32x range.
+    Verified on the DS-2SF8C442MXG1-ELWY/26: snapshot, zoom commands, and the
+    PTZ capabilities document (42x zoom range, reserved preset ids).
 
     Not yet confirmed on hardware, and therefore the places to look first if
     something behaves oddly:
@@ -122,7 +140,7 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
         azimuth_offset_deg: float = 0.0,
         default_elevation_deg: Optional[float] = 0.0,
         zoom_max: Optional[float] = None,
-        wide_fov_deg: Tuple[float, float] = (57.6, 34.5),
+        wide_fov_deg: Optional[Tuple[float, float]] = None,
         azimuth_tolerance_deg: float = 0.5,
         disable_osd: bool = True,
     ) -> None:
@@ -133,9 +151,10 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
                 DEFAULT_ZOOM_MAX if the camera cannot be queried. Set it in
                 credentials.json only to force a value.
             wide_fov_deg: (horizontal, vertical) field of view at 1x, from the
-                model datasheet. Used by click_to_move, which derives the FOV
-                at ratio Z as ``2*atan(tan(fov0/2)/Z)``. Override per camera in
-                credentials.json when deploying a different Hikvision model.
+                model datasheet. Used by click_to_move and /azimuth, which
+                derive the FOV at ratio Z as ``2*atan(tan(fov0/2)/Z)``. None
+                means DEFAULT_WIDE_FOV_DEG; set it per camera in
+                credentials.json to match the deployed model.
             azimuth_tolerance_deg: Convergence window when waiting for a move
                 to complete. The camera reports two decimals, so an exact
                 equality check would never settle.
@@ -160,7 +179,12 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
         self.default_elevation_deg = default_elevation_deg
         # None until resolved, see the zoom_max property.
         self._zoom_max: Optional[float] = float(zoom_max) if zoom_max is not None else None
-        self.wide_fov_deg = (float(wide_fov_deg[0]), float(wide_fov_deg[1]))
+        # PTZ capabilities document, fetched once on first use, see _ptz_capabilities.
+        self._caps: Optional[ET.Element] = None
+        self._caps_unavailable = False
+        self._reserved_preset_ids: Optional[frozenset] = None
+        fov = wide_fov_deg if wide_fov_deg is not None else DEFAULT_WIDE_FOV_DEG
+        self.wide_fov_deg = (float(fov[0]), float(fov[1]))
         self.azimuth_tolerance_deg = float(azimuth_tolerance_deg)
 
         self._auth = HTTPDigestAuth(self.username, self.password)
@@ -169,7 +193,7 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
         # Two valid ways to drive poses. With cam_azimuths, ToPos computes an
         # absolute move; without them it recalls a camera-side ISAPI preset,
         # which also restores zoom and focus. Presets must exist on the camera
-        # and use ids outside RESERVED_PRESET_IDS. The platform azimuth sync
+        # and use ids outside the reserved ones. The platform azimuth sync
         # only serves "tracked" adapters, so nothing fills azimuths in later.
         if self.cam_type != "static" and self.cam_poses and not self.cam_azimuths:
             logger.info(
@@ -246,75 +270,105 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
                 return el.text
         return None
 
-    @property
-    def zoom_max(self) -> float:
-        """Maximum zoom ratio: configured value, else camera capabilities, else DEFAULT_ZOOM_MAX.
+    def _ptz_capabilities(self) -> Optional[ET.Element]:
+        """GET /ISAPI/PTZCtrl/channels/{ch}/capabilities, cached after the first success.
 
-        A transient failure (network error, 5xx) is not cached, so a camera
-        that is offline at startup gets its real range once it comes back.
-        Any other failure (404, 401, missing or malformed range) will not fix
-        itself, so DEFAULT_ZOOM_MAX is cached and the camera is not asked again.
+        Returns None when the document is unavailable. A transient failure
+        (network error, 5xx) is retried on the next call, so a camera that is
+        offline at startup is read once it comes back. Any other failure (404,
+        401, invalid XML) will not fix itself, so it is remembered and the
+        camera is not asked again.
         """
-        if self._zoom_max is not None:
-            return self._zoom_max
-        zmax, transient = self._read_zoom_max()
-        if zmax is not None:
-            logger.info("[%s] Zoom range read from PTZ capabilities: up to %gx", self.ip_address, zmax)
-            self._zoom_max = zmax
-            return zmax
-        if transient:
-            logger.warning(
-                "[%s] PTZ capabilities unreachable, assuming %gx until the next try",
-                self.ip_address,
-                DEFAULT_ZOOM_MAX,
-            )
-        else:
-            logger.warning(
-                "[%s] No usable zoom range in PTZ capabilities, using %gx (set zoom_max in credentials.json to override)",
-                self.ip_address,
-                DEFAULT_ZOOM_MAX,
-            )
-            self._zoom_max = DEFAULT_ZOOM_MAX
-        return DEFAULT_ZOOM_MAX
-
-    def _read_zoom_max(self) -> Tuple[Optional[float], bool]:
-        """Read the max zoom ratio from /ISAPI/PTZCtrl/channels/{ch}/capabilities.
-
-        ``AbsoluteZoomPositionSpace/ZRange`` is in tenths on the tested unit
-        (10-420 for 1x-42x), unlike absoluteEx which carries the ratio itself.
-        Since the range always starts at 1x, Max / Min gives the ratio
-        whatever the unit.
-
-        Returns:
-            (ratio, transient): ratio is None on failure, and transient tells
-            whether the failure is worth retrying later.
-        """
+        if self._caps is not None or self._caps_unavailable:
+            return self._caps
         path = f"/ISAPI/PTZCtrl/channels/{self.ptz_channel}/capabilities"
         try:
             resp = self._request("GET", path, headers={"Accept": "application/xml"})
         except requests.RequestException as exc:
             logger.debug("[%s] PTZ capabilities read failed, %s", self.ip_address, exc)
-            return None, True
+            return None
         if resp.status_code != 200:
             logger.debug("[%s] PTZ capabilities read failed, status %s", self.ip_address, resp.status_code)
-            return None, resp.status_code >= 500
+            self._caps_unavailable = resp.status_code < 500
+            return None
         try:
-            root = ET.fromstring(resp.content)
+            self._caps = ET.fromstring(resp.content)
         except ET.ParseError as exc:
             logger.debug("[%s] PTZ capabilities are not valid XML, %s", self.ip_address, exc)
-            return None, False
+            self._caps_unavailable = True
+        return self._caps
 
+    @staticmethod
+    def _find_element(root: ET.Element, name: str) -> Optional[ET.Element]:
+        """First descendant with this local tag name, ignoring namespaces."""
         for el in root.iter():
-            if el.tag.rsplit("}", 1)[-1] == "AbsoluteZoomPositionSpace":
-                zmin, zmax = self._find_text(el, "Min"), self._find_text(el, "Max")
-                try:
-                    lo, hi = float(zmin or ""), float(zmax or "")
-                except ValueError:
-                    return None, False
-                if lo <= 0 or hi <= lo:
-                    return None, False
-                return hi / lo, False
-        return None, False
+            if el.tag.rsplit("}", 1)[-1] == name:
+                return el
+        return None
+
+    @property
+    def zoom_max(self) -> float:
+        """Maximum zoom ratio: configured value, else camera capabilities, else DEFAULT_ZOOM_MAX.
+
+        ``AbsoluteZoomPositionSpace/ZRange`` is in tenths on the tested units
+        (10-420 for 1x-42x), unlike absoluteEx which carries the ratio itself.
+        Since the range always starts at 1x, Max / Min gives the ratio
+        whatever the unit. The fallback is cached only when the capabilities
+        are permanently unavailable or carry no usable range.
+        """
+        if self._zoom_max is not None:
+            return self._zoom_max
+        caps = self._ptz_capabilities()
+        if caps is None and not self._caps_unavailable:
+            logger.warning(
+                "[%s] PTZ capabilities unreachable, assuming %gx until the next try",
+                self.ip_address,
+                DEFAULT_ZOOM_MAX,
+            )
+            return DEFAULT_ZOOM_MAX
+
+        space = self._find_element(caps, "AbsoluteZoomPositionSpace") if caps is not None else None
+        if space is not None:
+            try:
+                lo = float(self._find_text(space, "Min") or "")
+                hi = float(self._find_text(space, "Max") or "")
+            except ValueError:
+                lo = hi = 0.0
+            if 0 < lo < hi:
+                self._zoom_max = hi / lo
+                logger.info("[%s] Zoom range read from PTZ capabilities: up to %gx", self.ip_address, self._zoom_max)
+                return self._zoom_max
+
+        logger.warning(
+            "[%s] No usable zoom range in PTZ capabilities, using %gx (set zoom_max in credentials.json to override)",
+            self.ip_address,
+            DEFAULT_ZOOM_MAX,
+        )
+        self._zoom_max = DEFAULT_ZOOM_MAX
+        return DEFAULT_ZOOM_MAX
+
+    @property
+    def reserved_preset_ids(self) -> frozenset:
+        """Preset ids the camera reserves for device functions.
+
+        Read from ``PresetNameCap/specialNo@opt`` in the PTZ capabilities,
+        falling back to FALLBACK_RESERVED_PRESET_IDS when the list cannot be
+        read. The fallback is not cached while the camera is unreachable.
+        """
+        if self._reserved_preset_ids is not None:
+            return self._reserved_preset_ids
+        caps = self._ptz_capabilities()
+        special = self._find_element(caps, "specialNo") if caps is not None else None
+        opt = special.get("opt") if special is not None else None
+        if opt:
+            try:
+                self._reserved_preset_ids = frozenset(int(v) for v in opt.split(",") if v.strip())
+                return self._reserved_preset_ids
+            except ValueError:
+                logger.warning("[%s] Unexpected specialNo list in PTZ capabilities: %r", self.ip_address, opt)
+        if caps is not None or self._caps_unavailable:
+            self._reserved_preset_ids = FALLBACK_RESERVED_PRESET_IDS
+        return FALLBACK_RESERVED_PRESET_IDS
 
     def _clamp_elevation(self, elevation_deg: float) -> float:
         return self._clamp(float(elevation_deg), ELEVATION_MIN_DEG, ELEVATION_MAX_DEG)
@@ -706,15 +760,14 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
     # Presets
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _reject_reserved_preset(preset_id: int, action: str) -> None:
+    def _reject_reserved_preset(self, preset_id: int, action: str) -> None:
         """Refuse to touch a preset id that the camera uses as a function key."""
-        if preset_id in RESERVED_PRESET_IDS:
+        reserved = self.reserved_preset_ids
+        if preset_id in reserved:
             raise ValueError(
-                f"Refusing to {action} preset {preset_id}: Hikvision reserves it for a device "
+                f"Refusing to {action} preset {preset_id}: this camera reserves it for a device "
                 f"function (reboot, auto-scan, auto-flip, ...), not a position. "
-                f"Use an id outside {min(RESERVED_PRESET_IDS)}-{max(RESERVED_PRESET_IDS)}, "
-                f"typically 1-32."
+                f"Reserved ids: {sorted(reserved)}. Use an id outside them, typically 1-32."
             )
 
     def get_ptz_preset(self) -> Optional[str]:
@@ -791,8 +844,8 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
         """Not implemented: the ISAPI focus write path is unverified on this model.
 
         absoluteEx reports focus but rejects it as an input, and the
-        /Image FocusConfiguration route has not been validated on the
-        DS-2DE7A432IWG1-E. The value is stored so the patrol loop's focus
+        /Image FocusConfiguration route has not been validated on either
+        model. The value is stored so the patrol loop's focus
         restore stays a no-op instead of failing.
         """
         self.focus_position = position

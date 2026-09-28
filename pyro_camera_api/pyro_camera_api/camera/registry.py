@@ -115,7 +115,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         logger.info("Registered Reolink camera %s", key)
         return cam
 
-    # Hikvision ISAPI cameras (validated on DS-2DE7A432IWG1-E)
+    # Hikvision ISAPI cameras (validated on DS-2DE7A432IWG1-E and DS-2SF8C442MXG1-ELWY/26)
     if "hikvision" in adapter:
         cam = HikvisionCamera(
             camera_id=key,
@@ -134,7 +134,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             azimuth_offset_deg=conf.get("azimuth_offset_deg", conf.get("azimuth_offset", 0.0)),
             default_elevation_deg=conf.get("default_elevation_deg", 0.0),
             zoom_max=conf.get("zoom_max"),
-            wide_fov_deg=tuple(conf.get("wide_fov_deg", (57.6, 34.5))),
+            wide_fov_deg=conf.get("wide_fov_deg"),
         )
         logger.info("Registered Hikvision camera %s", key)
         return cam
