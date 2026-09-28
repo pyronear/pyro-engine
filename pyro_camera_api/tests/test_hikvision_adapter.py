@@ -67,7 +67,7 @@ def _make_cam(routes: dict[str, str], **kwargs) -> tuple[HikvisionCamera, FakeIS
         **kwargs,
     )
     fake = FakeISAPI(routes)
-    cam._request = fake  # type: ignore[method-assign]
+    cam._request = fake
     return cam, fake
 
 
@@ -121,10 +121,10 @@ def test_move_absolute_clamps_zoom_to_the_camera_range():
     ((path, kwargs),) = fake.puts()
     assert path == ABSOLUTE_EX
     body = ET.fromstring(kwargs["data"])
-    assert float(body.find(f"{NS}azimuth").text) == pytest.approx(10.0)
+    assert float(body.findtext(f"{NS}azimuth", "")) == pytest.approx(10.0)
     # Elevation is clamped to the safe tilt range, zoom to the 42x read from capabilities.
-    assert float(body.find(f"{NS}elevation").text) == pytest.approx(-15.0)
-    assert float(body.find(f"{NS}absoluteZoom").text) == pytest.approx(42.0)
+    assert float(body.findtext(f"{NS}elevation", "")) == pytest.approx(-15.0)
+    assert float(body.findtext(f"{NS}absoluteZoom", "")) == pytest.approx(42.0)
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ def test_move_absolute_clamps_zoom_to_the_camera_range():
 
 def _preset_list() -> list[tuple[int, str]]:
     root = ET.fromstring(_fixture("presets.xml"))
-    return [(int(p.find(f"{NS}id").text), p.find(f"{NS}presetName").text) for p in root.iter(f"{NS}PTZPreset")]
+    return [(int(p.findtext(f"{NS}id", "")), p.findtext(f"{NS}presetName", "")) for p in root.iter(f"{NS}PTZPreset")]
 
 
 def test_reserved_ids_match_the_function_presets_the_camera_lists():
@@ -158,7 +158,7 @@ def test_get_ptz_preset_returns_the_raw_list():
 
 def test_goto_user_preset_without_azimuths_recalls_it_on_the_camera():
     cam, fake = _make_cam({CAPABILITIES: CAPABILITIES_XML.decode()})
-    cam.wait_until_stationary = MagicMock(return_value={"azimuth_deg": 156.9})  # type: ignore[method-assign]
+    cam.wait_until_stationary = MagicMock(return_value={"azimuth_deg": 156.9})
 
     cam.move_camera("ToPos", idx=3)
 
