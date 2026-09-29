@@ -12,6 +12,7 @@ style:
 # Run tests for the library
 test:
 	coverage run -m pytest tests/
+	cd pyro_camera_api && PYTHONPATH=. uv run --group test pytest tests/
 
 # Build documentation for current version
 single-docs:
