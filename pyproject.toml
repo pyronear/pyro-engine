@@ -80,7 +80,7 @@ source = ["pyroengine"]
 
 [tool.mypy]
 python_version = "3.11"
-files = "pyroengine/,pyro_camera_api/,pyro-predictor/pyro_predictor/"
+files = "pyroengine/,pyro_camera_api/,pyro_temporal_api/,pyro-predictor/pyro_predictor/"
 show_error_codes = true
 pretty = true
 warn_unused_ignores = true
@@ -135,7 +135,7 @@ exclude = [".git", "pyro-predictor/**", "docs/**"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine", "pyro_camera_api"]
+known-first-party = ["pyroengine", "pyro_camera_api", "pyro_temporal_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -145,6 +145,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 ".github/**.py" = ["D", "T201", "ANN", "S", "PYI024"]
 "tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001", "S113"]
 "pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "S404", "S603", "S405", "S314", "E402", "RUF029"]
+"pyro_temporal_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "E402", "RUF029"]
 "pyroengine/core.py" = ["BLE001"]
 "pyroengine/sensors.py" = ["S113", "S501", "ANN"]
 "watchdog/**.py" = ["CPY001", "S108", "S310", "S404", "S603", "S607", "BLE001", "LOG015"]
