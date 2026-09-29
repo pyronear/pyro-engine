@@ -22,3 +22,8 @@ changelog:
     - title: Miscellaneous
       labels:
         - "type: misc"
+    # EVERYTHING ELSE
+    # Without this catch-all, unlabeled PRs match no category and GitHub
+    # drops them, which leaves the generated release notes empty.
+    - title: Other changes
+      labels: ["*"]
