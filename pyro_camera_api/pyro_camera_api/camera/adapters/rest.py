@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import re
 from io import BytesIO
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -17,13 +16,12 @@ import requests
 from PIL import Image
 
 from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.utils.redact import redact_url
 
 logger = logging.getLogger(__name__)
 
 # Header names whose values must never be logged in clear.
 _SENSITIVE_HEADERS = {"authorization", "x-api-key", "api-key", "apikey", "token"}
-# Query parameters whose values must never be logged in clear.
-_SENSITIVE_QUERY = re.compile(r"(token|access_token|api_?key|pwd|password)=([^&]+)", re.IGNORECASE)
 
 
 class RestSnapshotCamera(BaseCamera):
@@ -72,8 +70,8 @@ class RestSnapshotCamera(BaseCamera):
 
     @staticmethod
     def _redact_url(url: str) -> str:
-        """Mask credential-like query parameters for safe logging."""
-        return _SENSITIVE_QUERY.sub(r"\1=***", url)
+        """Mask userinfo and credential-like query parameters for safe logging."""
+        return redact_url(url)
 
     def _safe_headers(self) -> Dict[str, str]:
         """Return headers with sensitive values removed (for cross-origin fetches)."""
