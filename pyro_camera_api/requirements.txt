@@ -2,11 +2,7 @@
 #    uv export --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements-all.txt
 annotated-types==0.7.0
     # via pydantic
-anyio==4.12.1 ; python_full_version < '3.10'
-    # via
-    #   starlette
-    #   watchfiles
-anyio==4.13.0 ; python_full_version >= '3.10'
+anyio==4.13.0
     # via
     #   starlette
     #   watchfiles
@@ -14,9 +10,7 @@ certifi==2026.2.25
     # via requests
 charset-normalizer==3.4.7
     # via requests
-click==8.1.8 ; python_full_version < '3.10'
-    # via uvicorn
-click==8.3.2 ; python_full_version >= '3.10'
+click==8.3.2
     # via uvicorn
 colorama==0.4.6 ; sys_platform == 'win32'
     # via
@@ -25,8 +19,6 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   uvicorn
 coloredlogs==15.0.1
     # via onnxruntime
-exceptiongroup==1.3.1 ; python_full_version < '3.11'
-    # via anyio
 fastapi==0.110.3
     # via pyro-camera-api
 flatbuffers==25.12.19
@@ -63,9 +55,7 @@ pillow==10.4.0
     # via pyro-camera-api
 portalocker==3.2.0
     # via ncnn
-protobuf==6.33.6 ; python_full_version < '3.10'
-    # via onnxruntime
-protobuf==7.34.1 ; python_full_version >= '3.10'
+protobuf==7.34.1
     # via onnxruntime
 pydantic==2.13.1
     # via fastapi
@@ -73,11 +63,7 @@ pydantic-core==2.46.1
     # via pydantic
 pyreadline3==3.5.4 ; sys_platform == 'win32'
     # via humanfriendly
-python-dotenv==1.2.1 ; python_full_version < '3.10'
-    # via
-    #   pyro-camera-api
-    #   uvicorn
-python-dotenv==1.2.2 ; python_full_version >= '3.10'
+python-dotenv==1.2.2
     # via
     #   pyro-camera-api
     #   uvicorn
@@ -85,11 +71,7 @@ pywin32==311 ; sys_platform == 'win32'
     # via portalocker
 pyyaml==6.0.3
     # via uvicorn
-requests==2.32.5 ; python_full_version < '3.10'
-    # via
-    #   ncnn
-    #   pyro-camera-api
-requests==2.33.1 ; python_full_version >= '3.10'
+requests==2.33.1
     # via
     #   ncnn
     #   pyro-camera-api
@@ -102,13 +84,10 @@ tqdm==4.67.3
 typing-extensions==4.15.0
     # via
     #   anyio
-    #   exceptiongroup
     #   fastapi
     #   pydantic
     #   pydantic-core
-    #   starlette
     #   typing-inspection
-    #   uvicorn
 typing-inspection==0.4.2
     # via pydantic
 urllib3==2.6.3
@@ -121,7 +100,5 @@ uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'c
     # via uvicorn
 watchfiles==1.1.1
     # via uvicorn
-websockets==15.0.1 ; python_full_version < '3.10'
-    # via uvicorn
-websockets==16.0 ; python_full_version >= '3.10'
+websockets==16.0
     # via uvicorn
