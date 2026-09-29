@@ -139,6 +139,7 @@ class Engine(Predictor):
         save_captured_frames: Optional[bool] = False,
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
+        heartbeat_period: int = 60,  # 1 min
         last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
@@ -172,6 +173,8 @@ class Engine(Predictor):
         self.save_detections_frames = save_detections_frames
         self.cam_creds = cam_creds
         self.send_last_image_period = send_last_image_period
+        self.heartbeat_period = heartbeat_period
+        self._last_heartbeat: Dict[str, float] = {}  # camera ip -> time.monotonic() of the last attempt
         self.last_bbox_mask_fetch_period = last_bbox_mask_fetch_period
 
         # Local backup
@@ -266,7 +269,12 @@ class Engine(Predictor):
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
+            # One heartbeat per camera, not per pose: liveness only needs minute-level resolution and
+            # heartbeats were 89% of the API traffic.
+            ip = cam_id.split("_")[0]
+            if time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) >= self.heartbeat_period:
+                heartbeat_with_timeout(self, cam_id, timeout=1)
+                self._last_heartbeat[ip] = time.monotonic()
             if (
                 self._states[cam_key]["last_image_sent"] is None
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
