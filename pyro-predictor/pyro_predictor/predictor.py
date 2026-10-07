@@ -95,13 +95,14 @@ class Predictor:
         effective_thresh = self.conf_thresh * 0.8 if prev_ongoing else self.conf_thresh
 
         # Pool = current preds + last (nb - 1) past frames' raw preds.
-        pool = np.zeros((0, 5), dtype=np.float64)
-        pool = np.concatenate([pool, preds])
+        pool_parts = [np.zeros((0, 5), dtype=np.float64), preds]
         history = self._states[cam_key]["last_predictions"]
         recent_past = list(history)[-(nb - 1) :] if nb > 1 else []
         for _, box, _, _, _, _ in recent_past:
             if box.shape[0] > 0:
-                pool = np.concatenate([pool, box])
+                pool_parts.append(box)
+        # Keep the original order and float64 promotion, but copy the pool once.
+        pool = np.concatenate(pool_parts)
 
         conf = 0.0
         output_predictions: npt.NDArray[np.float64] = np.zeros((0, 5), dtype=np.float64)
@@ -177,7 +178,9 @@ class Predictor:
                 frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
 
         if fake_pred is None:
-            preds = self.model(frame.convert("RGB"), occlusion_bboxes or {})
+            # PIL's convert("RGB") copies even an already-RGB image.
+            rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
+            preds = self.model(rgb_frame, occlusion_bboxes or {})
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
