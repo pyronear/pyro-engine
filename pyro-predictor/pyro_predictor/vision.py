@@ -20,9 +20,11 @@ from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_REPO_ID = "pyronear/yolo11s_rapid-raccoon_v8.1.0"
+MODEL_REPO_ID = "pyronear/yolov11s"
+# Releases are git tags on the HF repo; pin one so engines never follow `main`.
+MODEL_REVISION = "v8.2.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
-MODEL_SLUG = MODEL_REPO_ID.split("/", 1)[1]
+MODEL_SLUG = f"{MODEL_REPO_ID.split('/', 1)[1]}_{MODEL_REVISION}"
 MODEL_CACHE_SUBDIR = "models"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
@@ -75,7 +77,7 @@ class Classifier:
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
-            # Namespace cached weights by model slug so a MODEL_REPO_ID bump lands in a
+            # Namespace cached weights by model slug so a MODEL_REVISION bump lands in a
             # fresh path and old weights can be purged.
             cache_root = pathlib.Path(model_folder) / MODEL_CACHE_SUBDIR
             model_cache = cache_root / MODEL_SLUG
@@ -97,9 +99,11 @@ class Classifier:
                     shutil.rmtree(legacy_extract, ignore_errors=True)
                     logger.info(f"Removed legacy model extract dir: {legacy_extract}")
 
-                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
+                logger.info(f"Downloading model from {MODEL_REPO_ID}@{MODEL_REVISION}/{model} ...")
                 model_cache.mkdir(exist_ok=True, parents=True)
-                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=str(model_cache))
+                hf_hub_download(
+                    repo_id=MODEL_REPO_ID, filename=model, revision=MODEL_REVISION, local_dir=str(model_cache)
+                )
                 logger.info("Model downloaded!")
 
             # Extract archive
