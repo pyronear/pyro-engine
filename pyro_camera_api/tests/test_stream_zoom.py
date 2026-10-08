@@ -30,3 +30,17 @@ def test_stop_stream_falls_back_to_zero():
         routes_stream._pre_stream_zoom["cam"] = routes_stream._read_zoom("cam")
         routes_stream.stop_stream(MagicMock())
     cam.start_zoom_focus.assert_called_once_with(position=0)
+
+
+def test_stop_stream_holds_the_startup_lock():
+    """Otherwise a concurrent start_stream could save a zoom this stop pops."""
+    held = []
+
+    def stop(_app):
+        held.append(routes_stream._START_STREAM_LOCK.locked())
+        return "cam"
+
+    with patch.dict(REGISTRY, {"cam": MagicMock()}, clear=True), patch(STOP, side_effect=stop):
+        routes_stream.stop_stream(MagicMock())
+    assert held == [True]
+    assert not routes_stream._START_STREAM_LOCK.locked()
