@@ -253,7 +253,10 @@ class Engine(Predictor):
             # One heartbeat per camera, not per pose: liveness only needs minute-level resolution and
             # heartbeats were 89% of the API traffic.
             ip = cam_id.split("_")[0]
-            if time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) >= self.heartbeat_period:
+            if (
+                ip in self.api_client
+                and time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) >= self.heartbeat_period
+            ):
                 # Short per-request timeout so a slow API never holds the frame loop
                 try:
                     self.heartbeat(cam_id, timeout=1)

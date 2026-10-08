@@ -612,6 +612,11 @@ def test_heartbeat_once_per_camera_per_period(tmp_path, mock_forest_image):
         engine.predict(mock_forest_image, "10.0.0.2_0")
         assert fake_client.heartbeat.call_count == 4
 
+        # A camera without an API client is skipped instead of raising KeyError
+        clock[0] += 61
+        engine.predict(mock_forest_image, "10.0.0.9_0")
+        assert fake_client.heartbeat.call_count == 4
+
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):
     """Build an Engine with the api_client stubbed and datetime.now() pinned to init_clock."""
