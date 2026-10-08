@@ -52,6 +52,10 @@ _session.trust_env = False
 _session.headers["Connection"] = "close"
 _session.mount("https://", _LegacyTLSAdapter())
 
+# Zoom/focus reads and the zoom restore run under the stream lock in
+# routes_stream, so a camera that stops answering must not hang them forever.
+_ZOOM_FOCUS_TIMEOUT = 5
+
 
 class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     """
@@ -96,6 +100,65 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 len(self.cam_poses),
                 len(self.cam_azimuths),
             )
+        self._has_motorised_lens: Optional[bool] = None
+        self._lens_probe_warned = False
+
+    def _probe_zoom_support(self) -> Optional[bool]:
+        """Ask the camera whether it reports a zoom position.
+
+        Returns None whenever the probe is inconclusive, so the caller can
+        distinguish transport, HTTP, Reolink API and parsing failures from a
+        successful response that establishes whether a zoom position is
+        available. Never raises.
+        """
+        try:
+            response = _session.post(
+                self._build_url("GetZoomFocus"),
+                json=[{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}],
+                verify=False,  # nosec: B501
+                timeout=_ZOOM_FOCUS_TIMEOUT,
+            )
+            if response.status_code != 200:
+                self._warn_probe_failure("got HTTP %s", response.status_code)
+                return None
+            reply = response.json()[0]
+            if reply.get("code") != 0:
+                self._warn_probe_failure("was rejected by the camera: %s", reply.get("error"))
+                return None
+            return reply["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
+        except Exception as exc:
+            self._warn_probe_failure("failed: %s", exc)
+            return None
+
+    def _warn_probe_failure(self, msg: str, *args: Any) -> None:
+        # Failed probes are retried on every zoom/focus command, so only the
+        # first failure per camera is worth a warning.
+        log = logger.debug if self._lens_probe_warned else logger.warning
+        self._lens_probe_warned = True
+        log("[%s] lens probe " + msg, self.ip_address, *args)
+
+    def has_motorised_lens(self) -> bool:
+        """Whether this camera's lens can be driven.
+
+        ``cam_type`` describes how the camera is mounted, not what optics it
+        carries. A "static" camera is one that does not pan or tilt, which says
+        nothing about zoom: Reolink bullets such as the RLC-811A or the P430 sit
+        fixed on their mast and still ship a motorised varifocal lens.
+
+        A definitive answer from a successful response is cached, since a lens
+        cannot grow a motor at runtime and zoom commands are frequent. Failed
+        probes are retried so one transient error cannot strand a capable camera
+        until the service restarts.
+
+        Only static cameras are probed: PTZ cameras always drive their lens, and
+        probing them would let a transient error drop a zoom command that used
+        to be sent unconditionally.
+        """
+        if self.cam_type != "static":
+            return True
+        if self._has_motorised_lens is None:
+            self._has_motorised_lens = self._probe_zoom_support()
+        return self._has_motorised_lens is True
 
     def _build_url(self, command: str) -> str:
         """Constructs a URL for API commands to the camera."""
@@ -257,7 +320,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         return self._handle_response(response, "Set AutoFocus settings successfully.")
 
     def start_zoom_focus(self, position: int):
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             url = self._build_url("StartZoomFocus")
             data: Any = [
                 {
@@ -266,7 +329,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
                 }
             ]
-            response = _session.post(url, json=data, verify=False)  # nosec: B501
+            response = _session.post(url, json=data, verify=False, timeout=_ZOOM_FOCUS_TIMEOUT)  # nosec: B501
             return self._handle_response(response, "Started ZoomFocus successfully.")
         return None
 
@@ -274,7 +337,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """
         Set manual focus to a specific position.
         """
-        if self.cam_type != "static":
+        if self.has_motorised_lens():
             self.focus_position = position
             url = self._build_url("StartZoomFocus")
             data: Any = [
@@ -292,7 +355,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """Retrieve the current manual focus and zoom positions."""
         url = self._build_url("GetZoomFocus")
         data: Any = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
-        response = _session.post(url, json=data, verify=False)  # nosec: B501
+        response = _session.post(url, json=data, verify=False, timeout=_ZOOM_FOCUS_TIMEOUT)  # nosec: B501
         result = self._handle_response(response, "Got zoom/focus values")
         if result and result[0]["code"] == 0:
             zoom_focus = result[0]["value"]["ZoomFocus"]

@@ -32,6 +32,22 @@ from pyro_camera_api.utils.time_utils import update_command_time
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Zoom each camera had when its stream started, restored when the stream stops.
+# Static varifocal cameras carry a zoom set by hand as their detection framing,
+# so resetting them to 0 would lose it.
+_pre_stream_zoom: dict[str, int] = {}
+
+
+def _read_zoom(camera_ip: str) -> int:
+    """Current zoom position of a camera, or 0 when it cannot tell."""
+    try:
+        zoom = (CAMERA_REGISTRY[camera_ip].get_focus_level() or {}).get("zoom")
+    except Exception as exc:
+        logger.warning("[%s] Failed to read zoom before stream, %s", camera_ip, exc)
+        return 0
+    return zoom if isinstance(zoom, int) else 0
+
+
 # Serializes stream startup: without it, two concurrent start_stream calls
 # can both pass the idempotent check and spawn two pipelines for the same
 # camera. The untracked duplicate keeps streaming invisibly, so stream-aware
@@ -85,6 +101,7 @@ def start_stream(camera_ip: str, request: Request):
         # startup failed), otherwise autofocus would be blocked forever.
         try:
             stopped_cam = stop_any_running_stream(app)
+            _pre_stream_zoom[camera_ip] = _read_zoom(camera_ip)
             cfg_stream = STREAMS[camera_ip]
             input_url: str = cfg_stream["input_url"]
             output_url: str = cfg_stream["output_url"]
@@ -155,8 +172,9 @@ def stop_stream(request: Request):
     """
     Stop the currently running live stream, regardless of which camera is streaming.
 
-    After stopping streaming, a best-effort zoom reset is applied to position 0
-    for cameras that support zoom control. Failures during zoom reset are ignored.
+    After stopping streaming, a best-effort zoom reset restores the zoom the
+    camera had when the stream started (0 if unknown), for cameras that support
+    zoom control. Failures during zoom reset are ignored.
 
     Returns:
         JSON confirmation and camera IP whose stream was stopped,
@@ -164,17 +182,21 @@ def stop_stream(request: Request):
     """
     update_command_time()
     app = request.app
-    stopped_cam = stop_any_running_stream(app)
-    if stopped_cam:
+    # Same lock as startup: a concurrent start_stream for this camera must not
+    # have its freshly saved zoom popped by this stop.
+    with _START_STREAM_LOCK:
+        stopped_cam = stop_any_running_stream(app)
+        if not stopped_cam:
+            return {"message": "No active stream was running"}
         cam = CAMERA_REGISTRY.get(stopped_cam)
         if cam:
+            zoom = _pre_stream_zoom.pop(stopped_cam, 0)
             try:
-                cam.start_zoom_focus(position=0)
-                logger.info("[%s] Zoom reset to position 0 after stream stop", stopped_cam)
+                cam.start_zoom_focus(position=zoom)
+                logger.info("[%s] Zoom reset to position %s after stream stop", stopped_cam, zoom)
             except Exception as exc:
                 logger.warning("[%s] Failed to reset zoom, %s", stopped_cam, exc)
-        return {"message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.", "camera_ip": stopped_cam}
-    return {"message": "No active stream was running"}
+    return {"message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.", "camera_ip": stopped_cam}
 
 
 @router.get("/status")
