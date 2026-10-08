@@ -133,7 +133,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             focus_position=conf.get("focus_position"),
             timeout=conf.get("timeout", 3.0),
             azimuth_offset_deg=conf.get("azimuth_offset_deg", conf.get("azimuth_offset", 0.0)),
-            default_elevation_deg=conf.get("timeout", 0),
+            default_elevation_deg=conf.get("default_elevation_deg", 0),
         )
         logger.info("Registered Linovision camera %s", key)
         return cam
