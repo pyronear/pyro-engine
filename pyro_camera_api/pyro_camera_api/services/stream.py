@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, cast
 
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import FFMPEG_PARAMS
 from pyro_camera_api.services.anonymizer_rtsp import (
     AnonymizerWorker,
@@ -38,6 +39,42 @@ class Pipeline:
 
 # Optional global app reference for the idle stopper
 _APP: Optional["FastAPI"] = None
+
+# Serializes stream startup and every stop path. Without it, two concurrent
+# start_stream calls can both pass the idempotent check and spawn two
+# pipelines for the same camera; the untracked duplicate keeps streaming
+# invisibly, so stream-aware guards (focus, patrol) believe no stream is
+# running. Reentrant because start_stream stops the previous stream while
+# holding it.
+STREAM_LOCK = threading.RLock()
+
+# Zoom each camera had when its stream started, restored when the stream stops.
+# Static varifocal cameras carry a zoom set by hand as their detection framing,
+# so resetting them to 0 would lose it.
+_pre_stream_zoom: dict[str, int] = {}
+
+
+def save_pre_stream_zoom(camera_id: str) -> None:
+    """Remember the camera's current zoom, or 0 when it cannot tell."""
+    try:
+        zoom = (CAMERA_REGISTRY[camera_id].get_focus_level() or {}).get("zoom")
+    except Exception as exc:
+        logger.warning("[%s] Failed to read zoom before stream, %s", camera_id, exc)
+        zoom = None
+    _pre_stream_zoom[camera_id] = zoom if isinstance(zoom, int) else 0
+
+
+def _restore_zoom(camera_id: str) -> None:
+    """Best-effort return to the pre-stream zoom; failures are logged only."""
+    zoom = _pre_stream_zoom.pop(camera_id, 0)
+    cam = CAMERA_REGISTRY.get(camera_id)
+    if cam is None or not hasattr(cam, "start_zoom_focus"):
+        return
+    try:
+        cam.start_zoom_focus(position=zoom)
+        logger.info("[%s] Zoom reset to position %s after stream stop", camera_id, zoom)
+    except Exception as exc:
+        logger.warning("[%s] Failed to reset zoom, %s", camera_id, exc)
 
 
 def set_app_for_stream(app: "FastAPI") -> None:
@@ -179,11 +216,20 @@ def build_ffmpeg_restream_cmd(input_url: str, output_url: str) -> list[str]:
 def stop_any_running_stream(app: Optional["FastAPI"]) -> Optional[str]:
     """
     Stop one active stream, whether decoder plus encoder pipeline
-    or a plain ffmpeg restream process.
+    or a plain ffmpeg restream process, then restore the zoom the camera had
+    when its stream started.
 
     Priority is to stop pipelines first, then processes.
     Returns the camera_id that was stopped or None if nothing was running.
     """
+    with STREAM_LOCK:
+        stopped = _stop_first_running_stream(app)
+        if stopped:
+            _restore_zoom(stopped)
+        return stopped
+
+
+def _stop_first_running_stream(app: Optional["FastAPI"]) -> Optional[str]:
     global _APP
 
     if app is None:
