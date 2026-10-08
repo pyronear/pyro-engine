@@ -6,20 +6,18 @@
 import io
 import logging
 import shutil
-import signal
 import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Never, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
 from pyro_predictor import Predictor
 from pyro_predictor.utils import box_iou
 from pyroclient import client
-from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.models import Response
 
@@ -72,23 +70,6 @@ class ContextCrop:
     full_h: int
 
 
-def handler(_signum: int, _frame: object) -> Never:
-    raise TimeoutError("Heartbeat check timed out")
-
-
-def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 1) -> None:  # noqa: ANN401
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout)
-    try:
-        api_instance.heartbeat(cam_id)
-    except TimeoutError:
-        logger.warning(f"Heartbeat check timed out for {cam_id}")
-    except RequestsConnectionError:
-        logger.warning(f"Unable to reach the pyro-api with {cam_id}")
-    finally:
-        signal.alarm(0)
-
-
 class Engine(Predictor):
     """Manages predictions and API interactions for wildfire alerts.
 
@@ -139,6 +120,7 @@ class Engine(Predictor):
         save_captured_frames: Optional[bool] = False,
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
+        heartbeat_period: int = 60,  # 1 min
         last_bbox_mask_fetch_period: int = 3600,  # 1H
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
@@ -172,6 +154,8 @@ class Engine(Predictor):
         self.save_detections_frames = save_detections_frames
         self.cam_creds = cam_creds
         self.send_last_image_period = send_last_image_period
+        self.heartbeat_period = heartbeat_period
+        self._last_heartbeat: Dict[str, float] = {}  # camera ip -> time.monotonic() of the last attempt
         self.last_bbox_mask_fetch_period = last_bbox_mask_fetch_period
 
         # Local backup
@@ -219,10 +203,10 @@ class Engine(Predictor):
             if entry[4]:  # is_staged: belongs to the event that just ended
                 window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
-    def heartbeat(self, cam_id: str) -> Response:
+    def heartbeat(self, cam_id: str, timeout: Optional[float] = None) -> Response:
         """Updates last ping of device"""
         ip = cam_id.split("_")[0]
-        return self.api_client[ip].heartbeat()
+        return self.api_client[ip].heartbeat(timeout=timeout)
 
     def predict(
         self,
@@ -266,7 +250,19 @@ class Engine(Predictor):
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
+            # One heartbeat per camera, not per pose: liveness only needs minute-level resolution and
+            # heartbeats were 89% of the API traffic.
+            ip = cam_id.split("_")[0]
+            if (
+                ip in self.api_client
+                and time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) >= self.heartbeat_period
+            ):
+                # Short per-request timeout so a slow API never holds the frame loop
+                try:
+                    self.heartbeat(cam_id, timeout=1)
+                except RequestException as e:
+                    logger.warning(f"Heartbeat failed for {cam_id}: {e}")
+                self._last_heartbeat[ip] = time.monotonic()
             if (
                 self._states[cam_key]["last_image_sent"] is None
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
