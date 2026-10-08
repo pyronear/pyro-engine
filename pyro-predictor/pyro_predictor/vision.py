@@ -54,6 +54,8 @@ class Classifier:
         self.verbose = verbose
         if not verbose:
             logger.setLevel(logging.WARNING)
+            # hf_hub 1.x logs its HTTP requests through httpx at INFO
+            logging.getLogger("httpx").setLevel(logging.WARNING)
 
         if model_path:
             if not pathlib.Path(model_path).is_file():
