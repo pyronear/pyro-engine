@@ -10,6 +10,7 @@ import logging
 import pathlib
 import time
 from io import BytesIO
+from operator import itemgetter
 from typing import Any, Callable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
@@ -36,7 +37,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         port: int = 80,
         protocol: str = "http",
-        snapshot_path: str = "/tmpfs/snap.jpg",
+        snapshot_path: str = "/tmpfs/snap.jpg",  # noqa: S108
         snapshot_command: Optional[str] = None,
         timeout: float = 5.0,
         cam_type: str = "static",
@@ -420,6 +421,6 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
                 folder = pathlib.Path("focus_debug") / self.ip_address.replace(".", "_")
                 folder.mkdir(exist_ok=True, parents=True)
                 image.save(folder / f"focus_{position}.jpg")
-        best_focus = max(scores, key=lambda item: item[1])[0]
+        best_focus = max(scores, key=itemgetter(1))[0]
         self.set_manual_focus(best_focus)
         return best_focus

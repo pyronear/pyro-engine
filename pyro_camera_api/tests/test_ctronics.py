@@ -102,44 +102,42 @@ class FakeOnvifService:
     def __init__(self):
         self.calls = []
         self.presets = [
-            SimpleNamespace(token="0", Name="home"),  # ruff: ignore[hardcoded-password-func-arg]
-            SimpleNamespace(token="1", Name="west"),  # ruff: ignore[hardcoded-password-func-arg]
+            SimpleNamespace(token="0", Name="home"),
+            SimpleNamespace(token="1", Name="west"),
         ]
         self.focus_position = 0.5
 
     def create_type(self, name):
         return SimpleNamespace(_type=name)
 
-    def GetProfiles(self):  # ruff: ignore[invalid-function-name]
-        return [
-            SimpleNamespace(token="profile-1", VideoSourceConfiguration=SimpleNamespace(SourceToken="video-1"))  # ruff: ignore[hardcoded-password-func-arg]
-        ]
+    def GetProfiles(self):
+        return [SimpleNamespace(token="profile-1", VideoSourceConfiguration=SimpleNamespace(SourceToken="video-1"))]
 
-    def ContinuousMove(self, request):  # ruff: ignore[invalid-function-name]
+    def ContinuousMove(self, request):
         if isinstance(request.Velocity, dict):
             request.Velocity = DictToAttr(request.Velocity)
         self.calls.append(("ContinuousMove", request))
 
-    def AbsoluteMove(self, request):  # ruff: ignore[invalid-function-name]
+    def AbsoluteMove(self, request):
         if isinstance(request.Position, dict):
             request.Position = DictToAttr(request.Position)
         self.calls.append(("AbsoluteMove", request))
 
-    def Stop(self, request):  # ruff: ignore[invalid-function-name]
+    def Stop(self, request):
         self.calls.append(("Stop", request))
 
-    def GetPresets(self, request):  # ruff: ignore[invalid-function-name]
+    def GetPresets(self, request):
         self.calls.append(("GetPresets", request))
         return self.presets
 
-    def GotoPreset(self, request):  # ruff: ignore[invalid-function-name]
+    def GotoPreset(self, request):
         self.calls.append(("GotoPreset", request))
 
-    def SetPreset(self, request):  # ruff: ignore[invalid-function-name]
+    def SetPreset(self, request):
         self.calls.append(("SetPreset", request))
         return SimpleNamespace(token=request.PresetToken or "new")
 
-    def Move(self, request):  # ruff: ignore[invalid-function-name]
+    def Move(self, request):
         self.calls.append(("Move", request))
         focus = request.Focus
         if isinstance(focus, dict):
@@ -147,15 +145,15 @@ class FakeOnvifService:
         else:
             self.focus_position = focus.Absolute.Position
 
-    def GetStatus(self, request):  # ruff: ignore[invalid-function-name]
+    def GetStatus(self, request):
         self.calls.append(("GetStatus", request))
         return SimpleNamespace(FocusStatus20=SimpleNamespace(Position=self.focus_position))
 
-    def GetImagingSettings(self, request):  # ruff: ignore[invalid-function-name]
+    def GetImagingSettings(self, request):
         self.calls.append(("GetImagingSettings", request))
         return SimpleNamespace(Focus=SimpleNamespace(AutoFocusMode="AUTO"))
 
-    def SetImagingSettings(self, request):  # ruff: ignore[invalid-function-name]
+    def SetImagingSettings(self, request):
         self.calls.append(("SetImagingSettings", request))
 
 
@@ -238,7 +236,7 @@ def test_onvif_connection_uses_configured_port_and_profile():
     camera._ensure_onvif()
 
     assert camera._onvif_camera.args[:4] == ("192.0.2.10", 8080, "user", "secret")
-    assert camera.onvif_profile_token == "profile-1"  # ruff: ignore[hardcoded-password-string]
+    assert camera.onvif_profile_token == "profile-1"
 
 
 def test_onvif_connection_errors_are_exposed_as_runtime_errors():
@@ -344,7 +342,7 @@ def test_preset_tokens_are_cached_between_moves():
 def test_move_camera_accepts_exact_string_preset_token():
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera._ensure_onvif()
-    camera._ptz_service.presets = [SimpleNamespace(token="Preset1", Name="Preset1")]  # ruff: ignore[hardcoded-password-func-arg]
+    camera._ptz_service.presets = [SimpleNamespace(token="Preset1", Name="Preset1")]
     camera._preset_tokens = None
     camera._presets = None
 
@@ -357,7 +355,7 @@ def test_move_camera_accepts_exact_string_preset_token():
 def test_preset_cache_accepts_capitalized_onvif_fields():
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
     camera._ensure_onvif()
-    camera._ptz_service.presets = [SimpleNamespace(Token="7", Name="tower")]  # ruff: ignore[hardcoded-password-func-arg]
+    camera._ptz_service.presets = [SimpleNamespace(Token="7", Name="tower")]
     camera._preset_tokens = None
     camera._presets = None
 
@@ -374,8 +372,8 @@ def test_preset_token_must_match_before_moving_or_updating_azimuth():
     camera._preset_tokens = None
     camera._presets = None
     camera._ptz_service.presets = [
-        SimpleNamespace(token="101"),  # ruff: ignore[hardcoded-password-func-arg]
-        SimpleNamespace(token="202"),  # ruff: ignore[hardcoded-password-func-arg]
+        SimpleNamespace(token="101"),
+        SimpleNamespace(token="202"),
     ]
 
     with pytest.raises(ValueError, match="ONVIF preset 1 was not found"):
@@ -489,7 +487,7 @@ def _real_camera() -> CTronicsCamera:
         cam_type="ptz",
         onvif_port=int(os.getenv("CTRONICS_ONVIF_PORT", "8080")),
         onvif_profile_token=os.getenv("CTRONICS_ONVIF_PROFILE"),
-        snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),  # ruff: ignore[hardcoded-temp-file]
+        snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),
     )
 
 

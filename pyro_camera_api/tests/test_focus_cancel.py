@@ -33,7 +33,7 @@ class OfflineReolink(ReolinkCamera):
             camera_id=kwargs.pop("camera_id", "reolink-test"),
             ip_address="192.0.2.1",
             username="user",
-            password="pwd",  # ruff: ignore[hardcoded-password-func-arg]
+            password="pwd",
             **kwargs,
         )
         self.focus_history = []
@@ -222,6 +222,7 @@ def unavailable_focus_camera():
 def test_focus_routes_return_503_when_onvif_is_unavailable(unavailable_focus_camera, route, monkeypatch):
     cam_id, cam = unavailable_focus_camera
     if route is manual_focus:
+
         def fail_manual_focus(_position):
             raise RuntimeError("connection refused")
 
@@ -229,6 +230,7 @@ def test_focus_routes_return_503_when_onvif_is_unavailable(unavailable_focus_cam
         with pytest.raises(HTTPException) as exc:
             route(cam_id, 250)
     else:
+
         def fail_get_focus_level():
             raise RuntimeError("connection refused")
 
