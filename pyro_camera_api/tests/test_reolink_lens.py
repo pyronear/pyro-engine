@@ -6,6 +6,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
 
 POST = "pyro_camera_api.camera.adapters.reolink._session.post"
@@ -145,3 +147,12 @@ def test_a_failing_probe_warns_once():
             cam.has_motorised_lens()
     assert log.warning.call_count == 1
     assert log.debug.call_count == 2
+
+
+def test_a_hung_camera_times_out_instead_of_blocking():
+    """The probe runs under the stream lock: it must be bounded, and a
+    timeout must stay inconclusive rather than raise."""
+    cam = _camera()
+    with patch(POST, side_effect=requests.Timeout("read timed out")) as post:
+        assert cam.has_motorised_lens() is False
+    assert post.call_args.kwargs["timeout"] > 0

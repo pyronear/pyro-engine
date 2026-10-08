@@ -52,6 +52,10 @@ _session.trust_env = False
 _session.headers["Connection"] = "close"
 _session.mount("https://", _LegacyTLSAdapter())
 
+# Zoom/focus reads and the zoom restore run under the stream lock in
+# routes_stream, so a camera that stops answering must not hang them forever.
+_ZOOM_FOCUS_TIMEOUT = 5
+
 
 class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
     """
@@ -112,6 +116,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 self._build_url("GetZoomFocus"),
                 json=[{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}],
                 verify=False,  # nosec: B501
+                timeout=_ZOOM_FOCUS_TIMEOUT,
             )
             if response.status_code != 200:
                 self._warn_probe_failure("got HTTP %s", response.status_code)
@@ -324,7 +329,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                     "param": {"ZoomFocus": {"channel": 0, "pos": position, "op": "ZoomPos"}},
                 }
             ]
-            response = _session.post(url, json=data, verify=False)  # nosec: B501
+            response = _session.post(url, json=data, verify=False, timeout=_ZOOM_FOCUS_TIMEOUT)  # nosec: B501
             return self._handle_response(response, "Started ZoomFocus successfully.")
         return None
 
@@ -350,7 +355,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         """Retrieve the current manual focus and zoom positions."""
         url = self._build_url("GetZoomFocus")
         data: Any = [{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}]
-        response = _session.post(url, json=data, verify=False)  # nosec: B501
+        response = _session.post(url, json=data, verify=False, timeout=_ZOOM_FOCUS_TIMEOUT)  # nosec: B501
         result = self._handle_response(response, "Got zoom/focus values")
         if result and result[0]["code"] == 0:
             zoom_focus = result[0]["value"]["ZoomFocus"]
