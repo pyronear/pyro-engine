@@ -196,7 +196,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._ensure_onvif()
         if self._preset_tokens is None:
             self._refresh_preset_cache()
-        token = self._preset_tokens.get(str(preset_id))
+        token = (self._preset_tokens or {}).get(str(preset_id))
         if token is not None:
             logger.debug("CTronics preset id=%s matched ONVIF token=%s", preset_id, token)
             return token
@@ -268,7 +268,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         self._ensure_onvif()
         if self._presets is None:
             self._refresh_preset_cache()
-        presets = self._presets
+        presets = self._presets or []
         return [
             {
                 "token": str(self._preset_value(preset, "token", "Token") or ""),

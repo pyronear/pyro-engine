@@ -462,7 +462,7 @@ def test_focus_finder_honors_abort_without_hardware():
 
 def test_focus_finder_seeds_from_current_focus_level():
     camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
-    positions = []
+    positions: list[int] = []
     image = Image.new("RGB", (8, 8), (10, 20, 30))
 
     with (
