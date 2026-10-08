@@ -27,7 +27,7 @@ def _camera(cam_type="static"):
         camera_id="cam",
         ip_address="192.168.1.10",
         username="user",
-        password="pwd",  # noqa: S106
+        password="pwd",
         cam_type=cam_type,
     )
 
