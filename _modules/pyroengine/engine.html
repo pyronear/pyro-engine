@@ -265,8 +265,8 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;ContextCrop&quot;</span><span class="p">,</span> <span class="s2">&quot;Engine&quot;</span><span class="p">]</span>
 
-<span class="c1"># Degenerate bbox stamped on alerts with no detection so the upload payload is never empty.</span>
-<span class="n">PLACEHOLDER_BBOX</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0001</span><span class="p">,</span> <span class="mf">0.0001</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+<span class="c1"># Client errors worth retrying later; every other 4xx is a permanent rejection of the payload.</span>
+<span class="n">RETRYABLE_STATUS</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="mi">408</span><span class="p">,</span> <span class="mi">425</span><span class="p">,</span> <span class="mi">429</span><span class="p">})</span>
 
 <span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> | </span><span class="si">%(levelname)s</span><span class="s2">: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -841,9 +841,6 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Cut one 224x224 JPEG per bbox out of the context crop, using the frozen event crop boxes.&quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">context_crop</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">bboxes</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">crop_boxes</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">crop_boxes</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">bboxes</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="c1"># Placeholder-only alerts carry no real detection, so they upload no crops.</span>
-        <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">bbox</span><span class="p">)</span> <span class="o">==</span> <span class="n">PLACEHOLDER_BBOX</span> <span class="k">for</span> <span class="n">bbox</span> <span class="ow">in</span> <span class="n">bboxes</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">None</span>
         <span class="n">region</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">context_crop</span><span class="o">.</span><span class="n">jpeg</span><span class="p">))</span>
         <span class="n">region_w</span><span class="p">,</span> <span class="n">region_h</span> <span class="o">=</span> <span class="n">region</span><span class="o">.</span><span class="n">size</span>
         <span class="c1"># The stored region may be downscaled, so map full-frame crop boxes through the actual</span>
@@ -923,16 +920,8 @@
             <span class="s2">&quot;crop_boxes&quot;</span><span class="p">:</span> <span class="n">crop_boxes</span><span class="p">,</span>
         <span class="p">})</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">fill_empty_bboxes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="c1"># Stamp a tiny placeholder bbox at conf=0 on any alert with none,</span>
-        <span class="c1"># so the upload guard always sees a non-empty payload.</span>
-        <span class="k">for</span> <span class="n">alert</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">:</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">alert</span><span class="p">[</span><span class="s2">&quot;bboxes&quot;</span><span class="p">]:</span>
-                <span class="n">alert</span><span class="p">[</span><span class="s2">&quot;bboxes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">PLACEHOLDER_BBOX</span><span class="p">]</span>
-
     <span class="k">def</span><span class="w"> </span><span class="nf">_process_alerts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam_creds</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">fill_empty_bboxes</span><span class="p">()</span>
             <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">)):</span>
                 <span class="c1"># try to upload the oldest element</span>
                 <span class="n">frame_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
@@ -948,12 +937,9 @@
                     <span class="p">)</span>
 
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="c1"># Detection creation</span>
+                    <span class="c1"># Detection creation. An empty bbox list is a frame with no detection: the</span>
+                    <span class="c1"># API attaches it to the ongoing sequences of the pose, or answers 204.</span>
                     <span class="n">bboxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;bboxes&quot;</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">bboxes</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - skipping alert with empty bboxes&quot;</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-                        <span class="k">continue</span>
                     <span class="n">jpeg_bytes</span> <span class="o">=</span> <span class="n">frame_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;jpeg_bytes&quot;</span><span class="p">)</span>
                     <span class="k">if</span> <span class="n">jpeg_bytes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="c1"># The full frame is no longer kept in RAM, so there is nothing to re-encode.</span>
@@ -970,17 +956,33 @@
                         <span class="n">jpeg_bytes</span><span class="p">,</span> <span class="n">bboxes</span><span class="p">,</span> <span class="n">pose_id</span><span class="p">,</span> <span class="n">crops</span><span class="o">=</span><span class="n">crops</span><span class="p">,</span> <span class="n">recorded_at</span><span class="o">=</span><span class="n">frame_info</span><span class="p">[</span><span class="s2">&quot;ts&quot;</span><span class="p">]</span>
                     <span class="p">)</span>
 
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-                    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - non-JSON response body: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                        <span class="k">raise</span>
+                    <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&gt;=</span> <span class="mi">500</span> <span class="ow">or</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="ow">in</span> <span class="n">RETRYABLE_STATUS</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="n">RequestException</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;API error </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-                    <span class="c1"># Clear</span>
+                    <span class="k">if</span> <span class="mi">200</span> <span class="o">&lt;=</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">300</span><span class="p">:</span>
+                        <span class="c1"># A 204 answers a frame with no detection that extended no sequence:</span>
+                        <span class="c1"># nothing was stored, so there is no detection id to look for.</span>
+                        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">204</span><span class="p">:</span>
+                            <span class="k">try</span><span class="p">:</span>
+                                <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+                            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                                <span class="k">raise</span> <span class="n">RequestException</span><span class="p">(</span>
+                                    <span class="sa">f</span><span class="s2">&quot;success </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2"> without a detection id: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span>
+                                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - alert sent&quot;</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Rejected for good: keeping the alert would only replay the same failure</span>
+                        <span class="c1"># and block the whole queue behind it.</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - alert rejected (</span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - alert sent&quot;</span><span class="p">)</span>
 
-                <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="n">RequestsConnectionError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="c1"># The client refused to serialize the payload, so a retry cannot help either.</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - invalid alert payload, dropping it&quot;</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_alerts</span><span class="o">.</span><span class="n">popleft</span><span class="p">()</span>
+
+                <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="n">RequestException</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Camera &#39;</span><span class="si">{</span><span class="n">cam_id</span><span class="si">}</span><span class="s2">&#39; - unable to upload cache&quot;</span><span class="p">)</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
                     <span class="k">break</span>
