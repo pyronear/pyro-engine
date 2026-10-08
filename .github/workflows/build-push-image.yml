@@ -21,6 +21,9 @@ jobs:
           - image: pyronear/pyro-camera-api
             context: pyro_camera_api
             dockerfile: pyro_camera_api/Dockerfile
+          - image: pyronear/pyro-temporal-api
+            context: pyro_temporal_api
+            dockerfile: pyro_temporal_api/Dockerfile
 
     steps:
       - name: Checkout repository
