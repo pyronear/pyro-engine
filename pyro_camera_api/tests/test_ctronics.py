@@ -1,0 +1,585 @@
+# Copyright (C) 2022-2026, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
+"""CTronics adapter tests.
+
+Real-camera test procedure
+===========================
+
+The default tests use a fake ONVIF client and do not contact a camera. They are
+safe to run in CI or on Vercel. To run the integration tests against a real
+camera, follow these steps from the ``pyro_camera_api`` directory:
+
+1. Install the project and test dependencies::
+
+    uv sync --all-groups
+
+2. Set the camera connection variables. The ONVIF port defaults to 8080::
+
+    export CTRONICS_IP="192.168.1.XX"
+    export CTRONICS_USER="admin"
+    export CTRONICS_PASSWORD="your-password"
+    export CTRONICS_ONVIF_PORT="8080"
+
+   Optional variables are ``CTRONICS_HTTP_PORT`` (default ``80``),
+   ``CTRONICS_ONVIF_PROFILE``, and ``CTRONICS_SNAPSHOT_PATH`` (default
+   ``/tmpfs/snap.jpg``).
+
+3. Run the safe real-camera smoke test. It checks snapshot capture, ONVIF
+   discovery, and preset listing without moving the camera::
+
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_REAL=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+
+   add "-s --log-cli-level=INFO" for more log infos during test
+
+4. Test a short PTZ movement followed immediately by Stop. This physically
+   moves the camera::
+
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_PTZ=1 CTRONICS_TEST_DIRECTION=Right uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+
+   Valid directions are ``Left``, ``Right``, ``Up``, ``Down``, ``UpLeft``,
+   ``UpRight``, ``DownLeft``, ``DownRight``, ``ZoomIn``, and ``ZoomOut``.
+
+5. Test an absolute zoom position. This physically changes the lens position::
+
+     PYTHONPATH=pyro_camera_api CTRONICS_TEST_ZOOM=1 CTRONICS_ZOOM_POSITION=32 \
+          uv run pytest pyro_camera_api/tests/test_ctronics.py::test_real_ctronics_zoom -v -s
+
+    ``CTRONICS_ZOOM_POSITION`` accepts values from 0 to 64 and defaults to 32.
+
+6. Test a preset move with the exact token returned by ONVIF (for example
+    ``Preset1``)::
+
+     PYTHONPATH=pyro_camera_api CTRONICS_TEST_PRESET=1 CTRONICS_TEST_PRESET_TOKEN=Preset1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+
+7. Test absolute ONVIF focus at two positions. This physically changes the lens position::
+
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_ABSOLUTE_FOCUS=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v -s
+
+8. Run the focus finder only when a focus sweep is acceptable. It moves the
+   focus through several positions and may take a while::
+
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_FOCUS_FINDER=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+
+9. Test reboot separately. The camera will restart and temporarily disconnect::
+
+    PYTHONPATH=pyro_camera_api CTRONICS_TEST_REBOOT=1 uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+
+Run the complete local test file without hardware with::
+
+    PYTHONPATH=pyro_camera_api uv run pytest pyro_camera_api/tests/test_ctronics.py -v
+"""
+
+import logging
+import os
+import sys
+import time
+from io import BytesIO
+from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+from PIL import Image
+
+from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
+from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
+
+
+class DictToAttr:
+    """Convertit récursivement un dictionnaire en objet avec accès par attribut."""
+
+    def __init__(self, data):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                setattr(self, key, DictToAttr(value))
+            else:
+                setattr(self, key, value)
+
+
+class FakeOnvifService:
+    def __init__(self):
+        self.calls = []
+        self.presets = [
+            SimpleNamespace(token="0", Name="home"),
+            SimpleNamespace(token="1", Name="west"),
+        ]
+        self.focus_position = 0.5
+
+    def create_type(self, name):
+        return SimpleNamespace(_type=name)
+
+    def GetProfiles(self):
+        return [SimpleNamespace(token="profile-1", VideoSourceConfiguration=SimpleNamespace(SourceToken="video-1"))]
+
+    def ContinuousMove(self, request):
+        if isinstance(request.Velocity, dict):
+            request.Velocity = DictToAttr(request.Velocity)
+        self.calls.append(("ContinuousMove", request))
+
+    def AbsoluteMove(self, request):
+        if isinstance(request.Position, dict):
+            request.Position = DictToAttr(request.Position)
+        self.calls.append(("AbsoluteMove", request))
+
+    def Stop(self, request):
+        self.calls.append(("Stop", request))
+
+    def GetPresets(self, request):
+        self.calls.append(("GetPresets", request))
+        return self.presets
+
+    def GotoPreset(self, request):
+        self.calls.append(("GotoPreset", request))
+
+    def SetPreset(self, request):
+        self.calls.append(("SetPreset", request))
+        return SimpleNamespace(token=request.PresetToken or "new")
+
+    def Move(self, request):
+        self.calls.append(("Move", request))
+        focus = request.Focus
+        if isinstance(focus, dict):
+            self.focus_position = focus["Absolute"]["Position"]
+        else:
+            self.focus_position = focus.Absolute.Position
+
+    def GetStatus(self, request):
+        self.calls.append(("GetStatus", request))
+        return SimpleNamespace(FocusStatus20=SimpleNamespace(Position=self.focus_position))
+
+    def GetImagingSettings(self, request):
+        self.calls.append(("GetImagingSettings", request))
+        return SimpleNamespace(Focus=SimpleNamespace(AutoFocusMode="AUTO"))
+
+    def SetImagingSettings(self, request):
+        self.calls.append(("SetImagingSettings", request))
+
+
+class FakeOnvifCamera:
+    def __init__(self, host, port, username, password, wsdl_dir=None):
+        self.args = (host, port, username, password, wsdl_dir)
+        self.media = FakeOnvifService()
+        self.ptz = FakeOnvifService()
+        self.imaging = FakeOnvifService()
+        self.devicemgmt = MagicMock()
+
+    def create_media_service(self):
+        return self.media
+
+    def create_ptz_service(self):
+        return self.ptz
+
+    def create_imaging_service(self):
+        return self.imaging
+
+
+@pytest.fixture(autouse=True)
+def fake_onvif(request):
+    if request.node.name.startswith("test_real_ctronics_"):
+        yield
+        return
+    module = ModuleType("onvif")
+    module.ONVIFCamera = FakeOnvifCamera  # type: ignore[attr-defined]
+    with patch.dict(sys.modules, {"onvif": module}):
+        yield
+
+
+def test_ctronics_exposes_ptz_and_focus_capabilities():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz", onvif_port=8080)
+
+    assert isinstance(camera, PTZMixin)
+    assert isinstance(camera, FocusMixin)
+    assert camera.onvif_port == 8080
+
+
+@pytest.mark.parametrize("unsupported_option", [{"model": "future-ctronics-model"}, {"onvif_protocol": "https"}])
+def test_ctronics_rejects_unused_configuration_options(unsupported_option):
+    with pytest.raises(TypeError):
+        CTronicsCamera("cam", "192.0.2.10", "user", "secret", **unsupported_option)
+
+
+def test_capture_builds_tmpfs_snapshot_url_and_returns_rgb_image():
+    payload = BytesIO()
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(payload, format="JPEG")
+    response = MagicMock(content=payload.getvalue())
+    response.raise_for_status.return_value = None
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret")
+
+    with patch("pyro_camera_api.camera.adapters.ctronics.requests.get", return_value=response) as get:
+        image = camera.capture()
+
+    assert image is not None
+    assert image.mode == "RGB"
+    assert get.call_args.kwargs["timeout"] == pytest.approx(5.0)
+    assert get.call_args.args[0] == ("http://192.0.2.10:80/tmpfs/snap.jpg?usr=user&pwd=secret")
+
+
+def test_snapshot_path_and_command_are_configurable_per_model():
+    camera = CTronicsCamera(
+        "cam",
+        "192.0.2.10",
+        "user",
+        "secret",
+        port=8080,
+        snapshot_path="/api/snapshot",
+        snapshot_command="image",
+    )
+
+    assert camera.snapshot_url == "http://192.0.2.10:8080/api/snapshot?cmd=image&usr=user&pwd=secret"
+
+
+def test_onvif_connection_uses_configured_port_and_profile():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz", onvif_port=8080)
+
+    camera._ensure_onvif()
+
+    assert camera._onvif_camera.args[:4] == ("192.0.2.10", 8080, "user", "secret")
+    assert camera.onvif_profile_token == "profile-1"
+
+
+def test_onvif_connection_errors_are_exposed_as_runtime_errors():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    with (
+        patch.object(FakeOnvifCamera, "__init__", side_effect=OSError("connection refused")),
+        pytest.raises(RuntimeError, match="CTronics ONVIF is unavailable"),
+    ):
+        camera._ensure_onvif()
+
+
+def test_onvif_connection_can_retry_after_preset_refresh_failure(monkeypatch):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    original_get_presets = FakeOnvifService.GetPresets
+    calls = 0
+
+    def fail_once(service, request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("temporary preset service failure")
+        return original_get_presets(service, request)
+
+    monkeypatch.setattr(FakeOnvifService, "GetPresets", fail_once)
+
+    with pytest.raises(RuntimeError, match="CTronics ONVIF is unavailable"):
+        camera._ensure_onvif()
+
+    assert camera._ptz_service is None
+    assert camera._imaging_service is None
+
+    camera._ensure_onvif()
+
+    assert camera._ptz_service is not None
+    assert camera._imaging_service is not None
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "Left",
+        "Right",
+        "Up",
+        "Down",
+        "UpLeft",
+        "UpRight",
+        "DownLeft",
+        "DownRight",
+        "ZoomIn",
+        "ZoomOut",
+    ],
+)
+def test_move_camera_maps_operations_to_onvif(operation):
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    camera.move_camera(operation, speed=32)
+
+    call_name, request = camera._ptz_service.calls[-1]
+    assert call_name == "ContinuousMove"
+    assert request.ProfileToken == "profile-1"
+    assert request.Velocity.PanTilt.x == pytest.approx(
+        -0.5 if operation in {"Left", "UpLeft", "DownLeft"} else 0.5 if "Right" in operation else 0
+    )
+    assert request.Velocity.PanTilt.y == pytest.approx(
+        0.5
+        if operation in {"Up", "UpLeft", "UpRight"}
+        else -0.5
+        if operation in {"Down", "DownLeft", "DownRight"}
+        else 0
+    )
+    assert request.Velocity.Zoom.x == pytest.approx(
+        -0.5 if operation == "ZoomOut" else 0.5 if operation == "ZoomIn" else 0
+    )
+
+
+def test_stop_preset_and_azimuth_tracking():
+    camera = CTronicsCamera(
+        "cam", "192.0.2.10", "user", "secret", cam_type="ptz", cam_poses=[0, 1], cam_azimuths=[0, 90]
+    )
+
+    camera.move_camera("ToPos", idx=1)
+    camera.move_camera("Stop")
+
+    assert camera.preset_move_hold_s == pytest.approx(5.0)
+    assert camera.get_azimuth() == pytest.approx(90.0)
+    assert [call[0] for call in camera._ptz_service.calls if call[0] in {"GetPresets", "GotoPreset", "Stop"}] == [
+        "GetPresets",
+        "GotoPreset",
+        "Stop",
+    ]
+
+
+def test_preset_tokens_are_cached_between_moves():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    camera.move_camera("ToPos", idx=0)
+    camera.move_camera("ToPos", idx=1)
+
+    assert [call[0] for call in camera._ptz_service.calls].count("GetPresets") == 1
+
+
+def test_move_camera_accepts_exact_string_preset_token():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._ptz_service.presets = [SimpleNamespace(token="Preset1", Name="Preset1")]
+    camera._preset_tokens = None
+    camera._presets = None
+
+    camera.move_camera("ToPos", idx="Preset1")
+
+    goto_request = next(request for operation, request in camera._ptz_service.calls if operation == "GotoPreset")
+    assert goto_request.PresetToken == "Preset1"
+
+
+def test_preset_cache_accepts_capitalized_onvif_fields():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._ptz_service.presets = [SimpleNamespace(Token="7", Name="tower")]
+    camera._preset_tokens = None
+    camera._presets = None
+
+    assert camera._preset_token(7) == "7"
+    assert camera.get_ptz_preset() == [{"token": "7", "name": "tower"}]
+
+
+def test_preset_token_must_match_before_moving_or_updating_azimuth():
+    camera = CTronicsCamera(
+        "cam", "192.0.2.10", "user", "secret", cam_type="ptz", cam_poses=[10, 20], cam_azimuths=[0, 90]
+    )
+    camera._ptz_service = None
+    camera._ensure_onvif()
+    camera._preset_tokens = None
+    camera._presets = None
+    camera._ptz_service.presets = [
+        SimpleNamespace(token="101"),
+        SimpleNamespace(token="202"),
+    ]
+
+    with pytest.raises(ValueError, match="ONVIF preset 1 was not found"):
+        camera.move_camera("ToPos", idx=1)
+
+    assert camera.get_azimuth() is None
+    assert [call[0] for call in camera._ptz_service.calls] == ["GetPresets", "GetPresets"]
+
+
+def test_preset_focus_autofocus_and_reboot_use_onvif():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+
+    presets = camera.get_ptz_preset()
+    camera.set_ptz_preset(idx=2, name="tower")
+    assert camera._preset_tokens is None
+    camera.set_manual_focus(250)
+    focus = camera.get_focus_level()
+    autofocus = camera.get_auto_focus()
+    camera.set_auto_focus(disable=True)
+    camera.start_zoom_focus(32)
+    assert camera.reboot_camera() is True
+
+    assert presets == [{"token": "0", "name": "home"}, {"token": "1", "name": "west"}]
+    assert focus["focus"] == 250
+    assert autofocus["mode"] == "AUTO"
+    camera._onvif_camera.devicemgmt.SystemReboot.assert_called_once_with()
+
+
+def test_ctronics_manual_focus_clamps_position():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz", focus_min=0, focus_max=1000)
+
+    camera.set_manual_focus(2000)
+
+    assert camera.focus_position == 1000
+    move_request = camera._imaging_service.calls[-1][1]
+    assert move_request.Focus["Absolute"]["Position"] == pytest.approx(1.0)
+
+
+def test_ctronics_manual_focus_rejects_unavailable_imaging():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera._ensure_onvif()
+    camera._imaging_service = None
+
+    with pytest.raises(RuntimeError, match="ONVIF Imaging service is unavailable"):
+        camera.set_manual_focus(250)
+
+
+def test_ctronics_zoom_does_not_move_focus():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera.focus_position = 250
+
+    camera.start_zoom_focus(32)
+
+    call_name, request = camera._ptz_service.calls[-1]
+    assert call_name == "AbsoluteMove"
+    assert request.ProfileToken == "profile-1"
+    assert request.Position.Zoom.x == pytest.approx(0.5)
+    assert camera.focus_position == 250
+
+
+def test_ctronics_focus_absolute_move_uses_onvif():
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", cam_type="ptz")
+
+    camera.set_manual_focus(250)
+
+    call_name, request = camera._imaging_service.calls[-1]
+    assert call_name == "Move"
+    assert request.Focus["Absolute"]["Position"] == pytest.approx(0.25)
+    assert camera.focus_position == 250
+
+
+def test_ctronics_focus_status_reads_absolute_onvif_position():
+    camera = CTronicsCamera("cam", "192.168.1.2", "user", "secret", cam_type="ptz")
+    camera.set_manual_focus(750)
+
+    assert camera.get_focus_level() == {"focus": 750, "focus_raw": 0.75, "zoom": None}
+
+
+def test_focus_finder_honors_abort_without_hardware():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    camera.focus_position = 500
+
+    with pytest.raises(FocusAbortedError):
+        camera.focus_finder(should_abort=lambda: True)
+
+
+def test_focus_finder_seeds_from_current_focus_level():
+    camera = CTronicsCamera("cam", "192.0.2.10", "user", "secret", cam_type="ptz")
+    positions: list[int] = []
+    image = Image.new("RGB", (8, 8), (10, 20, 30))
+
+    with (
+        patch.object(camera, "get_focus_level", return_value={"focus": 900}),
+        patch.object(camera, "set_manual_focus", side_effect=positions.append),
+        patch.object(camera, "capture", return_value=image),
+        patch.object(camera, "_measure_sharpness", return_value=1.0),
+    ):
+        camera.focus_finder()
+
+    assert positions[0] == 850
+    assert all(0 <= position <= 1000 for position in positions)
+
+
+def _real_camera() -> CTronicsCamera:
+    return CTronicsCamera(
+        "ctronics-real",
+        os.environ["CTRONICS_IP"],
+        os.environ["CTRONICS_USER"],
+        os.environ["CTRONICS_PASSWORD"],
+        port=int(os.getenv("CTRONICS_HTTP_PORT", "80")),
+        cam_type="ptz",
+        onvif_port=int(os.getenv("CTRONICS_ONVIF_PORT", "8080")),
+        onvif_profile_token=os.getenv("CTRONICS_ONVIF_PROFILE"),
+        snapshot_path=os.getenv("CTRONICS_SNAPSHOT_PATH", "/tmpfs/snap.jpg"),
+    )
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_REAL") != "1",
+    reason="Set CTRONICS_TEST_REAL=1 to run against a physical camera",
+)
+def test_real_ctronics_capture_and_onvif_discovery():
+    camera = _real_camera()
+
+    image = camera.capture()
+    assert image is not None
+    camera._ensure_onvif()
+    assert camera.get_ptz_preset() is not None
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_PTZ") != "1",
+    reason="Set CTRONICS_TEST_PTZ=1 to move a physical camera",
+)
+def test_real_ctronics_ptz_move_and_stop():
+    camera = _real_camera()
+    camera.move_camera(os.getenv("CTRONICS_TEST_DIRECTION", "Right"), speed=1)
+    time.sleep(1)
+    camera.move_camera("Stop")
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_ZOOM") != "1",
+    reason="Set CTRONICS_TEST_ZOOM=1 to change absolute zoom on a physical camera",
+)
+def test_real_ctronics_zoom():
+    position = int(os.getenv("CTRONICS_ZOOM_POSITION", "32"))
+    assert 0 <= position <= 64, "CTRONICS_ZOOM_POSITION must be between 0 and 64"
+
+    camera = _real_camera()
+    logging.basicConfig(level=logging.INFO)
+    print(f"[CTronics test] Setting absolute zoom position={position}", flush=True)
+    camera.start_zoom_focus(position)
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_PRESET") != "1",
+    reason="Set CTRONICS_TEST_PRESET=1 to move to a physical-camera preset",
+)
+def test_real_ctronics_preset_and_azimuth():
+    camera = _real_camera()
+    preset_token = os.environ.get("CTRONICS_TEST_PRESET_TOKEN")
+    if not preset_token:
+        pytest.fail("Set CTRONICS_TEST_PRESET_TOKEN to an exact ONVIF token, such as Preset1")
+    logging.basicConfig(level=logging.INFO)
+    print(f"[CTronics test] Requesting preset token={preset_token}", flush=True)
+    camera.move_camera("ToPos", idx=preset_token)
+    print(f"[CTronics test] GotoPreset completed for token={preset_token}", flush=True)
+    assert camera.get_azimuth() is None or 0 <= camera.get_azimuth() < 360
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_ABSOLUTE_FOCUS") != "1",
+    reason="Set CTRONICS_TEST_ABSOLUTE_FOCUS=1 to change focus on a physical camera",
+)
+def test_real_ctronics_absolute_focus():
+    camera = _real_camera()
+    camera.set_manual_focus(100)
+    time.sleep(2)
+    near_status = camera.get_focus_level()
+    near_image = camera.capture()
+
+    camera.set_manual_focus(900)
+    time.sleep(2)
+    far_status = camera.get_focus_level()
+    far_image = camera.capture()
+
+    print(f"[CTronics test] near={near_status}, far={far_status}", flush=True)
+    assert near_image is not None
+    assert far_image is not None
+    assert near_status["focus"] == 100
+    assert far_status["focus"] == 900
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_FOCUS_FINDER") != "1",
+    reason="Set CTRONICS_TEST_FOCUS_FINDER=1 to run the focus sweep on a physical camera",
+)
+def test_real_ctronics_focus_finder():
+    result = _real_camera().focus_finder(save_images=False)
+    assert isinstance(result, int)
+
+
+@pytest.mark.skipif(
+    os.getenv("CTRONICS_TEST_REBOOT") != "1",
+    reason="Set CTRONICS_TEST_REBOOT=1 to reboot a physical camera",
+)
+def test_real_ctronics_reboot():
+    assert _real_camera().reboot_camera() is True

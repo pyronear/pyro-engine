@@ -27,6 +27,7 @@ contract is `camera/base.py`, the dispatch `camera/registry.py`, the implementat
 | `reolink-823S2`, `reolink-823A16`  | `ReolinkCamera`      | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
 | `reolink` (any string containing it)| `ReolinkCamera`     | yes     | yes | yes   | same, but see Pitfalls: PTZ speeds fall back to the 823S2 tables      |
 | `linovision` (alias `hikvision`)   | `LinovisionCamera`   | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
+| `ctronics` (alias `ctronic`)       | `CTronicsCamera`     | yes     | yes | yes   | `type`, `ip_address`, `poses`, `azimuths`                             |
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url` (**required**)                                             |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` (**required**) with embedded credentials                        |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url` (**required**), `headers`, `response`, `json_path`, `encoding`  |
