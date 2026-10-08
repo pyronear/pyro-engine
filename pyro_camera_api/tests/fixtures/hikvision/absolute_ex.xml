@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PTZAbsoluteEx version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<elevation>8.09</elevation>
+<azimuth>214.21</azimuth>
+<absoluteZoom>1</absoluteZoom>
+<focus>25110</focus>
+<zoomCtrlType>adaption</zoomCtrlType>
+</PTZAbsoluteEx>

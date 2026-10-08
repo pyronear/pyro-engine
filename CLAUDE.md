@@ -44,7 +44,8 @@ pytest tests/test_engine.py -v
 ### Camera API
 
 - Entry point: `pyro_camera_api/pyro_camera_api/main.py` (FastAPI + lifespan)
-- Camera adapters in `camera/adapters/`: `reolink.py`, `linovision.py`, `rtsp.py`, `url.py`, `rest.py`, `mock.py` — all inherit from abstract bases in `camera/base.py`
+- Camera adapters in `camera/adapters/`: `reolink.py`, `linovision.py`, `hikvision.py`, `rtsp.py`, `url.py`, `rest.py`, `mock.py` — all inherit from abstract bases in `camera/base.py`
+  - `hikvision.py` (`HikvisionCamera`, adapter `"hikvision"`) is separate from Linovision: ISAPI `absoluteEx` in decimal degrees and zoom ratio (not tenths); zoom range and reserved preset ids are read from `/ISAPI/PTZCtrl/channels/{ch}/capabilities`.
   - `rest.py` (`RestSnapshotCamera`, adapter `"rest"`/`"api"`) is a config-driven HTTP snapshot adapter for endpoints that need custom auth headers or return the image wrapped in JSON (base64 or nested URL), e.g. vigilant.cat. Header/URL values may reference env vars via `${VAR}`.
 - `camera/registry.py` tracks live camera instances and background threads
 - Background patrol loops run in `camera/patrol.py`
@@ -59,7 +60,7 @@ pytest tests/test_engine.py -v
       "token": "<JWT>",
       "type": "ptz",          // or "static"
       "name": "site-cam-01",
-      "brand": "reolink",     // or "linovision"
+      "brand": "reolink",     // or "linovision", "hikvision"
       "id": 7,                // camera ID on pyronear API
       "poses": [0, 1, 2, 3], // PTZ preset IDs; empty list for static
       "azimuths": [0, 90, 180, 270]
