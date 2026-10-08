@@ -6,13 +6,12 @@
 import io
 import logging
 import shutil
-import signal
 import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Never, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -21,6 +20,7 @@ from pyro_predictor.utils import box_iou
 from pyroclient import client
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
+from requests.exceptions import Timeout as RequestsTimeout
 from requests.models import Response
 
 __all__ = ["ContextCrop", "Engine"]
@@ -72,21 +72,18 @@ class ContextCrop:
     full_h: int
 
 
-def handler(_signum: int, _frame: object) -> Never:
-    raise TimeoutError("Heartbeat check timed out")
+def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 3) -> None:  # noqa: ANN401
+    """Send a heartbeat and give up after `timeout` seconds so a slow API never stalls the loop.
 
-
-def heartbeat_with_timeout(api_instance: Any, cam_id: str, timeout: int = 1) -> None:  # noqa: ANN401
-    signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout)
+    This must stay a plain requests timeout: an asynchronous cutoff (signal.alarm raising inside the
+    HTTP call) can interrupt urllib3 while it holds a pool lock and deadlock the whole process.
+    """
     try:
-        api_instance.heartbeat(cam_id)
-    except TimeoutError:
+        api_instance.heartbeat(cam_id, timeout=timeout)
+    except RequestsTimeout:
         logger.warning(f"Heartbeat check timed out for {cam_id}")
     except RequestsConnectionError:
         logger.warning(f"Unable to reach the pyro-api with {cam_id}")
-    finally:
-        signal.alarm(0)
 
 
 class Engine(Predictor):
@@ -219,10 +216,10 @@ class Engine(Predictor):
             if entry[4]:  # is_staged: belongs to the event that just ended
                 window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
-    def heartbeat(self, cam_id: str) -> Response:
-        """Updates last ping of device"""
+    def heartbeat(self, cam_id: str, timeout: Optional[int] = None) -> Response:
+        """Updates last ping of device; `timeout` overrides the client timeout for this request only"""
         ip = cam_id.split("_")[0]
-        return self.api_client[ip].heartbeat()
+        return self.api_client[ip].heartbeat(timeout=timeout)
 
     def predict(
         self,
@@ -266,7 +263,7 @@ class Engine(Predictor):
 
         # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            heartbeat_with_timeout(self, cam_id, timeout=1)
+            heartbeat_with_timeout(self, cam_id)
             if (
                 self._states[cam_key]["last_image_sent"] is None
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period
