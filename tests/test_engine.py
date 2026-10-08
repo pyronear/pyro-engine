@@ -11,6 +11,7 @@ import onnx
 import pytest
 from dotenv import load_dotenv
 from PIL import Image
+from requests.exceptions import ReadTimeout
 
 from pyroengine.engine import CONTEXT_MAX_SIDE, ContextCrop, Engine
 
@@ -601,6 +602,15 @@ def test_heartbeat_once_per_camera_per_period(tmp_path, mock_forest_image):
         clock[0] += 31
         engine.predict(mock_forest_image, "10.0.0.1_1")
         assert fake_client.heartbeat.call_count == 3  # period elapsed for 10.0.0.1 only
+        fake_client.heartbeat.assert_called_with(timeout=1)
+
+        # A timed-out heartbeat is logged, never raised into the frame loop, and still throttled
+        fake_client.heartbeat.side_effect = ReadTimeout("slow api")
+        clock[0] += 61
+        engine.predict(mock_forest_image, "10.0.0.2_0")
+        assert fake_client.heartbeat.call_count == 4
+        engine.predict(mock_forest_image, "10.0.0.2_0")
+        assert fake_client.heartbeat.call_count == 4
 
 
 def _build_engine_with_pose_stub(tmp_path, init_clock):
