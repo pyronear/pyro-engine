@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from pyro_camera_api.camera.adapters.reolink import ReolinkCamera
 
-POST = "pyro_camera_api.camera.adapters.reolink.requests.post"
+POST = "pyro_camera_api.camera.adapters.reolink._session.post"
 
 
 def _reply(status=200, code=0, zoom_pos=0):
@@ -62,8 +62,8 @@ def test_unreachable_camera_is_treated_as_fixed_lens():
 
 def test_an_unanswered_probe_is_not_cached():
     """A transport failure says nothing about the optics. Caching it would
-    strand a PTZ camera as fixed-lens for the rest of the process."""
-    cam = _camera(cam_type="ptz")
+    strand a varifocal camera as fixed-lens for the rest of the process."""
+    cam = _camera(cam_type="static")
     with patch(POST, side_effect=OSError("unreachable")):
         assert cam.has_motorised_lens() is False
     with patch(POST, return_value=_reply(zoom_pos=0)):
@@ -71,7 +71,7 @@ def test_an_unanswered_probe_is_not_cached():
 
 
 def test_an_http_error_is_not_cached_either():
-    cam = _camera(cam_type="ptz")
+    cam = _camera(cam_type="static")
     with patch(POST, return_value=_reply(status=500)):
         assert cam.has_motorised_lens() is False
     with patch(POST, return_value=_reply(zoom_pos=4)):
@@ -109,3 +109,39 @@ def test_zoom_command_is_not_sent_to_a_fixed_lens_camera():
         assert cam.start_zoom_focus(32) is None
         # only the probe
         assert post.call_count == 1
+
+
+def test_ptz_camera_is_never_probed():
+    """PTZ cameras keep sending zoom commands unconditionally, as before."""
+    cam = _camera(cam_type="ptz")
+    with patch(POST, side_effect=OSError("unreachable")) as post:
+        assert cam.has_motorised_lens() is True
+        assert post.call_count == 0
+
+
+def test_a_malformed_reply_does_not_raise():
+    """A 200 with a body we did not expect must stay inconclusive, not raise
+    out of start_zoom_focus and turn the route's 400 into a 500."""
+    not_json = MagicMock(status_code=200)
+    not_json.json.side_effect = ValueError("Expecting value")
+    no_zoom_focus = MagicMock(status_code=200)
+    no_zoom_focus.json.return_value = [{"code": 0, "value": {}}]
+    cam = _camera()
+    for reply in (not_json, no_zoom_focus):
+        with patch(POST, return_value=reply):
+            assert cam.has_motorised_lens() is False
+    with patch(POST, return_value=_reply(zoom_pos=0)):
+        assert cam.has_motorised_lens() is True
+
+
+def test_a_failing_probe_warns_once():
+    """Failed probes are retried on every command, the log must not fill up."""
+    cam = _camera()
+    with (
+        patch(POST, return_value=_reply(code=1)),
+        patch("pyro_camera_api.camera.adapters.reolink.logger") as log,
+    ):
+        for _ in range(3):
+            cam.has_motorised_lens()
+    assert log.warning.call_count == 1
+    assert log.debug.call_count == 2

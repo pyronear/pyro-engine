@@ -97,31 +97,40 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 len(self.cam_azimuths),
             )
         self._has_motorised_lens: Optional[bool] = None
+        self._lens_probe_warned = False
 
     def _probe_zoom_support(self) -> Optional[bool]:
         """Ask the camera whether it reports a zoom position.
 
         Returns None whenever the probe is inconclusive, so the caller can
-        distinguish transport, HTTP, and Reolink API failures from a successful
-        response that establishes whether a zoom position is available.
+        distinguish transport, HTTP, Reolink API and parsing failures from a
+        successful response that establishes whether a zoom position is
+        available. Never raises.
         """
         try:
-            response = requests.post(
+            response = _session.post(
                 self._build_url("GetZoomFocus"),
                 json=[{"cmd": "GetZoomFocus", "action": 0, "param": {"channel": 0}}],
                 verify=False,  # nosec: B501
             )
+            if response.status_code != 200:
+                self._warn_probe_failure("got HTTP %s", response.status_code)
+                return None
+            reply = response.json()[0]
+            if reply.get("code") != 0:
+                self._warn_probe_failure("was rejected by the camera: %s", reply.get("error"))
+                return None
+            return reply["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
         except Exception as exc:
-            logger.warning("[%s] lens probe could not reach the camera: %s", self.ip_address, exc)
+            self._warn_probe_failure("failed: %s", exc)
             return None
-        if response.status_code != 200:
-            logger.warning("[%s] lens probe got HTTP %s", self.ip_address, response.status_code)
-            return None
-        payload = response.json()
-        if payload[0].get("code") != 0:
-            logger.warning("[%s] lens probe was rejected by the camera", self.ip_address)
-            return None
-        return payload[0]["value"]["ZoomFocus"].get("zoom", {}).get("pos") is not None
+
+    def _warn_probe_failure(self, msg: str, *args: Any) -> None:
+        # Failed probes are retried on every zoom/focus command, so only the
+        # first failure per camera is worth a warning.
+        log = logger.debug if self._lens_probe_warned else logger.warning
+        self._lens_probe_warned = True
+        log("[%s] lens probe " + msg, self.ip_address, *args)
 
     def has_motorised_lens(self) -> bool:
         """Whether this camera's lens can be driven.
@@ -135,7 +144,13 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         cannot grow a motor at runtime and zoom commands are frequent. Failed
         probes are retried so one transient error cannot strand a capable camera
         until the service restarts.
+
+        Only static cameras are probed: PTZ cameras always drive their lens, and
+        probing them would let a transient error drop a zoom command that used
+        to be sent unconditionally.
         """
+        if self.cam_type != "static":
+            return True
         if self._has_motorised_lens is None:
             self._has_motorised_lens = self._probe_zoom_support()
         return self._has_motorised_lens is True
@@ -389,7 +404,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
                 image.save(f"{folder}/focus_{pos}.jpg")
             return score_local
 
-        if not self.has_motorised_lens():
+        if self.cam_type == "static":
             return 720
 
         # set_manual_focus records every probed position in focus_position, so
