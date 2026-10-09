@@ -40,6 +40,7 @@ class Classifier:
         model_path: model path
         onnx_session_options: optional ONNX Runtime session options for deployment-specific
             threading and allocator tuning; None preserves the runtime defaults
+        ncnn_memory_mb: optional NCNN scratch arena size in MiB; overflow uses ordinary allocations
     """
 
     def __init__(
@@ -53,6 +54,7 @@ class Classifier:
         max_bbox_size=0.4,
         verbose=True,
         onnx_session_options: onnxruntime.SessionOptions | None = None,
+        ncnn_memory_mb: int | None = None,
     ) -> None:
         self.verbose = verbose
         if not verbose:
@@ -139,6 +141,11 @@ class Classifier:
             logger.info(f"ONNX model loaded successfully from {model_path}")
 
         self.imgsz = imgsz
+        self._ncnn_allocator: ncnn.PoolAllocator | None = None
+        if self.format == "ncnn" and ncnn_memory_mb is not None:
+            from ._allocator import ArenaAllocator
+
+            self._ncnn_allocator = ArenaAllocator(ncnn_memory_mb)
         self.conf = conf
         self.iou = iou
         self.max_bbox_size = max_bbox_size
@@ -219,6 +226,10 @@ class Classifier:
         if self.format == "ncnn":
             extractor = self.model.create_extractor()
             extractor.set_light_mode(True)
+            allocator = getattr(self, "_ncnn_allocator", None)
+            if allocator is not None:
+                extractor.set_blob_allocator(allocator)
+                extractor.set_workspace_allocator(allocator)
             extractor.input("in0", np_img)
             pred = ncnn.Mat()
             extractor.extract("out0", pred)

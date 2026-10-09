@@ -81,6 +81,7 @@ def main(args):
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
+        ncnn_memory_mb=args.ncnn_memory_mb,
     )
 
     sys_controller = SystemController(engine, camera_data, args.pyro_camera_api_url)
@@ -97,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default=None, help="model path")
     parser.add_argument("--thresh", type=float, default=0.25, help="Confidence threshold")
     parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
+    parser.add_argument("--ncnn-memory-mb", type=int, default=None, help="NCNN scratch arena in MiB (try 256)")
 
     # Camera & cache
 
