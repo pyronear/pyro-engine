@@ -75,6 +75,7 @@ def main(args):
         backup_size=args.backup_size,
         nb_consecutive_frames=args.nb_consecutive_frames,
         frame_size=args.frame_size,
+        reuse_identical_frames=args.reuse_identical_frames,
         cache_backup_period=args.cache_backup_period,
         cache_size=args.cache_size,
         jpeg_quality=args.jpeg_quality,
@@ -95,6 +96,9 @@ if __name__ == "__main__":
     )
     # Model
     parser.add_argument("--model_path", type=str, default=None, help="model path")
+    parser.add_argument(
+        "--reuse-identical-frames", action="store_true", help="Reuse detections for identical camera snapshots"
+    )
     parser.add_argument("--thresh", type=float, default=0.25, help="Confidence threshold")
     parser.add_argument("--max_bbox_size", type=float, default=0.4, help="Maximum bbox size")
 
