@@ -28,6 +28,10 @@ def test_classifier(tmpdir_factory, mock_wildfire_image):
     conf = np.max(out[:, 4])
     assert 0 <= conf <= 1
 
+    compact = Classifier(model_folder=folder, ncnn_memory_mb=256)
+    np.testing.assert_array_equal(compact(mock_wildfire_image), out)
+    assert compact._ncnn_allocator._live == {}
+
     # Test onnx model
     model = Classifier(model_folder=folder, format="onnx")
     model_path = str(pathlib.Path(folder) / MODEL_CACHE_SUBDIR / MODEL_SLUG / "onnx_cpu" / "best.onnx")

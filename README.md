@@ -59,6 +59,10 @@ im = Image.open("path/to/your/image.jpg").convert("RGB")
 prediction = engine.predict(im)
 ```
 
+For NCNN deployments with limited RAM, try `Engine(ncnn_memory_mb=256)` or
+`python run.py --ncnn-memory-mb 256`. This optional scratch arena reuses freed regions;
+overflow still uses ordinary allocations. Measure memory and latency on the device before enabling it.
+
 ---
 
 ## PyroCamera API: unified camera control
