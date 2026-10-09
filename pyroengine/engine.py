@@ -3,6 +3,7 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
+import hashlib
 import io
 import logging
 import shutil
@@ -102,6 +103,7 @@ class Engine(Predictor):
         alert_relaxation: number of consecutive positive detections required to send the first alert, and also
             the number of consecutive negative detections before stopping the alert
         frame_size: Resize frame to frame_size before sending it to the api in order to save bandwidth (H, W)
+        reuse_identical_frames: reuse detections for unchanged camera pixels and model/mask settings
         cache_backup_period: number of minutes between each cache backup to disk
         frame_saving_period: Send one frame over N to the api for our dataset
         cache_size: maximum number of alerts to save in cache
@@ -140,6 +142,7 @@ class Engine(Predictor):
         save_detections_frames: Optional[bool] = False,
         send_last_image_period: int = 3600,  # 1H
         last_bbox_mask_fetch_period: int = 3600,  # 1H
+        reuse_identical_frames: bool = False,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
@@ -165,6 +168,7 @@ class Engine(Predictor):
 
         # Cache & relaxation
         self.frame_saving_period = frame_saving_period
+        self.reuse_identical_frames = reuse_identical_frames
         self.jpeg_quality = jpeg_quality
         self.cache_backup_period = cache_backup_period
         self.day_time_strategy = day_time_strategy
@@ -318,11 +322,29 @@ class Engine(Predictor):
                     except RequestException as e:
                         logger.warning(f"Failed to fetch occlusion masks for cam {cam_key} (pose {pose_id}): {e}")
 
-        # Inference with ONNX
+        inference_key = None
         if fake_pred is None:
             bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
             rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
-            preds = self.model(rgb_frame, bbox_mask_dict)
+            if self.reuse_identical_frames:
+                # JPEG equality can hide changes in the uncompressed pixels fed to the model.
+                inference_key = (
+                    rgb_frame.size,
+                    hashlib.sha256(rgb_frame.tobytes()).digest(),
+                    id(self.model),
+                    id(self.model.model if self.model.format == "ncnn" else self.model.ort_session),
+                    self.model.format,
+                    repr(self.model.imgsz),
+                    self.model.conf,
+                    self.model.iou,
+                    self.model.max_bbox_size,
+                    tuple(tuple(box[:4]) for box in bbox_mask_dict.values()),
+                )
+            history = self._states[cam_key]["last_predictions"]
+            if inference_key is not None and history and inference_key == self._states[cam_key].get("inference_key"):
+                preds = history[-1][1].copy()
+            else:
+                preds = self.model(rgb_frame, bbox_mask_dict)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
@@ -342,6 +364,7 @@ class Engine(Predictor):
         extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
+        state["inference_key"] = inference_key
         if not self._states[cam_key]["ongoing"]:
             self._end_event(cam_key)
 

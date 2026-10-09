@@ -128,6 +128,10 @@ A `./data` directory is expected with at least:
 * optionally `model.onnx` to override weights from Hugging Face
 * optionally `config.json` to override model configuration
 
+For cameras that repeat their latest snapshot with a fixed model, `--reuse-identical-frames` reuses detections when the
+uncompressed pixels and model/mask settings match. Each pass still updates alert history and uploads.
+This option is off by default; fresh images still run the model.
+
 ---
 
 ## Camera configuration and adapters
