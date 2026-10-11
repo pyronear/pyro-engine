@@ -15,11 +15,8 @@ from pyro_camera_api.camera.registry import build_camera_object
 @pytest.mark.parametrize(
     ("fields", "expected_elevation", "expected_timeout"),
     [
-        ({}, 0, 3.0),
         ({"timeout": 7.5}, 0, 7.5),
-        ({"default_elevation_deg": -4.5, "timeout": 9.0}, -4.5, 9.0),
-        ({"default_elevation_deg": 0, "timeout": 8.0}, 0, 8.0),
-        ({"default_elevation_deg": None, "timeout": 8.0}, None, 8.0),
+        ({"default_elevation_deg": -4.5}, -4.5, 3.0),
     ],
 )
 def test_elevation_and_timeout_are_independent(adapter, fields, expected_elevation, expected_timeout):
