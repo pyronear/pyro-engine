@@ -30,8 +30,9 @@ def test_engine_offline(tmpdir_factory, mock_wildfire_image, mock_forest_image):
     assert engine._alerts[0]["media_id"] is None
     assert engine._alerts[0]["alert_id"] is None
 
-    # inference
-    engine = Engine(nb_consecutive_frames=4, cache_folder=folder, save_captured_frames=True)
+    # inference, with the production threshold (src/run.py --thresh) so the test does not
+    # depend on the exact score of the current model weights
+    engine = Engine(nb_consecutive_frames=4, conf_thresh=0.25, cache_folder=folder, save_captured_frames=True)
     out = engine.predict(mock_forest_image)
     assert isinstance(out, float)
     assert 0 <= out <= 1
