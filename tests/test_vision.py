@@ -3,6 +3,7 @@ import pathlib
 import shutil
 
 import numpy as np
+import pytest
 
 # Canonical import — Classifier lives in pyro_predictor
 from pyro_predictor import Classifier
@@ -94,3 +95,22 @@ def test_download(tmpdir_factory):
     # Test that the model was re-downloaded (at least once more)
     assert hash1 == hash2  # optional if content is static
     assert pathlib.Path(model_path).exists()
+
+
+@pytest.mark.parametrize(("machine", "expected"), [("aarch64", "ncnn"), ("armv7l", "ncnn"), ("x86_64", "onnx")])
+def test_default_format_follows_architecture(tmp_path, monkeypatch, machine, expected):
+    from unittest.mock import MagicMock
+
+    from pyro_predictor import vision
+
+    download = MagicMock()
+    monkeypatch.setattr(vision.platform, "machine", lambda: machine)
+    monkeypatch.setattr(vision, "hf_hub_download", download)
+    monkeypatch.setattr(vision.tarfile, "open", MagicMock())
+    monkeypatch.setattr(vision.ncnn, "Net", MagicMock())
+    monkeypatch.setattr(vision.onnxruntime, "InferenceSession", MagicMock())
+
+    model = Classifier(model_folder=str(tmp_path), verbose=False)
+
+    assert model.format == expected
+    assert download.call_args.kwargs["filename"] == f"{expected}_cpu.tar.gz"

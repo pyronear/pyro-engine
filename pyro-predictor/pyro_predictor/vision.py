@@ -38,6 +38,7 @@ class Classifier:
 
     Args:
         model_path: model path
+        format: "ncnn" or "onnx"; defaults to "ncnn" on ARM and "onnx" elsewhere
     """
 
     def __init__(
@@ -46,7 +47,7 @@ class Classifier:
         imgsz=1024,
         conf=0.15,
         iou=0,
-        format="ncnn",
+        format=None,
         model_path=None,
         max_bbox_size=0.4,
         verbose=True,
@@ -64,12 +65,13 @@ class Classifier:
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
             self.format = "onnx"
         else:
-            if format == "ncnn":
+            model_format = format if format is not None else ("ncnn" if self.is_arm_architecture() else "onnx")
+            if model_format == "ncnn":
                 if not self.is_arm_architecture():
                     logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
-            elif format == "onnx":
+            elif model_format == "onnx":
                 model = MODEL_NAME.replace("ncnn", "onnx")
                 self.format = "onnx"
             else:
