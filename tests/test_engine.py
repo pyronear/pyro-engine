@@ -11,7 +11,9 @@ import onnx
 import pytest
 from dotenv import load_dotenv
 from PIL import Image
+from requests.exceptions import Timeout
 
+import pyroengine.engine as engine_module
 from pyroengine.engine import CONTEXT_MAX_SIDE, ContextCrop, Engine
 
 
@@ -612,6 +614,18 @@ def _run_predict_at(engine, cam_id, image, run_clock):
 
     with patch("pyroengine.engine.datetime", _RunDateTime):
         engine.predict(image, cam_id)
+
+
+def test_predict_survives_heartbeat_timeout(tmp_path, mock_forest_image):
+    """A slow heartbeat is dropped with a warning; predict() must neither stall nor raise."""
+    engine, fake_client, cam_id = _build_engine_with_pose_stub(tmp_path, datetime(2026, 5, 1, 9, 0, 0))
+    fake_client.heartbeat.side_effect = Timeout("slow api")
+
+    _run_predict_at(engine, cam_id, mock_forest_image, datetime(2026, 5, 1, 9, 0, 1))
+
+    # The cutoff is a requests timeout forwarded to pyroclient, never a signal.alarm.
+    fake_client.heartbeat.assert_called_once_with(timeout=3)
+    assert not hasattr(engine_module, "signal")
 
 
 def test_pose_image_skipped_when_engine_starts_after_noon(tmp_path, mock_forest_image):
