@@ -70,7 +70,13 @@ def test_job_lifecycle_and_conversion(client):
     body = c.get(f"/jobs/{job_id}").json()
     assert body["status"] == "done"
     assert body["cam_id"] == "192.168.1.10_1"
-    assert body["verdict"] == {"is_positive": True, "probability": 0.8, "n_tubes": 1}
+    assert body["verdict"] == {
+        "is_positive": True,
+        "probability": 0.8,
+        "n_tubes": 1,
+        "embeddings_cached": 0,
+        "embeddings_new": 0,
+    }
 
     frames, dets = model.calls[0]
     assert [f.frame_id for f in frames] == [f"192.168.1.10_1_2026-09-08T10-00-0{i}" for i in range(3)]
