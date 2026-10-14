@@ -123,8 +123,12 @@ PYRO_ENGINE_VERSION=latest
 Optional temporal validation of alerts: with `COMPOSE_PROFILES=temporal` and `TEMPORAL_API_URL=http://localhost:8082`
 in `.env`, the stack also starts `pyro_temporal_api`. While an alert is ongoing, the engine sends the last frames and
 boxes of that camera pose to it and only uploads the alert once the temporal smoke model confirms it. Leave both unset
-to send alerts as before. The service needs `data/model_onnx.zip`, exported from a
-[temporal-model](https://github.com/pyronear/temporal-model) release with `temporal-export-onnx`.
+to send alerts as before. The service needs `data/model_onnx.zip`: the [temporal-model](https://github.com/pyronear/temporal-model)
+release on Hugging Face (`pyronear/temporal-model`, revision `v0.6.0`, trained on pyro-dataset v4.7.0), re-exported
+with `temporal-export-onnx` so the package carries the split backbone/head graphs. With those, the service embeds
+only real frames and keeps per-frame ViT embeddings across rounds, so re-scoring a window one frame longer only costs
+the new frame (as long as the tube's crop window does not move). A fused single-graph package still loads, without
+these savings.
 
 ### Data directory
 

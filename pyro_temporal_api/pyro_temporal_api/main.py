@@ -29,26 +29,38 @@ logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
 MAX_FRAMES = 20
+# Per-slot ViT embeddings kept across jobs, keyed by (frame id, crop box): the engine resubmits the
+# same window one frame longer every round, so most slots were embedded on the previous job.
+# One entry is 1.5 KB (ViT-S); a pose contributes ~10 frames x tubes per job.
+EMBEDDING_CACHE_SIZE = 4096
 # Inference frames are a few hundred KB; anything larger is not an engine frame.
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    model = OnnxTemporalModel.from_package(MODEL_PATH)
+    manifest = read_manifest(MODEL_PATH)
+    split = manifest.get("format_version", 1) >= 2
+    if not split:
+        logger.warning(
+            "%s is a format 1 package (fused classifier.onnx): every slot is embedded on every job. "
+            "Re-export it with temporal-export-onnx to skip padded slots and cache embeddings.",
+            MODEL_PATH,
+        )
+    model = OnnxTemporalModel.from_package(MODEL_PATH, embedding_cache_size=EMBEDDING_CACHE_SIZE if split else 0)
     app.state.jobs = JobStore(model)
-    app.state.model_version = model_version(MODEL_PATH)
+    app.state.model_version = manifest.get("model_version")
     logger.info("Loaded temporal model %s (version %s)", MODEL_PATH, app.state.model_version)
     yield
 
 
-def model_version(path: Path) -> str | None:
+def read_manifest(path: Path) -> dict:
     import zipfile
 
     import yaml
 
     with zipfile.ZipFile(path) as zf:
-        return yaml.safe_load(zf.read("manifest.yaml")).get("model_version")
+        return dict(yaml.safe_load(zf.read("manifest.yaml")))
 
 
 app = FastAPI(title="Pyro Temporal API", lifespan=lifespan)

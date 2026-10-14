@@ -76,6 +76,7 @@ def _to_frame_detections(frames: list[Any], boxes: list[list[list[float]]]) -> d
 
 def score(model: Any, job: Job) -> dict[str, Any]:
     """Run the temporal model on a job's window; frames live on disk only for the call."""
+    hits, misses = getattr(model, "cache_hits", 0), getattr(model, "cache_misses", 0)
     with tempfile.TemporaryDirectory(prefix="temporal_job_") as td:
         paths = []
         for frame_id, data in job.frames:
@@ -90,6 +91,9 @@ def score(model: Any, job: Job) -> dict[str, Any]:
         "is_positive": bool(out.is_positive),
         "probability": max(probs) if probs else None,
         "n_tubes": len(kept),
+        # ViT slots served from the embedding cache vs embedded for this job (0/0 without a cache)
+        "embeddings_cached": getattr(model, "cache_hits", 0) - hits,
+        "embeddings_new": getattr(model, "cache_misses", 0) - misses,
     }
 
 
