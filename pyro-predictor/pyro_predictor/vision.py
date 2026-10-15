@@ -38,6 +38,8 @@ class Classifier:
 
     Args:
         model_path: model path
+        onnx_session_options: optional ONNX Runtime session options for deployment-specific
+            threading and allocator tuning; None preserves the runtime defaults
     """
 
     def __init__(
@@ -50,6 +52,7 @@ class Classifier:
         model_path=None,
         max_bbox_size=0.4,
         verbose=True,
+        onnx_session_options: onnxruntime.SessionOptions | None = None,
     ) -> None:
         self.verbose = verbose
         if not verbose:
@@ -128,7 +131,9 @@ class Classifier:
                 else:
                     providers = ["CPUExecutionProvider"]
                     logger.info("Using CPUExecutionProvider for ONNX inference")
-                self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
+                self.ort_session = onnxruntime.InferenceSession(
+                    onnx_file, sess_options=onnx_session_options, providers=providers
+                )
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
@@ -155,7 +160,7 @@ class Classifier:
             - The resized and normalized image of shape (1, C, H, W).
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
-        np_img, pad = letterbox(np.array(pil_img), self.imgsz)  # Applies letterbox resize with padding
+        np_img, pad = letterbox(np.asarray(pil_img), self.imgsz)  # Applies letterbox resize with padding
 
         if self.format == "ncnn":
             np_img = ncnn.Mat.from_pixels(np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0])
@@ -163,8 +168,9 @@ class Classifier:
             std = [1 / 255, 1 / 255, 1 / 255]
             np_img.substract_mean_normalize(mean=mean, norm=std)
         else:
-            np_img = np.expand_dims(np_img.astype("float32"), axis=0)  # Add batch dimension
-            np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+            # Cast directly into the contiguous CHW buffer, avoiding a float32
+            # HWC intermediate of the same size.
+            np_img = np.ascontiguousarray(np_img.transpose((2, 0, 1)), dtype=np.float32)[None, ...]
             np_img /= 255.0  # Normalize to [0, 1]
 
         return np_img, pad

@@ -321,7 +321,8 @@ class Engine(Predictor):
         # Inference with ONNX
         if fake_pred is None:
             bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
-            preds = self.model(frame.convert("RGB"), bbox_mask_dict)
+            rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
+            preds = self.model(rgb_frame, bbox_mask_dict)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
