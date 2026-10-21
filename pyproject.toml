@@ -43,6 +43,9 @@ tracker = "https://github.com/pyronear/pyro-engine/issues"
 [tool.setuptools.packages.find]
 include = ["pyroengine*"]
 
+[tool.uv]
+required-version = ">=0.13.4,<1.0.0"
+
 [tool.uv.sources]
 pyro_camera_api_client = { path = "pyro_camera_api/client", editable = true }
 pyro_predictor = { path = "pyro-predictor", editable = true }

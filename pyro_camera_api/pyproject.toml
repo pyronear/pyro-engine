@@ -30,3 +30,4 @@ quality = [
 
 [tool.uv]
 package = false
+required-version = ">=0.13.4,<1.0.0"
