@@ -8,7 +8,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  UV_VERSION: "0.13.4"
 
 jobs:
   ruff:
@@ -19,9 +18,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: ${{ env.UV_VERSION }}
+      - uses: ./.github/actions/setup-uv
       - name: Install quality dependencies
         run: uv sync --locked --only-group quality
       - name: Run ruff
@@ -38,9 +35,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: ${{ env.UV_VERSION }}
+      - uses: ./.github/actions/setup-uv
       - name: Install quality dependencies
         run: uv sync --locked --group quality
       - name: Run mypy

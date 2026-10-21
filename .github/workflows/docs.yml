@@ -3,9 +3,6 @@ on:
   push:
     branches: main
 
-env:
-  UV_VERSION: "0.13.4"
-
 jobs:
   docs-deploy:
     runs-on: ${{ matrix.os }}
@@ -22,9 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: ${{ env.UV_VERSION }}
+      - uses: ./.github/actions/setup-uv
 
       - name: Stub version.py for docs
         run: |
