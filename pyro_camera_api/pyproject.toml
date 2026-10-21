@@ -12,6 +12,7 @@ dependencies = [
     "opencv-python-headless>=4.9.0,<5",
     "pillow>=10.2.0,<11",
     "requests>=2.31.0,<3",
+    "onvif-zeep>=0.2.12,<1",
     "numpy>=1.26.4,<2",
     "urllib3>=2.2.1,<3",
     "ncnn==1.0.20240410",
