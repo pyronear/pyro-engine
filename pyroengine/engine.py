@@ -11,7 +11,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from PIL import Image
@@ -127,16 +127,20 @@ class Engine(Predictor):
         temporal_api_url: Optional[str] = None,
         temporal_window: int = 10,
         temporal_job_timeout: float = 120.0,
+        temporal_min_score: float = 0.1,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
-        # Temporal validation: when set, an ongoing alert is only staged once the temporal
-        # service has confirmed the last `temporal_window` frames of that camera pose. A job
-        # still pending after `temporal_job_timeout` seconds fails open (alert sent unvalidated).
+        # Temporal validation: when set, the last `temporal_window` frames of an alerting camera
+        # pose are scored by the temporal service every round. Boxes covered by a tube scoring at
+        # least `temporal_min_score` are uploaded with that probability, the API applies its own
+        # threshold; the other boxes are dropped. A job still pending after `temporal_job_timeout`
+        # seconds fails open (frames sent without scores, the API scores them itself).
         # Set before super().__init__, which already builds the per-camera states.
         self.temporal = TemporalClient(temporal_api_url) if temporal_api_url else None
         self.temporal_window = temporal_window
         self.temporal_job_timeout = temporal_job_timeout
+        self.temporal_min_score = temporal_min_score
         super().__init__(
             model_path=model_path,
             conf_thresh=conf_thresh,
@@ -209,7 +213,8 @@ class Engine(Predictor):
         if self.temporal is not None and self.temporal_window > (state["last_predictions"].maxlen or 0):
             state["last_predictions"] = deque(state["last_predictions"], maxlen=self.temporal_window)
         state["temporal_job"] = None  # (job_id, submitted_at) while a verdict is pending
-        state["temporal_validated"] = False
+        state["temporal_tubes"] = []  # [(xyxy box, probability)] of the last verdict, above temporal_min_score
+        state["temporal_bypass"] = False  # fail open: rest of the event goes out without scores
 
     def _temporal_window(self, cam_key: str) -> List[WindowFrame]:
         """The prediction window as (frame_id, jpeg, boxes) triples, oldest first.
@@ -238,25 +243,28 @@ class Engine(Predictor):
         state = self._states[cam_key]
         state["event_crop_boxes"] = []
         state["temporal_job"] = None
-        state["temporal_validated"] = False
+        state["temporal_tubes"] = []
+        state["temporal_bypass"] = False
         window = state["last_predictions"]
         for i, entry in enumerate(window):
             if entry[4]:  # is_staged: belongs to the event that just ended
                 window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
     def _temporal_gate(self, cam_key: str, cam_id: str, resubmit: bool = True) -> bool:
-        """Return True when this event may be staged: temporal verdict positive, or service unavailable.
+        """Return True when the frames not yet staged may be staged now.
 
-        Round N submits the frame window; round N+1 reads the verdict. A negative verdict resubmits
-        the window (now one frame longer) so the event can still be confirmed later; with
-        ``resubmit`` False (the event already ended) a negative verdict just drops it. A transport
-        error, a failed job or a job pending longer than ``temporal_job_timeout`` fails open: the
-        alert goes out as without temporal validation.
+        Round N submits the frame window; round N+1 reads the verdict, stages the pending frames
+        with the per-tube probabilities (``state["temporal_tubes"]``) and, while the event is
+        ongoing (``resubmit``), submits the window again so every frame carries a fresh score. A
+        verdict with no tube above ``temporal_min_score`` stages nothing; once the event ended it
+        drops the held frames. A transport error, a failed job or a job pending longer than
+        ``temporal_job_timeout`` fails open: the rest of the event goes out without scores.
         """
         state = self._states[cam_key]
-        if state["temporal_validated"] or self.temporal is None:
+        if state["temporal_bypass"] or self.temporal is None:
             return True
         try:
+            stage = False
             if state["temporal_job"] is not None:
                 job_id, submitted_at = state["temporal_job"]
                 result = self.temporal.result(job_id)
@@ -266,44 +274,73 @@ class Engine(Predictor):
                         return False
                     logger.error(
                         f"Camera '{cam_id}' - temporal job still pending after {self.temporal_job_timeout:.0f}s, "
-                        "alert sent unvalidated"
+                        "alert sent unscored"
                     )
                     state["temporal_job"] = None
-                    state["temporal_validated"] = True
+                    state["temporal_bypass"] = True
                     return True
                 state["temporal_job"] = None
                 if result["status"] == "done":
                     verdict = result["verdict"]
-                    prob = verdict.get("probability")
-                    prob_str = f"{prob:.2%}" if prob is not None else "n/a"
-                    if verdict["is_positive"]:
-                        logger.info(f"Camera '{cam_id}' - temporal model confirmed the alert (probability: {prob_str})")
-                        state["temporal_validated"] = True
-                        return True
-                    logger.info(
-                        f"Camera '{cam_id}' - temporal model rejected the alert "
-                        f"(probability: {prob_str}, tubes: {verdict.get('n_tubes')}), "
-                        + ("resubmitting" if resubmit else "event over, dropped")
-                    )
-                    if not resubmit:
-                        return False
+                    tubes = [
+                        (tuple(t["box"]), float(t["probability"]))
+                        for t in verdict.get("tubes", [])
+                        if t["probability"] >= self.temporal_min_score
+                    ]
+                    state["temporal_tubes"] = tubes
+                    if tubes:
+                        logger.info(
+                            f"Camera '{cam_id}' - temporal model scored {len(tubes)} tube(s) "
+                            f"(max probability: {max(p for _, p in tubes):.2%})"
+                        )
+                        stage = True
+                    else:
+                        logger.info(
+                            f"Camera '{cam_id}' - temporal model rejected the alert "
+                            f"(tubes: {verdict.get('n_tubes')}), "
+                            + ("resubmitting" if resubmit else "event over, dropped")
+                        )
+                        if not resubmit:
+                            return False
                 else:
                     logger.error(
-                        f"Camera '{cam_id}' - temporal job failed ({result.get('error')}), alert sent unvalidated"
+                        f"Camera '{cam_id}' - temporal job failed ({result.get('error')}), alert sent unscored"
                     )
-                    state["temporal_validated"] = True
+                    state["temporal_bypass"] = True
                     return True
             elif not resubmit:
                 return False
-            window = self._temporal_window(cam_key)
-            state["temporal_job"] = (self.temporal.submit(cam_id, window), time.monotonic())
-            logger.info(f"Camera '{cam_id}' - temporal validation submitted ({len(window)} frames), alert held")
-            return False
+            if resubmit:
+                window = self._temporal_window(cam_key)
+                state["temporal_job"] = (self.temporal.submit(cam_id, window), time.monotonic())
+                logger.info(f"Camera '{cam_id}' - temporal scoring submitted ({len(window)} frames)")
+            return stage
         except (RequestException, KeyError, ValueError) as e:
-            logger.error(f"Camera '{cam_id}' - temporal service unavailable ({e}), alert sent unvalidated")
+            logger.error(f"Camera '{cam_id}' - temporal service unavailable ({e}), alert sent unscored")
             state["temporal_job"] = None  # a lost job must not keep the event alive forever
-            state["temporal_validated"] = True
+            state["temporal_bypass"] = True
             return True
+
+    def _temporal_scores(self, cam_key: str, bboxes: list) -> Tuple[list, Optional[List[float]]]:
+        """Keep the boxes covered by a scored tube and return them with one probability each.
+
+        Without temporal scoring (disabled or failed open) every box is kept and no score is sent,
+        so the API scores the sequence itself.
+        """
+        state = self._states[cam_key]
+        if self.temporal is None or state["temporal_bypass"]:
+            return bboxes, None
+        kept, scores = [], []
+        for box in bboxes:
+            probs = [p for tube, p in state["temporal_tubes"] if self._overlaps(box, tube)]
+            if probs:
+                kept.append(box)
+                scores.append(round(max(probs), 3))
+        return kept, scores
+
+    @staticmethod
+    def _overlaps(a: Sequence[float], b: Sequence[float]) -> bool:
+        return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
 
     def heartbeat(self, cam_id: str, timeout: Optional[float] = None) -> Response:
         """Updates last ping of device"""
@@ -491,10 +528,13 @@ class Engine(Predictor):
                 bboxes = [[b[0], b[1], b[2], b[3], 0.0] for b in last_seen]
             if bboxes:
                 last_seen = bboxes
+            sent_bboxes, scores = self._temporal_scores(cam_key, bboxes)
             crop_boxes = (
-                self._assign_crop_boxes(bboxes, cam_key, *full_size) if bboxes and full_size is not None else None
+                self._assign_crop_boxes(sent_bboxes, cam_key, *full_size)
+                if sent_bboxes and full_size is not None
+                else None
             )
-            self._stage_alert(crop_, cam_id, ts, bboxes, jpeg_bytes, crop_boxes)
+            self._stage_alert(crop_, cam_id, ts, sent_bboxes, jpeg_bytes, crop_boxes, scores)
             state["last_predictions"][idx] = (crop_, preds_, bboxes, ts, True, jpeg_bytes)
 
     @staticmethod
@@ -769,6 +809,7 @@ class Engine(Predictor):
         bboxes: list,
         jpeg_bytes: Optional[bytes] = None,
         crop_boxes: Optional[list] = None,
+        temporal_scores: Optional[List[float]] = None,
     ) -> None:
         # Store information in the queue
         self._alerts.append({
@@ -780,6 +821,7 @@ class Engine(Predictor):
             "bboxes": bboxes,
             "jpeg_bytes": jpeg_bytes,
             "crop_boxes": crop_boxes,
+            "temporal_scores": temporal_scores,  # one per bbox, None when the API must score itself
         })
 
     def _process_alerts(self) -> None:
@@ -815,7 +857,12 @@ class Engine(Predictor):
                     _, pose_id = self.cam_creds[cam_id]
                     ip = cam_id.split("_")[0]
                     response = self.api_client[ip].create_detection(
-                        jpeg_bytes, bboxes, pose_id, crops=crops, recorded_at=frame_info["ts"]
+                        jpeg_bytes,
+                        bboxes,
+                        pose_id,
+                        crops=crops,
+                        recorded_at=frame_info["ts"],
+                        temporal_model_scores=frame_info.get("temporal_scores"),
                     )
 
                     if response.status_code >= 500 or response.status_code in RETRYABLE_STATUS:

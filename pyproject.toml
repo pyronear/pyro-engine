@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     "requests>=2.33.0,<3",
     "python-dotenv==1.1.0",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@658cc6a2a28d9b52fd33167b7affc6ddae4e45b1#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
     "onvif-zeep>=0.2.12",

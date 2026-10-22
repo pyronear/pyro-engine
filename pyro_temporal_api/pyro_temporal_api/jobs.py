@@ -77,6 +77,18 @@ def _to_frame_detections(frames: list[Any], boxes: list[list[list[float]]]) -> d
     return out
 
 
+def _tube_summary(tube: dict[str, Any]) -> dict[str, Any] | None:
+    """``{"probability", "box"}`` of a scored tube, the box being the union of its detections (normalized xyxy)."""
+    boxes = [e["bbox"] for e in tube["entries"] if e.get("bbox") is not None]
+    if tube.get("probability") is None or not boxes:
+        return None
+    x1 = min(cx - w / 2 for cx, _, w, _ in boxes)
+    y1 = min(cy - h / 2 for _, cy, _, h in boxes)
+    x2 = max(cx + w / 2 for cx, _, w, _ in boxes)
+    y2 = max(cy + h / 2 for _, cy, _, h in boxes)
+    return {"probability": round(float(tube["probability"]), 4), "box": [round(v, 4) for v in (x1, y1, x2, y2)]}
+
+
 def score(model: Any, job: Job) -> dict[str, Any]:
     """Run the temporal model on a job's window; frames live on disk only for the call."""
     hits, misses = getattr(model, "cache_hits", 0), getattr(model, "cache_misses", 0)
@@ -89,11 +101,18 @@ def score(model: Any, job: Job) -> dict[str, Any]:
         frames = model.load_sequence(paths)
         out = model.predict(frames, frame_detections=_to_frame_detections(frames, job.boxes))
     kept = out.details["tubes"]["kept"]
-    probs = [t["probability"] for t in kept if t["probability"] is not None]
+    tubes: list[dict[str, Any]] = []
+    for t in kept:
+        summary = _tube_summary(t)
+        if summary is not None:
+            tubes.append(summary)
+    probs = [t["probability"] for t in tubes]
     return {
         "is_positive": bool(out.is_positive),
         "probability": max(probs) if probs else None,
         "n_tubes": len(kept),
+        # One entry per scored tube: the engine attaches each probability to the boxes it covers.
+        "tubes": tubes,
         # ViT slots served from the embedding cache vs embedded for this job (0/0 without a cache)
         "embeddings_cached": getattr(model, "cache_hits", 0) - hits,
         "embeddings_new": getattr(model, "cache_misses", 0) - misses,
