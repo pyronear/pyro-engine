@@ -51,6 +51,11 @@ jobs:
         run: |
           uv sync --locked --group test
           uv run pytest tests/
+      - name: Run temporal API tests
+        working-directory: pyro_temporal_api
+        run: |
+          uv sync --locked --group dev
+          uv run pytest tests/
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:

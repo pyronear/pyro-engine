@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 import requests
 
-__all__ = ["TemporalClient"]
+__all__ = ["TemporalClient", "WindowFrame"]
 
 # (frame_id, jpeg bytes, boxes as [[x1, y1, x2, y2, conf], ...] normalized xyxy)
 WindowFrame = Tuple[str, bytes, List[List[float]]]
@@ -19,7 +19,8 @@ WindowFrame = Tuple[str, bytes, List[List[float]]]
 class TemporalClient:
     """Submit a window of frames for one camera pose, then poll the verdict on a later round."""
 
-    def __init__(self, url: str, timeout: float = 10.0) -> None:
+    # Localhost service: a longer wait would stall the inference loop of every other camera.
+    def __init__(self, url: str, timeout: float = 5.0) -> None:
         self.url = url.rstrip("/")
         self.timeout = timeout
 

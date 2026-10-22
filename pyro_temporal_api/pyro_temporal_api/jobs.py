@@ -11,6 +11,7 @@ import logging
 import queue
 import tempfile
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -24,6 +25,8 @@ logger = logging.getLogger(__name__)
 MAX_JOBS_KEPT = 100
 # One job per camera pose per round is the normal load; more means a stuck worker or a flood.
 MAX_PENDING = 16
+# A job scores in seconds; one running longer than this means the worker is stuck (health goes red).
+STUCK_AFTER = 120.0
 
 
 class QueueFullError(RuntimeError):
@@ -105,6 +108,7 @@ class JobStore:
         self._jobs: OrderedDict[str, Job] = OrderedDict()
         self._queue: queue.Queue[Job] = queue.Queue()
         self._lock = threading.Lock()
+        self._running_since: float | None = None
         self._worker = threading.Thread(target=self._run, name="temporal-worker", daemon=True)
         self._worker.start()
 
@@ -123,6 +127,19 @@ class JobStore:
         with self._lock:
             return self._jobs.get(job_id)
 
+    def snapshot(self, job_id: str) -> dict[str, Any] | None:
+        """The job as returned by the API, read under the lock the worker publishes results with."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return job.to_dict() if job is not None else None
+
+    def healthy(self) -> bool:
+        """False when the worker thread died or has been scoring one job for longer than STUCK_AFTER."""
+        if not self._worker.is_alive():
+            return False
+        since = self._running_since
+        return since is None or time.monotonic() - since < STUCK_AFTER
+
     def wait(self, job_id: str, timeout: float) -> bool:
         """Block until the job finishes (tests and synchronous callers)."""
         job = self.get(job_id)
@@ -131,14 +148,17 @@ class JobStore:
     def _run(self) -> None:
         while True:
             job = self._queue.get()
+            self._running_since = time.monotonic()
             try:
-                job.verdict = score(self._model, job)
-                job.status = "done"
-                logger.info("job %s cam %s: %s", job.job_id, job.cam_id, job.verdict)
+                verdict = score(self._model, job)
+                with self._lock:  # publish verdict and status together: no half-updated reads
+                    job.verdict, job.status = verdict, "done"
+                logger.info("job %s cam %s: %s", job.job_id, job.cam_id, verdict)
             except Exception as exc:
-                job.status = "error"
-                job.error = f"{type(exc).__name__}: {exc}"
+                with self._lock:
+                    job.error, job.status = f"{type(exc).__name__}: {exc}", "error"
                 logger.exception("job %s cam %s failed", job.job_id, job.cam_id)
             finally:
+                self._running_since = None
                 job.frames = []  # release the JPEGs once scored
                 job._done.set()

@@ -13,6 +13,7 @@ style:
 test:
 	coverage run -m pytest tests/
 	cd pyro_camera_api && PYTHONPATH=. uv run --group test pytest tests/
+	cd pyro_temporal_api && uv run --group dev pytest tests/
 
 # Build documentation for current version
 single-docs:
@@ -59,6 +60,12 @@ run:
 	docker pull pyronear/pyro-camera-api:latest
 	docker pull pyronear/pyro-temporal-api:latest
 	docker compose up -d
+
+# Pull and run the stack without the temporal validation service, whatever .env says
+run-no-temporal:
+	docker pull pyronear/pyro-engine:latest
+	docker pull pyronear/pyro-camera-api:latest
+	COMPOSE_PROFILES= TEMPORAL_API_URL= docker compose up -d
 
 # Build images locally and run the stack
 run_local: build-api build-temporal build-app

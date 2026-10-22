@@ -10,7 +10,7 @@ import signal
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Never, Optional, Tuple
 
@@ -23,7 +23,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 from requests.models import Response
 
-from pyroengine.temporal_client import TemporalClient
+from pyroengine.temporal_client import TemporalClient, WindowFrame
 
 __all__ = ["ContextCrop", "Engine"]
 
@@ -144,14 +144,17 @@ class Engine(Predictor):
         last_bbox_mask_fetch_period: int = 3600,  # 1H
         temporal_api_url: Optional[str] = None,
         temporal_window: int = 10,
+        temporal_job_timeout: float = 120.0,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
         # Temporal validation: when set, an ongoing alert is only staged once the temporal
-        # service has confirmed the last `temporal_window` frames of that camera pose.
+        # service has confirmed the last `temporal_window` frames of that camera pose. A job
+        # still pending after `temporal_job_timeout` seconds fails open (alert sent unvalidated).
         # Set before super().__init__, which already builds the per-camera states.
         self.temporal = TemporalClient(temporal_api_url) if temporal_api_url else None
         self.temporal_window = temporal_window
+        self.temporal_job_timeout = temporal_job_timeout
         super().__init__(
             model_path=model_path,
             conf_thresh=conf_thresh,
@@ -216,9 +219,29 @@ class Engine(Predictor):
         return state
 
     def _init_temporal_state(self, state: Dict[str, Any]) -> None:
-        state["temporal_frames"] = deque(maxlen=self.temporal_window)
-        state["temporal_job"] = None
+        # One buffer for detection and temporal validation: the frames the temporal model scores
+        # are the frames staged on a positive verdict. Detection still pools the last
+        # nb_consecutive_frames only.
+        if self.temporal is not None and self.temporal_window > (state["last_predictions"].maxlen or 0):
+            state["last_predictions"] = deque(state["last_predictions"], maxlen=self.temporal_window)
+        state["temporal_job"] = None  # (job_id, submitted_at) while a verdict is pending
         state["temporal_validated"] = False
+
+    def _temporal_window(self, cam_key: str) -> List[WindowFrame]:
+        """The prediction window as (frame_id, jpeg, boxes) triples, oldest first.
+
+        The frame id is the capture timestamp (microsecond precision), so a resubmitted frame keeps
+        its id and the service can reuse its cached embedding.
+        """
+        window = []
+        for _, preds, _, ts, _, jpeg in self._states[cam_key]["last_predictions"]:
+            if jpeg is None:
+                continue
+            boxes = np.round(preds[:, :5], 4).tolist()
+            # The service rejects degenerate boxes (rounded/clipped to zero width or height at the image edge)
+            boxes = [b for b in boxes if b[0] < b[2] and b[1] < b[3]]
+            window.append((f"{cam_key}_{ts.replace(':', '-')}", jpeg, boxes))
+        return window
 
     def _end_event(self, cam_key: str) -> None:
         """Reset per-event staging state when an alert ends.
@@ -230,7 +253,6 @@ class Engine(Predictor):
         """
         state = self._states[cam_key]
         state["event_crop_boxes"] = []
-        # The temporal frame window survives events; only the verdict of this event is dropped.
         state["temporal_job"] = None
         state["temporal_validated"] = False
         window = state["last_predictions"]
@@ -244,18 +266,27 @@ class Engine(Predictor):
         Round N submits the frame window; round N+1 reads the verdict. A negative verdict resubmits
         the window (now one frame longer) so the event can still be confirmed later; with
         ``resubmit`` False (the event already ended) a negative verdict just drops it. A transport
-        error or a failed job fails open: the alert goes out as without temporal validation.
+        error, a failed job or a job pending longer than ``temporal_job_timeout`` fails open: the
+        alert goes out as without temporal validation.
         """
         state = self._states[cam_key]
         if state["temporal_validated"] or self.temporal is None:
             return True
         try:
-            job_id = state["temporal_job"]
-            if job_id is not None:
+            if state["temporal_job"] is not None:
+                job_id, submitted_at = state["temporal_job"]
                 result = self.temporal.result(job_id)
                 if result["status"] == "pending":
-                    logger.info(f"Camera '{cam_id}' - temporal verdict pending, alert held")
-                    return False
+                    if time.monotonic() - submitted_at < self.temporal_job_timeout:
+                        logger.info(f"Camera '{cam_id}' - temporal verdict pending, alert held")
+                        return False
+                    logger.error(
+                        f"Camera '{cam_id}' - temporal job still pending after {self.temporal_job_timeout:.0f}s, "
+                        "alert sent unvalidated"
+                    )
+                    state["temporal_job"] = None
+                    state["temporal_validated"] = True
+                    return True
                 state["temporal_job"] = None
                 if result["status"] == "done":
                     verdict = result["verdict"]
@@ -280,12 +311,13 @@ class Engine(Predictor):
                     return True
             elif not resubmit:
                 return False
-            window = list(state["temporal_frames"])
-            state["temporal_job"] = self.temporal.submit(cam_id, window)
+            window = self._temporal_window(cam_key)
+            state["temporal_job"] = (self.temporal.submit(cam_id, window), time.monotonic())
             logger.info(f"Camera '{cam_id}' - temporal validation submitted ({len(window)} frames), alert held")
             return False
         except (RequestException, KeyError, ValueError) as e:
             logger.error(f"Camera '{cam_id}' - temporal service unavailable ({e}), alert sent unvalidated")
+            state["temporal_job"] = None  # a lost job must not keep the event alive forever
             state["temporal_validated"] = True
             return True
 
@@ -411,9 +443,6 @@ class Engine(Predictor):
         extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
-        if self.temporal is not None and encoded_bytes is not None:
-            frame_id = f"{cam_key}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')}"
-            state["temporal_frames"].append((frame_id, encoded_bytes, np.round(preds[:, :5], 4).tolist()))
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)

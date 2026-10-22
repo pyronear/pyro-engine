@@ -60,6 +60,16 @@ def test_health(client):
     assert c.get("/health").json() == {"status": "ok", "model_version": "test"}
 
 
+def test_health_is_503_when_worker_dead_or_stuck(client, monkeypatch):
+    c, _ = client
+    store = c.app.state.jobs
+    monkeypatch.setattr(store, "_running_since", 0.0)  # scoring "since boot": stuck
+    assert c.get("/health").status_code == 503
+    monkeypatch.setattr(store, "_running_since", None)
+    monkeypatch.setattr(store, "_worker", SimpleNamespace(is_alive=lambda: False))
+    assert c.get("/health").status_code == 503
+
+
 def test_job_lifecycle_and_conversion(client):
     c, model = client
     r = _submit(c, n_frames=3)
@@ -106,7 +116,13 @@ def test_unknown_job_is_404(client):
     [
         ({"n_frames": 2, "boxes": [[]]}, "box lists"),
         ({"n_frames": 1, "boxes": [[[0.1, 0.1, 0.2]]]}, "each box"),
-        ({"n_frames": 21}, "expected 1 to 20"),
+        ({"n_frames": 1, "boxes": [[["0.1", 0.1, 0.2, 0.2, 0.5]]]}, "each box"),
+        ({"n_frames": 1, "boxes": [[[0.1, 0.1, float("inf"), 0.2, 0.5]]]}, "each box"),
+        ({"n_frames": 1, "boxes": [[[0.3, 0.1, 0.2, 0.2, 0.5]]]}, "x1 < x2"),
+        ({"n_frames": 1, "boxes": [[[0.1, 0.1, 1.2, 0.2, 0.5]]]}, "normalized"),
+        ({"n_frames": 1, "boxes": [[[0.1, 0.1, 0.2, 0.2, 1.5]]]}, "each box"),
+        ({"n_frames": 1, "boxes": [[[0.1, 0.1, 0.2, 0.2, 0.5]] * 51]}, "more than 50"),
+        ({"n_frames": 11}, "expected 1 to 10"),
     ],
 )
 def test_rejects_malformed_submissions(client, kwargs, detail):
@@ -114,6 +130,19 @@ def test_rejects_malformed_submissions(client, kwargs, detail):
     r = _submit(c, **kwargs)
     assert r.status_code == 422
     assert detail in r.json()["detail"]
+
+
+def test_rejects_duplicate_frame_ids_and_corrupt_images(client):
+    c, _ = client
+    files = [("frames", ("same.jpg", _jpeg(), "image/jpeg"))] * 2
+    r = c.post("/jobs", data={"cam_id": "x", "boxes": json.dumps([[], []])}, files=files)
+    assert r.status_code == 422
+    assert "duplicate" in r.json()["detail"]
+
+    files = [("frames", ("bad.jpg", b"not a jpeg", "image/jpeg"))]
+    r = c.post("/jobs", data={"cam_id": "x", "boxes": json.dumps([[]])}, files=files)
+    assert r.status_code == 422
+    assert "not a valid image" in r.json()["detail"]
 
 
 def test_frames_are_released_after_scoring(client):
