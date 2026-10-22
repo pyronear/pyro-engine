@@ -13,13 +13,16 @@ the torch-free ``model_onnx.zip`` runtime of pyronear/temporal-model.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import math
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from PIL import Image
 from temporal_model.core.onnx_model import OnnxTemporalModel
 
 from pyro_temporal_api.jobs import JobStore, QueueFullError
@@ -28,7 +31,9 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
-MAX_FRAMES = 20
+# The engine submits its 10-frame prediction window; the model scores at most that many slots per tube.
+MAX_FRAMES = 10
+MAX_BOXES_PER_FRAME = 50
 # Per-slot ViT embeddings kept across jobs, keyed by (frame id, crop box): the engine resubmits the
 # same window one frame longer every round, so most slots were embedded on the previous job.
 # One entry is 1.5 KB (ViT-S); a pose contributes ~10 frames x tubes per job.
@@ -68,7 +73,20 @@ app = FastAPI(title="Pyro Temporal API", lifespan=lifespan)
 
 @app.get("/health")
 def health(request: Request):
+    jobs = getattr(request.app.state, "jobs", None)
+    if jobs is not None and not jobs.healthy():
+        raise HTTPException(status_code=503, detail="temporal worker dead or stuck")
     return {"status": "ok", "model_version": getattr(request.app.state, "model_version", None)}
+
+
+def _valid_box(box: object) -> bool:
+    """[x1, y1, x2, y2, conf]: finite numbers, normalized xyxy with x1 < x2 and y1 < y2, conf in [0, 1]."""
+    if not isinstance(box, list) or len(box) != 5:
+        return False
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box):
+        return False
+    x1, y1, x2, y2, conf = box
+    return 0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1 and 0 <= conf <= 1
 
 
 @app.post("/jobs", status_code=202)
@@ -89,15 +107,26 @@ async def submit_job(
     if len(parsed) != len(frames):
         raise HTTPException(status_code=422, detail=f"{len(frames)} frames but {len(parsed)} box lists")
     for fb in parsed:
-        if any(not isinstance(b, list) or len(b) != 5 for b in fb):
-            raise HTTPException(status_code=422, detail="each box must be [x1, y1, x2, y2, conf]")
+        if len(fb) > MAX_BOXES_PER_FRAME:
+            raise HTTPException(status_code=422, detail=f"more than {MAX_BOXES_PER_FRAME} boxes in one frame")
+        if not all(_valid_box(b) for b in fb):
+            raise HTTPException(
+                status_code=422, detail="each box must be [x1, y1, x2, y2, conf], normalized, x1 < x2, y1 < y2"
+            )
 
-    payload = []
+    payload: list[tuple[str, bytes]] = []
     for f in frames:
         data = await f.read(MAX_FRAME_BYTES + 1)
         if len(data) > MAX_FRAME_BYTES:
             raise HTTPException(status_code=413, detail=f"frame {f.filename} exceeds {MAX_FRAME_BYTES} bytes")
-        payload.append((Path(f.filename or "frame").stem, data))
+        frame_id = Path(f.filename or "frame").stem
+        if any(frame_id == seen for seen, _ in payload):
+            raise HTTPException(status_code=422, detail=f"duplicate frame id {frame_id}")
+        try:
+            Image.open(io.BytesIO(data)).verify()
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"frame {frame_id} is not a valid image: {exc}") from exc
+        payload.append((frame_id, data))
     try:
         job = request.app.state.jobs.submit(cam_id, payload, parsed)
     except QueueFullError as exc:
@@ -107,7 +136,7 @@ async def submit_job(
 
 @app.get("/jobs/{job_id}")
 def get_job(request: Request, job_id: str):
-    job = request.app.state.jobs.get(job_id)
+    job = request.app.state.jobs.snapshot(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="unknown job")
-    return job.to_dict()
+    return job
