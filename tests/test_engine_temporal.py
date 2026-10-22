@@ -17,7 +17,26 @@ CAM = "192.168.1.10_1"
 # post_process turns it into normalized xyxy [0.4, 0.4, 0.5, 0.5, 0.6]
 PRED = np.array([[460.8, 460.8, 102.4, 102.4, 0.6]])
 EMPTY = np.empty((5, 0))
-DONE = lambda positive: {"status": "done", "verdict": {"is_positive": positive, "probability": 0.5, "n_tubes": 1}}
+BOX = [0.4, 0.4, 0.5, 0.5]
+FAR_BOX = [0.8, 0.8, 0.9, 0.9]
+
+
+def done(*tubes):
+    """A done verdict with one (box, probability) tube each."""
+    tubes = [{"box": box, "probability": prob} for box, prob in tubes]
+    probs = [t["probability"] for t in tubes]
+    return {
+        "status": "done",
+        "verdict": {
+            "is_positive": any(p > 0.5 for p in probs),
+            "probability": max(probs, default=None),
+            "n_tubes": len(tubes),
+            "tubes": tubes,
+        },
+    }
+
+
+PENDING = {"status": "pending"}
 
 
 class FakeTemporal:
@@ -57,8 +76,12 @@ def _fire(engine, image, n=1):
     return engine._states[CAM]
 
 
+def _scores(engine):
+    return [a["temporal_scores"] for a in engine._alerts]
+
+
 def test_window_is_the_prediction_window(tmp_path, mock_wildfire_image):
-    engine = _engine(tmp_path, FakeTemporal([{"status": "pending"}] * 3), temporal_window=3)
+    engine = _engine(tmp_path, FakeTemporal([PENDING] * 3), temporal_window=3)
     state = _fire(engine, mock_wildfire_image, n=4)
     assert state["last_predictions"].maxlen == 3  # widened from nb_consecutive_frames=2
     window = engine._temporal_window(CAM)
@@ -72,9 +95,8 @@ def test_window_is_the_prediction_window(tmp_path, mock_wildfire_image):
     assert [f for f, _, _ in engine._temporal_window(CAM)] == [f for f, _, _ in window]
 
 
-def test_alert_held_until_positive_verdict(tmp_path, mock_wildfire_image):
-    done = lambda positive: {"status": "done", "verdict": {"is_positive": positive, "probability": 0.5, "n_tubes": 1}}
-    temporal = FakeTemporal([{"status": "pending"}, done(False), done(True)])
+def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wildfire_image):
+    temporal = FakeTemporal([PENDING, done((BOX, 0.05)), done((BOX, 0.3)), done((BOX, 0.9))])
     engine = _engine(tmp_path, temporal)
 
     state = _fire(engine, mock_wildfire_image)  # ongoing on the first frame -> submit
@@ -83,25 +105,37 @@ def test_alert_held_until_positive_verdict(tmp_path, mock_wildfire_image):
     assert state["temporal_job"][0] == "job1"
     assert len(engine._alerts) == 0
 
-    _fire(engine, mock_wildfire_image)  # pending -> held
+    _fire(engine, mock_wildfire_image)  # pending -> held, no new job
     assert len(engine._alerts) == 0
     assert state["temporal_job"][0] == "job1"
 
-    _fire(engine, mock_wildfire_image)  # negative -> resubmitted with a longer window
+    _fire(engine, mock_wildfire_image)  # below temporal_min_score -> nothing staged, resubmitted
     assert len(engine._alerts) == 0
     assert state["temporal_job"][0] == "job2"
     assert len(temporal.submitted[1][1]) == 3
 
-    _fire(engine, mock_wildfire_image)  # positive -> validated, window staged
-    assert state["temporal_validated"] is True
-    assert state["temporal_job"] is None
-    assert len(engine._alerts) > 0
-    assert not temporal.results  # every scripted verdict was consumed
+    _fire(engine, mock_wildfire_image)  # 0.3 >= 0.1 -> held frames staged with that score, resubmitted
+    assert len(engine._alerts) == 4
+    assert all(s == [0.3] for s in _scores(engine))
+    assert state["temporal_job"][0] == "job3"
 
-    n_staged = len(engine._alerts)
-    _fire(engine, mock_wildfire_image)  # validated event: no more calls, keeps staging
-    assert len(temporal.submitted) == 2
-    assert len(engine._alerts) > n_staged
+    _fire(engine, mock_wildfire_image)  # next verdict: only the new frame, with the fresh score
+    assert len(engine._alerts) == 5
+    assert _scores(engine)[-1] == [0.9]
+    assert len(temporal.submitted) == 4  # one job per round while ongoing
+    assert not temporal.results
+
+
+def test_boxes_outside_scored_tubes_are_dropped(tmp_path, mock_wildfire_image):
+    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9))]))
+    _fire(engine, mock_wildfire_image, n=2)
+    assert len(engine._alerts) == 2  # frames still go out (continuity) ...
+    assert all(a["bboxes"] == [] and a["temporal_scores"] == [] for a in engine._alerts)  # ... without the box
+
+    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9), (BOX, 0.2))]))
+    _fire(engine, mock_wildfire_image, n=2)
+    assert [[b[:4] for b in a["bboxes"]] for a in engine._alerts] == [[BOX]] * 2
+    assert _scores(engine) == [[0.2], [0.2]]
 
 
 @pytest.mark.parametrize(
@@ -112,27 +146,29 @@ def test_alert_held_until_positive_verdict(tmp_path, mock_wildfire_image):
     ],
     ids=["job_error", "service_down"],
 )
-def test_service_failure_fails_open(tmp_path, mock_wildfire_image, temporal):
+def test_service_failure_fails_open_without_scores(tmp_path, mock_wildfire_image, temporal):
     engine = _engine(tmp_path, temporal)
     state = _fire(engine, mock_wildfire_image)
     if isinstance(temporal, FakeTemporal):
         assert len(engine._alerts) == 0  # round N: submitted, held
         _fire(engine, mock_wildfire_image)  # round N+1: job error
-    assert state["temporal_validated"] is True
+    assert state["temporal_bypass"] is True
     assert len(engine._alerts) > 0
+    assert all(a["bboxes"] and a["temporal_scores"] is None for a in engine._alerts)
 
 
 def test_end_of_event_resets_verdict_but_keeps_window(tmp_path, mock_wildfire_image, mock_forest_image):
-    temporal = FakeTemporal([{"status": "done", "verdict": {"is_positive": True, "probability": 0.9, "n_tubes": 1}}])
+    temporal = FakeTemporal([done((BOX, 0.9))] * 6)
     engine = _engine(tmp_path, temporal)
     state = _fire(engine, mock_wildfire_image, n=3)
-    assert state["temporal_validated"] is True
+    assert state["temporal_tubes"]
     n_frames = len(state["last_predictions"])
 
     for _ in range(3):
-        engine.predict(mock_forest_image, CAM, fake_pred=np.empty((5, 0)))
+        engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
     assert state["ongoing"] is False
-    assert state["temporal_validated"] is False
+    assert state["temporal_tubes"] == []
+    assert state["temporal_bypass"] is False
     assert state["temporal_job"] is None
     assert len(state["last_predictions"]) >= n_frames
 
@@ -145,6 +181,7 @@ def test_disabled_without_url(tmp_path, mock_wildfire_image):
     assert state["ongoing"]
     assert state["last_predictions"].maxlen == 2  # window untouched
     assert len(engine._alerts) > 0  # staged on the spot, no gate
+    assert all(a["temporal_scores"] is None for a in engine._alerts)
 
 
 def test_lost_job_fails_open_and_event_can_end(tmp_path, mock_wildfire_image, mock_forest_image):
@@ -155,31 +192,31 @@ def test_lost_job_fails_open_and_event_can_end(tmp_path, mock_wildfire_image, mo
     engine = _engine(tmp_path, temporal)
     state = _fire(engine, mock_wildfire_image)  # submitted
     _fire(engine, mock_wildfire_image)  # poll fails -> fail open
-    assert state["temporal_validated"] is True
+    assert state["temporal_bypass"] is True
     assert state["temporal_job"] is None
     assert len(engine._alerts) > 0
 
     for _ in range(3):
         engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
     assert state["ongoing"] is False
-    assert state["temporal_validated"] is False  # event ended and was reset
+    assert state["temporal_bypass"] is False  # event ended and was reset
     n_alerts = len(engine._alerts)
     engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
     assert len(engine._alerts) == n_alerts  # nothing staged once the event is over
 
 
 def test_job_pending_too_long_fails_open(tmp_path, mock_wildfire_image):
-    temporal = FakeTemporal([{"status": "pending"}])
+    temporal = FakeTemporal([PENDING])
     engine = _engine(tmp_path, temporal, temporal_job_timeout=0)
     state = _fire(engine, mock_wildfire_image)  # submitted
     _fire(engine, mock_wildfire_image)  # still pending past the deadline -> fail open
-    assert state["temporal_validated"] is True
+    assert state["temporal_bypass"] is True
     assert state["temporal_job"] is None
     assert len(engine._alerts) > 0
 
 
 def test_event_ending_during_validation_still_uploads_on_positive(tmp_path, mock_wildfire_image, mock_forest_image):
-    temporal = FakeTemporal([{"status": "pending"}, {"status": "pending"}, DONE(True)])
+    temporal = FakeTemporal([PENDING, PENDING, done((BOX, 0.7))])
     engine = _engine(tmp_path, temporal)
     state = _fire(engine, mock_wildfire_image)  # submitted, held
     engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # still ongoing (hysteresis), pending
@@ -188,15 +225,17 @@ def test_event_ending_during_validation_still_uploads_on_positive(tmp_path, mock
     assert state["temporal_job"][0] == "job1"
     assert len(engine._alerts) == 0
 
-    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # positive verdict: held frames go out
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # verdict in: held frames go out, no new job
     assert len(engine._alerts) > 0
+    assert _scores(engine)[0] == [0.7]
     assert state["temporal_job"] is None
-    assert state["temporal_validated"] is False  # event closed after staging
+    assert len(temporal.submitted) == 1
+    assert state["temporal_tubes"] == []  # event closed after staging
     assert not temporal.results
 
 
 def test_event_ending_during_validation_dropped_on_negative(tmp_path, mock_wildfire_image, mock_forest_image):
-    temporal = FakeTemporal([{"status": "pending"}, {"status": "pending"}, DONE(False)])
+    temporal = FakeTemporal([PENDING, PENDING, done((BOX, 0.02))])
     engine = _engine(tmp_path, temporal)
     state = _fire(engine, mock_wildfire_image)
     for _ in range(3):

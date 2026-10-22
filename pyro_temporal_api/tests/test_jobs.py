@@ -29,7 +29,17 @@ class FakeModel:
         if self.fail:
             raise RuntimeError("boom")
         self.calls.append((frames, frame_detections))
-        kept = [{"logit": 1.0, "probability": self.probability}] if frame_detections else []
+        kept = (
+            [
+                {
+                    "logit": 1.0,
+                    "probability": self.probability,
+                    "entries": [{"bbox": (0.45, 0.45, 0.1, 0.1)}, {"bbox": None}],
+                }
+            ]
+            if frame_detections
+            else []
+        )
         return SimpleNamespace(is_positive=self.positive, details={"tubes": {"kept": kept}})
 
 
@@ -84,6 +94,7 @@ def test_job_lifecycle_and_conversion(client):
         "is_positive": True,
         "probability": 0.8,
         "n_tubes": 1,
+        "tubes": [{"probability": 0.8, "box": [0.4, 0.4, 0.5, 0.5]}],
         "embeddings_cached": 0,
         "embeddings_new": 0,
     }
@@ -150,6 +161,18 @@ def test_frames_are_released_after_scoring(client):
     job_id = _submit(c).json()["job_id"]
     assert c.app.state.jobs.wait(job_id, timeout=5)
     assert c.app.state.jobs.get(job_id).frames == []
+
+
+def test_tube_summary_skips_unscored_or_empty_tubes():
+    assert jobs._tube_summary({"probability": None, "entries": [{"bbox": (0.5, 0.5, 0.1, 0.1)}]}) is None
+    assert jobs._tube_summary({"probability": 0.9, "entries": [{"bbox": None}]}) is None
+    assert jobs._tube_summary({
+        "probability": 0.9,
+        "entries": [{"bbox": (0.2, 0.2, 0.2, 0.2)}, {"bbox": (0.5, 0.5, 0.2, 0.2)}],
+    }) == {
+        "probability": 0.9,
+        "box": [0.1, 0.1, 0.6, 0.6],
+    }
 
 
 def test_to_frame_detections_keeps_empty_frames():
