@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main, develop]
 
-env:
-  UV_VERSION: "0.6.16"
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -27,9 +24,7 @@ jobs:
           python-version: ${{ matrix.python }}
           architecture: x64
 
-      - uses: astral-sh/setup-uv@v5
-        with:
-          version: ${{ env.UV_VERSION }}
+      - uses: ./.github/actions/setup-uv
 
       - name: Install dependencies
         run: uv sync --locked --no-default-groups
