@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 import logging
+import sys
 
 import pytest
 
@@ -95,3 +96,22 @@ def test_filter_scrubs_records_with_args():
     assert RedactSecretsFilter().filter(record) is True
     assert "pw" not in record.getMessage()
     assert "[10.0.0.1] Start pipeline" in record.getMessage()
+
+
+@pytest.mark.parametrize("line", ["max_conf p=0.35", "u=3 v=4", "auto=1"])
+def test_redact_text_leaves_short_keys_outside_streamid(line):
+    assert redact_text(line) == line
+
+
+def test_filter_scrubs_exception_traceback():
+    try:
+        raise ConnectionError("Max retries exceeded with url: rtsp://admin:S3cret@10.0.0.1/live")
+    except ConnectionError:
+        record = logging.LogRecord("any", logging.ERROR, __file__, 1, "capture failed", None, sys.exc_info())
+    assert RedactSecretsFilter().filter(record) is True
+    assert "S3cret" not in logging.Formatter().format(record)
+
+
+def test_filter_tolerates_malformed_args():
+    record = logging.LogRecord("any", logging.INFO, __file__, 1, "x %s %s", ("a",), None)
+    assert RedactSecretsFilter().filter(record) is True

@@ -19,10 +19,11 @@ _USERINFO = re.compile(r"(\w[\w+.-]*://)[^\s/]*@")
 
 # Credential-like key=value pairs in query strings, MediaMTX streamid forms
 # ("#!::u=user,p=pass,m=publish") and ffmpeg command lines. "u"/"p" are kept for the
-# streamid form; the lookbehind keeps them from matching inside longer words.
+# streamid form only (after ":" or ","), so a value like "p=0.35" elsewhere stays readable;
+# the lookbehind keeps the other keys from matching inside longer words.
 _SENSITIVE_KV = re.compile(
-    r"(?<![\w-])(password|passwd|pwd|passphrase|pass|secret|token|access_token|api_?key|"
-    r"auth|username|usr|user|[up])=([^&,\s'\"]+)",
+    r"((?<![\w-])(?:password|passwd|pwd|passphrase|pass|secret|token|access_token|api_?key|"
+    r"auth|username|usr|user)|(?<=[:,])[up])=([^&,\s'\"]+)",
     re.IGNORECASE,
 )
 
@@ -62,9 +63,19 @@ class RedactSecretsFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
+        try:
+            msg = record.getMessage()
+        except Exception:
+            # Malformed format/args: let the handler report it the way logging normally does.
+            return True
         redacted = redact_text(msg)
         if redacted != msg:
             record.msg = redacted
             record.args = None
+        if record.exc_info and not record.exc_text:
+            # Formatters reuse a cached exc_text, so filling it here scrubs the traceback too
+            # (e.g. a requests error quoting a URL with credentials).
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            record.exc_text = redact_text(record.exc_text)
         return True
