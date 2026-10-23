@@ -1,0 +1,142 @@
+# Copyright (C) 2022-2026, Pyronear.
+
+# This program is licensed under the Apache License 2.0.
+# See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
+
+"""Temporal validation service.
+
+The engine submits a window of frames + YOLO boxes for one camera pose
+(``POST /jobs``) and reads the verdict on its next round (``GET /jobs/{id}``).
+Scoring runs in a worker thread so requests return immediately. The model is
+the torch-free ``model_onnx.zip`` runtime of pyronear/temporal-model.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import logging
+import math
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from PIL import Image
+from temporal_model.core.onnx_model import OnnxTemporalModel
+
+from pyro_temporal_api.jobs import JobStore, QueueFullError
+
+logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
+# The engine submits its 11-frame prediction window; the model scores at most that many slots per tube.
+MAX_FRAMES = 11
+MAX_BOXES_PER_FRAME = 50
+# Per-slot ViT embeddings kept across jobs, keyed by (frame id, crop box): the engine resubmits the
+# same window one frame longer every round, so most slots were embedded on the previous job.
+# One entry is 1.5 KB (ViT-S); a pose contributes ~10 frames x tubes per job.
+EMBEDDING_CACHE_SIZE = 4096
+# Inference frames are a few hundred KB; anything larger is not an engine frame.
+MAX_FRAME_BYTES = 4 * 1024 * 1024
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    manifest = read_manifest(MODEL_PATH)
+    split = manifest.get("format_version", 1) >= 2
+    if not split:
+        logger.warning(
+            "%s is a format 1 package (fused classifier.onnx): every slot is embedded on every job. "
+            "Re-export it with temporal-export-onnx to skip padded slots and cache embeddings.",
+            MODEL_PATH,
+        )
+    model = OnnxTemporalModel.from_package(MODEL_PATH, embedding_cache_size=EMBEDDING_CACHE_SIZE if split else 0)
+    app.state.jobs = JobStore(model)
+    app.state.model_version = manifest.get("model_version")
+    logger.info("Loaded temporal model %s (version %s)", MODEL_PATH, app.state.model_version)
+    yield
+
+
+def read_manifest(path: Path) -> dict:
+    import zipfile
+
+    import yaml
+
+    with zipfile.ZipFile(path) as zf:
+        return dict(yaml.safe_load(zf.read("manifest.yaml")))
+
+
+app = FastAPI(title="Pyro Temporal API", lifespan=lifespan)
+
+
+@app.get("/health")
+def health(request: Request):
+    jobs = getattr(request.app.state, "jobs", None)
+    if jobs is not None and not jobs.healthy():
+        raise HTTPException(status_code=503, detail="temporal worker dead or stuck")
+    return {"status": "ok", "model_version": getattr(request.app.state, "model_version", None)}
+
+
+def _valid_box(box: object) -> bool:
+    """[x1, y1, x2, y2, conf]: finite numbers, normalized xyxy with x1 < x2 and y1 < y2, conf in [0, 1]."""
+    if not isinstance(box, list) or len(box) != 5:
+        return False
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in box):
+        return False
+    x1, y1, x2, y2, conf = box
+    return 0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1 and 0 <= conf <= 1
+
+
+@app.post("/jobs", status_code=202)
+async def submit_job(
+    request: Request,
+    cam_id: str = Form(...),
+    boxes: str = Form(..., description="JSON list, one entry per frame: [[x1, y1, x2, y2, conf], ...]"),
+    frames: list[UploadFile] = File(..., description="JPEG frames, oldest first; filename stem = frame id"),
+):
+    try:
+        parsed = json.loads(boxes)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"boxes is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, list) or not all(isinstance(fb, list) for fb in parsed):
+        raise HTTPException(status_code=422, detail="boxes must be a list of per-frame box lists")
+    if not 1 <= len(frames) <= MAX_FRAMES:
+        raise HTTPException(status_code=422, detail=f"expected 1 to {MAX_FRAMES} frames, got {len(frames)}")
+    if len(parsed) != len(frames):
+        raise HTTPException(status_code=422, detail=f"{len(frames)} frames but {len(parsed)} box lists")
+    for fb in parsed:
+        if len(fb) > MAX_BOXES_PER_FRAME:
+            raise HTTPException(status_code=422, detail=f"more than {MAX_BOXES_PER_FRAME} boxes in one frame")
+        if not all(_valid_box(b) for b in fb):
+            raise HTTPException(
+                status_code=422, detail="each box must be [x1, y1, x2, y2, conf], normalized, x1 < x2, y1 < y2"
+            )
+
+    payload: list[tuple[str, bytes]] = []
+    for f in frames:
+        data = await f.read(MAX_FRAME_BYTES + 1)
+        if len(data) > MAX_FRAME_BYTES:
+            raise HTTPException(status_code=413, detail=f"frame {f.filename} exceeds {MAX_FRAME_BYTES} bytes")
+        frame_id = Path(f.filename or "frame").stem
+        if any(frame_id == seen for seen, _ in payload):
+            raise HTTPException(status_code=422, detail=f"duplicate frame id {frame_id}")
+        try:
+            Image.open(io.BytesIO(data)).verify()
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"frame {frame_id} is not a valid image: {exc}") from exc
+        payload.append((frame_id, data))
+    try:
+        job = request.app.state.jobs.submit(cam_id, payload, parsed)
+    except QueueFullError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"job_id": job.job_id}
+
+
+@app.get("/jobs/{job_id}")
+def get_job(request: Request, job_id: str):
+    job = request.app.state.jobs.snapshot(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown job")
+    return job

@@ -46,6 +46,11 @@ jobs:
         run: |
           uv sync --locked --group test
           uv run pytest tests/
+      - name: Run temporal API tests
+        working-directory: pyro_temporal_api
+        run: |
+          uv sync --locked --group dev
+          uv run pytest tests/
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -112,5 +117,5 @@ jobs:
           license: 'Apache-2.0'
           owner: 'Pyronear'
           starting-year: 2022
-          folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api,pyro-predictor/pyro_predictor'
+          folders: 'pyroengine,docs,scripts,.github,src,pyro_camera_api,pyro_temporal_api,pyro-predictor/pyro_predictor'
           ignore-files: 'version.py,__init__.py'
