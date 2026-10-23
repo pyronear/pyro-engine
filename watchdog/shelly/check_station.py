@@ -210,7 +210,7 @@ def check_shelly(shelly_ip: str) -> str | None:
     scripts = (rpc_optional(shelly_ip, "Script.List") or {}).get("scripts", [])
     match = [s for s in scripts if s.get("name") == SCRIPT_NAME]
     if not match:
-        ko(f"no script named {SCRIPT_NAME} on the device (run setup_shelly_watchdog.sh from pyro-sys-setup)")
+        ko(f"no script named {SCRIPT_NAME} on the device (run setup_shelly_watchdog.sh)")
     else:
         script = match[0]
         if script.get("enable"):
@@ -240,7 +240,7 @@ def check_shelly(shelly_ip: str) -> str | None:
         else:
             ko(
                 f"output {out_id} initial_state is {config.get('initial_state')!r}, "
-                "expected 'on' (run harden_shelly.sh from pyro-sys-setup)"
+                "expected 'on' (run harden_shelly.sh)"
             )
 
     # hardening (warn-level: the watchdog works without it)
