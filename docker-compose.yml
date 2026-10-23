@@ -49,7 +49,10 @@ services:
     restart: always
     network_mode: host
     healthcheck:
-      test: ["CMD-SHELL", "grep -q 'confidence\\|Nighttime detected' engine.log || exit 1"]
+      # The loop logs every pass and the night sleep is 60 min, so a log untouched for 70 min means a
+      # stuck process. Docker never restarts an unhealthy container by itself: kill everything but
+      # PID 1 so the pipeline exits and `restart: always` brings the engine back.
+      test: ["CMD-SHELL", "find engine.log -mmin -70 | grep -q . || kill -9 -1"]
       interval: 30s
       retries: 3
       start_period: 20s
