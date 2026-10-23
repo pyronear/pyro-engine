@@ -227,3 +227,17 @@ def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine,
 
     assert not mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_heartbeat_written_while_stream_active(mock_client_class, mock_engine, mock_camera_data, tmp_path):
+    """A stream longer than the healthcheck window must not mark the engine unhealthy."""
+    mock_client_class.return_value.get_stream_status.return_value = {"active_streams": 1}
+    heartbeat = tmp_path / "heartbeat"
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url", heartbeat_file=str(heartbeat))
+    heartbeat.unlink(missing_ok=True)
+
+    controller.inference_loop()
+
+    assert heartbeat.exists()

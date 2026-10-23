@@ -193,6 +193,8 @@ class SystemController:
         """
         if self._any_stream_active():
             logger.info("Stream detected, skipping inference on all cameras")
+            # Paused on purpose, not stuck: keep the healthcheck green through long streams.
+            self._write_heartbeat()
             return
 
         start_ts = time.time()
