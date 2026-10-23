@@ -31,8 +31,8 @@ logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=log
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
-# The engine submits its 10-frame prediction window; the model scores at most that many slots per tube.
-MAX_FRAMES = 10
+# The engine submits its 11-frame prediction window; the model scores at most that many slots per tube.
+MAX_FRAMES = 11
 MAX_BOXES_PER_FRAME = 50
 # Per-slot ViT embeddings kept across jobs, keyed by (frame id, crop box): the engine resubmits the
 # same window one frame longer every round, so most slots were embedded on the previous job.

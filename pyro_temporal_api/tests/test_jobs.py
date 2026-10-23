@@ -133,7 +133,7 @@ def test_unknown_job_is_404(client):
         ({"n_frames": 1, "boxes": [[[0.1, 0.1, 1.2, 0.2, 0.5]]]}, "normalized"),
         ({"n_frames": 1, "boxes": [[[0.1, 0.1, 0.2, 0.2, 1.5]]]}, "each box"),
         ({"n_frames": 1, "boxes": [[[0.1, 0.1, 0.2, 0.2, 0.5]] * 51]}, "more than 50"),
-        ({"n_frames": 11}, "expected 1 to 10"),
+        ({"n_frames": 12}, "expected 1 to 11"),
     ],
 )
 def test_rejects_malformed_submissions(client, kwargs, detail):

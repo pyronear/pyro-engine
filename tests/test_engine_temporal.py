@@ -114,26 +114,41 @@ def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wild
     assert state["temporal_job"][0] == "job2"
     assert len(temporal.submitted[1][1]) == 3
 
-    _fire(engine, mock_wildfire_image)  # 0.3 >= 0.1 -> held frames staged with that score, resubmitted
-    assert len(engine._alerts) == 4
+    _fire(engine, mock_wildfire_image)  # 0.3 >= 0.1 -> the 3 frames job2 scored go out, the 4th waits
+    assert len(engine._alerts) == 3
     assert all(s == [0.3] for s in _scores(engine))
     assert state["temporal_job"][0] == "job3"
 
-    _fire(engine, mock_wildfire_image)  # next verdict: only the new frame, with the fresh score
-    assert len(engine._alerts) == 5
+    _fire(engine, mock_wildfire_image)  # next verdict (job3 scored frames 1-4): frame 4 goes out, frame 5 waits
+    assert len(engine._alerts) == 4
     assert _scores(engine)[-1] == [0.9]
     assert len(temporal.submitted) == 4  # one job per round while ongoing
     assert not temporal.results
 
 
+def test_only_frames_of_the_scored_job_are_staged(tmp_path, mock_wildfire_image):
+    """Regression: with a full window, a verdict must not stage the frame captured after its job
+    (unscored) nor lose the oldest scored frame."""
+    temporal = FakeTemporal([PENDING, done((BOX, 0.5)), done((BOX, 0.6))])
+    engine = _engine(tmp_path, temporal, temporal_window=3)
+    ts = []
+    for _ in range(4):
+        state = _fire(engine, mock_wildfire_image)
+        ts.append(state["last_predictions"][-1][3])
+    # job1 = {f1}, job2 = {f1, f2, f3}; f4 arrived after job2 and f1 left the window before its verdict
+    assert [a["ts"] for a in engine._alerts] == ts[:3]
+    assert _scores(engine) == [[0.5], [0.6], [0.6]]
+    assert state["last_predictions"][-1][4] is False  # f4 waits for job3
+
+
 def test_boxes_outside_scored_tubes_are_dropped(tmp_path, mock_wildfire_image):
-    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9))]))
-    _fire(engine, mock_wildfire_image, n=2)
+    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9))] * 2))
+    _fire(engine, mock_wildfire_image, n=3)
     assert len(engine._alerts) == 2  # frames still go out (continuity) ...
     assert all(a["bboxes"] == [] and a["temporal_scores"] == [] for a in engine._alerts)  # ... without the box
 
-    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9), (BOX, 0.2))]))
-    _fire(engine, mock_wildfire_image, n=2)
+    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9), (BOX, 0.2))] * 2))
+    _fire(engine, mock_wildfire_image, n=3)
     assert [[b[:4] for b in a["bboxes"]] for a in engine._alerts] == [[BOX]] * 2
     assert _scores(engine) == [[0.2], [0.2]]
 
@@ -244,3 +259,11 @@ def test_event_ending_during_validation_dropped_on_negative(tmp_path, mock_wildf
     assert state["temporal_job"] is None  # no resubmission for an ended event
     assert len(temporal.submitted) == 1
     assert len(engine._alerts) == 0
+    rejected_ts = [e[3] for e in state["last_predictions"]]
+    assert all(e[4] for e in state["last_predictions"])  # held frames consumed, never uploaded
+
+    # Regression: a new event on the same pose must not upload the rejected frames under its own score
+    temporal.results.extend([PENDING, done((BOX, 0.9))])
+    _fire(engine, mock_wildfire_image, n=3)
+    assert len(engine._alerts) > 0
+    assert not {a["ts"] for a in engine._alerts} & set(rejected_ts)
