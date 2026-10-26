@@ -188,6 +188,7 @@ class SystemController:
             logger.info("Stream detected, skipping inference on all cameras")
             return
 
+        day_frames = []
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
 
@@ -201,8 +202,7 @@ class SystemController:
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
                             logger.info(f"Captured image for {ip}, pose {pose}")
-                            self.is_day = is_day_time(None, frame, "ir")
-                            self.engine.predict(frame, cam_id)
+                            day_frames.append(self._analyze(frame, cam_id))
                     except requests.HTTPError as e:
                         logger.error(
                             f"HTTP error for {camera_name}, pose {pose}: "
@@ -220,12 +220,25 @@ class SystemController:
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
                         logger.info(f"Captured image for {ip}")
-                        self.is_day = is_day_time(None, frame, "ir")
-                        self.engine.predict(frame, cam_id)
+                        day_frames.append(self._analyze(frame, cam_id))
                 except requests.HTTPError as e:
                     logger.error(f"HTTP error for {camera_name}: {e.response.text if e.response is not None else e}")
                 except Exception as e:
                     logger.error(f"Error for {camera_name}: {e}")
+
+        # The site sleeps only once every camera reports night, so one camera in infrared
+        # (fog, a dark area) does not blind the others.
+        if day_frames:
+            self.is_day = any(day_frames)
+
+    def _analyze(self, frame: Image.Image, cam_id: str) -> bool:
+        """Run inference on a day frame and return whether the frame is a day frame."""
+        if not is_day_time(None, frame, "ir"):
+            # The model is trained on day images, infrared frames only give false positives
+            logger.info(f"Night frame for {cam_id}, skipping inference")
+            return False
+        self.engine.predict(frame, cam_id)
+        return True
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -276,7 +289,7 @@ class SystemController:
                     except Exception as e:
                         logger.error(f"Failed to stop patrol on camera {ip}: {e}")
 
-                logger.info("Nighttime detected by at least one camera, sleeping for 1 hour")
+                logger.info("Nighttime detected by every camera, sleeping for 1 hour")
                 time.sleep(3600)
 
                 try:
