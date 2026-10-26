@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from typing import Any, Dict, List
@@ -27,7 +26,6 @@ STREAM_CHECK_INTERVAL = 5.0
 # A loop iteration takes well under a minute even when every camera call times
 # out, so this much silence from a live patrol thread means it is hung.
 STALL_LIMIT = 10 * 60.0
-WATCHDOG_INTERVAL = 60.0
 
 # per camera state for the static loop
 FAILURE_COUNT: Dict[str, int] = {}
@@ -81,20 +79,6 @@ def stalled_patrols() -> List[str]:
         for ip, thread in PATROL_THREADS.items()
         if thread.is_alive() and now - PATROL_PROGRESS.get(ip, now) > STALL_LIMIT
     ]
-
-
-def patrol_watchdog() -> None:
-    """Exit the process when a patrol thread hangs, so Docker restarts the container.
-
-    A thread blocked in a call cannot be killed from Python, and a Docker
-    healthcheck cannot restart the container either (uvicorn is PID 1).
-    """
-    while True:
-        time.sleep(WATCHDOG_INTERVAL)
-        stalled = stalled_patrols()
-        if stalled:
-            logger.critical("No patrol progress for %ds on %s, exiting to restart", int(STALL_LIMIT), stalled)
-            os._exit(1)
 
 
 def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:

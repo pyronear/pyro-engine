@@ -7,6 +7,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from pyro_camera_api.camera.patrol import stalled_patrols
 
 router = APIRouter()
 
@@ -14,9 +17,12 @@ router = APIRouter()
 @router.get("/health")
 def health():
     """
-    Return a basic heartbeat response to confirm that the API is running.
+    Return 200 while the API answers and every running patrol makes progress.
 
-    This endpoint does not perform any camera or service check.
-    It is intended for uptime monitoring and infrastructure-level health probes.
+    Returns 503 with the hung cameras when a patrol thread is stuck, which the
+    compose healthcheck turns into a container restart.
     """
+    stalled = stalled_patrols()
+    if stalled:
+        return JSONResponse(status_code=503, content={"status": "patrol_stalled", "cameras": stalled})
     return {"status": "ok"}
