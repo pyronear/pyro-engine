@@ -285,7 +285,10 @@ class SystemController:
         """Run inference on a day frame and return its confidence, None when the frame is skipped."""
         if not frame_is_day:
             # The model is trained on day images, infrared frames only give false positives.
+            # Drop the camera's detection history so evening frames are not combined with the
+            # next morning's ones.
             logger.debug("[%s] Night frame, skipping inference", cam_id)
+            self.engine._states.pop(cam_id, None)
             return None
         # A live camera never returns the exact same pixels twice: an identical frame is frozen,
         # and analyzing it again would re-upload the same detection every pass.
@@ -293,8 +296,9 @@ class SystemController:
         if self._last_frame_digest.get(cam_id) == digest:
             logger.warning("[%s] Frame identical to the previous one, skipping inference", cam_id)
             return None
+        conf = float(self.engine.predict(frame, cam_id))
         self._last_frame_digest[cam_id] = digest
-        return float(self.engine.predict(frame, cam_id))
+        return conf
 
     def check_and_restart_patrol(self) -> None:
         """
