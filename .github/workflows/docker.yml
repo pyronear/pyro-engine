@@ -16,6 +16,9 @@ jobs:
       - name: Verify engine starts successfully
         run: |
           docker run --rm pyronear/pyro-engine:latest python -c "from pyroengine import SystemController; print('OK')"
+      - name: Verify only opencv-python-headless provides cv2
+        run: |
+          docker run --rm pyronear/pyro-engine:latest python -c "import importlib.metadata as m, cv2; names = {d.metadata['Name'].lower() for d in m.distributions()}; assert 'opencv-python' not in names, names; print(cv2.__version__)"
       - name: Build camera API image
         run: docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
       - name: Verify camera API starts successfully
