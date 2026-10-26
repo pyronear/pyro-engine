@@ -3,9 +3,13 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
+import threading
+import time
+
 from PIL import Image
 
 from pyro_camera_api.api.routes_cameras import get_latest_image
+from pyro_camera_api.camera import patrol
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 
@@ -25,3 +29,25 @@ def test_latest_image_refuses_stale_frame(monkeypatch):
         assert get_latest_image(cam_id, 0, quality=95, max_age_s=300).status_code == 204
     finally:
         CAMERA_REGISTRY.pop(cam_id, None)
+
+
+def test_watchdog_flags_only_hung_patrol_threads(monkeypatch):
+    # A live thread silent for too long is hung, a finished one is not
+    hung, done = threading.Event(), threading.Event()
+    threads = {
+        "hung": threading.Thread(target=hung.wait, daemon=True),
+        "busy": threading.Thread(target=hung.wait, daemon=True),
+        "done": threading.Thread(target=done.set),
+    }
+    for thread in threads.values():
+        thread.start()
+    threads["done"].join()
+    monkeypatch.setattr(patrol, "PATROL_THREADS", threads)
+    now = time.monotonic()
+    monkeypatch.setattr(
+        patrol, "PATROL_PROGRESS", {"hung": now - patrol.STALL_LIMIT - 1, "busy": now, "done": now - 3600}
+    )
+    try:
+        assert patrol.stalled_patrols() == ["hung"]
+    finally:
+        hung.set()
