@@ -41,7 +41,7 @@ def _make_cam(**kwargs) -> HikvisionCamera:
         camera_id="203.0.113.20",
         ip_address="203.0.113.20",
         username="admin",
-        password="pwd",  # noqa: S106
+        password="pwd",
         disable_osd=False,
         **kwargs,
     )

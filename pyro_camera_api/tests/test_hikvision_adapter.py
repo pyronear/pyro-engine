@@ -62,7 +62,7 @@ def _make_cam(routes: dict[str, str], **kwargs) -> tuple[HikvisionCamera, FakeIS
         camera_id="203.0.113.30",
         ip_address="203.0.113.30",
         username="admin",
-        password="pwd",  # noqa: S106
+        password="pwd",
         disable_osd=False,
         **kwargs,
     )

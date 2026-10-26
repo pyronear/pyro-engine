@@ -74,7 +74,7 @@ def test_click_to_move_uses_the_adapter_wide_fov(monkeypatch):
         camera_id=ip,
         ip_address=ip,
         username="admin",
-        password="pwd",  # noqa: S106
+        password="pwd",
         cam_type="ptz",
         wide_fov_deg=(57.6, 34.5),
         disable_osd=False,
@@ -106,7 +106,7 @@ def test_click_to_move_hikvision_fov_shrinks_with_zoom(monkeypatch):
         camera_id=ip,
         ip_address=ip,
         username="admin",
-        password="pwd",  # noqa: S106
+        password="pwd",
         cam_type="ptz",
         wide_fov_deg=(57.6, 34.5),
         disable_osd=False,
@@ -138,7 +138,7 @@ def test_azimuth_route_reports_hikvision_zoom_and_fov(monkeypatch):
         camera_id=ip,
         ip_address=ip,
         username="admin",
-        password="pwd",  # noqa: S106
+        password="pwd",
         cam_type="ptz",
         zoom_max=33.0,
         wide_fov_deg=(57.6, 34.5),

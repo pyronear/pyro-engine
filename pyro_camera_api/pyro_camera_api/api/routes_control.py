@@ -1142,7 +1142,7 @@ def zoom_camera(camera_ip: str, level: int):
             try:
                 z_ratio = cam.get_ptz_status().get("zoom_ratio")
                 if z_ratio:
-                    current = int(round(float(z_ratio)))
+                    current = round(float(z_ratio))
                     ratio_units = True
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read zoom ratio: %s", camera_ip, exc)
