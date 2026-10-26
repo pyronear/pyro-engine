@@ -170,8 +170,8 @@ def test_heartbeat_file_is_written(mock_client_class, mock_engine, mock_camera_d
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
-def test_heartbeat_not_written_when_no_capture_succeeds(mock_client_class, mock_engine, mock_camera_data, tmp_path):
-    """A blind engine must go stale so the healthcheck reports it, not stay fresh."""
+def test_heartbeat_written_when_no_capture_succeeds(mock_client_class, mock_engine, mock_camera_data, tmp_path):
+    """Offline cameras must not get the engine killed: a restart would not bring them back."""
     mock_client = mock_client_class.return_value
     mock_client.get_latest_image.return_value = None
     mock_client.get_stream_status.return_value = {"active_streams": 0}
@@ -182,7 +182,7 @@ def test_heartbeat_not_written_when_no_capture_succeeds(mock_client_class, mock_
 
     controller.inference_loop()
 
-    assert not heartbeat.exists()
+    assert heartbeat.exists()
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")

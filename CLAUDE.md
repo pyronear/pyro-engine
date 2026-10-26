@@ -99,7 +99,7 @@ Both services configure logging only from their entrypoint (`src/run.py` calls `
 
 Convention: camera-scoped messages start with `[cam_id]`, use `%`-style lazy args, and INFO is reserved for events an operator should see (one summary per inference round and per patrol cycle, detections, alerts, failures). Per-pose and per-frame detail belongs at DEBUG.
 
-The engine container healthcheck reads the freshness of the heartbeat file (`--heartbeat-file`, default `data/heartbeat`), so it is independent of log level and log wording. The file is deleted at startup and touched only on real progress (successful capture, night sleep, autofocus on a responsive camera): an engine that captures nothing goes unhealthy after the 10 min window.
+The engine container healthcheck reads the freshness of the heartbeat file (`--heartbeat-file`, default `data/heartbeat`), so it is independent of log level and log wording. The file is deleted at startup and touched on every loop pass, through the night sleep and during autofocus on a responsive camera. When it is older than 10 min the healthcheck kills the engine (`init: true` makes tini PID 1 so the kill reaches python) and `restart: always` brings it back. Offline cameras do not stop the heartbeat, since a restart would not fix them.
 
 ### Legacy direct-camera module
 

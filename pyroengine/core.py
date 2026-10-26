@@ -191,10 +191,12 @@ class SystemController:
 
         This skips processing entirely if a stream is currently active.
         """
+        # Liveness, not image flow: the healthcheck kills a stale engine, and restarting it
+        # would not bring back an offline camera (the camera API reports those instead).
+        self._write_heartbeat()
+
         if self._any_stream_active():
             logger.info("Stream detected, skipping inference on all cameras")
-            # Paused on purpose, not stuck: keep the healthcheck green through long streams.
-            self._write_heartbeat()
             return
 
         start_ts = time.time()
@@ -221,9 +223,6 @@ class SystemController:
                         failed += 1
                         continue
                     logger.debug("[%s] Captured image from %s", cam_id, camera_name)
-                    # Written only on real progress, so an engine that captures nothing
-                    # goes stale and the healthcheck reports it instead of a fresh file.
-                    self._write_heartbeat()
                     self.is_day = is_day_time(None, frame, "ir")
                     conf = float(self.engine.predict(frame, cam_id))
                     analyzed += 1

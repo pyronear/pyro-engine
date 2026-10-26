@@ -48,13 +48,17 @@ services:
     command: python run.py
     restart: always
     network_mode: host
+    # tini as PID 1, so the healthcheck's kill -9 -1 also reaches python
+    init: true
     healthcheck:
-      # Liveness comes from the heartbeat file, touched only on real progress (a
-      # successful capture, night sleep, autofocus on a responsive camera), so a blind
-      # engine goes unhealthy while LOG_LEVEL changes cannot affect the verdict.
+      # Liveness comes from the heartbeat file, touched on every loop pass, through the
+      # night sleep and during autofocus, so LOG_LEVEL changes cannot affect the verdict.
       # 10 min tolerates the slowest legitimate gaps (hourly autofocus with unreachable
       # cameras at 2 min each, long alert-cache flushes on a slow uplink).
-      test: ["CMD-SHELL", "[ -n \"$$(find data/heartbeat -mmin -10 2>/dev/null)\" ] || exit 1"]
+      # Docker never restarts an unhealthy container by itself: a stale file kills every
+      # process but PID 1 so `restart: always` brings the engine back. No file yet means
+      # the engine is still starting (model download) and must not be killed.
+      test: ["CMD-SHELL", "[ -n \"$$(find data/heartbeat -mmin +10 2>/dev/null)\" ] && kill -9 -1; [ -n \"$$(find data/heartbeat -mmin -10 2>/dev/null)\" ]"]
       interval: 30s
       retries: 3
       # Covers the first-boot model download plus the camera API and first-frame waits.
