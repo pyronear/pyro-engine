@@ -20,9 +20,11 @@ from .utils import box_iou, letterbox, nms, xywh2xyxy
 
 __all__ = ["Classifier"]
 
-MODEL_REPO_ID = "pyronear/yolo11s_rapid-raccoon_v8.1.0"
+MODEL_REPO_ID = "pyronear/yolov11s"
+# Releases are git tags on the HF repo; pin one so engines never follow `main`.
+MODEL_REVISION = "v8.3.0"
 MODEL_NAME = "ncnn_cpu.tar.gz"
-MODEL_SLUG = MODEL_REPO_ID.split("/", 1)[1]
+MODEL_SLUG = f"{MODEL_REPO_ID.split('/', 1)[1]}_{MODEL_REVISION}"
 MODEL_CACHE_SUBDIR = "models"
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO, force=True)
@@ -38,6 +40,9 @@ class Classifier:
 
     Args:
         model_path: model path
+        format: "ncnn" or "onnx"; defaults to "ncnn" on ARM and "onnx" elsewhere
+        onnx_session_options: optional ONNX Runtime session options for deployment-specific
+            threading and allocator tuning; None preserves the runtime defaults
     """
 
     def __init__(
@@ -46,14 +51,17 @@ class Classifier:
         imgsz=1024,
         conf=0.15,
         iou=0,
-        format="ncnn",
+        format=None,
         model_path=None,
         max_bbox_size=0.4,
         verbose=True,
+        onnx_session_options: onnxruntime.SessionOptions | None = None,
     ) -> None:
         self.verbose = verbose
         if not verbose:
             logger.setLevel(logging.WARNING)
+            # hf_hub 1.x logs its HTTP requests through httpx at INFO
+            logging.getLogger("httpx").setLevel(logging.WARNING)
 
         if model_path:
             if not pathlib.Path(model_path).is_file():
@@ -62,18 +70,19 @@ class Classifier:
                 raise ValueError(f"Input model_path should point to an ONNX export but currently is {model_path}")
             self.format = "onnx"
         else:
-            if format == "ncnn":
+            model_format = format if format is not None else ("ncnn" if self.is_arm_architecture() else "onnx")
+            if model_format == "ncnn":
                 if not self.is_arm_architecture():
                     logger.info("NCNN format is optimized for arm architecture only, switching to onnx is recommended")
                 model = MODEL_NAME
                 self.format = "ncnn"
-            elif format == "onnx":
+            elif model_format == "onnx":
                 model = MODEL_NAME.replace("ncnn", "onnx")
                 self.format = "onnx"
             else:
                 raise ValueError("Unsupported format: should be 'ncnn' or 'onnx'")
 
-            # Namespace cached weights by model slug so a MODEL_REPO_ID bump lands in a
+            # Namespace cached weights by model slug so a MODEL_REVISION bump lands in a
             # fresh path and old weights can be purged.
             cache_root = pathlib.Path(model_folder) / MODEL_CACHE_SUBDIR
             model_cache = cache_root / MODEL_SLUG
@@ -95,9 +104,11 @@ class Classifier:
                     shutil.rmtree(legacy_extract, ignore_errors=True)
                     logger.info(f"Removed legacy model extract dir: {legacy_extract}")
 
-                logger.info(f"Downloading model from {MODEL_REPO_ID}/{model} ...")
+                logger.info(f"Downloading model from {MODEL_REPO_ID}@{MODEL_REVISION}/{model} ...")
                 model_cache.mkdir(exist_ok=True, parents=True)
-                hf_hub_download(repo_id=MODEL_REPO_ID, filename=model, local_dir=str(model_cache))
+                hf_hub_download(
+                    repo_id=MODEL_REPO_ID, filename=model, revision=MODEL_REVISION, local_dir=str(model_cache)
+                )
                 logger.info("Model downloaded!")
 
             # Extract archive
@@ -126,7 +137,9 @@ class Classifier:
                 else:
                     providers = ["CPUExecutionProvider"]
                     logger.info("Using CPUExecutionProvider for ONNX inference")
-                self.ort_session = onnxruntime.InferenceSession(onnx_file, providers=providers)
+                self.ort_session = onnxruntime.InferenceSession(
+                    onnx_file, sess_options=onnx_session_options, providers=providers
+                )
 
             except Exception as e:
                 raise RuntimeError(f"Failed to load the ONNX model from {model_path}: {e!s}") from e
@@ -153,7 +166,7 @@ class Classifier:
             - The resized and normalized image of shape (1, C, H, W).
             - Padding information as a tuple of integers (pad_height, pad_width).
         """
-        np_img, pad = letterbox(np.array(pil_img), self.imgsz)  # Applies letterbox resize with padding
+        np_img, pad = letterbox(np.asarray(pil_img), self.imgsz)  # Applies letterbox resize with padding
 
         if self.format == "ncnn":
             np_img = ncnn.Mat.from_pixels(np_img, ncnn.Mat.PixelType.PIXEL_BGR, np_img.shape[1], np_img.shape[0])
@@ -161,8 +174,9 @@ class Classifier:
             std = [1 / 255, 1 / 255, 1 / 255]
             np_img.substract_mean_normalize(mean=mean, norm=std)
         else:
-            np_img = np.expand_dims(np_img.astype("float32"), axis=0)  # Add batch dimension
-            np_img = np.ascontiguousarray(np_img.transpose((0, 3, 1, 2)))  # Convert from BHWC to BCHW format
+            # Cast directly into the contiguous CHW buffer, avoiding a float32
+            # HWC intermediate of the same size.
+            np_img = np.ascontiguousarray(np_img.transpose((2, 0, 1)), dtype=np.float32)[None, ...]
             np_img /= 255.0  # Normalize to [0, 1]
 
         return np_img, pad
