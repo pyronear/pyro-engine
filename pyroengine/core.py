@@ -9,7 +9,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import requests
@@ -204,6 +204,7 @@ class SystemController:
         failed = 0
         positive = 0
         max_conf = 0.0
+        day_frames: List[bool] = []
 
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
@@ -223,8 +224,11 @@ class SystemController:
                         failed += 1
                         continue
                     logger.debug("[%s] Captured image from %s", cam_id, camera_name)
-                    self.is_day = is_day_time(None, frame, "ir")
-                    conf = float(self.engine.predict(frame, cam_id))
+                    frame_is_day = is_day_time(None, frame, "ir")
+                    day_frames.append(frame_is_day)
+                    conf = self._analyze(frame, cam_id, frame_is_day)
+                    if conf is None:
+                        continue
                     analyzed += 1
                     max_conf = max(max_conf, conf)
                     # The predictor applies hysteresis (0.8x threshold while an event is
@@ -239,6 +243,11 @@ class SystemController:
                 except Exception:
                     failed += 1
                     logger.exception("[%s] Inference failed on %s", cam_id, camera_name)
+
+        # The site sleeps only once every camera reports night, so one camera in infrared
+        # (fog, a dark area) does not blind the others.
+        if day_frames:
+            self.is_day = any(day_frames)
 
         logger.info(
             "Inference round: analyzed=%d failed=%d positive=%d max_confidence=%.2f duration=%.1fs",
@@ -269,6 +278,14 @@ class SystemController:
             chunk = min(step, remaining)
             time.sleep(chunk)
             remaining -= chunk
+
+    def _analyze(self, frame: Image.Image, cam_id: str, frame_is_day: bool) -> Optional[float]:
+        """Run inference on a day frame and return its confidence, None when the frame is skipped."""
+        if not frame_is_day:
+            # The model is trained on day images, infrared frames only give false positives.
+            logger.debug("[%s] Night frame, skipping inference", cam_id)
+            return None
+        return float(self.engine.predict(frame, cam_id))
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -319,7 +336,7 @@ class SystemController:
                     except Exception as e:
                         logger.error("[%s] Failed to stop patrol: %s", ip, e)
 
-                logger.info("Nighttime detected by at least one camera, sleeping for 1 hour")
+                logger.info("Nighttime detected by every camera, sleeping for 1 hour")
                 self._sleep_with_heartbeat(3600)
 
                 try:
