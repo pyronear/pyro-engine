@@ -134,12 +134,12 @@ def reboot_allowed(attempts: Deque[float], now: float) -> bool:
 def recovery_status(camera_ip: str) -> Dict[str, Any]:
     state = RECOVERY_STATE.get(camera_ip)
     if state is None:
-        return {"status": None, "reboots_24h": 0, "last_reboot": None}
+        return {"status": None, "reboot_attempts_24h": 0, "last_reboot_attempt": None}
     now = time.monotonic()
     return {
         "status": state["status"],
-        "reboots_24h": sum(1 for t in state["attempts"] if now - t <= DAY),
-        "last_reboot": state["last_reboot"],
+        "reboot_attempts_24h": sum(1 for t in state["attempts"] if now - t <= DAY),
+        "last_reboot_attempt": state["last_reboot_attempt"],
     }
 
 
@@ -147,7 +147,7 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     cam = CAMERA_REGISTRY[camera_ip]
     can_reboot = hasattr(cam, "reboot_camera")
     is_ptz = getattr(cam, "cam_type", "static") == "ptz"
-    state: Dict[str, Any] = {"status": "ok", "attempts": deque(), "last_reboot": None}
+    state: Dict[str, Any] = {"status": "ok", "attempts": deque(), "last_reboot_attempt": None}
     RECOVERY_STATE[camera_ip] = state
 
     logger.info(
@@ -168,13 +168,15 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             state["status"] = "idle"
             continue
 
-        snap = snapshot(dict(cam.last_images), dict(cam.last_image_at))
+        # One copy, the patrol thread keeps storing images while we read them
+        images = dict(cam.last_images)
+        snap = snapshot(images, dict(cam.last_image_at))
         if prev is None:
             prev = snap
             state["status"] = "ok"
             continue
 
-        ptz_images = [img for pose, img in cam.last_images.items() if is_ptz and pose != -1 and img is not None]
+        ptz_images = [img for pose, img in images.items() if is_ptz and pose != -1 and img is not None]
         try:
             problem = detect(prev, snap, ptz_images)
         except Exception as exc:
@@ -212,7 +214,7 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
         logger.error("[%s] Rebooting camera, %s", camera_ip, problem)
         state["attempts"].append(time.monotonic())
-        state["last_reboot"] = datetime.now(timezone.utc).isoformat()
+        state["last_reboot_attempt"] = datetime.now(timezone.utc).isoformat()
         ok = False
         try:
             ok = bool(cam.reboot_camera())

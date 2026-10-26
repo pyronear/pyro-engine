@@ -92,4 +92,4 @@ def test_frozen_camera_is_rebooted_once_unless_allowed(monkeypatch, allow_still)
 
     # The cooldown keeps it to a single attempt
     assert cam.reboot_camera.call_count == (0 if allow_still else 1)
-    assert sd.recovery_status(cam_id)["reboots_24h"] == (0 if allow_still else 1)
+    assert sd.recovery_status(cam_id)["reboot_attempts_24h"] == (0 if allow_still else 1)

@@ -111,7 +111,7 @@ def patrol_status(camera_ip: str):
         - type of patrol loop (static or preset patrol)
         - number of recent patrol failures
         - timestamp at which retry should resume (skip-until logic)
-        - stuck detector state: detected problem, reboots in the last 24 h, last reboot (UTC)
+        - stuck detector state: detected problem, reboot attempts in the last 24 h, last attempt (UTC)
 
     This endpoint is safe to call periodically from UI dashboards.
     """
