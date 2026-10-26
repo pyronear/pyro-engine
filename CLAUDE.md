@@ -87,7 +87,7 @@ For each `cam_id`, the engine periodically fetches a JSON file at `{bbox_mask_ur
 
 ### Night / day handling
 
-Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max(R - G) == 0` the image is considered infrared/night. At night the main loop sleeps for 1 hour, stops all patrols, then re-checks before resuming inference.
+Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max(R - G) == 0` the image is considered infrared/night. Night frames are not analyzed. Once every frame of an inference pass is a night frame, the main loop stops all patrols, sleeps for 1 hour, then re-checks before resuming inference.
 
 ### Environment Variables (`.env`)
 
