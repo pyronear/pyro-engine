@@ -19,6 +19,7 @@ from pyro_camera_api.camera.patrol import (
     static_loop,
 )
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
+from pyro_camera_api.camera.stuck_detector import recovery_status
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ def patrol_status(camera_ip: str):
         - type of patrol loop (static or preset patrol)
         - number of recent patrol failures
         - timestamp at which retry should resume (skip-until logic)
+        - stuck detector state: detected problem, reboots in the last 24 h, last reboot (UTC)
 
     This endpoint is safe to call periodically from UI dashboards.
     """
@@ -131,4 +133,5 @@ def patrol_status(camera_ip: str):
         "loop_type": loop_type,
         "failures": FAILURE_COUNT.get(camera_ip, 0),
         "skip_until": int(SKIP_UNTIL.get(camera_ip, 0.0)),
+        "recovery": recovery_status(camera_ip),
     }
