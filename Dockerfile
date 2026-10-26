@@ -34,7 +34,9 @@ RUN apt-get update && \
 # Layer 2: Stable deps (~400MB, changes only on version bumps)
 COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/uv
 COPY ./requirements.txt /tmp/requirements.txt
-RUN uv pip install --no-cache --system -r /tmp/requirements.txt && \
+# --no-deps: requirements.txt already pins every dependency. Resolving again would pull
+# the latest opencv-python for ncnn, which overwrites cv2 from opencv-python-headless.
+RUN uv pip install --no-cache --system --no-deps -r /tmp/requirements.txt && \
     rm -f /tmp/requirements.txt
 
 # Layer 3: Git-based deps (~5MB, changes when API clients are updated)
