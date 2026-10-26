@@ -204,7 +204,9 @@ class SystemController:
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
                             logger.info(f"Captured image for {ip}, pose {pose}")
-                            day_frames.append(self._analyze(frame, cam_id))
+                            frame_is_day = is_day_time(None, frame, "ir")
+                            day_frames.append(frame_is_day)
+                            self._analyze(frame, cam_id, frame_is_day)
                     except requests.HTTPError as e:
                         logger.error(
                             f"HTTP error for {camera_name}, pose {pose}: "
@@ -222,7 +224,9 @@ class SystemController:
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
                         logger.info(f"Captured image for {ip}")
-                        day_frames.append(self._analyze(frame, cam_id))
+                        frame_is_day = is_day_time(None, frame, "ir")
+                        day_frames.append(frame_is_day)
+                        self._analyze(frame, cam_id, frame_is_day)
                 except requests.HTTPError as e:
                     logger.error(f"HTTP error for {camera_name}: {e.response.text if e.response is not None else e}")
                 except Exception as e:
@@ -233,21 +237,23 @@ class SystemController:
         if day_frames:
             self.is_day = any(day_frames)
 
-    def _analyze(self, frame: Image.Image, cam_id: str) -> bool:
-        """Run inference on a day frame and return whether the frame is a day frame."""
-        if not is_day_time(None, frame, "ir"):
-            # The model is trained on day images, infrared frames only give false positives
+    def _analyze(self, frame: Image.Image, cam_id: str, frame_is_day: bool) -> None:
+        """Run inference on a day frame that differs from the previous one of this camera."""
+        if not frame_is_day:
+            # The model is trained on day images, infrared frames only give false positives.
+            # Drop the camera's detection history so evening frames are not combined with the
+            # next morning's ones.
             logger.info(f"Night frame for {cam_id}, skipping inference")
-            return False
+            self.engine._states.pop(cam_id, None)
+            return
         # A live camera never returns the exact same pixels twice: an identical frame is frozen,
         # and analyzing it again would re-upload the same detection every pass.
         digest = hashlib.md5(frame.tobytes(), usedforsecurity=False).digest()
         if self._last_frame_digest.get(cam_id) == digest:
             logger.warning(f"Frame identical to the previous one for {cam_id}, skipping inference")
-            return True
-        self._last_frame_digest[cam_id] = digest
+            return
         self.engine.predict(frame, cam_id)
-        return True
+        self._last_frame_digest[cam_id] = digest
 
     def check_and_restart_patrol(self) -> None:
         """

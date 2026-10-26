@@ -189,3 +189,35 @@ def test_identical_frame_is_not_analyzed_twice(mock_client_class, mock_engine):
 
     assert mock_engine.predict.call_count == 2
     assert controller.is_day
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_failed_prediction_keeps_day_and_is_retried(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.return_value = day_img
+    mock_engine.predict.side_effect = [RuntimeError("upload failed"), None]
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+    controller.is_day = True
+
+    controller.inference_loop()
+    assert controller.is_day
+
+    controller.inference_loop()
+    assert mock_engine.predict.call_count == 2
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_night_frame_drops_detection_history(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_engine._states = {"192.168.1.2": {"ongoing": True}}
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    controller.inference_loop()
+
+    assert "192.168.1.2" not in mock_engine._states
