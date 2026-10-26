@@ -24,7 +24,7 @@ def test_session_applies_default_timeout(monkeypatch):
     # A call without timeout must not wait forever on a silent camera (pyro-engine#422)
     seen = []
 
-    def fake_send(self, request, **kwargs):
+    def fake_send(_self, _request, **kwargs):
         seen.append(kwargs["timeout"])
         raise requests.ConnectionError
 
