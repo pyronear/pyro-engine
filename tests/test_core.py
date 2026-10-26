@@ -121,3 +121,23 @@ def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine,
 
     assert not mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_night_stops_running_patrols(mock_client_class, mock_engine, mock_camera_data, monkeypatch):
+    mock_client = mock_client_class.return_value
+    mock_client.get_patrol_status.return_value = {"patrol_running": True}
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = False
+
+    class NightSleep(Exception):
+        pass
+
+    def sleep(_s):
+        raise NightSleep
+
+    monkeypatch.setattr("pyroengine.core.time.sleep", sleep)
+    with pytest.raises(NightSleep):
+        controller.main_loop(period=30)
+
+    mock_client.stop_patrol.assert_called_once_with("192.168.1.1")
