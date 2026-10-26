@@ -270,7 +270,7 @@ class SystemController:
                 for ip in self.camera_data:
                     try:
                         patrol_status = self.camera_api_client.get_patrol_status(ip)
-                        if not patrol_status.get("patrol_running", True):
+                        if patrol_status.get("patrol_running", False):
                             self.camera_api_client.stop_patrol(ip)
                             logger.info(f"Stopped patrol for camera {ip} due to night")
                     except Exception as e:
