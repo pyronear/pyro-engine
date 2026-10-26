@@ -8,7 +8,9 @@ import time
 
 from PIL import Image
 
+from pyro_camera_api.api import routes_health
 from pyro_camera_api.api.routes_cameras import get_latest_image
+from pyro_camera_api.api.routes_health import health
 from pyro_camera_api.camera import patrol
 from pyro_camera_api.camera.adapters.mock import MockCamera
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
@@ -51,3 +53,9 @@ def test_watchdog_flags_only_hung_patrol_threads(monkeypatch):
         assert patrol.stalled_patrols() == ["hung"]
     finally:
         hung.set()
+
+
+def test_health_reports_stalled_patrols(monkeypatch):
+    assert health() == {"status": "ok"}
+    monkeypatch.setattr(routes_health, "stalled_patrols", lambda: ["192.168.1.12"])
+    assert health().status_code == 503

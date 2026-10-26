@@ -20,7 +20,7 @@ from pyro_camera_api.api.routes_focus import router as focus_router
 from pyro_camera_api.api.routes_health import router as health_router
 from pyro_camera_api.api.routes_patrol import router as patrol_router
 from pyro_camera_api.api.routes_stream import router as stream_router
-from pyro_camera_api.camera.patrol import patrol_loop, patrol_watchdog, static_loop
+from pyro_camera_api.camera.patrol import patrol_loop, static_loop
 from pyro_camera_api.camera.pose_azimuths import azimuth_sync_loop
 from pyro_camera_api.camera.registry import (
     CAMERA_REGISTRY,
@@ -92,7 +92,6 @@ async def lifespan(app: FastAPI):
             logger.info("Stuck detector disabled by ENABLE_STUCK_DETECTOR for %s", cam_id)
 
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
-    threading.Thread(target=patrol_watchdog, daemon=True).start()
 
     # Resolve pose azimuths from the platform API in the background (retries
     # until the API is reachable; azimuth stays unknown in the meantime).
