@@ -46,7 +46,7 @@ services:
                   time.sleep(5)
               try:
                   conn = HTTPConnection("127.0.0.1", 8081, timeout=5)
-                  conn.request("GET", "/health")
+                  conn.request("GET", "/health/patrols")
                   if conn.getresponse().status == 200:
                       sys.exit(0)
               except ConnectionRefusedError:
