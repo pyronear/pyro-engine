@@ -103,7 +103,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
                 image = cam.capture()
                 if image:
-                    cam.last_images[pose] = image
+                    cam.store_image(pose, image)
                     captured += 1
                     logger.debug("[%s] Stored image for pose %s", camera_ip, pose)
                 else:
@@ -183,7 +183,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     # trust: discard it without counting a failure.
                     logger.debug("[%s] Discarding frame captured during settle window", camera_ip)
                 elif image:
-                    cam.last_images[-1] = image
+                    cam.store_image(-1, image)
                     # Steady state is silent, only the recovery is worth an INFO line.
                     if FAILURE_COUNT[camera_ip]:
                         logger.info("[%s] Capture recovered after %d failures", camera_ip, FAILURE_COUNT[camera_ip])
