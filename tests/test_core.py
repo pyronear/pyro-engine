@@ -130,14 +130,14 @@ def test_night_stops_running_patrols(mock_client_class, mock_engine, mock_camera
     controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
     controller.is_day = False
 
-    class NightSleep(Exception):
+    class NightSleepError(Exception):
         pass
 
     def sleep(_s):
-        raise NightSleep
+        raise NightSleepError
 
     monkeypatch.setattr("pyroengine.core.time.sleep", sleep)
-    with pytest.raises(NightSleep):
+    with pytest.raises(NightSleepError):
         controller.main_loop(period=30)
 
     mock_client.stop_patrol.assert_called_once_with("192.168.1.1")
@@ -170,3 +170,22 @@ def test_night_frames_are_skipped_and_site_sleeps_only_when_all_are_night(mock_c
     mock_client.get_latest_image.side_effect = [None, None]
     controller.inference_loop()
     assert not controller.is_day
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_identical_frame_is_not_analyzed_twice(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.side_effect = [
+        Image.new("RGB", (100, 100), (255, 200, 200)),
+        Image.new("RGB", (100, 100), (255, 200, 200)),
+        Image.new("RGB", (100, 100), (255, 201, 200)),
+    ]
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    for _ in range(3):
+        controller.inference_loop()
+
+    assert mock_engine.predict.call_count == 2
+    assert controller.is_day

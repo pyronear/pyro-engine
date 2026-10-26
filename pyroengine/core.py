@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import hashlib
 import logging
 import sys
 import time
@@ -81,6 +82,7 @@ class SystemController:
         self.camera_data = camera_data
         self.is_day = True
         self.last_autofocus: Optional[datetime] = None
+        self._last_frame_digest: Dict[str, bytes] = {}
 
         # Wait for the camera API to be available
         time.sleep(self.API_INITIAL_WAIT)
@@ -237,6 +239,13 @@ class SystemController:
             # The model is trained on day images, infrared frames only give false positives
             logger.info(f"Night frame for {cam_id}, skipping inference")
             return False
+        # A live camera never returns the exact same pixels twice: an identical frame is frozen,
+        # and analyzing it again would re-upload the same detection every pass.
+        digest = hashlib.md5(frame.tobytes(), usedforsecurity=False).digest()
+        if self._last_frame_digest.get(cam_id) == digest:
+            logger.warning(f"Frame identical to the previous one for {cam_id}, skipping inference")
+            return True
+        self._last_frame_digest[cam_id] = digest
         self.engine.predict(frame, cam_id)
         return True
 
