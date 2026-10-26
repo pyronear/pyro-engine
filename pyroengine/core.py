@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import hashlib
 import logging
 import sys
 import time
@@ -83,6 +84,7 @@ class SystemController:
         self.last_autofocus: Optional[datetime] = None
         # Touched on every loop so container liveness does not depend on log content.
         self.heartbeat_file = Path(heartbeat_file) if heartbeat_file else None
+        self._last_frame_digest: Dict[str, bytes] = {}
 
         # Wait for the camera API to be available
         logger.info("Waiting for Pyro Camera API at %s", pyro_camera_api_url)
@@ -285,6 +287,13 @@ class SystemController:
             # The model is trained on day images, infrared frames only give false positives.
             logger.debug("[%s] Night frame, skipping inference", cam_id)
             return None
+        # A live camera never returns the exact same pixels twice: an identical frame is frozen,
+        # and analyzing it again would re-upload the same detection every pass.
+        digest = hashlib.md5(frame.tobytes(), usedforsecurity=False).digest()
+        if self._last_frame_digest.get(cam_id) == digest:
+            logger.warning("[%s] Frame identical to the previous one, skipping inference", cam_id)
+            return None
+        self._last_frame_digest[cam_id] = digest
         return float(self.engine.predict(frame, cam_id))
 
     def check_and_restart_patrol(self) -> None:
