@@ -99,7 +99,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
                 image = cam.capture()
                 if image:
-                    cam.last_images[pose] = image
+                    cam.store_image(pose, image)
                     logger.info("[%s] Stored image for pose %s", camera_ip, pose)
 
             except Exception as exc:
@@ -161,7 +161,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     settle_until = opened_at + 1.0
 
                 if image and now >= settle_until:
-                    cam.last_images[-1] = image
+                    cam.store_image(-1, image)
                     logger.info("[%s] Updated static image (pose -1)", camera_ip)
                     # success reset failure counter and clear skip
                     FAILURE_COUNT[camera_ip] = 0
