@@ -17,10 +17,20 @@ router = APIRouter()
 @router.get("/health")
 def health():
     """
-    Return 200 while the API answers and every running patrol makes progress.
+    Return a basic heartbeat response to confirm that the API is running.
 
-    Returns 503 with the hung cameras when a patrol thread is stuck, which the
-    compose healthcheck turns into a container restart.
+    Kept free of camera checks: the Shelly watchdog reads it as Pi liveness and
+    power-cycles the Pi and the router when it fails.
+    """
+    return {"status": "ok"}
+
+
+@router.get("/health/patrols")
+def health_patrols():
+    """
+    Return 200 while every running patrol makes progress, 503 with the hung cameras otherwise.
+
+    Used by the compose healthcheck, which restarts the container on a 503.
     """
     stalled = stalled_patrols()
     if stalled:
