@@ -2,7 +2,9 @@
 #    uv export --no-hashes --no-emit-project --no-default-groups --no-dev --no-emit-package pyro_predictor --no-emit-package pyro_camera_api_client --format requirements-txt -o requirements-all.txt
 anyio==4.14.2
     # via httpx
-certifi==2026.2.25
+attrs==26.1.0
+    # via zeep
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
@@ -38,6 +40,10 @@ idna==3.11
     #   anyio
     #   httpx
     #   requests
+isodate==0.7.2
+    # via zeep
+lxml==6.1.3
+    # via zeep
 mpmath==1.3.0
     # via sympy
 ncnn==1.0.20240410
@@ -51,6 +57,8 @@ numpy==2.4.4
     #   pyro-predictor
 onnxruntime==1.22.1
     # via pyro-predictor
+onvif-zeep==0.2.12
+    # via pyroengine
     # via ncnn
 opencv-python-headless==4.11.0.86
     # via pyro-predictor
@@ -62,6 +70,8 @@ pillow==11.0.0
     # via
     #   pyro-camera-api-client
     #   pyro-predictor
+platformdirs==4.9.6
+    # via zeep
 portalocker==3.2.0
     # via ncnn
 protobuf==7.34.1
@@ -81,6 +91,13 @@ requests==2.34.2
     #   pyro-camera-api-client
     #   pyroclient
     #   pyroengine
+    #   requests-file
+    #   requests-toolbelt
+    #   zeep
+requests-file==3.0.1
+    # via zeep
+requests-toolbelt==1.0.0
+    # via zeep
 sympy==1.14.0
     # via onnxruntime
 tqdm==4.67.1
@@ -94,3 +111,5 @@ typing-extensions==4.15.0
     #   huggingface-hub
 urllib3==2.6.3
     # via requests
+zeep==4.3.3
+    # via onvif-zeep

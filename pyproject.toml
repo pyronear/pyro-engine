@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     "requests>=2.33.0,<3",
     "python-dotenv==1.1.0",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@658cc6a2a28d9b52fd33167b7affc6ddae4e45b1#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
     "onvif-zeep>=0.2.12",
@@ -83,7 +83,7 @@ source = ["pyroengine"]
 
 [tool.mypy]
 python_version = "3.11"
-files = "pyroengine/,pyro_camera_api/,pyro-predictor/pyro_predictor/"
+files = "pyroengine/,pyro_camera_api/,pyro_temporal_api/,pyro-predictor/pyro_predictor/"
 show_error_codes = true
 pretty = true
 warn_unused_ignores = true
@@ -138,7 +138,7 @@ exclude = [".git", "pyro-predictor/**", "docs/**"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine", "pyro_camera_api"]
+known-first-party = ["pyroengine", "pyro_camera_api", "pyro_temporal_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -149,6 +149,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 ".github/**.py" = ["D", "T201", "ANN", "S", "PYI024"]
 "tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001", "S113"]
 "pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "S404", "S603", "S405", "S314", "E402", "RUF029"]
+"pyro_temporal_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "E402", "RUF029"]
 "pyro_camera_api/tests/**.py" = ["N802", "S105", "S106", "S108"]
 "pyroengine/core.py" = ["BLE001"]
 "pyroengine/sensors.py" = ["S113", "S501", "ANN"]

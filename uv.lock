@@ -1392,7 +1392,7 @@ requires-dist = [
 [[package]]
 name = "pyroclient"
 version = "0.2.0.dev0"
-source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main#fba2e2c8d2e89dbac7d34dddc603e21fa3b5bfb5" }
+source = { git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=658cc6a2a28d9b52fd33167b7affc6ddae4e45b1#658cc6a2a28d9b52fd33167b7affc6ddae4e45b1" }
 dependencies = [
     { name = "requests" },
 ]
@@ -1442,7 +1442,7 @@ requires-dist = [
     { name = "onvif-zeep", specifier = ">=0.2.12" },
     { name = "pyro-camera-api-client", editable = "pyro_camera_api/client" },
     { name = "pyro-predictor", editable = "pyro-predictor" },
-    { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=main" },
+    { name = "pyroclient", git = "https://github.com/pyronear/pyro-api.git?subdirectory=client&rev=658cc6a2a28d9b52fd33167b7affc6ddae4e45b1" },
     { name = "python-dotenv", specifier = "==1.1.0" },
     { name = "requests", specifier = ">=2.33.0,<3" },
 ]
