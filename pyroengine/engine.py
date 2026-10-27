@@ -127,13 +127,13 @@ class Engine(Predictor):
         temporal_api_url: Optional[str] = None,
         temporal_window: int = 11,
         temporal_job_timeout: float = 120.0,
-        temporal_min_score: float = 0.1,
+        temporal_min_score: float = 0.2,
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
         # Temporal validation: when set, the last `temporal_window` frames of an alerting camera
-        # pose are scored by the temporal service every round. Boxes covered by a tube scoring at
-        # least `temporal_min_score` are uploaded with that probability, the API applies its own
+        # pose are scored by the temporal service every round. Boxes covered by a tube scoring
+        # above `temporal_min_score` are uploaded with that probability, the API applies its own
         # threshold; the other boxes are dropped. A job still pending after `temporal_job_timeout`
         # seconds fails open (frames sent without scores, the API scores them itself).
         # Set before super().__init__, which already builds the per-camera states.
@@ -312,7 +312,7 @@ class Engine(Predictor):
                     tubes = [
                         (tuple(t["box"]), float(t["probability"]))
                         for t in verdict.get("tubes", [])
-                        if t["probability"] >= self.temporal_min_score
+                        if t["probability"] > self.temporal_min_score
                     ]
                     state["temporal_tubes"] = tubes
                     state["temporal_scored"] = frame_ids

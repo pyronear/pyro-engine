@@ -96,7 +96,7 @@ def test_window_is_the_prediction_window(tmp_path, mock_wildfire_image):
 
 
 def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wildfire_image):
-    temporal = FakeTemporal([PENDING, done((BOX, 0.05)), done((BOX, 0.3)), done((BOX, 0.9))])
+    temporal = FakeTemporal([PENDING, done((BOX, 0.2)), done((BOX, 0.3)), done((BOX, 0.9))])
     engine = _engine(tmp_path, temporal)
 
     state = _fire(engine, mock_wildfire_image)  # ongoing on the first frame -> submit
@@ -109,12 +109,12 @@ def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wild
     assert len(engine._alerts) == 0
     assert state["temporal_job"][0] == "job1"
 
-    _fire(engine, mock_wildfire_image)  # below temporal_min_score -> nothing staged, resubmitted
+    _fire(engine, mock_wildfire_image)  # 0.2 is not above temporal_min_score -> nothing staged, resubmitted
     assert len(engine._alerts) == 0
     assert state["temporal_job"][0] == "job2"
     assert len(temporal.submitted[1][1]) == 1  # the same image three times is scored once
 
-    _fire(engine, mock_wildfire_image)  # 0.3 >= 0.1 -> the 3 frames job2 scored go out, the 4th waits
+    _fire(engine, mock_wildfire_image)  # 0.3 > 0.2 -> the 3 frames job2 scored go out, the 4th waits
     assert len(engine._alerts) == 3
     assert all(s == [0.3] for s in _scores(engine))
     assert state["temporal_job"][0] == "job3"
@@ -164,10 +164,10 @@ def test_boxes_outside_scored_tubes_are_dropped(tmp_path, mock_wildfire_image):
     assert len(engine._alerts) == 2  # frames still go out (continuity) ...
     assert all(a["bboxes"] == [] and a["temporal_scores"] == [] for a in engine._alerts)  # ... without the box
 
-    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9), (BOX, 0.2))] * 2))
+    engine = _engine(tmp_path, FakeTemporal([done((FAR_BOX, 0.9), (BOX, 0.3))] * 2))
     _fire(engine, mock_wildfire_image, n=3)
     assert [[b[:4] for b in a["bboxes"]] for a in engine._alerts] == [[BOX]] * 2
-    assert _scores(engine) == [[0.2], [0.2]]
+    assert _scores(engine) == [[0.3], [0.3]]
 
 
 @pytest.mark.parametrize(
