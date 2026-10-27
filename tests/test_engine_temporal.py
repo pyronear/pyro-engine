@@ -112,7 +112,7 @@ def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wild
     _fire(engine, mock_wildfire_image)  # below temporal_min_score -> nothing staged, resubmitted
     assert len(engine._alerts) == 0
     assert state["temporal_job"][0] == "job2"
-    assert len(temporal.submitted[1][1]) == 3
+    assert len(temporal.submitted[1][1]) == 1  # the same image three times is scored once
 
     _fire(engine, mock_wildfire_image)  # 0.3 >= 0.1 -> the 3 frames job2 scored go out, the 4th waits
     assert len(engine._alerts) == 3
@@ -124,6 +124,23 @@ def test_frames_scored_every_round_and_sent_with_tube_scores(tmp_path, mock_wild
     assert _scores(engine)[-1] == [0.9]
     assert len(temporal.submitted) == 4  # one job per round while ongoing
     assert not temporal.results
+
+
+def test_repeated_frames_are_scored_once_and_still_sent(tmp_path, mock_wildfire_image, mock_forest_image):
+    temporal = FakeTemporal([PENDING, done((BOX, 0.8)), done((BOX, 0.8))])
+    engine = _engine(tmp_path, temporal)
+    state = engine._states[CAM]
+    # job1 = {f1}; the pose is then read twice before the patrol refreshed it: job2 = {f1, f2, f2 again}
+    for image in (mock_wildfire_image, mock_forest_image, mock_forest_image):
+        _fire(engine, image)
+    window = engine._temporal_window(CAM)
+    assert len(window) == 3
+    assert [f for f, _, _ in temporal.submitted[-1][1]] == [window[0][0], window[1][0]]  # the repeat is not sent
+    assert state["temporal_job"][2] == frozenset(f for f, _, _ in window)  # but job2 scores it
+
+    _fire(engine, mock_forest_image)  # job2 verdict: f2 and its repeat go out with the tube score
+    assert [a["ts"] for a in engine._alerts] == [e[3] for e in list(state["last_predictions"])[:3]]
+    assert _scores(engine) == [[0.8]] * 3
 
 
 def test_only_frames_of_the_scored_job_are_staged(tmp_path, mock_wildfire_image):

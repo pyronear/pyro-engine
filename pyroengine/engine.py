@@ -235,6 +235,20 @@ class Engine(Predictor):
             window.append((self._frame_id(cam_key, ts), jpeg, boxes))
         return window
 
+    @staticmethod
+    def _distinct_frames(window: List[WindowFrame]) -> List[WindowFrame]:
+        """The window without the frames whose JPEG repeats an earlier one, as pyro-api scores distinct
+        frames only. The camera API serves the last capture again when a pose is read before the patrol
+        refreshed it, and repeated frames push the temporal score up (a false positive went from 0.003
+        to 0.75 with one frame read three times)."""
+        seen = set()
+        distinct = []
+        for frame in window:
+            if frame[1] not in seen:
+                seen.add(frame[1])
+                distinct.append(frame)
+        return distinct
+
     def _consume_window(self, cam_key: str) -> None:
         """Mark every frame still waiting for a verdict as staged without upload: the event was rejected
         for good, so a later event must not upload them under its own score."""
@@ -327,9 +341,11 @@ class Engine(Predictor):
                 return False
             if resubmit:
                 window = self._temporal_window(cam_key)
-                job_id = self.temporal.submit(cam_id, window)
+                distinct = self._distinct_frames(window)
+                job_id = self.temporal.submit(cam_id, distinct)
+                # Every frame of the window is scored by this job, repeats included: tube scores apply by box.
                 state["temporal_job"] = (job_id, time.monotonic(), frozenset(f for f, _, _ in window))
-                logger.info(f"Camera '{cam_id}' - temporal scoring submitted ({len(window)} frames)")
+                logger.info(f"Camera '{cam_id}' - temporal scoring submitted ({len(distinct)} frames)")
             return stage
         except (RequestException, KeyError, ValueError) as e:
             logger.error(f"Camera '{cam_id}' - temporal service unavailable ({e}), alert sent unscored")
