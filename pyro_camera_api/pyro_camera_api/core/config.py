@@ -62,7 +62,7 @@ def build_rtsp_input_url(ip: str, cfg: dict) -> str:
     password = quote(str(cfg.get("password", CAM_PWD)), safe="")
     adapter = (cfg.get("adapter") or cfg.get("brand") or "").lower()
 
-    if "linovision" in adapter:
+    if "linovision" in adapter or "hikvision" in adapter:
         channel = str(cfg.get("rtsp_channel", cfg.get("channel", "102")))
         path = cfg.get("rtsp_path", f"/Streaming/Channels/{channel}")
     else:

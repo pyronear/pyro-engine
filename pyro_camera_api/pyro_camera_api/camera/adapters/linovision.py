@@ -557,7 +557,7 @@ class LinovisionCamera(BaseCamera, PTZMixin, FocusMixin):
             zoom=z,
             prefer_current_elevation=True,
         )
-        return {"zoom_raw": int(round(z * 10)), "zoom_ratio": z}
+        return {"zoom_raw": round(z * 10), "zoom_ratio": z}
 
     def focus_finder(
         self,

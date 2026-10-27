@@ -28,6 +28,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import pathlib
 import time
@@ -579,10 +580,8 @@ class APIClient:
             return False
 
     def stop_patrol(self):
-        try:
+        with contextlib.suppress(Exception):
             self._api.stop_patrol(self.ip)
-        except Exception:
-            pass
 
     def get_patrol_status(self) -> Optional[Dict]:
         try:
@@ -746,7 +745,7 @@ with st.sidebar:
     current_model = st.session_state.get("cam_model", known_adapters[0])
     # Always ensure the detected adapter is selectable
     if current_model not in known_adapters:
-        known_adapters = [current_model] + known_adapters
+        known_adapters = [current_model, *known_adapters]
     st.session_state["cam_model"] = st.selectbox("Adapter (auto-detected via API)", known_adapters, key="sel_model")
 
     # Summary of ongoing calibrations
@@ -1424,7 +1423,7 @@ with tab_calib:
             presets_live = client.get_presets()
             st.session_state["presets_list"] = presets_live
             preset_opts: Dict[str, int] = {f"[{p['id']}] {p.get('name', '')}".strip(): p["id"] for p in presets_live}
-            home_options = ["(none)"] + list(preset_opts.keys())
+            home_options = ["(none)", *list(preset_opts.keys())]
             # _home_default stores the label to auto-select after saving a new preset
             _home_default = st.session_state.get("_home_default")
             _home_index = home_options.index(_home_default) if _home_default in home_options else 0
@@ -1773,12 +1772,8 @@ with tab_calib:
         # Displacement preview
         if pt_b and pt_a:
             st.divider()
-            if ax_p == "pan":
-                # Camera -> right: landmark moves left
-                px_delta = pt_b[0] - pt_a[0]
-            else:
-                # Camera -> up: landmark moves down (Down -> inverse)
-                px_delta = pt_a[1] - pt_b[1]
+            # pan: camera -> right, landmark moves left. tilt: camera -> up, landmark moves down.
+            px_delta = pt_b[0] - pt_a[0] if ax_p == "pan" else pt_a[1] - pt_b[1]
             deg = abs(px_delta * (h_fov_p if ax_p == "pan" else v_fov_p) / (W if ax_p == "pan" else H))
 
             ref_map = REFERENCE_PAN_SPEEDS if ax_p == "pan" else REFERENCE_TILT_SPEEDS

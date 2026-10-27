@@ -68,7 +68,8 @@ The `pyro_camera_api` package provides a REST API and a Python client to control
 The API supports multiple camera adapters through a common abstraction:
 
 * `reolink` adapter, for Reolink PTZ or static cameras
-* `linovision` adapter, for Linovision/Hikvision PTZ cameras using ISAPI
+* `linovision` adapter, for Linovision PTZ cameras using ISAPI
+* `hikvision` adapter, for Hikvision PTZ cameras using ISAPI
 * `rtsp` adapter, for RTSP streams
 * `url` adapter, for HTTP snapshot URLs
 * `rest` adapter, for HTTP APIs needing auth headers or returning a JSON-wrapped image
