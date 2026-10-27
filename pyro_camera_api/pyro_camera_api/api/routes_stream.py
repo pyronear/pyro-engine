@@ -13,10 +13,11 @@ import threading
 from fastapi import APIRouter, HTTPException, Request
 
 from pyro_camera_api.camera.focus_manager import cancel_focus_and_wait
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY, FOCUS_CANCEL_EVENTS
+from pyro_camera_api.camera.registry import FOCUS_CANCEL_EVENTS
 from pyro_camera_api.core.config import RAW_CONFIG, STREAMS
 from pyro_camera_api.services.anonymizer_rtsp import EncoderWorker, RTSPDecoderWorker
 from pyro_camera_api.services.stream import (
+    STREAM_LOCK,
     Pipeline,
     build_ffmpeg_restream_cmd,
     get_processes,
@@ -25,34 +26,13 @@ from pyro_camera_api.services.stream import (
     is_pipeline_running,
     is_process_running,
     log_ffmpeg_output,
+    save_pre_stream_zoom,
     stop_any_running_stream,
 )
 from pyro_camera_api.utils.time_utils import update_command_time
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Zoom each camera had when its stream started, restored when the stream stops.
-# Static varifocal cameras carry a zoom set by hand as their detection framing,
-# so resetting them to 0 would lose it.
-_pre_stream_zoom: dict[str, int] = {}
-
-
-def _read_zoom(camera_ip: str) -> int:
-    """Current zoom position of a camera, or 0 when it cannot tell."""
-    try:
-        zoom = (CAMERA_REGISTRY[camera_ip].get_focus_level() or {}).get("zoom")
-    except Exception as exc:
-        logger.warning("[%s] Failed to read zoom before stream, %s", camera_ip, exc)
-        return 0
-    return zoom if isinstance(zoom, int) else 0
-
-
-# Serializes stream startup: without it, two concurrent start_stream calls
-# can both pass the idempotent check and spawn two pipelines for the same
-# camera. The untracked duplicate keeps streaming invisibly, so stream-aware
-# guards (focus, patrol) believe no stream is running.
-_START_STREAM_LOCK = threading.Lock()
 
 
 @router.post("/start_stream/{camera_ip}")
@@ -75,7 +55,7 @@ def start_stream(camera_ip: str, request: Request):
     if camera_ip not in STREAMS:
         raise HTTPException(status_code=404, detail=f"No stream config for camera {camera_ip}")
 
-    with _START_STREAM_LOCK:
+    with STREAM_LOCK:
         app = request.app
         workers = get_workers(app)
         procs = get_processes(app)
@@ -101,7 +81,7 @@ def start_stream(camera_ip: str, request: Request):
         # startup failed), otherwise autofocus would be blocked forever.
         try:
             stopped_cam = stop_any_running_stream(app)
-            _pre_stream_zoom[camera_ip] = _read_zoom(camera_ip)
+            save_pre_stream_zoom(camera_ip)
             cfg_stream = STREAMS[camera_ip]
             input_url: str = cfg_stream["input_url"]
             output_url: str = cfg_stream["output_url"]
@@ -181,22 +161,10 @@ def stop_stream(request: Request):
         or a message indicating that no stream was active.
     """
     update_command_time()
-    app = request.app
-    # Same lock as startup: a concurrent start_stream for this camera must not
-    # have its freshly saved zoom popped by this stop.
-    with _START_STREAM_LOCK:
-        stopped_cam = stop_any_running_stream(app)
-        if not stopped_cam:
-            return {"message": "No active stream was running"}
-        cam = CAMERA_REGISTRY.get(stopped_cam)
-        if cam:
-            zoom = _pre_stream_zoom.pop(stopped_cam, 0)
-            try:
-                cam.start_zoom_focus(position=zoom)
-                logger.info("[%s] Zoom reset to position %s after stream stop", stopped_cam, zoom)
-            except Exception as exc:
-                logger.warning("[%s] Failed to reset zoom, %s", stopped_cam, exc)
-    return {"message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.", "camera_ip": stopped_cam}
+    stopped_cam = stop_any_running_stream(request.app)
+    if stopped_cam:
+        return {"message": f"Stream for {stopped_cam} stopped. Zoom reset if supported.", "camera_ip": stopped_cam}
+    return {"message": "No active stream was running"}
 
 
 @router.get("/status")
