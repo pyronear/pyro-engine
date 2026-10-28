@@ -181,7 +181,7 @@ class Engine(Predictor):
         self._backup_size = backup_size
         self._backup_folder = Path(backup_folder) if backup_folder else Path(cache_folder) / "backup"
         self._last_backup_clean: Dict[str, float] = {}
-        self._backup_missing = False
+        self._backup_unavailable = False  # already warned, do not log on every frame
 
         # Augment states with API-specific fields. Anchor the daily pose timestamp at
         # construction so a startup after noon does not trigger an immediate send;
@@ -767,41 +767,49 @@ class Engine(Predictor):
         try:
             # The root is never created here, so an unmounted USB key does not fill the SD card
             if not self._backup_folder.is_dir():
-                if not self._backup_missing:
+                if not self._backup_unavailable:
                     logger.warning(f"Backup folder {self._backup_folder} is missing, frames are not saved")
-                self._backup_missing = True
+                self._backup_unavailable = True
                 return
-            self._backup_missing = False
             backup_cache = self._backup_folder / folder
             backup_cache.mkdir(exist_ok=True)
-            # Size scan walks the whole folder, so only run it once per hour
+            # Size scan walks the whole backup root, so only run it once per hour per folder.
+            # The timestamp is set after a successful scan, so a failure (key unplugged) is retried next frame.
             now = time.monotonic()
             if now - self._last_backup_clean.get(folder, -3600) >= 3600:
-                self._last_backup_clean[folder] = now
                 self._clean_local_backup(backup_cache)
+                self._last_backup_clean[folder] = now
             day_cache = backup_cache / time.strftime("%Y%m%d")
             day_cache.mkdir(exist_ok=True)
             cam_cache = day_cache / str(cam_id)
             cam_cache.mkdir(exist_ok=True)
             file = cam_cache / f"{time.strftime('%Y%m%d-%H%M%S')}.jpg"
+            # Write next to the target then rename, so a key unplugged mid-write never leaves a truncated jpg
+            tmp = file.with_suffix(".jpg.tmp")
             if encoded_bytes is not None:
-                file.write_bytes(encoded_bytes)
+                tmp.write_bytes(encoded_bytes)
             elif img is not None:
-                img.save(file)
+                img.save(tmp, format="JPEG")
+            tmp.replace(file)
+            self._backup_unavailable = False
         except OSError as e:
-            logger.warning(f"Unable to save frame in {self._backup_folder}: {e}")
+            if not self._backup_unavailable:
+                logger.warning(f"Unable to save frame in {self._backup_folder}: {e}")
+            self._backup_unavailable = True
 
     def _clean_local_backup(self, backup_cache: Path) -> None:
-        """Clean local backup when it's bigger than _backup_size MB
+        """Delete the oldest days of backup_cache until the whole backup root is under _backup_size MB
 
         Args:
             backup_cache (Path): backup to clean
         """
-        backup_by_days = list(backup_cache.glob("*"))
-        backup_by_days.sort()
-        for folder in backup_by_days:
-            s = sum(f.stat().st_size for f in backup_cache.rglob("*") if f.is_file()) // 1024**2
-            if s > self._backup_size:
-                shutil.rmtree(folder)
-            else:
+
+        def size_mb(path: Path) -> int:
+            return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) // 1024**2
+
+        total = size_mb(self._backup_folder)
+        for folder in sorted(backup_cache.glob("*")):
+            if total <= self._backup_size:
                 break
+            total -= size_mb(folder)
+            shutil.rmtree(folder)

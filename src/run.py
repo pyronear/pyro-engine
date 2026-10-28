@@ -141,7 +141,7 @@ if __name__ == "__main__":
         "--backup-size",
         type=int,
         default=10000,
-        help="Local backup can't be bigger than 10Go",
+        help="Total size cap of the backup folder in MB, oldest days are deleted first",
     )
     parser.add_argument(
         "--backup-dir",
