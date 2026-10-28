@@ -171,6 +171,39 @@ def test_night_frames_are_skipped_and_site_sleeps_only_when_all_are_night(mock_c
     controller.inference_loop()
     assert not controller.is_day
 
+    # One night frame and one camera without a fresh image (204): the missing camera
+    # says nothing about the light, the site must not go to sleep on one night frame
+    controller.is_day = True
+    mock_client.get_latest_image.side_effect = [night_img, None]
+    controller.inference_loop()
+    assert controller.is_day
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_wake_up_probes_every_camera(mock_client_class, mock_engine):
+    camera_data = {
+        "192.168.1.1": {"name": "cam1", "type": "static"},
+        "192.168.1.2": {"name": "cam2", "type": "static"},
+    }
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    night_img = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_client = mock_client_class.return_value
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    # The first camera stays in infrared (or is down), the second one sees daylight
+    mock_client.capture_image.side_effect = [night_img, day_img]
+    assert controller._probe_day()
+    mock_client.capture_image.side_effect = [RuntimeError("down"), day_img]
+    assert controller._probe_day()
+
+    # Every camera reports night: stay asleep
+    mock_client.capture_image.side_effect = [night_img, night_img]
+    assert not controller._probe_day()
+
+    # One night frame and one camera down: not proven night, wake up
+    mock_client.capture_image.side_effect = [night_img, RuntimeError("down")]
+    assert controller._probe_day()
+
 
 @patch("pyroengine.core.PyroCameraAPIClient")
 def test_identical_frame_is_not_analyzed_twice(mock_client_class, mock_engine):

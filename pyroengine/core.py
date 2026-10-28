@@ -191,6 +191,7 @@ class SystemController:
             return
 
         day_frames = []
+        expected = 0
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
 
@@ -201,6 +202,7 @@ class SystemController:
                         return
                     try:
                         cam_id = f"{ip}_{pose}"
+                        expected += 1
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
                             logger.info(f"Captured image for {ip}, pose {pose}")
@@ -221,6 +223,7 @@ class SystemController:
                     return
                 try:
                     cam_id = ip
+                    expected += 1
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
                         logger.info(f"Captured image for {ip}")
@@ -232,10 +235,13 @@ class SystemController:
                 except Exception as e:
                     logger.error(f"Error for {camera_name}: {e}")
 
-        # The site sleeps only once every camera reports night, so one camera in infrared
-        # (fog, a dark area) does not blind the others.
-        if day_frames:
-            self.is_day = any(day_frames)
+        # One day frame keeps the site awake, so one camera in infrared (fog, a dark area) does
+        # not blind the others. It sleeps only when every expected frame came back and all are
+        # night: a camera without a fresh image (204, error) says nothing about the light.
+        if any(day_frames):
+            self.is_day = True
+        elif day_frames and len(day_frames) == expected:
+            self.is_day = False
 
     def _analyze(self, frame: Image.Image, cam_id: str, frame_is_day: bool) -> None:
         """Run inference on a day frame that differs from the previous one of this camera."""
@@ -254,6 +260,27 @@ class SystemController:
             return
         self.engine.predict(frame, cam_id)
         self._last_frame_digest[cam_id] = digest
+
+    def _probe_day(self) -> bool:
+        """Capture one frame per camera until one shows daylight.
+
+        Stays night only when every camera answered with a night frame: a camera that
+        fails to answer says nothing, so the site wakes up and lets the inference loop
+        decide from the next fresh frames.
+        """
+        night = 0
+        for ip in self.camera_data:
+            try:
+                frame = self.camera_api_client.capture_image(ip)
+            except Exception as e:
+                logger.error(f"Failed to capture {ip} after sleep: {e}")
+                continue
+            if frame is None:
+                continue
+            if is_day_time(None, frame, "ir"):
+                return True
+            night += 1
+        return night < len(self.camera_data)
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -308,10 +335,8 @@ class SystemController:
                 time.sleep(3600)
 
                 try:
-                    ip = next(iter(self.camera_data.keys()))
-                    frame = self.camera_api_client.capture_image(ip)
-                    self.is_day = is_day_time(None, frame, "ir")
-                    logger.info(f"Re checked day and night using camera {ip}, result is_day={self.is_day}")
+                    self.is_day = self._probe_day()
+                    logger.info(f"Re checked day and night after sleep, result is_day={self.is_day}")
 
                     if self.is_day:
                         logger.info("Day detected, restarting patrols")
