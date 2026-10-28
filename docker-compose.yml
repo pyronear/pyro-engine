@@ -50,6 +50,7 @@ services:
       - ./data:/usr/src/app/data
       # Saved frames go to a USB key mounted on /mnt/usb (see README). /mnt is bound with rslave
       # so the container sees the key even when it is mounted after start.
+      # --backup-size is a total cap in MB: keep it below the smallest key in use (128 Go).
       - type: bind
         source: /mnt
         target: /usr/src/app/mnt
@@ -58,7 +59,7 @@ services:
           create_host_path: true
     # The json-file driver below is the single rotated log sink; nothing reads a log
     # file inside the container anymore.
-    command: python run.py --backup-dir /usr/src/app/mnt/usb/frames --backup-size 100000
+    command: python run.py --backup-dir /usr/src/app/mnt/usb/frames --backup-size 80000
     read_only: true
     cap_drop:
       - ALL
