@@ -158,3 +158,12 @@ def test_frozen_camera_is_rebooted_once_unless_allowed(monkeypatch, allow_still)
     assert cam.reboot_camera.call_count == (0 if allow_still else 1)
     assert sd.recovery_status(cam_id)["reboot_attempts_24h"] == (0 if allow_still else 1)
     assert len(sd.load_attempts(cam_id)) == (0 if allow_still else 1)
+    # A restarted detector reports the saved attempt
+    CAMERA_REGISTRY[cam_id] = cam
+    stop = threading.Event()
+    stop.set()
+    sd.stuck_check_loop(cam_id, stop)
+    CAMERA_REGISTRY.pop(cam_id, None)
+    status = sd.recovery_status(cam_id)
+    assert status["reboot_attempts_24h"] == (0 if allow_still else 1)
+    assert (status["last_reboot_attempt"] is not None) == (not allow_still)

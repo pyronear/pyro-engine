@@ -182,7 +182,12 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     cam = CAMERA_REGISTRY[camera_ip]
     can_reboot = hasattr(cam, "reboot_camera")
     is_ptz = getattr(cam, "cam_type", "static") == "ptz"
-    state: Dict[str, Any] = {"status": "ok", "attempts": load_attempts(camera_ip), "last_reboot_attempt": None}
+    attempts = load_attempts(camera_ip)
+    state: Dict[str, Any] = {
+        "status": "ok",
+        "attempts": attempts,
+        "last_reboot_attempt": datetime.fromtimestamp(attempts[-1], timezone.utc).isoformat() if attempts else None,
+    }
     RECOVERY_STATE[camera_ip] = state
 
     logger.info(
