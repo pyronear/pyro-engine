@@ -32,7 +32,9 @@ services:
       # Docker never restarts an unhealthy container by itself: on a hung patrol (503) or an API
       # that stopped answering, kill everything but PID 1 so `restart: always` brings it back.
       # The probe tries 3 times (5 s timeout, 5 s apart) so a single slow answer does not restart it.
-      # Connection refused only means uvicorn is still starting, as it binds after camera setup.
+      # Connection refused only means uvicorn is still starting, as it binds after camera setup:
+      # killing on it would loop at startup (the kill runs during start_period too). A hang before
+      # the bind is bounded by the 10 s timeout on every camera call, so it cannot last.
       # The image ships no curl, so the probe uses Python's HTTP client.
       test:
         - CMD
