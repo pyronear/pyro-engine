@@ -25,7 +25,9 @@ services:
       # Docker never restarts an unhealthy container by itself: on a hung patrol (503) or an API
       # that stopped answering, kill everything but PID 1 so `restart: always` brings it back.
       # curl retries twice so a single slow answer does not restart it. Connection refused (rc 7)
-      # only means uvicorn is still starting, as it binds after camera setup.
+      # only means uvicorn is still starting, as it binds after camera setup: killing on it would
+      # loop at startup (the kill runs during start_period too). A hang before the bind is bounded
+      # by the 10 s timeout on every camera call, so rc 7 cannot last.
       test: ["CMD-SHELL", "curl -sf --max-time 5 --retry 2 --retry-delay 5 http://localhost:8081/health/patrols; rc=$$?; [ $$rc -eq 0 ] && exit 0; [ $$rc -eq 7 ] && exit 1; kill -9 -1"]
       interval: 30s
       retries: 3
