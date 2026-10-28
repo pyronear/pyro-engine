@@ -29,18 +29,21 @@ that does not move (at home, or a mock). Never set it on a station.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
 from PIL import Image
 
+from pyro_camera_api.camera import patrol
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 from pyro_camera_api.services.stream import is_camera_streaming
 
@@ -54,16 +57,22 @@ MIN_POSES_FOR_CHECK = 2
 # Skip the check when the mean per-image gray variance falls below this threshold.
 # Calibrated on sun_test data: foggy rounds mean variance <= 332, stuck rounds mean >= 854.
 MIN_MEAN_VARIANCE_FOR_CHECK = 500.0
-# Same limits as the Shelly watchdog.
-# ponytail: in-memory budget, a container restart resets it; persist under data/ if restarts loop
+# Same limits as the Shelly watchdog. Attempts are wall-clock times kept in STATE_FILE, so a
+# container restart (healthcheck, update) does not hand out a fresh budget.
 MAX_REBOOTS_PER_DAY = 3
 REBOOT_COOLDOWN = 30 * 60.0
 DAY = 24 * 3600.0
+STATE_FILE = os.getenv("RECOVERY_STATE_FILE", "data/camera_recovery.json")
+# The static loop skips a camera 30 min after two failed captures: give a rebooting camera
+# this long to come back before its captures count again.
+REBOOT_GRACE = 90.0
 
 ALLOW_STILL_CAMERA = os.getenv("ALLOW_STILL_CAMERA", "false").strip().lower() in ("1", "true", "yes", "on")
 
-# Per camera recovery state, exposed by /patrol_status
+# Per camera recovery state, exposed by /patrol_status. The lock covers the attempts deque,
+# appended by the detector thread and read by the API.
 RECOVERY_STATE: Dict[str, Dict[str, Any]] = {}
+_LOCK = threading.Lock()
 
 # pose -> (time the image was stored, md5 of its pixels)
 Snapshot = Dict[int, Tuple[float, bytes]]
@@ -131,14 +140,40 @@ def reboot_allowed(attempts: Deque[float], now: float) -> bool:
     return len(attempts) < MAX_REBOOTS_PER_DAY and (not attempts or now - attempts[-1] >= REBOOT_COOLDOWN)
 
 
+def load_attempts(camera_ip: str) -> Deque[float]:
+    """Reboot attempts of the last 24 h saved by a previous run, none when the file is unusable."""
+    try:
+        saved = json.loads(Path(STATE_FILE).read_text()).get(camera_ip, [])
+    except (OSError, ValueError, AttributeError):
+        return deque()
+    now = time.time()
+    return deque(float(t) for t in saved if now - float(t) <= DAY)
+
+
+def save_attempts(camera_ip: str, attempts: Deque[float]) -> None:
+    try:
+        path = Path(STATE_FILE)
+        try:
+            state = json.loads(path.read_text())
+        except (OSError, ValueError):
+            state = {}
+        state[camera_ip] = list(attempts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state))
+    except (OSError, TypeError) as exc:
+        logger.warning("[%s] Cannot save reboot attempts to %s: %s", camera_ip, STATE_FILE, exc)
+
+
 def recovery_status(camera_ip: str) -> Dict[str, Any]:
     state = RECOVERY_STATE.get(camera_ip)
     if state is None:
         return {"status": None, "reboot_attempts_24h": 0, "last_reboot_attempt": None}
-    now = time.monotonic()
+    now = time.time()
+    with _LOCK:
+        attempts = list(state["attempts"])
     return {
         "status": state["status"],
-        "reboot_attempts_24h": sum(1 for t in state["attempts"] if now - t <= DAY),
+        "reboot_attempts_24h": sum(1 for t in attempts if now - t <= DAY),
         "last_reboot_attempt": state["last_reboot_attempt"],
     }
 
@@ -147,7 +182,7 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     cam = CAMERA_REGISTRY[camera_ip]
     can_reboot = hasattr(cam, "reboot_camera")
     is_ptz = getattr(cam, "cam_type", "static") == "ptz"
-    state: Dict[str, Any] = {"status": "ok", "attempts": deque(), "last_reboot_attempt": None}
+    state: Dict[str, Any] = {"status": "ok", "attempts": load_attempts(camera_ip), "last_reboot_attempt": None}
     RECOVERY_STATE[camera_ip] = state
 
     logger.info(
@@ -202,27 +237,37 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         if not can_reboot:
             logger.error("[%s] Camera %s and its adapter cannot reboot it", camera_ip, problem)
             continue
-        if not reboot_allowed(state["attempts"], time.monotonic()):
-            logger.error(
-                "[%s] Camera %s, reboot budget spent (%d per 24 h, %d min apart)",
-                camera_ip,
-                problem,
-                MAX_REBOOTS_PER_DAY,
-                int(REBOOT_COOLDOWN // 60),
-            )
+        with _LOCK:
+            allowed = reboot_allowed(state["attempts"], time.time())
+        if not allowed:
+            # Logged once per episode: hits keep counting silently until the cooldown ends
+            if hits == CONSECUTIVE_HITS_BEFORE_REBOOT:
+                logger.error(
+                    "[%s] Camera %s, reboot budget spent (%d per 24 h, %d min apart)",
+                    camera_ip,
+                    problem,
+                    MAX_REBOOTS_PER_DAY,
+                    int(REBOOT_COOLDOWN // 60),
+                )
             continue
 
         logger.error("[%s] Rebooting camera, %s", camera_ip, problem)
-        state["attempts"].append(time.monotonic())
+        with _LOCK:
+            state["attempts"].append(time.time())
+            save_attempts(camera_ip, state["attempts"])
         state["last_reboot_attempt"] = datetime.now(timezone.utc).isoformat()
         ok = False
         try:
             ok = bool(cam.reboot_camera())
         except Exception as exc:
-            logger.error("[%s] Reboot raised: %s", camera_ip, exc)
+            # The exception text carries the request URL, with the camera password in it
+            logger.error("[%s] Reboot raised %s", camera_ip, type(exc).__name__)
         if ok:
             for pose in list(cam.last_images):
                 cam.last_images[pose] = None
+            # Let the camera boot before its failed captures count towards the 30 min skip
+            patrol.FAILURE_COUNT[camera_ip] = 0
+            patrol.SKIP_UNTIL[camera_ip] = time.time() + REBOOT_GRACE
         else:
             logger.error("[%s] Reboot command rejected by camera", camera_ip)
         prev, hits = None, 0
