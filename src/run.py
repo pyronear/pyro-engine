@@ -89,6 +89,10 @@ def main(args):
     sys_controller.main_loop(args.period, args.send_alerts)
 
 
+def str2bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes"}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Raspberry Pi system controller",
@@ -153,13 +157,13 @@ if __name__ == "__main__":
     # Debug
     parser.add_argument(
         "--save_captured_frames",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Save all captured frames locally",
     )
     parser.add_argument(
         "--save_detections_frames",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Save all locally detection frames locally",
     )

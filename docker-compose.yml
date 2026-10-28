@@ -44,6 +44,7 @@ services:
       # Saved frames go to a USB key mounted on /mnt/usb (see README). /mnt is bound with rslave
       # so the container sees the key even when it is mounted after start.
       # --backup-size is a total cap in MB: keep it below the smallest key in use (128 Go).
+      # SAVE_CAPTURED_FRAMES and FRAMES_DIR come from .env (see .env.example).
       - type: bind
         source: /mnt
         target: /usr/src/app/mnt
@@ -53,7 +54,7 @@ services:
     command: >
       sh -c '
         truncate -s 0 engine.log &&
-        python run.py --backup-dir /usr/src/app/mnt/usb/frames --backup-size 80000 2>&1 | tee -a engine.log
+        python run.py --save_captured_frames ${SAVE_CAPTURED_FRAMES:-false} --backup-dir ${FRAMES_DIR:-/usr/src/app/mnt/usb/frames} --backup-size 80000 2>&1 | tee -a engine.log
       '
     restart: always
     network_mode: host
