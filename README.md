@@ -130,6 +130,25 @@ A `./data` directory is expected with at least:
 * optionally `model.onnx` to override weights from Hugging Face
 * optionally `config.json` to override model configuration
 
+### Saving frames on a USB key
+
+With `SAVE_CAPTURED_FRAMES=true` in `.env` (or `--save_detections_frames`), frames are saved in `/mnt/usb/frames` on
+the host, so they do not fill the SD card. Saving on the SD card instead is an explicit choice:
+`FRAMES_DIR=/usr/src/app/data/backup`. The engine never creates that folder: if the key is missing or fails, it keeps running and
+just does not save frames. Never create `/mnt/usb/frames` while the key is unplugged, or frames would land on the SD
+card. `--backup-size` is a total cap in MB over the whole folder, oldest days are deleted first. To set up the key
+(this erases it):
+
+```bash
+sudo mkfs.ext4 -L pyro-usb /dev/sda1
+sudo mkdir -p /mnt/usb
+echo "UUID=$(sudo blkid -s UUID -o value /dev/sda1) /mnt/usb ext4 defaults,nofail,x-systemd.device-timeout=10s,x-systemd.automount 0 2" | sudo tee -a /etc/fstab
+sudo systemctl daemon-reload && sudo systemctl start mnt-usb.automount
+sudo mkdir /mnt/usb/frames && findmnt -T /mnt/usb
+```
+
+`findmnt` must show `/dev/sda1` on `/mnt/usb`. The automount mounts the key again when it is plugged back in.
+
 ---
 
 ## Camera configuration and adapters
