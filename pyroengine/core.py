@@ -4,6 +4,7 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import hashlib
 import logging
 import sys
 import time
@@ -81,6 +82,7 @@ class SystemController:
         self.camera_data = camera_data
         self.is_day = True
         self.last_autofocus: Optional[datetime] = None
+        self._last_frame_digest: Dict[str, bytes] = {}
 
         # Wait for the camera API to be available
         time.sleep(self.API_INITIAL_WAIT)
@@ -188,6 +190,8 @@ class SystemController:
             logger.info("Stream detected, skipping inference on all cameras")
             return
 
+        day_frames = []
+        expected = 0
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
 
@@ -198,11 +202,13 @@ class SystemController:
                         return
                     try:
                         cam_id = f"{ip}_{pose}"
+                        expected += 1
                         frame = self._safe_get_latest_image(ip, pose)
                         if frame is not None:
                             logger.info(f"Captured image for {ip}, pose {pose}")
-                            self.is_day = is_day_time(None, frame, "ir")
-                            self.engine.predict(frame, cam_id)
+                            frame_is_day = is_day_time(None, frame, "ir")
+                            day_frames.append(frame_is_day)
+                            self._analyze(frame, cam_id, frame_is_day)
                     except requests.HTTPError as e:
                         logger.error(
                             f"HTTP error for {camera_name}, pose {pose}: "
@@ -217,15 +223,64 @@ class SystemController:
                     return
                 try:
                     cam_id = ip
+                    expected += 1
                     frame = self._safe_get_latest_image(ip, -1)
                     if frame is not None:
                         logger.info(f"Captured image for {ip}")
-                        self.is_day = is_day_time(None, frame, "ir")
-                        self.engine.predict(frame, cam_id)
+                        frame_is_day = is_day_time(None, frame, "ir")
+                        day_frames.append(frame_is_day)
+                        self._analyze(frame, cam_id, frame_is_day)
                 except requests.HTTPError as e:
                     logger.error(f"HTTP error for {camera_name}: {e.response.text if e.response is not None else e}")
                 except Exception as e:
                     logger.error(f"Error for {camera_name}: {e}")
+
+        # One day frame keeps the site awake, so one camera in infrared (fog, a dark area) does
+        # not blind the others. It sleeps only when every expected frame came back and all are
+        # night: a camera without a fresh image (204, error) says nothing about the light.
+        if any(day_frames):
+            self.is_day = True
+        elif day_frames and len(day_frames) == expected:
+            self.is_day = False
+
+    def _analyze(self, frame: Image.Image, cam_id: str, frame_is_day: bool) -> None:
+        """Run inference on a day frame that differs from the previous one of this camera."""
+        if not frame_is_day:
+            # The model is trained on day images, infrared frames only give false positives.
+            # Drop the camera's detection history so evening frames are not combined with the
+            # next morning's ones.
+            logger.info(f"Night frame for {cam_id}, skipping inference")
+            self.engine._states.pop(cam_id, None)
+            return
+        # A live camera never returns the exact same pixels twice: an identical frame is frozen,
+        # and analyzing it again would re-upload the same detection every pass.
+        digest = hashlib.md5(frame.tobytes(), usedforsecurity=False).digest()
+        if self._last_frame_digest.get(cam_id) == digest:
+            logger.warning(f"Frame identical to the previous one for {cam_id}, skipping inference")
+            return
+        self.engine.predict(frame, cam_id)
+        self._last_frame_digest[cam_id] = digest
+
+    def _probe_day(self) -> bool:
+        """Capture one frame per camera until one shows daylight.
+
+        Stays night only when every camera answered with a night frame: a camera that
+        fails to answer says nothing, so the site wakes up and lets the inference loop
+        decide from the next fresh frames.
+        """
+        night = 0
+        for ip in self.camera_data:
+            try:
+                frame = self.camera_api_client.capture_image(ip)
+            except Exception as e:
+                logger.error(f"Failed to capture {ip} after sleep: {e}")
+                continue
+            if frame is None:
+                continue
+            if is_day_time(None, frame, "ir"):
+                return True
+            night += 1
+        return night < len(self.camera_data)
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -270,20 +325,18 @@ class SystemController:
                 for ip in self.camera_data:
                     try:
                         patrol_status = self.camera_api_client.get_patrol_status(ip)
-                        if not patrol_status.get("patrol_running", True):
+                        if patrol_status.get("patrol_running", False):
                             self.camera_api_client.stop_patrol(ip)
                             logger.info(f"Stopped patrol for camera {ip} due to night")
                     except Exception as e:
                         logger.error(f"Failed to stop patrol on camera {ip}: {e}")
 
-                logger.info("Nighttime detected by at least one camera, sleeping for 1 hour")
+                logger.info("Nighttime detected by every camera, sleeping for 1 hour")
                 time.sleep(3600)
 
                 try:
-                    ip = next(iter(self.camera_data.keys()))
-                    frame = self.camera_api_client.capture_image(ip)
-                    self.is_day = is_day_time(None, frame, "ir")
-                    logger.info(f"Re checked day and night using camera {ip}, result is_day={self.is_day}")
+                    self.is_day = self._probe_day()
+                    logger.info(f"Re checked day and night after sleep, result is_day={self.is_day}")
 
                     if self.is_day:
                         logger.info("Day detected, restarting patrols")

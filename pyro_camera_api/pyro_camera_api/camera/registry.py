@@ -56,6 +56,8 @@ CAMERA_REGISTRY: Dict[str, BaseCamera] = {}
 # Patrol threading state, later managed in camera.patrol
 PATROL_THREADS: Dict[str, threading.Thread] = {}
 PATROL_FLAGS: Dict[str, threading.Event] = {}
+# time.monotonic() of the last loop iteration of each patrol thread
+PATROL_PROGRESS: Dict[str, float] = {}
 
 # Stuck-detector threading state, later managed in camera.stuck_detector
 STUCK_CHECK_THREADS: Dict[str, threading.Thread] = {}

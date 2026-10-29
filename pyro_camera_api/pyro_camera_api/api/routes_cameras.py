@@ -238,13 +238,19 @@ def get_latest_image(
         le=100,
         description="JPEG quality that controls compression level. Higher means better quality and larger file size.",
     ),
+    max_age_s: int = Query(
+        default=300,
+        ge=1,
+        description="Images stored longer ago than this are treated as missing.",
+    ),
 ):
     """
     Return the last stored image for a given camera and pose.
 
     The camera adapter may cache captured frames per preset pose in its
     last_images mapping. This endpoint exposes that cache. If there is
-    no image for the requested pose, the endpoint returns HTTP 204 with
+    no image for the requested pose, or it is older than max_age_s (for
+    example a hung patrol thread), the endpoint returns HTTP 204 with
     an empty body.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
@@ -252,7 +258,8 @@ def get_latest_image(
         raise HTTPException(status_code=404, detail="Unknown camera")
 
     image = cam.last_images.get(pose)
-    if image is None:
+    stored_at = cam.last_image_at.get(pose)
+    if image is None or stored_at is None or time.monotonic() - stored_at > max_age_s:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     buffer = BytesIO()

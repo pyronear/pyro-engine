@@ -121,3 +121,136 @@ def test_inference_loop_skips_when_stream_active(mock_client_class, mock_engine,
 
     assert not mock_client.get_latest_image.called
     assert not mock_engine.predict.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_night_stops_running_patrols(mock_client_class, mock_engine, mock_camera_data, monkeypatch):
+    mock_client = mock_client_class.return_value
+    mock_client.get_patrol_status.return_value = {"patrol_running": True}
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = False
+
+    class NightSleepError(Exception):
+        pass
+
+    def sleep(_s):
+        raise NightSleepError
+
+    monkeypatch.setattr("pyroengine.core.time.sleep", sleep)
+    with pytest.raises(NightSleepError):
+        controller.main_loop(period=30)
+
+    mock_client.stop_patrol.assert_called_once_with("192.168.1.1")
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_night_frames_are_skipped_and_site_sleeps_only_when_all_are_night(mock_client_class, mock_engine):
+    camera_data = {
+        "192.168.1.1": {"name": "cam1", "type": "ptz", "poses": [1]},
+        "192.168.1.2": {"name": "cam2", "type": "static"},
+    }
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    night_img = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    # One camera in infrared: it is not analyzed, the other one keeps the site awake
+    mock_client.get_latest_image.side_effect = [night_img, day_img]
+    controller.inference_loop()
+    mock_engine.predict.assert_called_once_with(day_img, "192.168.1.2")
+    assert controller.is_day
+
+    mock_client.get_latest_image.side_effect = [night_img, night_img]
+    controller.inference_loop()
+    assert mock_engine.predict.call_count == 1
+    assert not controller.is_day
+
+    # No frame at all (stale cache): keep the previous state
+    mock_client.get_latest_image.side_effect = [None, None]
+    controller.inference_loop()
+    assert not controller.is_day
+
+    # One night frame and one camera without a fresh image (204): the missing camera
+    # says nothing about the light, the site must not go to sleep on one night frame
+    controller.is_day = True
+    mock_client.get_latest_image.side_effect = [night_img, None]
+    controller.inference_loop()
+    assert controller.is_day
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_wake_up_probes_every_camera(mock_client_class, mock_engine):
+    camera_data = {
+        "192.168.1.1": {"name": "cam1", "type": "static"},
+        "192.168.1.2": {"name": "cam2", "type": "static"},
+    }
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    night_img = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_client = mock_client_class.return_value
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    # The first camera stays in infrared (or is down), the second one sees daylight
+    mock_client.capture_image.side_effect = [night_img, day_img]
+    assert controller._probe_day()
+    mock_client.capture_image.side_effect = [RuntimeError("down"), day_img]
+    assert controller._probe_day()
+
+    # Every camera reports night: stay asleep
+    mock_client.capture_image.side_effect = [night_img, night_img]
+    assert not controller._probe_day()
+
+    # One night frame and one camera down: not proven night, wake up
+    mock_client.capture_image.side_effect = [night_img, RuntimeError("down")]
+    assert controller._probe_day()
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_identical_frame_is_not_analyzed_twice(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.side_effect = [
+        Image.new("RGB", (100, 100), (255, 200, 200)),
+        Image.new("RGB", (100, 100), (255, 200, 200)),
+        Image.new("RGB", (100, 100), (255, 201, 200)),
+    ]
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    for _ in range(3):
+        controller.inference_loop()
+
+    assert mock_engine.predict.call_count == 2
+    assert controller.is_day
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_failed_prediction_keeps_day_and_is_retried(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    day_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.return_value = day_img
+    mock_engine.predict.side_effect = [RuntimeError("upload failed"), None]
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+    controller.is_day = True
+
+    controller.inference_loop()
+    assert controller.is_day
+
+    controller.inference_loop()
+    assert mock_engine.predict.call_count == 2
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_night_frame_drops_detection_history(mock_client_class, mock_engine):
+    camera_data = {"192.168.1.2": {"name": "cam2", "type": "static"}}
+    mock_client = mock_client_class.return_value
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 255, 255))
+    mock_engine._states = {"192.168.1.2": {"ongoing": True}}
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+
+    controller.inference_loop()
+
+    assert "192.168.1.2" not in mock_engine._states

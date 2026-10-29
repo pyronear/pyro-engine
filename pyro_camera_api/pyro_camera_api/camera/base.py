@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
@@ -36,6 +37,12 @@ class BaseCamera(ABC):
         # PTZ cameras can use pose -> image
         # Static cameras can use -1 -> image
         self.last_images: Dict[int, Optional[Image.Image]] = {}
+        # time.monotonic() of each stored image, so stale frames can be refused
+        self.last_image_at: Dict[int, float] = {}
+
+    def store_image(self, pose: int, image: Image.Image) -> None:
+        self.last_images[pose] = image
+        self.last_image_at[pose] = time.monotonic()
 
     @abstractmethod
     def capture(self, **kwargs) -> Optional[Image.Image]:
