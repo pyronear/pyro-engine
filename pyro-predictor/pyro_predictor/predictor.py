@@ -88,9 +88,11 @@ class Predictor:
         preds: np.ndarray,
         cam_key: str,
         encoded_bytes: Optional[bytes] = None,
+        captured_at: Optional[str] = None,
     ) -> float:
         # `frame` is stored opaquely in the window and replayed at staging time; callers may
         # pass a full PIL image or any lighter payload (e.g. Engine passes a compact context crop).
+        # `captured_at` is the frame's capture time (ISO 8601) when known, else the current time is used.
         nb = self.nb_consecutive_frames
         prev_ongoing = self._states[cam_key]["ongoing"]
         # Hysteresis: once alerting, relax the threshold so the alert keeps emitting frames.
@@ -145,7 +147,7 @@ class Predictor:
             frame,
             preds,
             output_predictions.tolist(),
-            datetime.now(timezone.utc).isoformat(),
+            captured_at or datetime.now(timezone.utc).isoformat(),
             False,
             encoded_bytes,
         ))

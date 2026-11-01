@@ -125,6 +125,39 @@ def test_inference_loop_summary_counts_failures(mock_client_class, mock_engine, 
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
+def test_inference_loop_passes_capture_time(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    dummy_img = Image.new("RGB", (100, 100), (255, 200, 200))
+    dummy_img.info["captured_at"] = "2026-10-30T08:40:51+00:00"
+    mock_client.get_latest_image.return_value = dummy_img
+    mock_client.get_stream_status.return_value = {"active_streams": 0}
+
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller._last_frame_digest.clear()  # the warm-up pass in __init__ already read these frames
+    mock_engine.predict.reset_mock()
+
+    controller.inference_loop()
+
+    mock_engine.predict.assert_any_call(dummy_img, "192.168.1.1_1", captured_at="2026-10-30T08:40:51+00:00")
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_focus_finder_skips_folder_cameras(mock_client_class, mock_engine):
+    mock_client = mock_client_class.return_value
+    camera_data = {"cam": {"name": "cam", "type": "ptz", "adapter": "folder", "poses": [1]}}
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+    controller.is_day = True
+    controller.last_autofocus = None
+    mock_client.get_latest_image.reset_mock()
+
+    controller.focus_finder()
+
+    assert not mock_client.run_focus_optimization.called
+    assert not mock_client.stop_patrol.called
+    assert not mock_client.get_latest_image.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_handles_http_error(mock_client_class, mock_engine, mock_camera_data):
     mock_client = mock_client_class.return_value
     mock_error = requests.HTTPError(response=MagicMock(text="404 Not Found"))
@@ -268,7 +301,7 @@ def test_night_frames_are_skipped_and_site_sleeps_only_when_all_are_night(mock_c
     # One camera in infrared: it is not analyzed, the other one keeps the site awake
     mock_client.get_latest_image.side_effect = [night_img, day_img]
     controller.inference_loop()
-    mock_engine.predict.assert_called_once_with(day_img, "192.168.1.2")
+    mock_engine.predict.assert_called_once_with(day_img, "192.168.1.2", captured_at=None)
     assert controller.is_day
 
     # Every camera at night: the site sleeps after NIGHT_PASSES_BEFORE_SLEEP passes, not one

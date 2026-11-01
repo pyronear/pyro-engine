@@ -515,6 +515,7 @@ class Engine(Predictor):
         cam_id: Optional[str] = None,
         occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # ruff: ignore[unused-method-argument]
         fake_pred: Optional[np.ndarray] = None,
+        captured_at: Optional[str] = None,
     ) -> float:
         """Computes the confidence that the image contains wildfire cues
 
@@ -528,6 +529,7 @@ class Engine(Predictor):
                             [w1, w2]
                             [h1, h2]
                             [conf1, conf2]]
+            captured_at: capture time of the frame (ISO 8601) when it differs from now, sent as recorded_at
         Returns:
             the predicted confidence
         """
@@ -626,7 +628,7 @@ class Engine(Predictor):
         state = self._states[cam_key]
         extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
-        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
+        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes, captured_at=captured_at)
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)

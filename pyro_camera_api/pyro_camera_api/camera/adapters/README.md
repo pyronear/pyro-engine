@@ -32,6 +32,7 @@ contract is `camera/base.py`, the dispatch `camera/registry.py`, the implementat
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url` (**required**)                                             |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` (**required**) with embedded credentials                        |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url` (**required**), `headers`, `response`, `json_path`, `encoding`  |
+| `folder`                           | `FolderCamera`       | yes     | no  | no    | `type`, `id`, `pose_ids`, `folder_path` (**required**), `poses`, `max_age_s` |
 | `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos                                   |
 
 Only the fields marked **required** block registration; the others have fallbacks (`ip_address`
@@ -53,6 +54,47 @@ Picking between the generic three:
 
 Write a new adapter only for a proprietary control protocol, typically PTZ or focus, that none of
 the three can drive.
+
+## Cameras without a connection: `folder`
+
+`folder` is for cameras we cannot reach, whose images are deposited on disk. It expects:
+
+```
+{folder_path}/{id}/{pose_id}/{YYYYMMDDTHHMMSSZ}.jpg
+```
+
+- `id` and `pose_id` are the platform identifiers, from `id` and `pose_ids` in `credentials.json`.
+- The timestamp is the capture time in UTC. It is sent to the platform as `recorded_at`.
+- Files must appear atomically: write under another name such as `.tmp`, then rename on the same
+  filesystem. Any other file name is ignored.
+
+The adapter knows only this format. Whoever deposits the images can write it directly, or an
+ingester upstream can convert them. An ingester is usually needed, since something has to map the
+source's camera and preset names to platform identifiers. Retention is also left to that side: the
+adapter only reads, so mount the folder read-only and purge it separately.
+
+`credentials.json` keeps its usual structure, for `ptz` and `static` cameras alike. Use any key
+without `_` instead of an IP, and set `CAM_USER` and `CAM_PWD` even if unused, `src/run.py` requires them:
+
+```json
+"cam-01": {
+  "adapter": "folder", "type": "ptz", "name": "cam-01", "id": 42, "token": "...",
+  "poses": [8], "pose_ids": [317],
+  "folder_path": "/srv/pyro/frames", "max_age_s": 1200
+}
+```
+
+Frames go through a dedicated `folder_loop` rather than the patrol or static loop, because a pose
+with no new image is normal here. Each pose holds one frame at a time, the oldest unread one, and
+`/latest_image` serves it once, then answers 204 until the next one. The engine therefore skips a
+camera with nothing new, without inference or heartbeat, and never counts one image twice.
+
+- `max_age_s` (default 1200) is the age above which frames are skipped. To catch up after an outage,
+  raise it, restart, wait for the backlog to drain, then lower it and restart.
+- The read position is kept in memory. A restart reads again everything under `max_age_s`, so a
+  restart during a catch-up starts it over and sends its detections again.
+- Caught-up detections carry their real `recorded_at`, but the platform treats them as new: they
+  appear in the recent feed and can notify.
 
 ## The capture() contract
 

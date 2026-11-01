@@ -137,7 +137,8 @@ class SystemController:
             logger.info("Hourly autofocus triggered after idle period")
 
             for ip, cam in self.camera_data.items():
-                if cam.get("type") != "static":
+                # Folder cameras have no device to focus
+                if cam.get("type") != "static" and cam.get("adapter") != "folder":
                     poses = cam.get("poses", [])
                     if not poses:
                         continue
@@ -336,7 +337,7 @@ class SystemController:
                 self.engine._states.pop(cam_id, None)
             return None
         self._night_frames[cam_id] = 0
-        conf = float(self.engine.predict(frame, cam_id))
+        conf = float(self.engine.predict(frame, cam_id, captured_at=frame.info.get("captured_at")))
         # Stored after predict, so a failed prediction is retried on the next pass.
         self._last_frame_digest[cam_id] = digest
         return conf

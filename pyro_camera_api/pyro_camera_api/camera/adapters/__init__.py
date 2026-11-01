@@ -1,5 +1,6 @@
 # pyro_camera_api/camera/adapters/__init__.py
 from .ctronics import CTronicsCamera
+from .folder import FolderCamera
 from .hikvision import HikvisionCamera
 from .linovision import LinovisionCamera
 from .reolink import ReolinkCamera
@@ -9,6 +10,7 @@ from .url import URLCamera
 
 __all__ = [
     "CTronicsCamera",
+    "FolderCamera",
     "HikvisionCamera",
     "LinovisionCamera",
     "RTSPCamera",
