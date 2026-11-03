@@ -5,6 +5,7 @@
 
 import io
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -70,14 +71,18 @@ def test_health(client):
     assert c.get("/health").json() == {"status": "ok", "model_version": "test"}
 
 
-def test_health_is_503_when_worker_dead_or_stuck(client, monkeypatch):
+def test_health_exits_when_worker_dead_or_stuck(client, monkeypatch):
     c, _ = client
     store = c.app.state.jobs
-    monkeypatch.setattr(store, "_running_since", 0.0)  # scoring "since boot": stuck
-    assert c.get("/health").status_code == 503
+    exits = []
+    monkeypatch.setattr(main.os, "_exit", exits.append)  # docker restarts the service on exit
+    monkeypatch.setattr(store, "_running_since", time.monotonic() - jobs.STUCK_AFTER - 1)  # stuck
+    c.get("/health")
+    assert exits == [1]
     monkeypatch.setattr(store, "_running_since", None)
     monkeypatch.setattr(store, "_worker", SimpleNamespace(is_alive=lambda: False))
-    assert c.get("/health").status_code == 503
+    c.get("/health")
+    assert exits == [1, 1]
 
 
 def test_job_lifecycle_and_conversion(client):

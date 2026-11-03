@@ -75,7 +75,9 @@ app = FastAPI(title="Pyro Temporal API", lifespan=lifespan)
 def health(request: Request):
     jobs = getattr(request.app.state, "jobs", None)
     if jobs is not None and not jobs.healthy():
-        raise HTTPException(status_code=503, detail="temporal worker dead or stuck")
+        # `restart: always` ignores an unhealthy container: exit so docker restarts the service.
+        logger.error("temporal worker dead or stuck, exiting for docker to restart the service")
+        os._exit(1)
     return {"status": "ok", "model_version": getattr(request.app.state, "model_version", None)}
 
 
