@@ -22,6 +22,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent / "pyro_camera_api"))
 from pyro_camera_api_client.client import PyroCameraAPIClient
 
 from .engine import Engine
+from .zoom_capture import RETURN_MARGIN_S, ZoomCapture
 
 __all__ = ["SystemController", "is_day_time"]
 
@@ -76,9 +77,12 @@ class SystemController:
         camera_data: Dict[str, Dict[str, Any]],
         pyro_camera_api_url: str,
         heartbeat_file: Optional[str] = None,
+        zoom_capture: Optional[ZoomCapture] = None,
     ) -> None:
         self.engine = engine
         self.camera_data = camera_data
+        # Temporary R&D: closer look at validated detections, uploaded to S3 (see zoom_capture.py)
+        self.zoom_capture = zoom_capture
         self.is_day = True
         self.last_autofocus: Optional[datetime] = None
         # Touched on every loop so container liveness does not depend on log content.
@@ -185,11 +189,32 @@ class SystemController:
             logger.error("[%s] Could not get image for pose %s: %s", ip, pose, e)
             return None
 
-    def inference_loop(self) -> None:
+    def _maybe_zoom_capture(
+        self, ip: str, pose: int, cam: Dict[str, Any], cam_id: str, frame: Image.Image, deadline: float
+    ) -> None:
+        """Start a zoom capture job when the engine validated detections on a Reolink PTZ pose."""
+        if self.zoom_capture is None:
+            return
+        adapter = str(cam.get("adapter") or cam.get("brand") or "").lower()
+        if not adapter.startswith("reolink"):
+            return
+        state = self.engine._states.get(cam_id)
+        if not state or not state["ongoing"] or not state["last_predictions"]:
+            return
+        # Validated bboxes of the latest frame: normalized [x1, y1, x2, y2, conf]
+        bboxes = state["last_predictions"][-1][2]
+        if bboxes:
+            self.zoom_capture.trigger(self.camera_api_client, ip, pose, cam["name"], frame, bboxes, deadline)
+
+    def inference_loop(self, deadline: Optional[float] = None) -> None:
         """
         Run one inference pass on all cameras and poses.
 
         This skips processing entirely if a stream is currently active.
+
+        Args:
+            deadline (float, optional): time.monotonic() value before which zoom capture jobs must
+                return the camera to its patrol; zoom capture is skipped when None.
         """
         # Liveness, not image flow: the healthcheck kills a stale engine, and restarting it
         # would not bring back an offline camera (the camera API reports those instead).
@@ -226,6 +251,8 @@ class SystemController:
                     self.is_day = is_day_time(None, frame, "ir")
                     conf = float(self.engine.predict(frame, cam_id))
                     analyzed += 1
+                    if deadline is not None and is_ptz:
+                        self._maybe_zoom_capture(ip, pose, cam, cam_id, frame, deadline)
                     max_conf = max(max_conf, conf)
                     # The predictor applies hysteresis (0.8x threshold while an event is
                     # ongoing), so read its verdict instead of re-deriving the threshold:
@@ -308,6 +335,7 @@ class SystemController:
         """
         while True:
             start_ts = time.time()
+            start_mono = time.monotonic()
 
             if not self.is_day:
                 for ip in self.camera_data:
@@ -346,7 +374,14 @@ class SystemController:
                     self.focus_finder()
 
                 self.check_and_restart_patrol()
-                self.inference_loop()
+                if self.zoom_capture is None:
+                    self.inference_loop()
+                else:
+                    # Zoom jobs run in parallel with inference and must hand the camera back to
+                    # the patrol before the next loop: they abort at the deadline, then restore.
+                    deadline = start_mono + period - RETURN_MARGIN_S
+                    self.inference_loop(deadline)
+                    self.zoom_capture.wait(max(0.0, deadline + RETURN_MARGIN_S + 5.0 - time.monotonic()))
 
                 loop_time = time.time() - start_ts
                 sleep_time = max(period - loop_time, 0)
