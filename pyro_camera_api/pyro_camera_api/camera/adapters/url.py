@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from io import BytesIO
 from typing import Optional, Tuple
 from urllib.parse import urlparse, urlunparse
@@ -17,6 +16,7 @@ from PIL import Image
 from requests.auth import HTTPDigestAuth
 
 from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.utils.redact import redact_url
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +40,7 @@ class URLCamera(BaseCamera):
         """
         Mask credentials in URL for safe logging.
         """
-        parsed = urlparse(url)
-        # Drop user info from netloc
-        netloc = parsed.netloc.split("@")[-1]
-        cleaned = parsed._replace(netloc=netloc)
-        redacted = urlunparse(cleaned)
-        # Mask query credentials
-        redacted = re.sub(r"(usr|user|username)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
-        return re.sub(r"(pwd|pass|password)=([^&]+)", r"\1=***", redacted, flags=re.IGNORECASE)
+        return redact_url(url)
 
     @staticmethod
     def _strip_credentials(parsed) -> Tuple[str, Optional[Tuple[str, str]]]:

@@ -11,7 +11,12 @@ import time
 
 from dotenv import load_dotenv
 
+from pyroengine.logs import setup_logging
 from pyroengine.sensors import ReolinkCamera
+
+# Standalone script: nothing else configures logging, without this the INFO output
+# from pyroengine.sensors is silently dropped.
+setup_logging()
 
 # Load credentials from .env file
 load_dotenv()

@@ -20,8 +20,6 @@ from requests.adapters import HTTPAdapter
 __all__ = ["ReolinkCamera"]
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
