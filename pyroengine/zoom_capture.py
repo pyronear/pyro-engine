@@ -40,14 +40,15 @@ MAX_BBOXES = 3
 RETURN_MARGIN_S = 6.0
 # stop_patrol only flags the patrol thread; let its in-flight pose move finish.
 PATROL_STOP_SETTLE_S = 1.5
+ZOOM_RESET_ATTEMPTS = 2
 JPEG_QUALITY = 95
 
 # (key, data, content_type) -> None
 Uploader = Callable[[str, bytes, str], None]
 
 
-class _DeadlineError(Exception):
-    """Raised before a PTZ step when the loop deadline is already past."""
+class _AbortError(Exception):
+    """Raised before a PTZ step when the deadline is past or a stream took the camera."""
 
 
 def s3_uploader_from_env() -> Optional[Tuple[Uploader, str]]:
@@ -59,8 +60,10 @@ def s3_uploader_from_env() -> Optional[Tuple[Uploader, str]]:
     if not bucket:
         return None
     import boto3  # imported lazily: R&D-only dependency
+    from botocore.config import Config
 
-    s3 = boto3.client("s3")
+    # Short timeouts: a job holding a camera must never wait minutes on a dead uplink.
+    s3 = boto3.client("s3", config=Config(connect_timeout=5, read_timeout=15, retries={"max_attempts": 2}))
     prefix = os.environ.get("S3_PREFIX", "").strip("/")
 
     def upload(key: str, data: bytes, content_type: str) -> None:
@@ -83,13 +86,12 @@ def crop_square(frame: Image.Image, bbox: Sequence[float], side: int = CROP_SIDE
 
 
 class ZoomCapture:
-    """Runs one capture job per trigger in a background thread, at most one PTZ sequence per camera."""
+    """Runs one capture job per trigger in a background thread, at most one job per camera."""
 
     def __init__(self, upload: Uploader, prefix: str = "") -> None:
         self.upload = upload
         self.prefix = f"{prefix}/" if prefix else ""
-        self._ptz_busy: Dict[str, threading.Lock] = {}
-        self._threads: List[threading.Thread] = []
+        self._jobs: Dict[str, threading.Thread] = {}
 
     def trigger(
         self,
@@ -100,25 +102,35 @@ class ZoomCapture:
         frame: Image.Image,
         bboxes: Sequence[Sequence[float]],
         deadline: float,
+        should_abort: Callable[[], bool] = lambda: False,
     ) -> None:
-        """Crop the 4K frame now (so it can be dropped) and run uploads + PTZ sequence in a thread."""
+        """Crop the 4K frame now (so it can be dropped) and run uploads + PTZ sequence in a thread.
+
+        Skipped while the previous job of this camera is still running, so a slow uplink never
+        piles up threads and crops on the device.
+        """
+        job = self._jobs.get(ip)
+        if job is not None and job.is_alive():
+            logger.warning(f"[{ip}] zoom capture: previous job still running, skipping pose {pose}")
+            return
         best = sorted(bboxes, key=operator.itemgetter(4), reverse=True)[:MAX_BBOXES]
         if not best:
             return
         crops = [crop_square(frame, b) for b in best]
-        self._ptz_busy.setdefault(ip, threading.Lock())
-        thread = threading.Thread(
-            target=self._run, args=(client, ip, pose, name, best, crops, deadline), daemon=True, name=f"zoom-{ip}"
+        job = threading.Thread(
+            target=self._run,
+            args=(client, ip, pose, name, best, crops, deadline, should_abort),
+            daemon=True,
+            name=f"zoom-{ip}",
         )
-        self._threads = [t for t in self._threads if t.is_alive()]
-        self._threads.append(thread)
-        thread.start()
+        self._jobs[ip] = job
+        job.start()
 
     def wait(self, timeout: float) -> None:
         """Block until every job is done or `timeout` seconds have elapsed."""
         end = time.monotonic() + timeout
-        for thread in self._threads:
-            thread.join(max(0.0, end - time.monotonic()))
+        for job in list(self._jobs.values()):
+            job.join(max(0.0, end - time.monotonic()))
 
     def _put(self, key: str, data: bytes, content_type: str) -> str:
         self.upload(key, data, content_type)
@@ -133,6 +145,7 @@ class ZoomCapture:
         bboxes: List[Sequence[float]],
         crops: List[bytes],
         deadline: float,
+        should_abort: Callable[[], bool],
     ) -> None:
         ts = datetime.now(timezone.utc)
         base = f"{self.prefix}{name}/{ts:%Y-%m-%d}/{ts:%Y%m%dT%H%M%SZ}_pose{pose}"
@@ -151,13 +164,10 @@ class ZoomCapture:
         }
         try:
             manifest["crops"] = [self._put(f"{base}_crop{i}.jpg", data, "image/jpeg") for i, data in enumerate(crops)]
-            if not self._ptz_busy[ip].acquire(blocking=False):
-                manifest["status"] = "busy"
-            else:
-                try:
-                    self._ptz_sequence(client, ip, pose, bboxes[0], base, deadline, manifest)
-                finally:
-                    self._ptz_busy[ip].release()
+            zoom_crop = self._ptz_sequence(client, ip, pose, bboxes[0], deadline, should_abort, manifest)
+            # Uploaded only once the camera is back on patrol: S3 must never hold the camera.
+            if zoom_crop is not None:
+                manifest["zoom_crop"] = self._put(f"{base}_zoom{ZOOM_LEVEL}.jpg", zoom_crop, "image/jpeg")
         except Exception as e:  # noqa: BLE001
             logger.error(f"[{ip}] zoom capture failed: {e}")
             manifest["status"] = "error"
@@ -174,15 +184,18 @@ class ZoomCapture:
         ip: str,
         pose: int,
         bbox: Sequence[float],
-        base: str,
         deadline: float,
+        should_abort: Callable[[], bool],
         manifest: Dict[str, Any],
-    ) -> None:
+    ) -> Optional[bytes]:
+        """Drive the camera onto the bbox and return the zoomed centre crop, or None when aborted."""
         timings = manifest["timings"]
 
         def step(label: str, fn: Callable[[], Any]) -> Any:  # noqa: ANN401
             if time.monotonic() > deadline:
-                raise _DeadlineError(label)
+                raise _AbortError(f"deadline before {label}")
+            if should_abort():
+                raise _AbortError(f"stream active before {label}")
             t0 = time.monotonic()
             result = fn()
             timings[label] = round(time.monotonic() - t0, 2)
@@ -190,6 +203,7 @@ class ZoomCapture:
 
         click_x, click_y = (bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0
         manifest["click"] = [round(click_x, 4), round(click_y, 4)]
+        zoom_crop: Optional[bytes] = None
         patrol_stopped = False
         try:
             step("stop_patrol", lambda: client.stop_patrol(ip))
@@ -201,24 +215,31 @@ class ZoomCapture:
             step("click_to_move", lambda: client.click_to_move(ip, click_x, click_y))
             step("zoom", lambda: client.zoom(ip, ZOOM_LEVEL))
             zoomed = step("capture", lambda: client.capture_image(ip))
-            data = crop_square(zoomed, (0.5, 0.5, 0.5, 0.5))
-            manifest["zoom_crop"] = step(
-                "upload", lambda: self._put(f"{base}_zoom{ZOOM_LEVEL}.jpg", data, "image/jpeg")
-            )
+            zoom_crop = crop_square(zoomed, (0.5, 0.5, 0.5, 0.5))
             manifest["status"] = "done"
-        except _DeadlineError as e:
-            logger.warning(f"[{ip}] zoom capture: deadline reached before {e}")
-            manifest["status"] = f"deadline before {e}"
+        except _AbortError as e:
+            logger.warning(f"[{ip}] zoom capture: {e}")
+            manifest["status"] = str(e)
         finally:
             if patrol_stopped:
-                for label, fn in (
-                    ("zoom_reset", lambda: client.zoom(ip, 0)),
-                    ("start_patrol", lambda: client.start_patrol(ip)),
-                ):
-                    t0 = time.monotonic()
-                    try:
-                        fn()
-                        timings[label] = round(time.monotonic() - t0, 2)
-                    except Exception as e:  # noqa: BLE001
-                        logger.error(f"[{ip}] zoom capture {label} failed: {e}")
-                        manifest["errors"].append(f"{label}: {e}")
+                self._restore(client, ip, manifest)
+        return zoom_crop
+
+    @staticmethod
+    def _restore(client: PyroCameraAPIClient, ip: str, manifest: Dict[str, Any]) -> None:
+        """Zoom back to 0 (retried: a zoomed patrol would blind the detector) and restart the patrol."""
+        plan = [("zoom_reset", lambda: client.zoom(ip, 0))] * ZOOM_RESET_ATTEMPTS + [
+            ("start_patrol", lambda: client.start_patrol(ip))
+        ]
+        done = set()
+        for label, fn in plan:
+            if label in done:
+                continue
+            t0 = time.monotonic()
+            try:
+                fn()
+                manifest["timings"][label] = round(time.monotonic() - t0, 2)
+                done.add(label)
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"[{ip}] zoom capture {label} failed: {e}")
+                manifest["errors"].append(f"{label}: {e}")

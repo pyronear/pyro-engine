@@ -204,7 +204,10 @@ class SystemController:
         # Validated bboxes of the latest frame: normalized [x1, y1, x2, y2, conf]
         bboxes = state["last_predictions"][-1][2]
         if bboxes:
-            self.zoom_capture.trigger(self.camera_api_client, ip, pose, cam["name"], frame, bboxes, deadline)
+            # A stream starting mid-job aborts the PTZ steps: live viewing keeps priority.
+            self.zoom_capture.trigger(
+                self.camera_api_client, ip, pose, cam["name"], frame, bboxes, deadline, self._any_stream_active
+            )
 
     def inference_loop(self, deadline: Optional[float] = None) -> None:
         """

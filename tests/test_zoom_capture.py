@@ -17,19 +17,30 @@ def no_settle(monkeypatch):
 
 
 @pytest.fixture
+def events():
+    """Upload keys and PTZ calls in the order they happened."""
+    return []
+
+
+@pytest.fixture
 def uploads():
     return {}
 
 
 @pytest.fixture
-def capture(uploads):
-    return ZoomCapture(lambda key, data, _ct: uploads.__setitem__(key, data), prefix="rnd")
+def capture(uploads, events):
+    def upload(key, data, _ct):
+        uploads[key] = data
+        events.append(key)
+
+    return ZoomCapture(upload, prefix="rnd")
 
 
 @pytest.fixture
-def client():
+def client(events):
     c = MagicMock()
     c.capture_image.return_value = Image.new("RGB", (3840, 2160), (10, 20, 30))
+    c.start_patrol.side_effect = lambda _ip: events.append("start_patrol")
     return c
 
 
@@ -51,7 +62,7 @@ def test_crop_square_grows_with_large_bbox():
     assert w == h == 2160  # 1920 * 1.2 capped by the frame height
 
 
-def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads):
+def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads, events):
     frame = Image.new("RGB", (3840, 2160))
     bboxes = [[0.1, 0.1, 0.2, 0.2, 0.5], [0.6, 0.6, 0.7, 0.8, 0.9]]
     capture.trigger(client, "10.0.0.1", 2, "cam", frame, bboxes, time.monotonic() + 60)
@@ -71,6 +82,8 @@ def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads):
     assert manifest["bboxes"][0][4] == 0.9
     assert manifest["zoom_crop"].endswith("_zoom10.jpg")
     assert Image.open(io.BytesIO(uploads[manifest["zoom_crop"]])).size == (1024, 1024)
+    # The zoomed image is uploaded only once the camera is back on patrol
+    assert events.index("start_patrol") < events.index(manifest["zoom_crop"])
 
 
 def test_deadline_passed_uploads_crops_only(capture, client, uploads):
@@ -82,6 +95,20 @@ def test_deadline_passed_uploads_crops_only(capture, client, uploads):
     _, manifest = _manifest(uploads)
     assert manifest["status"] == "deadline before stop_patrol"
     assert len(manifest["crops"]) == 1
+
+
+def test_stream_aborts_sequence_and_restores(capture, client, uploads):
+    frame = Image.new("RGB", (1920, 1080))
+    stream = iter([False, False, True])  # stream shows up before click_to_move
+    capture.trigger(
+        client, "10.0.0.1", 1, "cam", frame, [[0.4, 0.4, 0.5, 0.5, 0.7]], time.monotonic() + 60, lambda: next(stream)
+    )
+    capture.wait(5)
+
+    names = [c[0] for c in client.method_calls]
+    assert names == ["stop_patrol", "goto_preset", "zoom", "start_patrol"]
+    _, manifest = _manifest(uploads)
+    assert manifest["status"] == "stream active before click_to_move"
 
 
 def test_error_mid_sequence_still_resets_zoom_and_patrol(capture, client, uploads):
@@ -98,17 +125,32 @@ def test_error_mid_sequence_still_resets_zoom_and_patrol(capture, client, upload
     assert "409 busy" in manifest["errors"][0]
 
 
-def test_busy_camera_skips_ptz_but_uploads_crops(capture, client, uploads):
+def test_zoom_reset_is_retried_before_patrol_restart(capture, client, uploads):
+    client.zoom.side_effect = [None, RuntimeError("timeout"), None]
     frame = Image.new("RGB", (1920, 1080))
-    capture._ptz_busy["10.0.0.1"] = threading.Lock()
-    capture._ptz_busy["10.0.0.1"].acquire()
     capture.trigger(client, "10.0.0.1", 1, "cam", frame, [[0.4, 0.4, 0.5, 0.5, 0.7]], time.monotonic() + 60)
     capture.wait(5)
 
-    assert not client.method_calls
+    assert [c.args[1] for c in client.zoom.call_args_list] == [10, 0, 0]
+    names = [c[0] for c in client.method_calls]
+    assert names[-1] == "start_patrol"
     _, manifest = _manifest(uploads)
-    assert manifest["status"] == "busy"
-    assert len(manifest["crops"]) == 1
+    assert manifest["status"] == "done"
+    assert manifest["errors"] == ["zoom_reset: timeout"]
+
+
+def test_trigger_skipped_while_previous_job_runs(capture, client, uploads):
+    gate = threading.Event()
+    client.stop_patrol.side_effect = lambda _ip: gate.wait(5)
+    frame = Image.new("RGB", (1920, 1080))
+    capture.trigger(client, "10.0.0.1", 1, "cam", frame, [[0.4, 0.4, 0.5, 0.5, 0.7]], time.monotonic() + 60)
+    capture.trigger(client, "10.0.0.1", 2, "cam", frame, [[0.4, 0.4, 0.5, 0.5, 0.7]], time.monotonic() + 60)
+    gate.set()
+    capture.wait(5)
+
+    assert client.stop_patrol.call_count == 1
+    assert len([k for k in uploads if k.endswith("_manifest.json")]) == 1
+    assert len([k for k in uploads if "_crop" in k]) == 1
 
 
 @patch("pyroengine.core.time.sleep", lambda *_a, **_k: None)
@@ -143,6 +185,7 @@ def test_inference_loop_triggers_zoom_capture_for_reolink_only(mock_client_class
     args = zoom_capture.trigger.call_args.args
     assert args[1:4] == ("10.0.0.1", 1, "reo")
     assert args[5] == [[0.1, 0.1, 0.2, 0.2, 0.8]]
+    assert args[7] == controller._any_stream_active
 
     zoom_capture.trigger.reset_mock()
     controller.inference_loop()  # no deadline: zoom capture disabled
