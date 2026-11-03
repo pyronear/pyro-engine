@@ -41,6 +41,9 @@ services:
       context: .
     image: pyronear/pyro-engine:${PYRO_ENGINE_VERSION:-latest}
     container_name: engine
+    # Load .env for the optional S3_* / AWS_* zoom capture variables
+    env_file:
+      - .env
     environment:
       API_URL: ${API_URL}
       CAM_USER: ${CAM_USER}
