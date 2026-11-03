@@ -239,6 +239,10 @@ class SystemController:
             # Static cameras expose a single frame under the conventional pose -1.
             poses = cam.get("poses", []) if is_ptz else [-1]
 
+            if self.zoom_capture is not None and self.zoom_capture.images_stale(ip):
+                logger.info("[%s] Patrol just restarted after a zoom capture, skipping it this loop", ip)
+                continue
+
             for pose in poses:
                 if self._any_stream_active():
                     logger.info("Stream turned on during loop, stopping inference immediately")

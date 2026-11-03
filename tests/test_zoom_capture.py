@@ -84,6 +84,9 @@ def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads, eve
     assert Image.open(io.BytesIO(uploads[manifest["zoom_crop"]])).size == (1024, 1024)
     # The zoomed image is uploaded only once the camera is back on patrol
     assert events.index("start_patrol") < events.index(manifest["zoom_crop"])
+    # The restarted patrol has not refreshed the pose images yet
+    assert capture.images_stale("10.0.0.1")
+    assert not capture.images_stale("10.0.0.9")
 
 
 def test_deadline_passed_uploads_crops_only(capture, client, uploads):
@@ -177,6 +180,7 @@ def test_inference_loop_triggers_zoom_capture_for_reolink_only(mock_client_class
         "10.0.0.2": {"name": "lino", "type": "ptz", "adapter": "linovision", "poses": [1]},
     }
     zoom_capture = MagicMock()
+    zoom_capture.images_stale.return_value = False
     controller = SystemController(engine, camera_data, "http://fake.url", zoom_capture=zoom_capture)
 
     controller.inference_loop(deadline=time.monotonic() + 30)
@@ -189,4 +193,11 @@ def test_inference_loop_triggers_zoom_capture_for_reolink_only(mock_client_class
 
     zoom_capture.trigger.reset_mock()
     controller.inference_loop()  # no deadline: zoom capture disabled
+    zoom_capture.trigger.assert_not_called()
+
+    # A camera whose patrol just restarted is skipped for the whole loop
+    engine.predict.reset_mock()
+    zoom_capture.images_stale.side_effect = lambda ip: ip == "10.0.0.1"
+    controller.inference_loop(deadline=time.monotonic() + 30)
+    assert [c.args[1] for c in engine.predict.call_args_list] == ["10.0.0.2_1"]
     zoom_capture.trigger.assert_not_called()

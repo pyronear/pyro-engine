@@ -40,6 +40,8 @@ MAX_BBOXES = 3
 RETURN_MARGIN_S = 6.0
 # stop_patrol only flags the patrol thread; let its in-flight pose move finish.
 PATROL_STOP_SETTLE_S = 1.5
+# Seconds a restarted patrol needs to refresh every pose image (4 poses, ~2.5 s each).
+PATROL_PASS_S = 12.0
 ZOOM_RESET_ATTEMPTS = 2
 JPEG_QUALITY = 95
 
@@ -92,6 +94,8 @@ class ZoomCapture:
         self.upload = upload
         self.prefix = f"{prefix}/" if prefix else ""
         self._jobs: Dict[str, threading.Thread] = {}
+        # camera ip -> time.monotonic() of the last patrol restart by a job
+        self._patrol_restarted_at: Dict[str, float] = {}
 
     def trigger(
         self,
@@ -125,6 +129,14 @@ class ZoomCapture:
         )
         self._jobs[ip] = job
         job.start()
+
+    def images_stale(self, ip: str) -> bool:
+        """True while a patrol restarted by a job has not yet refreshed every pose image.
+
+        Analysing the camera before that would replay the previous loop's images: duplicated
+        frames in the sliding window and in the alert.
+        """
+        return time.monotonic() - self._patrol_restarted_at.get(ip, float("-inf")) < PATROL_PASS_S
 
     def wait(self, timeout: float) -> None:
         """Block until every job is done or `timeout` seconds have elapsed."""
@@ -225,8 +237,7 @@ class ZoomCapture:
                 self._restore(client, ip, manifest)
         return zoom_crop
 
-    @staticmethod
-    def _restore(client: PyroCameraAPIClient, ip: str, manifest: Dict[str, Any]) -> None:
+    def _restore(self, client: PyroCameraAPIClient, ip: str, manifest: Dict[str, Any]) -> None:
         """Zoom back to 0 (retried: a zoomed patrol would blind the detector) and restart the patrol."""
         plan = [("zoom_reset", lambda: client.zoom(ip, 0))] * ZOOM_RESET_ATTEMPTS + [
             ("start_patrol", lambda: client.start_patrol(ip))
@@ -240,6 +251,8 @@ class ZoomCapture:
                 fn()
                 manifest["timings"][label] = round(time.monotonic() - t0, 2)
                 done.add(label)
+                if label == "start_patrol":
+                    self._patrol_restarted_at[ip] = time.monotonic()
             except Exception as e:  # noqa: BLE001
                 logger.error(f"[{ip}] zoom capture {label} failed: {e}")
                 manifest["errors"].append(f"{label}: {e}")
