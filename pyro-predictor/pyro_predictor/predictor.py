@@ -197,7 +197,9 @@ class Predictor:
         # A detection is worth an INFO line, a quiet frame is not. verbose=False keeps the
         # caller's INFO stream clean without touching any global logger level.
         if conf > self.conf_thresh and self.verbose:
-            logger.info("[%s] Wildfire detected (confidence: %.2f%%)", cam_key, conf * 100)
+            logger.info(
+                "[%s] Wildfire detected (confidence: %.2f%%) bbox: %s", cam_key, conf * 100, np.round(preds, 3).tolist()
+            )
         else:
             logger.debug("[%s] Wildfire=%s (confidence: %.2f%%)", cam_key, conf > self.conf_thresh, conf * 100)
 

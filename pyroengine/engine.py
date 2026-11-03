@@ -346,7 +346,9 @@ class Engine(Predictor):
 
         # Log analysis result: a detection is always worth an INFO line, a quiet frame is not.
         if conf > self.conf_thresh:
-            logger.info("[%s] Wildfire detected (confidence: %.2f%%)", cam_key, conf * 100)
+            logger.info(
+                "[%s] Wildfire detected (confidence: %.2f%%) bbox: %s", cam_key, conf * 100, np.round(preds, 3).tolist()
+            )
         else:
             logger.debug("[%s] No wildfire (confidence: %.2f%%)", cam_key, conf * 100)
 
