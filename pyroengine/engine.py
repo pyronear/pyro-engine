@@ -363,15 +363,23 @@ class Engine(Predictor):
             return bboxes, None
         kept, scores = [], []
         for box in bboxes:
-            probs = [p for tube, p in state["temporal_tubes"] if self._overlaps(box, tube)]
+            probs = [p for tube, p in state["temporal_tubes"] if self._coverage(box, tube) >= 0.5]
             if probs:
                 kept.append(box)
                 scores.append(round(max(probs), 3))
         return kept, scores
 
     @staticmethod
-    def _overlaps(a: Sequence[float], b: Sequence[float]) -> bool:
-        return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+    def _coverage(box: Sequence[float], tube: Sequence[float]) -> float:
+        """Fraction of `box` inside `tube` (the union box of a tube over its frames).
+
+        Not IoU: a small legitimate box inside a long tube has a tiny IoU but is fully covered,
+        while a false positive merely touching the tube is barely covered.
+        """
+        w = min(box[2], tube[2]) - max(box[0], tube[0])
+        h = min(box[3], tube[3]) - max(box[1], tube[1])
+        area = (box[2] - box[0]) * (box[3] - box[1])
+        return max(w, 0.0) * max(h, 0.0) / area if area > 0 else 0.0
 
     def heartbeat(self, cam_id: str, timeout: Optional[float] = None) -> Response:
         """Updates last ping of device"""

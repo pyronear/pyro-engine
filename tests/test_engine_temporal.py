@@ -169,6 +169,16 @@ def test_boxes_outside_scored_tubes_are_dropped(tmp_path, mock_wildfire_image):
     assert [[b[:4] for b in a["bboxes"]] for a in engine._alerts] == [[BOX]] * 2
     assert _scores(engine) == [[0.3], [0.3]]
 
+    # a tube merely touching the box does not lend it its score, a tube covering the box does
+    touching = [0.48, 0.48, 0.9, 0.9]
+    engine = _engine(tmp_path, FakeTemporal([done((touching, 0.9))] * 2))
+    _fire(engine, mock_wildfire_image, n=3)
+    assert all(a["bboxes"] == [] for a in engine._alerts)
+    covering = [0.3, 0.3, 0.9, 0.9]
+    engine = _engine(tmp_path, FakeTemporal([done((covering, 0.9))] * 2))
+    _fire(engine, mock_wildfire_image, n=3)
+    assert _scores(engine) == [[0.9], [0.9]]
+
 
 @pytest.mark.parametrize(
     "temporal",
