@@ -5,6 +5,7 @@
 
 import io
 import json
+import os
 import time
 from types import SimpleNamespace
 
@@ -74,8 +75,8 @@ def test_health(client):
 def test_health_exits_when_worker_dead_or_stuck(client, monkeypatch):
     c, _ = client
     store = c.app.state.jobs
-    exits = []
-    monkeypatch.setattr(main.os, "_exit", exits.append)  # docker restarts the service on exit
+    exits: list[int] = []
+    monkeypatch.setattr(os, "_exit", exits.append)  # docker restarts the service on exit
     monkeypatch.setattr(store, "_running_since", time.monotonic() - jobs.STUCK_AFTER - 1)  # stuck
     c.get("/health")
     assert exits == [1]
