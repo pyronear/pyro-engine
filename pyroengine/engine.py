@@ -134,7 +134,8 @@ class Engine(Predictor):
         # pose are scored by the temporal service every round. Boxes covered by a tube scoring
         # above `temporal_min_score` are uploaded with that probability, the API applies its own
         # threshold; the other boxes are dropped. A job still pending after `temporal_job_timeout`
-        # seconds fails open (frames sent without scores, the API scores them itself).
+        # seconds fails open: frames are sent without scores. The API then scores a sequence the
+        # device never scored; a sequence already scored keeps its last device verdict.
         # Set before super().__init__, which already builds the per-camera states.
         self.temporal = TemporalClient(temporal_api_url) if temporal_api_url else None
         self.temporal_window = temporal_window
@@ -284,7 +285,9 @@ class Engine(Predictor):
         score. Frames captured after a submission wait for the next verdict. A verdict with no tube
         above ``temporal_min_score`` stages nothing; once the event ended it drops the held frames. A
         transport error, a failed job or a job pending longer than ``temporal_job_timeout`` fails
-        open: the rest of the event goes out without scores.
+        open: the rest of the event goes out without scores. The API scores a sequence the device
+        never scored; one already scored keeps its last device verdict, so a fail-open after a
+        score below the API threshold leaves it unvalidated until a higher score or the event's end.
         """
         state = self._states[cam_key]
         if state["temporal_bypass"] or self.temporal is None:
@@ -355,8 +358,9 @@ class Engine(Predictor):
     def _temporal_scores(self, cam_key: str, bboxes: list) -> Tuple[list, Optional[List[float]]]:
         """Keep the boxes covered by a scored tube and return them with one probability each.
 
-        Without temporal scoring (disabled or failed open) every box is kept and no score is sent,
-        so the API scores the sequence itself.
+        Without temporal scoring (disabled or failed open) every box is kept and no score is sent:
+        the API scores a sequence it never got a device score for, and keeps the last device
+        verdict of one it did.
         """
         state = self._states[cam_key]
         if self.temporal is None or state["temporal_bypass"]:
@@ -868,7 +872,7 @@ class Engine(Predictor):
             "bboxes": bboxes,
             "jpeg_bytes": jpeg_bytes,
             "crop_boxes": crop_boxes,
-            "temporal_scores": temporal_scores,  # one per bbox, None when the API must score itself
+            "temporal_scores": temporal_scores,  # one per bbox, None when no device score is sent
         })
 
     def _process_alerts(self) -> None:
