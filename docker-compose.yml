@@ -45,6 +45,7 @@ services:
     container_name: pyro-temporal-api
     environment:
       TEMPORAL_MODEL_PATH: ${TEMPORAL_MODEL_PATH:-data/model_onnx.zip}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
     restart: always

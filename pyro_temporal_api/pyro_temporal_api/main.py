@@ -27,7 +27,18 @@ from temporal_model.core.onnx_model import OnnxTemporalModel
 
 from pyro_temporal_api.jobs import JobStore, QueueFullError
 
-logging.basicConfig(format="%(asctime)s | %(levelname)s: %(message)s", level=logging.INFO)
+# Same format and LOG_LEVEL as the engine and the camera API. Uvicorn installs its own INFO
+# handlers: hand them to the root one so the level applies service-wide, and keep the access
+# lines (one per health check) for debug runs only.
+_LOG_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+logging.basicConfig(format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", level=_LOG_LEVEL, force=True)
+for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logging.getLogger(_name).handlers.clear()
+    logging.getLogger(_name).propagate = True
+    logging.getLogger(_name).setLevel(logging.NOTSET)
+logging.getLogger("uvicorn.access").setLevel(
+    logging.DEBUG if _LOG_LEVEL <= logging.DEBUG else max(_LOG_LEVEL, logging.WARNING)
+)
 logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))

@@ -101,7 +101,7 @@ Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM
 
 ### Logging
 
-Both services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/pyro_camera_api/main.py` calls `core.logging.setup_logging`), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
+All three services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/pyro_camera_api/main.py` calls `core.logging.setup_logging`, `pyro_temporal_api/pyro_temporal_api/main.py` configures it at import), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
 
 Convention: camera-scoped messages start with `[cam_id]`, use `%`-style lazy args, and INFO is reserved for events an operator should see (one summary per inference round and per patrol cycle, detections, alerts, failures). Per-pose and per-frame detail belongs at DEBUG.
 

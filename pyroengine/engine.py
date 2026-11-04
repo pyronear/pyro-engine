@@ -299,11 +299,12 @@ class Engine(Predictor):
                 result = self.temporal.result(job_id)
                 if result["status"] == "pending":
                     if time.monotonic() - submitted_at < self.temporal_job_timeout:
-                        logger.info(f"Camera '{cam_id}' - temporal verdict pending, alert held")
+                        logger.debug("[%s] Temporal verdict pending, alert held", cam_id)
                         return False
                     logger.error(
-                        f"Camera '{cam_id}' - temporal job still pending after {self.temporal_job_timeout:.0f}s, "
-                        "alert sent unscored"
+                        "[%s] Temporal job still pending after %.0fs, alert sent unscored",
+                        cam_id,
+                        self.temporal_job_timeout,
                     )
                     state["temporal_job"] = None
                     state["temporal_bypass"] = True
@@ -320,23 +321,24 @@ class Engine(Predictor):
                     state["temporal_scored"] = frame_ids
                     if tubes:
                         logger.info(
-                            f"Camera '{cam_id}' - temporal model scored {len(tubes)} tube(s) "
-                            f"(max probability: {max(p for _, p in tubes):.2%})"
+                            "[%s] Temporal model scored %d tube(s) (max probability: %.2f%%)",
+                            cam_id,
+                            len(tubes),
+                            100 * max(p for _, p in tubes),
                         )
                         stage = True
                     else:
                         logger.info(
-                            f"Camera '{cam_id}' - temporal model rejected the alert "
-                            f"(tubes: {verdict.get('n_tubes')}), "
-                            + ("resubmitting" if resubmit else "event over, dropped")
+                            "[%s] Temporal model rejected the alert (tubes: %s), %s",
+                            cam_id,
+                            verdict.get("n_tubes"),
+                            "resubmitting" if resubmit else "event over, dropped",
                         )
                         if not resubmit:
                             self._consume_window(cam_key)
                             return False
                 else:
-                    logger.error(
-                        f"Camera '{cam_id}' - temporal job failed ({result.get('error')}), alert sent unscored"
-                    )
+                    logger.error("[%s] Temporal job failed (%s), alert sent unscored", cam_id, result.get("error"))
                     state["temporal_bypass"] = True
                     return True
             elif not resubmit:
@@ -347,10 +349,10 @@ class Engine(Predictor):
                 job_id = self.temporal.submit(cam_id, distinct)
                 # Every frame of the window is scored by this job, repeats included: tube scores apply by box.
                 state["temporal_job"] = (job_id, time.monotonic(), frozenset(f for f, _, _ in window))
-                logger.info(f"Camera '{cam_id}' - temporal scoring submitted ({len(distinct)} frames)")
+                logger.debug("[%s] Temporal scoring submitted (%d frames)", cam_id, len(distinct))
             return stage
         except (RequestException, KeyError, ValueError) as e:
-            logger.error(f"Camera '{cam_id}' - temporal service unavailable ({e}), alert sent unscored")
+            logger.error("[%s] Temporal service unavailable (%s), alert sent unscored", cam_id, e)
             state["temporal_job"] = None  # a lost job must not keep the event alive forever
             state["temporal_bypass"] = True
             return True
