@@ -53,6 +53,21 @@ jobs:
           path: coverage.xml
 
 
+  tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ./.github/actions/setup-uv
+      - name: Install calibration tools
+        working-directory: tools
+        run: uv sync --locked
+      - name: Test calibration apps without camera hardware
+        working-directory: tools
+        run: uv run --locked python -m unittest discover -s tests
+
   codecov-upload:
     runs-on: ubuntu-latest
     needs: pytest

@@ -4,21 +4,24 @@ version = "0.1.0"
 description = "Streamlit app to calibrate PTZ speed and FOV for Pyronear cameras."
 requires-python = ">=3.11"
 dependencies = [
-    "streamlit>=1.30",
+    "streamlit>=1.66.1,<1.67",
     "opencv-python-headless>=4.8",
-    "pillow>=10.0",
+    "pillow>=13.0.0,<14",
     "requests>=2.31",
     "pandas>=2.0",
     "matplotlib>=3.8",
     "numpy>=1.26",
-    "streamlit-image-coordinates>=0.1.6",
-    "urllib3>=2.0",
+    "streamlit-image-coordinates>=0.4.1,<0.5",
+    "urllib3>=2.8.0,<3",
     "pyro-camera-api-client",
 ]
 
 [tool.uv]
 package = false
 required-version = ">=0.13.4,<1.0.0"
+constraint-dependencies = [
+    "idna>=3.15",
+]
 
 [tool.uv.sources]
 pyro-camera-api-client = { path = "../pyro_camera_api/client", editable = true }
