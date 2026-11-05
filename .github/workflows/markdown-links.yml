@@ -2,9 +2,6 @@ name: Check Broken Markdown Links
 
 on:
   pull_request:
-    branches:
-      - main
-      - develop
 
 jobs:
   markdown-link-check:

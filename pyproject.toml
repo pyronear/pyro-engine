@@ -55,7 +55,7 @@ quality = [
     "ruff>=0.14.0,<0.15",
     "black>=24.3.0,<25",
     "isort>=5.13.2,<6",
-    "mypy>=1.9.0,<2",
+    "ty>=0.0.97,<0.1",
     "pydocstyle>=6.3.0,<7",
 ]
 dev = [
@@ -65,7 +65,7 @@ dev = [
     "requests>=2.31.0,<3",
     "flake8>=7.0.0,<8",
     "isort>=5.13.2,<6",
-    "mypy>=1.9.0,<2",
+    "ty>=0.0.97,<0.1",
     "pydocstyle>=6.3.0,<7",
     "black>=24.3.0,<25",
     "onnx>=1.15.0,<2",
@@ -81,40 +81,20 @@ docs = [
 [tool.coverage.run]
 source = ["pyroengine"]
 
-[tool.mypy]
-python_version = "3.11"
-files = "pyroengine/,pyro_camera_api/,pyro-predictor/pyro_predictor/"
-show_error_codes = true
-pretty = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-no_implicit_optional = true
-check_untyped_defs = true
-implicit_reexport = false
+[tool.ty.environment]
+python-version = "3.11"
+root = [".", "pyro-predictor", "pyro_camera_api/client", "pyro_camera_api"]
 
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
+[tool.ty.analysis]
+# NCNN exposes its API through an untyped native extension.
+replace-imports-with-any = ["ncnn.**"]
 
-[[tool.mypy.overrides]]
-module = "pyroengine.version"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "pyroengine.__init__"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = [
-    "onnxruntime.*",
-    "requests.*",
-    "PIL.*",
-    "pyroclient.*",
-    "urllib3.*",
-    "setuptools",
-    "yaml",
-    "ncnn",
+[tool.ty.src]
+include = [
+    "pyroengine",
+    "pyro-predictor/pyro_predictor",
+    "pyro_camera_api/client/pyro_camera_api_client",
 ]
-
 
 [tool.ruff]
 line-length = 120

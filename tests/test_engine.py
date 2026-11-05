@@ -157,7 +157,7 @@ def test_engine_online(tmpdir_factory, mock_wildfire_stream, mock_wildfire_image
     cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 66)}
     # Skip the API-related tests if the URL is not specified
 
-    if isinstance(api_url, str):
+    if api_url:
         engine = Engine(
             api_url=api_url,
             conf_thresh=0.01,
@@ -705,7 +705,7 @@ def test_engine_occlusion(tmpdir_factory, mock_wildfire_stream, mock_wildfire_im
     cam_creds = {"dummy_cam": (os.environ.get("API_TOKEN"), 356)}
     # Skip the API-related tests if the URL is not specified
 
-    if isinstance(api_url, str):
+    if api_url:
         engine = Engine(
             api_url=api_url,
             conf_thresh=0.01,

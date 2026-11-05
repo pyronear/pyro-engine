@@ -10,11 +10,12 @@ import json
 import logging
 import math
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import PTZMixin
+from pyro_camera_api.camera.protocols import FocusControl, PresetControl, Rebootable, RelativePTZ
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS, STOP_EVENTS
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.utils.time_utils import update_command_time
@@ -134,7 +135,7 @@ def fov_at_zoom(zoom: int, adapter: str | None = None) -> tuple[float, float]:
 def _read_zoom_ratio(cam, camera_ip: str, caller: str) -> float:
     """Current optical zoom ratio of a hardware-PTZ camera, 1x if it cannot be read."""
     try:
-        z = cam.get_ptz_status().get("zoom_ratio")
+        z = cast(RelativePTZ, cam).get_ptz_status().get("zoom_ratio")
         if z:
             return max(1.0, float(z))
     except Exception as exc:
@@ -249,7 +250,7 @@ def click_to_move(
             # Positive tilt_deg = click below center = camera must look down.
             # Dome convention (field-checked): elevation increases downward
             # (0 = horizon, 90 = straight down), so pass tilt_deg as-is.
-            target = cam.move_relative_deg(pan_deg, tilt_deg)
+            target = cast(RelativePTZ, cam).move_relative_deg(pan_deg, tilt_deg)
             return {
                 "status": "ok",
                 "camera_ip": camera_ip,
@@ -267,7 +268,7 @@ def click_to_move(
         zoom = 0
         if hasattr(cam, "get_focus_level"):
             try:
-                info = cam.get_focus_level() or {}
+                info = cast(FocusControl, cam).get_focus_level() or {}
                 z = info.get("zoom")
                 if z is not None:
                     zoom = int(z)
@@ -470,7 +471,7 @@ def move_camera(
             effective_zoom = zoom
             if hasattr(cam, "get_focus_level"):
                 try:
-                    info = cam.get_focus_level() or {}
+                    info = cast(FocusControl, cam).get_focus_level() or {}
                     z_read = info.get("zoom")
                     if z_read is not None:
                         effective_zoom = int(z_read)
@@ -820,7 +821,7 @@ def _execute_degrees_move(
     zoom = 0
     if hasattr(cam, "get_focus_level"):
         try:
-            info = cam.get_focus_level() or {}
+            info = cast(FocusControl, cam).get_focus_level() or {}
             z = info.get("zoom")
             if z is not None:
                 zoom = int(z)
@@ -989,7 +990,7 @@ def get_camera_azimuth(camera_ip: str):
     zoom = 0
     if hasattr(cam, "get_focus_level"):
         try:
-            info = cam.get_focus_level() or {}
+            info = cast(FocusControl, cam).get_focus_level() or {}
             z = info.get("zoom")
             if z is not None:
                 zoom = int(z)
@@ -1042,7 +1043,7 @@ def list_presets(camera_ip: str):
     if not hasattr(cam, "get_ptz_preset"):
         raise HTTPException(status_code=400, detail="Camera does not support presets")
 
-    presets = cam.get_ptz_preset()
+    presets = cast(PresetControl, cam).get_ptz_preset()
     return {"camera_ip": camera_ip, "presets": presets}
 
 
@@ -1062,7 +1063,7 @@ def set_preset(camera_ip: str, idx: Optional[int] = None):
     if not hasattr(cam, "set_ptz_preset"):
         raise HTTPException(status_code=400, detail="Camera does not support presets")
 
-    cam.set_ptz_preset(idx=idx)
+    cast(PresetControl, cam).set_ptz_preset(idx=idx)
     return {"status": "preset_set", "camera_ip": camera_ip, "id": idx}
 
 
@@ -1088,7 +1089,7 @@ def reboot_camera(camera_ip: str):
 
     try:
         logger.warning("[%s] Rebooting camera", camera_ip)
-        ok = cam.reboot_camera()
+        ok = cast(Rebootable, cam).reboot_camera()
     except Exception as exc:
         logger.error("[%s] Failed to reboot camera: %s", camera_ip, exc)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -1140,7 +1141,7 @@ def zoom_camera(camera_ip: str, level: int):
         if hasattr(cam, "get_ptz_status"):
             # Hardware zoom readback (linovision): ratio units, full 25x sweep ~3.6 s.
             try:
-                z_ratio = cam.get_ptz_status().get("zoom_ratio")
+                z_ratio = cast(RelativePTZ, cam).get_ptz_status().get("zoom_ratio")
                 if z_ratio:
                     current = round(float(z_ratio))
                     ratio_units = True
@@ -1148,13 +1149,13 @@ def zoom_camera(camera_ip: str, level: int):
                 logger.warning("[%s] zoom: failed to read zoom ratio: %s", camera_ip, exc)
         if current is None and hasattr(cam, "get_focus_level"):
             try:
-                info = cam.get_focus_level() or {}
+                info = cast(FocusControl, cam).get_focus_level() or {}
                 z = info.get("zoom")
                 if z is not None:
                     current = int(z)
             except Exception as exc:
                 logger.warning("[%s] zoom: failed to read current zoom: %s", camera_ip, exc)
-        ret = cam.start_zoom_focus(level)
+        ret = cast(FocusControl, cam).start_zoom_focus(level)
         target_ratio = ret.get("zoom_ratio") if isinstance(ret, dict) else None
         if ratio_units and current is not None and target_ratio is not None:
             # Ratio units (linovision): settle sized on the datasheet zoom

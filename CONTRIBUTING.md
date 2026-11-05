@@ -63,6 +63,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 `uv sync` (run from the repo root after cloning) creates a `.venv/` and installs everything declared in `pyproject.toml` and `uv.lock`. Activate it with `source .venv/bin/activate` or run commands via `uv run <cmd>`.
 
+`make typecheck` replaces mypy with ty and checks the engine/predictor/client and camera service in separate uv environments. Their ONNX Runtime and NumPy constraints differ, so each service is checked against its own runtime dependencies.
+
 #### 2. Fork the repository
 We are going to get a local copy of the remote project (_fork_) and set remotes so we stay up to date to recent contributions.
 

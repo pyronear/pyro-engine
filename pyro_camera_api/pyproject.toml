@@ -25,9 +25,15 @@ test = [
 ]
 quality = [
     "ruff==0.11.9",
-    "mypy==1.10.0",
 ]
 
 [tool.uv]
 package = false
 required-version = ">=0.13.4,<1.0.0"
+
+[tool.ty.analysis]
+# NCNN exposes its API through an untyped native extension.
+replace-imports-with-any = ["ncnn.**"]
+
+[tool.ty.src]
+include = ["pyro_camera_api"]

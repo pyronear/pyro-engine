@@ -8,7 +8,7 @@ import pathlib
 import platform
 import shutil
 import tarfile
-from typing import Tuple
+from typing import Tuple, cast
 
 import ncnn
 import numpy as np
@@ -230,7 +230,7 @@ class Classifier:
             extractor.extract("out0", pred)
             pred = np.asarray(pred)
         else:
-            pred = self.ort_session.run(["output0"], {"images": np_img})[0][0]
+            pred = cast(np.ndarray, self.ort_session.run(["output0"], {"images": np_img})[0])[0]
 
         # Convert pad to a tuple if required
         if isinstance(pad, list):

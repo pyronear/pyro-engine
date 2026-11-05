@@ -16,7 +16,7 @@ These two services run as separate Docker containers and communicate over localh
 ```bash
 # Style / lint
 make style        # auto-fix: ruff format + ruff check --fix
-make quality      # check-only: ruff format, ruff check, mypy
+make quality      # check-only: ruff format, ruff check, ty
 
 # Tests
 make test         # pytest with coverage
@@ -109,6 +109,6 @@ The engine container healthcheck reads the freshness of the heartbeat file (`--h
 ## Code Style
 
 - Python 3.11+, line length 120
-- Ruff for formatting and linting; mypy with strict checks
+- Ruff for formatting and linting; ty for type checking
 - Test coverage enforced via `pytest-cov`
 - License headers are validated in CI (`style.yml`)

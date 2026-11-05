@@ -177,7 +177,7 @@ class Predictor:
         if isinstance(self.frame_size, tuple):
             target = (self.frame_size[1], self.frame_size[0])  # PIL expects (W, H)
             if frame.size != target:
-                frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
+                frame = frame.resize(target, Image.Resampling.BILINEAR)
 
         if fake_pred is None:
             # PIL's convert("RGB") copies even an already-RGB image.

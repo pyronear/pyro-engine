@@ -102,8 +102,6 @@ venv*
 # mkdocs documentation
 /site
 
-# mypy
-.mypy_cache/
 data/
 test/fixtures/videos/
 

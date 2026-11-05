@@ -9,10 +9,12 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+from typing import cast
 
 from fastapi import APIRouter, HTTPException, Request
 
 from pyro_camera_api.camera.focus_manager import cancel_focus_and_wait
+from pyro_camera_api.camera.protocols import FocusControl
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, FOCUS_CANCEL_EVENTS
 from pyro_camera_api.core.config import RAW_CONFIG, STREAMS
 from pyro_camera_api.services.anonymizer_rtsp import EncoderWorker, RTSPDecoderWorker
@@ -42,7 +44,7 @@ _pre_stream_zoom: dict[str, int] = {}
 def _read_zoom(camera_ip: str) -> int:
     """Current zoom position of a camera, or 0 when it cannot tell."""
     try:
-        zoom = (CAMERA_REGISTRY[camera_ip].get_focus_level() or {}).get("zoom")
+        zoom = (cast(FocusControl, CAMERA_REGISTRY[camera_ip]).get_focus_level() or {}).get("zoom")
     except Exception as exc:
         logger.warning("[%s] Failed to read zoom before stream, %s", camera_ip, exc)
         return 0
@@ -194,7 +196,7 @@ def stop_stream(request: Request):
         if cam:
             zoom = _pre_stream_zoom.pop(stopped_cam, 0)
             try:
-                cam.start_zoom_focus(position=zoom)
+                cast(FocusControl, cam).start_zoom_focus(position=zoom)
                 logger.info("[%s] Zoom reset to position %s after stream stop", stopped_cam, zoom)
             except Exception as exc:
                 logger.warning("[%s] Failed to reset zoom, %s", stopped_cam, exc)

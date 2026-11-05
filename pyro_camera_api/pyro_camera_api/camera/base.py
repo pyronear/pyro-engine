@@ -38,7 +38,7 @@ class BaseCamera(ABC):
         self.last_images: Dict[int, Optional[Image.Image]] = {}
 
     @abstractmethod
-    def capture(self, **kwargs) -> Optional[Image.Image]:
+    def capture(self, *, patrol_id: Optional[int] = None) -> Optional[Image.Image]:
         """
         Capture a frame and return it as a PIL Image or None on failure.
 
@@ -70,6 +70,7 @@ class PTZMixin(ABC):
     # Local pose presets and their real-world azimuths, index-aligned. The
     # azimuths come from credentials.json (legacy) or are fetched from the
     # platform API at startup (see camera.pose_azimuths).
+    current_azimuth: Optional[float]
     cam_poses: List[int]
     cam_azimuths: List[float]
 

@@ -552,7 +552,7 @@ class EncoderWorker:
             self._open()
             assert self._proc
             assert self._proc.stdin
-            enc_in: io.BufferedWriter = self._proc.stdin  # type: ignore[assignment]
+            enc_in = self._proc.stdin
 
             next_deadline = time.time()
             while not self._stop.is_set():

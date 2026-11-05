@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import cast
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 
 from pyro_camera_api.camera.base import FocusAbortedError, FocusMixin, PTZMixin
 from pyro_camera_api.camera.focus_manager import focus_abort_requested, stream_is_active
+from pyro_camera_api.camera.protocols import FocusControl
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, MOVE_LOCKS
 from pyro_camera_api.utils.time_utils import update_command_time
 
@@ -69,7 +71,7 @@ def toggle_autofocus(camera_ip: str, disable: bool = True):
     if not hasattr(cam, "set_auto_focus"):
         raise HTTPException(status_code=400, detail="Camera does not support autofocus control")
 
-    result = cam.set_auto_focus(disable)
+    result = cast(FocusControl, cam).set_auto_focus(disable)
 
     return {
         "status": "autofocus",
@@ -97,7 +99,7 @@ def get_focus_status(camera_ip: str):
         raise HTTPException(status_code=400, detail="Camera does not expose focus status")
 
     try:
-        data = cam.get_focus_level()
+        data = cast(FocusControl, cam).get_focus_level()
     except RuntimeError as exc:
         logger.warning("Focus status unavailable for %s: %s", camera_ip, exc)
         raise HTTPException(status_code=503, detail="Focus service unavailable") from exc
@@ -156,7 +158,7 @@ def run_focus_optimization(camera_ip: str, save_images: bool = False):
                 except Exception as exc:
                     logger.warning("Could not move camera to pose %s before focus: %s", pose1, exc)
 
-        best_position = cam.focus_finder(
+        best_position = cast(FocusControl, cam).focus_finder(
             save_images=save_images,
             should_abort=lambda: focus_abort_requested(camera_ip),
         )
