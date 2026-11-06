@@ -11,3 +11,4 @@ dependencies = [
 [tool.uv]
 package = false
 required-version = ">=0.13.4,<1.0.0"
+constraint-dependencies = ["urllib3>=2.8.0"]

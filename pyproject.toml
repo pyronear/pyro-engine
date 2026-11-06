@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "requests>=2.33.0,<3",
-    "python-dotenv==1.1.0",
+    "python-dotenv==1.2.2",
     "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
@@ -45,6 +45,13 @@ include = ["pyroengine*"]
 
 [tool.uv]
 required-version = ">=0.13.4,<1.0.0"
+constraint-dependencies = [
+    "filelock>=4.2.1",
+    "fsspec>=2026.6.0",
+    "idna>=3.15",
+    "soupsieve>=2.9.0",
+    "urllib3>=2.8.0",
+]
 
 [tool.uv.sources]
 pyro_camera_api_client = { path = "pyro_camera_api/client", editable = true }
@@ -56,10 +63,10 @@ quality = [
     "ty>=0.0.97,<0.1",
 ]
 test = [
-    "pytest>=7.0,<8",
-    "pytest-asyncio>=0.23.0,<0.24",
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=1.4.0,<1.5",
     "coverage>=7.4.0,<8",
-    "onnx>=1.15.0,<2",
+    "onnx>=1.22.0,<2",
 ]
 dev = [
     { include-group = "quality" },

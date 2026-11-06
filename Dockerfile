@@ -9,7 +9,8 @@ RUN apt-get update && \
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /bin/uv
 COPY ./requirements-git.txt /tmp/requirements-git.txt
-RUN uv pip install --no-cache --target=/tmp/git-packages -r /tmp/requirements-git.txt
+# Runtime dependencies are already pinned in requirements.txt; keep this layer client-only.
+RUN uv pip install --no-cache --no-deps --target=/tmp/git-packages -r /tmp/requirements-git.txt
 
 # ---- Runtime ----
 FROM python:3.11.13-slim-bookworm

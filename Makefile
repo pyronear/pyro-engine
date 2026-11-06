@@ -24,6 +24,7 @@ style:
 test:
 	uv run --locked --no-default-groups --group test coverage run -m pytest tests/
 	cd pyro_camera_api && PYTHONPATH=. uv run --locked --group test pytest tests/
+	cd tools && uv run --locked python -m unittest discover -s tests
 
 # Build documentation for current version
 single-docs:
