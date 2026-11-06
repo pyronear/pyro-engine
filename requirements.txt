@@ -15,7 +15,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     # via tqdm
 coloredlogs==15.0.1
     # via onnxruntime
-filelock==3.28.0
+filelock==4.2.1
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
