@@ -388,9 +388,10 @@ class PyroCameraAPIClient:
         resp = self._request("POST", "/patrol/start_patrol", params=params)
         return resp.json()
 
-    def stop_patrol(self, camera_ip: str) -> Dict[str, Any]:
+    def stop_patrol(self, camera_ip: str, request_timeout: Optional[float] = 15.0) -> Dict[str, Any]:
+        """Stop the patrol; the API waits up to 10 s for the patrol thread, hence the longer timeout."""
         params = {"camera_ip": camera_ip}
-        resp = self._request("POST", "/patrol/stop_patrol", params=params)
+        resp = self._request("POST", "/patrol/stop_patrol", params=params, timeout=request_timeout)
         return resp.json()
 
     def get_patrol_status(self, camera_ip: str) -> Dict[str, Any]:
