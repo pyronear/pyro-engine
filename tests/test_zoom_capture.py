@@ -11,11 +11,6 @@ from pyroengine.core import SystemController
 from pyroengine.zoom_capture import ZoomCapture, crop_hd, resize_hd
 
 
-@pytest.fixture(autouse=True)
-def no_settle(monkeypatch):
-    monkeypatch.setattr("pyroengine.zoom_capture.time.sleep", lambda *_a, **_k: None)
-
-
 @pytest.fixture
 def events():
     """Upload keys and PTZ calls in the order they happened."""

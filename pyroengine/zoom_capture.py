@@ -42,8 +42,6 @@ HD = (1280, 720)
 MAX_BBOXES = 3
 # Seconds kept before the loop deadline for zoom 0 + patrol restart.
 RETURN_MARGIN_S = 6.0
-# stop_patrol only flags the patrol thread; let its in-flight pose move finish.
-PATROL_STOP_SETTLE_S = 1.5
 # Seconds a restarted patrol needs to refresh every pose image (4 poses, ~2.5 s each).
 PATROL_PASS_S = 12.0
 ZOOM_RESET_ATTEMPTS = 2
@@ -244,9 +242,8 @@ class ZoomCapture:
         patrol_stopped = False
         try:
             step("stop_patrol", lambda: client.stop_patrol(ip))
+            # stop_patrol returns once the patrol thread is gone, so no late patrol move follows.
             patrol_stopped = True
-            # ponytail: fixed settle, the API has no "patrol thread idle" signal
-            time.sleep(PATROL_STOP_SETTLE_S)
             # The patrol has moved on since the analysed frame: go back to its pose first.
             step("goto_preset", lambda: client.goto_preset(ip, pose))
             step("click_to_move", lambda: client.click_to_move(ip, click_x, click_y))
