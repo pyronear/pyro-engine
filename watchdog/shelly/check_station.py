@@ -84,7 +84,7 @@ def emit(line: str = "") -> None:
         with LOG_FILE.open("a", encoding="utf-8") as f:
             for raw in line.split("\n"):
                 f.write(f"{stamp} | {_ANSI_RE.sub('', raw)}\n")
-    except Exception:  # noqa: S110 — never fail a check because of the log
+    except Exception:  # ruff: ignore[try-except-pass] — never fail a check because of the log
         pass
 
 

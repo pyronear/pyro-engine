@@ -121,7 +121,7 @@ class Engine(Predictor):
         send_last_image_period: int = 3600,  # 1H
         heartbeat_period: int = 60,  # 1 min
         last_bbox_mask_fetch_period: int = 3600,  # 1H
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
         super().__init__(
@@ -211,7 +211,7 @@ class Engine(Predictor):
         self,
         frame: Image.Image,
         cam_id: Optional[str] = None,
-        occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # noqa: ARG002
+        occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # ruff: ignore[unused-method-argument]
         fake_pred: Optional[np.ndarray] = None,
     ) -> float:
         """Computes the confidence that the image contains wildfire cues

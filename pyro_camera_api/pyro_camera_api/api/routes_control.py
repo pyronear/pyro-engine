@@ -512,7 +512,7 @@ def move_camera(
             duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
 
             # Micro-impulse: angle below bias → move+stop at speed 1
-            micro = duration_sec == 0.0 and abs(degrees) > 0
+            micro = duration_sec == 0.0 and abs(degrees) > 0  # ruff: ignore[float-equality-comparison]
             interrupted = False
             start_azimuth = _start_azimuth_for_tracking(cam)
             if micro:
@@ -888,7 +888,7 @@ def _execute_degrees_move(
             )
 
     duration_sec = max(0.0, (abs(degrees) - bias) / deg_per_sec)
-    micro = duration_sec == 0.0 and abs(degrees) > 0
+    micro = duration_sec == 0.0 and abs(degrees) > 0  # ruff: ignore[float-equality-comparison]
     interrupted = False
     start_azimuth = _start_azimuth_for_tracking(cam)
 

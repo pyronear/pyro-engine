@@ -210,7 +210,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             password=password,
             port=conf.get("port", 80),
             protocol=conf.get("protocol", "http"),
-            snapshot_path=conf.get("snapshot_path", "/tmpfs/snap.jpg"),  # noqa: S108
+            snapshot_path=conf.get("snapshot_path", "/tmpfs/snap.jpg"),  # ruff: ignore[hardcoded-temp-file]
             snapshot_command=conf.get("snapshot_command"),
             timeout=conf.get("timeout", 5.0),
             cam_type=cam_type,

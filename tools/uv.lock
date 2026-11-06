@@ -992,7 +992,6 @@ requires-dist = [
     { name = "pillow" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "requests" },
-    { name = "ruff", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev"]
 

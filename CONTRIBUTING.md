@@ -61,9 +61,19 @@ We use [uv](https://docs.astral.sh/uv/) to manage the Python environment and dep
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-`uv sync` (run from the repo root after cloning) creates a `.venv/` and installs everything declared in `pyproject.toml` and `uv.lock`. Activate it with `source .venv/bin/activate` or run commands via `uv run <cmd>`.
+Run `uv sync --locked` from the repository root to install the committed dependencies in `.venv/`. The default `dev` group includes the `quality` and `test` groups. Run tools through uv or use the Make targets; no environment activation or globally installed quality tools are needed.
 
-`make typecheck` replaces mypy with ty and checks the engine/predictor/client and camera service in separate uv environments. Their ONNX Runtime and NumPy constraints differ, so each service is checked against its own runtime dependencies.
+```shell
+make style    # Ruff import sorting, lint fixes and formatting
+make quality  # Ruff formatting/lint checks and ty type checking
+make test     # Engine and camera API tests
+```
+
+Ruff and ty are declared once in the root `quality` group. `make typecheck` installs the engine and camera API in separate uv environments and checks each against its own runtime dependencies. Their ONNX Runtime and NumPy constraints differ, so they must not share one environment.
+
+Use Ruff rule names and `# ruff: ignore[rule-name]` for inline exceptions, rather than numeric codes and `# noqa`. Keep each exception scoped to the affected line or test file.
+
+After changing dependency declarations, run `make lock` for the engine export and regenerate the corresponding nested lockfiles. CI uses `uv sync --locked` and runs commands with `uv run --no-sync` so that the selected dependency groups stay in effect.
 
 #### 2. Fork the repository
 We are going to get a local copy of the remote project (_fork_) and set remotes so we stay up to date to recent contributions.
@@ -101,8 +111,8 @@ git merge upstream/master
 
 4. install the project dependencies
 ```shell
-# create the virtualenv and install the project + dependencies in editable mode
-uv sync
+# create the virtualenv and install the project + development groups
+uv sync --locked
 ```
 
 

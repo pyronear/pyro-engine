@@ -52,23 +52,18 @@ pyro_predictor = { path = "pyro-predictor", editable = true }
 
 [dependency-groups]
 quality = [
-    "ruff>=0.14.0,<0.15",
-    "black>=24.3.0,<25",
-    "isort>=5.13.2,<6",
+    "ruff>=0.17.3,<0.18",
     "ty>=0.0.97,<0.1",
-    "pydocstyle>=6.3.0,<7",
 ]
-dev = [
+test = [
     "pytest>=7.0,<8",
     "pytest-asyncio>=0.23.0,<0.24",
     "coverage>=7.4.0,<8",
-    "requests>=2.31.0,<3",
-    "flake8>=7.0.0,<8",
-    "isort>=5.13.2,<6",
-    "ty>=0.0.97,<0.1",
-    "pydocstyle>=6.3.0,<7",
-    "black>=24.3.0,<25",
     "onnx>=1.15.0,<2",
+]
+dev = [
+    { include-group = "quality" },
+    { include-group = "test" },
 ]
 docs = [
     "sphinx>=7.2.6,<8",
@@ -104,13 +99,13 @@ preview = true
 [tool.ruff.lint]
 select = [
     "F", "E", "W", "I", "N",
-    "D201", "D202", "D207", "D208", "D214", "D215", "D300", "D301", "D417", "D419",
+    "blank-line-before-function", "blank-line-after-function", "under-indentation", "over-indentation", "overindented-section", "overindented-section-underline", "triple-single-quotes", "escape-sequence-in-docstring", "undocumented-param", "empty-docstring",
     "YTT", "ANN", "ASYNC", "S", "BLE", "B", "A", "COM", "CPY", "C4", "T10", "ISC", "ICN", "LOG",
     "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "PERF", "NPY", "FURB", "RUF"
 ]
 ignore = [
-    "E501", "B008", "B904", "C901", "F403", "E731", "C416",
-    "ANN002", "ANN003", "COM812", "ISC001"
+    "line-too-long", "function-call-in-default-argument", "raise-without-from-inside-except", "complex-structure", "undefined-local-with-import-star", "lambda-assignment", "unnecessary-comprehension",
+    "missing-type-args", "missing-type-kwargs", "missing-trailing-comma", "single-line-implicit-string-concatenation",
 ]
 exclude = [".git", "pyro-predictor/**", "docs/**"]
 
@@ -122,31 +117,19 @@ known-first-party = ["pyroengine", "pyro_camera_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/__init__.py" = ["I001", "F401", "CPY001"]
-"src/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S106", "S113", "S501"]
-"setup_presets/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S106", "S113", "S501"]
-"tools/**.py" = ["D", "T201", "ANN", "BLE001", "S108", "S110", "S501", "S608", "N816", "B023", "ARG002", "RUF001", "RUF003"]
-".github/**.py" = ["D", "T201", "ANN", "S", "PYI024"]
-"tests/**.py" = ["D103", "CPY001", "S101", "T201", "ANN001", "ANN201", "ANN202", "ARG001", "S113"]
-"pyro_camera_api/**.py" = ["D", "T201", "S101", "ANN", "BLE001", "S113", "S501", "S404", "S603", "S405", "S314", "E402", "RUF029"]
-"pyro_camera_api/tests/**.py" = ["N802", "S105", "S106", "S108"]
-"pyroengine/core.py" = ["BLE001"]
-"pyroengine/sensors.py" = ["S113", "S501", "ANN"]
-"watchdog/**.py" = ["CPY001", "S108", "S310", "S404", "S603", "S607", "BLE001", "LOG015"]
-"watchdog/shelly/check_station.py" = ["CPY001", "S310", "S603", "S607", "BLE001", "T201"]
+"**/__init__.py" = ["unsorted-imports", "unused-import", "missing-copyright-notice"]
+"src/**.py" = ["D", "print", "assert", "ANN", "blind-except", "hardcoded-password-func-arg", "request-without-timeout", "request-with-no-cert-validation"]
+"setup_presets/**.py" = ["D", "print", "assert", "ANN", "blind-except", "hardcoded-password-func-arg", "request-without-timeout", "request-with-no-cert-validation"]
+"tools/**.py" = ["D", "print", "ANN", "blind-except", "hardcoded-temp-file", "try-except-pass", "request-with-no-cert-validation", "hardcoded-sql-expression", "mixed-case-variable-in-global-scope", "function-uses-loop-variable", "unused-method-argument", "ambiguous-unicode-character-string", "ambiguous-unicode-character-comment"]
+".github/**.py" = ["D", "print", "ANN", "S", "collections-named-tuple"]
+"tests/**.py" = ["undocumented-public-function", "missing-copyright-notice", "assert", "print", "missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "unused-function-argument", "request-without-timeout", "float-equality-comparison"]
+"pyro_camera_api/**.py" = ["D", "print", "assert", "ANN", "blind-except", "request-without-timeout", "request-with-no-cert-validation", "suspicious-subprocess-import", "subprocess-without-shell-equals-true", "suspicious-xml-etree-import", "suspicious-xml-element-tree-usage", "module-import-not-at-top-of-file", "unused-async"]
+"pyro_camera_api/tests/**.py" = ["invalid-function-name", "hardcoded-password-string", "hardcoded-password-func-arg", "hardcoded-temp-file", "float-equality-comparison"]
+"pyroengine/core.py" = ["blind-except"]
+"pyroengine/sensors.py" = ["request-without-timeout", "request-with-no-cert-validation", "ANN"]
+"watchdog/**.py" = ["missing-copyright-notice", "hardcoded-temp-file", "suspicious-url-open-usage", "suspicious-subprocess-import", "subprocess-without-shell-equals-true", "start-process-with-partial-path", "blind-except", "root-logger-call"]
+"watchdog/shelly/check_station.py" = ["missing-copyright-notice", "suspicious-url-open-usage", "subprocess-without-shell-equals-true", "start-process-with-partial-path", "blind-except", "print"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-
-[tool.isort]
-line_length = 120
-skip_glob = "**/__init__.py"
-
-[tool.pydocstyle]
-select = "D300,D301,D417"
-match = ".*\\.py"
-
-[tool.black]
-line-length = 120
-target-version = ['py311']
