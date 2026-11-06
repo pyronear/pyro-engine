@@ -12,8 +12,10 @@ lint:
 typecheck:
 	uv sync --locked --inexact --no-default-groups --group quality
 	uv sync --locked --inexact --project pyro_camera_api --no-default-groups
+	uv sync --locked --inexact --project pyro_temporal_api --no-default-groups
 	uv run --no-sync ty check
 	uv run --no-sync ty check --project pyro_camera_api --python pyro_camera_api/.venv
+	uv run --no-sync ty check --project pyro_temporal_api --python pyro_temporal_api/.venv
 
 # This target auto-fixes lint issues where possible
 style:
