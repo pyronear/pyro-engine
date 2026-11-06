@@ -1,6 +1,6 @@
 UV_QUALITY = uv run --locked --inexact --no-default-groups --group quality
 
-.PHONY: quality lint typecheck style test single-docs lock build-api build-app build-lib build-optional-lib run run_local log log-api stop
+.PHONY: quality lint typecheck style test single-docs lock lock-api build-api build-app build-lib build-optional-lib run run_local log log-api stop
 
 # Run the same quality checks locally and in CI.
 quality: lint typecheck
@@ -40,13 +40,15 @@ lock:
 	grep -v 'git+' requirements-all.txt | grep -v 'file://' | grep -v '^-e ' | grep -v '^opencv-python==' > requirements.txt
 	rm requirements-all.txt
 
-# Generate requirements and build camera API Docker image
-build-api:
+# Update the camera API lock and legacy requirements export
+lock-api:
 	cd pyro_camera_api && \
 		uv lock && \
 		uv export --locked --no-hashes --no-emit-project --no-default-groups --no-dev --format requirements-txt -o requirements-all.txt && \
 		grep -v '^opencv-python==' requirements-all.txt > requirements.txt && \
 		rm requirements-all.txt
+# Build the camera API from its committed lockfile
+build-api:
 	docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
 
 # Build the engine Docker image

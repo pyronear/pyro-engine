@@ -5,6 +5,7 @@
 
 import argparse
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -139,12 +140,17 @@ def main():
         protocol=args.protocol,
     )
 
+    # The application root is read-only in Compose; captures belong on the data mount.
+    data_dir = Path("data")
+    if args.action in {"capture", "manual_focus_and_capture"}:
+        data_dir.mkdir(parents=True, exist_ok=True)
+
     # Handling different actions
     if args.action == "capture":
         image = camera_controller.capture(patrol_id=args.patrol_id)
         if image is not None:
-            image.resize((1280, 720)).save("im.jpg")
-            print("Image captured and saved as im.jpg")
+            image.resize((1280, 720)).save(data_dir / "im.jpg")
+            print("Image captured and saved as data/im.jpg")
         else:
             print("Failed to capture image.")
     elif args.action == "move_camera":
@@ -188,8 +194,8 @@ def main():
             print(f"Manual focus set at position {args.zoom_position}")
             image = camera_controller.capture(patrol_id=args.patrol_id)
             if image is not None:
-                image.resize((1280, 720)).save("manual_focus.jpg")
-                print("Captured image with manual focus and saved as manual_focus.jpg.")
+                image.resize((1280, 720)).save(data_dir / "manual_focus.jpg")
+                print("Captured image with manual focus and saved as data/manual_focus.jpg.")
             else:
                 print("Failed to capture image.")
 
