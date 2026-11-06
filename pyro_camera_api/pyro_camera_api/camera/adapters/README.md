@@ -61,7 +61,7 @@ One method is mandatory, whatever the camera:
 ```python
 class BaseCamera(ABC):
     @abstractmethod
-    def capture(self, **kwargs) -> Optional[Image.Image]: ...
+    def capture(self, *, patrol_id: Optional[int] = None) -> Optional[Image.Image]: ...
 ```
 
 - Return an RGB Pillow image, or `None` on failure. Never let an exception escape: the patrol and
@@ -70,8 +70,8 @@ class BaseCamera(ABC):
   static loop, where two consecutive failures put the camera into a 30 minute skip window. Retry
   inside `capture()` rather than letting a blip cost half an hour of blindness.
 - Log the failure before returning `None`, masking credentials and tokens.
-- Set a timeout on every network call, and accept `**kwargs`, since routes sometimes pass
-  `patrol_id` that static adapters ignore.
+- Set a timeout on every network call, and accept the keyword-only `patrol_id` argument;
+  static adapters can ignore its value.
 
 ## Capabilities
 
@@ -167,7 +167,7 @@ class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
         self.cam_azimuths = cam_azimuths or []
         self.current_azimuth = None  # GET /control/azimuth calls get_azimuth() unguarded
 
-    def capture(self, patrol_id=None, timeout=2):
+    def capture(self, *, patrol_id=None, timeout=2):
         try:
             resp = self.session.get(f"http://{self.ip_address}/snapshot", timeout=timeout)
             resp.raise_for_status()

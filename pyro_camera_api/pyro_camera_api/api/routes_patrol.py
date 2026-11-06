@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from types import FunctionType
-from typing import Protocol, cast
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -21,11 +19,6 @@ from pyro_camera_api.camera.patrol import (
     static_loop,
 )
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
-
-
-class _PatrolThread(Protocol):
-    _target: FunctionType
-
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -63,7 +56,7 @@ def start_patrol(camera_ip: str, request: Request):
         return {
             "status": "already_running",
             "camera_ip": camera_ip,
-            "loop_type": cast(_PatrolThread, PATROL_THREADS[camera_ip])._target.__name__,
+            "loop_type": getattr(PATROL_THREADS[camera_ip], "_target").__name__,  # noqa: B009
         }
 
     stop_flag = threading.Event()
@@ -126,7 +119,7 @@ def patrol_status(camera_ip: str):
 
     loop_type = None
     if thread is not None and hasattr(thread, "_target"):
-        target_fn = cast(_PatrolThread, thread)._target.__name__
+        target_fn = getattr(thread, "_target").__name__  # noqa: B009
         if target_fn == "patrol_loop":
             loop_type = "patrol"
         elif target_fn == "static_loop":
