@@ -11,7 +11,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from io import BytesIO
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, cast
 
 import requests
 import urllib3
@@ -289,7 +289,7 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
             return None
         if resp.status_code != 200:
             logger.debug("[%s] PTZ capabilities read failed, status %s", self.ip_address, resp.status_code)
-            self._caps_unavailable = resp.status_code < 500
+            self._caps_unavailable = cast(int, resp.status_code) < 500
             return None
         try:
             self._caps = ET.fromstring(resp.content)

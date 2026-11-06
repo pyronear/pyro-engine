@@ -240,7 +240,7 @@ class Engine(Predictor):
         if isinstance(self.frame_size, tuple):
             target = (self.frame_size[1], self.frame_size[0])  # PIL expects (W, H)
             if frame.size != target:
-                frame = frame.resize(target, Image.BILINEAR)  # type: ignore[attr-defined]
+                frame = frame.resize(target, Image.Resampling.BILINEAR)
 
         # Encode once for API uploads and on-disk backup; feed the uncompressed frame to the model.
         buf = io.BytesIO()
@@ -483,7 +483,7 @@ class Engine(Predictor):
             scale = CONTEXT_MAX_SIDE / longest
             region = region.resize(
                 (max(1, round(region.size[0] * scale)), max(1, round(region.size[1] * scale))),
-                Image.LANCZOS,  # type: ignore[attr-defined]
+                Image.Resampling.LANCZOS,
             )
         buf = io.BytesIO()
         region.save(buf, format="JPEG", quality=CONTEXT_JPEG_QUALITY)
@@ -624,7 +624,7 @@ class Engine(Predictor):
             crop_w, crop_h = crop.size
             downscaling = crop_w > 224 or crop_h > 224
             if (crop_w, crop_h) != (224, 224):
-                crop = crop.resize((224, 224), Image.LANCZOS)  # type: ignore[attr-defined]
+                crop = crop.resize((224, 224), Image.Resampling.LANCZOS)
             buf = io.BytesIO()
             if downscaling:
                 crop.save(buf, format="JPEG", quality=CROP_JPEG_QUALITY_LARGE)

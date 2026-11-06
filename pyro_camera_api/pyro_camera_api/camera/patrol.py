@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
+from pyro_camera_api.camera.base import PTZMixin
+from pyro_camera_api.camera.protocols import FocusControl
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.services.stream import is_camera_streaming
 
@@ -95,7 +97,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 break
 
             try:
-                cam.move_camera("ToPos", idx=pose, speed=50)
+                cast(PTZMixin, cam).move_camera("ToPos", idx=pose, speed=50)
                 logger.debug("[%s] Moved to pose %s", camera_ip, pose)
                 time.sleep(1.5)
 
@@ -119,16 +121,17 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             continue
 
         try:
-            cam.move_camera("ToPos", idx=poses[0], speed=50)
+            cast(PTZMixin, cam).move_camera("ToPos", idx=poses[0], speed=50)
             logger.debug("[%s] Returned to pose %s", camera_ip, poses[0])
         except Exception as exc:
             logger.warning("[%s] Failed to return to first pose: %s", camera_ip, exc)
 
         if getattr(cam, "focus_position", None) is not None:
             try:
-                if cam.focus_position is not None:
-                    cam.set_manual_focus(cam.focus_position)
-                logger.debug("[%s] Restored manual focus to %s", camera_ip, cam.focus_position)
+                focus_cam = cast(FocusControl, cam)
+                if focus_cam.focus_position is not None:
+                    focus_cam.set_manual_focus(focus_cam.focus_position)
+                logger.debug("[%s] Restored manual focus to %s", camera_ip, focus_cam.focus_position)
             except Exception as exc:
                 logger.warning("[%s] Failed to restore focus: %s", camera_ip, exc)
 

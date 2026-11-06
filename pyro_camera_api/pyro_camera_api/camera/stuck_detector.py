@@ -21,12 +21,13 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Dict, List
+from typing import Dict, List, cast
 
 import cv2
 import numpy as np
 from PIL import Image
 
+from pyro_camera_api.camera.protocols import Rebootable
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATROL_THREADS
 
 logger = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 )
                 ok = False
                 try:
-                    ok = bool(cam.reboot_camera())
+                    ok = bool(cast(Rebootable, cam).reboot_camera())
                 except Exception as exc:
                     logger.error("[%s] Reboot raised: %s", camera_ip, exc)
 

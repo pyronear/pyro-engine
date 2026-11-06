@@ -56,7 +56,7 @@ def start_patrol(camera_ip: str, request: Request):
         return {
             "status": "already_running",
             "camera_ip": camera_ip,
-            "loop_type": PATROL_THREADS[camera_ip]._target.__name__,
+            "loop_type": getattr(PATROL_THREADS[camera_ip], "_target").__name__,  # noqa: B009
         }
 
     stop_flag = threading.Event()
@@ -119,7 +119,7 @@ def patrol_status(camera_ip: str):
 
     loop_type = None
     if thread is not None and hasattr(thread, "_target"):
-        target_fn = thread._target.__name__
+        target_fn = getattr(thread, "_target").__name__  # noqa: B009
         if target_fn == "patrol_loop":
             loop_type = "patrol"
         elif target_fn == "static_loop":

@@ -989,7 +989,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'" },
     { name = "pillow" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "requests" },
