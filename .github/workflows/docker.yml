@@ -6,20 +6,56 @@ on:
   pull_request:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  images:
+    name: Docker (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
       - name: Build engine image
-        run: make build-app
-      - name: Verify engine starts successfully
-        run: |
-          docker run --rm pyronear/pyro-engine:latest python -c "from pyroengine import SystemController; print('OK')"
-      - name: Verify only opencv-python-headless provides cv2
-        run: |
-          docker run --rm pyronear/pyro-engine:latest python -c "import importlib.metadata as m, cv2; names = {d.metadata['Name'].lower() for d in m.distributions()}; assert 'opencv-python' not in names, names; print(cv2.__version__)"
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          pull: true
+          tags: pyronear/pyro-engine:test
+          cache-from: |
+            type=gha,scope=pyronear/pyro-engine
+            type=gha,scope=engine-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=engine-${{ matrix.arch }}
       - name: Build camera API image
-        run: docker build -f pyro_camera_api/Dockerfile pyro_camera_api -t pyronear/pyro-camera-api:latest
-      - name: Verify camera API starts successfully
-        run: |
-          docker run --rm pyronear/pyro-camera-api:latest python -c "from pyro_camera_api.main import app; print('OK')"
+        uses: docker/build-push-action@v6
+        with:
+          context: pyro_camera_api
+          file: pyro_camera_api/Dockerfile
+          load: true
+          pull: true
+          tags: pyronear/pyro-camera-api:test
+          cache-from: |
+            type=gha,scope=pyronear/pyro-camera-api
+            type=gha,scope=camera-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=camera-${{ matrix.arch }}
+      - name: Verify isolated runtime, native libraries, HTTP health and heartbeat restart
+        run: bash .github/check-docker.sh
+      - name: Record image sizes
+        run: docker image inspect pyronear/pyro-engine:test pyronear/pyro-camera-api:test --format '{{.RepoTags}} {{.Size}} bytes'
+
+  # Keep the existing required check name while validating both native architectures.
+  build:
+    if: always()
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all native image checks
+        run: test '${{ needs.images.result }}' = success
