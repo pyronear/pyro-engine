@@ -28,7 +28,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/usr/src/app \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH" \
-    HOME=/home/pyro \
     XDG_CACHE_HOME=/usr/src/app/data/.cache
 
 # FFmpeg is required by RTSP/SRT streaming. No curl, Git, uv or build environment ships.
@@ -37,16 +36,13 @@ RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=
     rm -f /etc/apt/apt.conf.d/docker-clean \
     && apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg libgomp1 \
-    && groupadd --gid 1000 pyro \
-    && useradd --uid 1000 --gid 1000 --no-log-init --home-dir /home/pyro --shell /usr/sbin/nologin pyro \
-    && install -d -o 1000 -g 1000 /home/pyro /usr/src/app/data /usr/src/app/focus_debug \
+    && install -d /usr/src/app/data /usr/src/app/focus_debug \
     && rm -rf /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/ensurepip \
     && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11
 
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /usr/src/app
 COPY --chmod=u=rwX,go=rX pyro_camera_api ./pyro_camera_api
-USER 1000:1000
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD ["python", "-c", "from http.client import HTTPConnection; c = HTTPConnection('127.0.0.1', 8081, timeout=4); c.request('GET', '/health'); raise SystemExit(c.getresponse().status != 200)"]

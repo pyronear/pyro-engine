@@ -128,7 +128,7 @@ round is one summary line per camera cycle and one per inference round; detectio
 failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
 predictions, ffmpeg output and HTTP access logs.
 
-### Docker builds and runtime permissions
+### Docker builds and runtime isolation
 
 Both images install only locked runtime dependencies into `/opt/venv` with uv. Dependency layers are built before application code, and BuildKit cache mounts reuse downloaded wheels. Git, uv, Python package installers and build caches stay outside the final runtime. The engine uses headless OpenCV without an FFmpeg/GUI installation; FFmpeg remains in the camera service for RTSP/SRT streaming.
 
@@ -141,14 +141,7 @@ make build-api
 docker compose build
 ```
 
-Images run as UID/GID `1000:1000`. Before starting Compose, set `PYRO_UID` and `PYRO_GID` in `.env` to the intended host user's `id -u` and `id -g`, and ensure that user owns the data directory and can read `credentials.json`. For an existing installation with root-owned data, stop the services and perform a one-time ownership migration; for example, when the current host user will run them:
-
-```bash
-mkdir -p data
-sudo chown -R "$(id -u):$(id -g)" data
-```
-
-Do not make camera credentials world-readable to work around ownership. The writable data bind mount holds model downloads, Hugging Face caches, backups and the engine heartbeat. Compose uses a read-only root filesystem, drops Linux capabilities and disallows privilege escalation. `/tmp` and optional camera `focus_debug` images use bounded temporary filesystems; focus-debug captures are cleared when the container stops. To retain those debug images, override `/usr/src/app/focus_debug` with a writable bind mount owned by the configured UID/GID.
+Images retain the current root identity to read pi-manager's root-owned data and credentials. A non-root deployment migration is deferred to the station deployment work. The writable data bind mount holds model downloads, Hugging Face caches, backups, camera-control debug captures and the engine heartbeat. Compose uses a read-only root filesystem, drops Linux capabilities and disallows privilege escalation. `/tmp` and optional camera `focus_debug` images use bounded temporary filesystems; focus-debug captures are cleared when the container stops. To retain those debug images, override `/usr/src/app/focus_debug` with a writable bind mount.
 
 `make lock` and `make lock-api` update the corresponding locks and legacy requirements exports. Image builds consume the committed locks and fail if dependency declarations do not match them; they do not resolve newer packages implicitly.
 

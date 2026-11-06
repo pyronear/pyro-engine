@@ -16,8 +16,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
-    # Match the owner of the data bind mount; the image defaults to 1000:1000.
-    user: "${PYRO_UID:-1000}:${PYRO_GID:-1000}"
     read_only: true
     cap_drop:
       - ALL
@@ -26,7 +24,7 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
       # Optional autofocus captures are temporary, as they were in the container layer.
-      - /usr/src/app/focus_debug:size=128m,uid=${PYRO_UID:-1000},gid=${PYRO_GID:-1000},mode=0700
+      - /usr/src/app/focus_debug:size=128m,mode=0700
     init: true
     restart: always
     network_mode: host
@@ -53,8 +51,6 @@ services:
     # The json-file driver below is the single rotated log sink; nothing reads a log
     # file inside the container anymore.
     command: python run.py
-    # Match the owner of the data bind mount; the image defaults to 1000:1000.
-    user: "${PYRO_UID:-1000}:${PYRO_GID:-1000}"
     read_only: true
     cap_drop:
       - ALL

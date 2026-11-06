@@ -48,7 +48,6 @@ ENV LANG=C.UTF-8 \
     PYTHONNOUSERSITE=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH" \
-    HOME=/home/pyro \
     XDG_CACHE_HOME=/usr/src/app/data/.cache \
     HF_HOME=/usr/src/app/data/.cache/huggingface
 
@@ -58,9 +57,7 @@ RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=
     rm -f /etc/apt/apt.conf.d/docker-clean \
     && apt-get update \
     && apt-get install -y --no-install-recommends libstdc++6 libgomp1 \
-    && groupadd --gid 1000 pyro \
-    && useradd --uid 1000 --gid 1000 --no-log-init --home-dir /home/pyro --shell /usr/sbin/nologin pyro \
-    && install -d -o 1000 -g 1000 /home/pyro /usr/src/app/data \
+    && install -d /usr/src/app/data \
     && rm -rf /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/ensurepip \
     && rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.11
 
@@ -68,5 +65,4 @@ RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /usr/src/app
 COPY --chmod=0444 src/run.py src/control_reolink_cam.py ./
-USER 1000:1000
 CMD ["python", "run.py"]

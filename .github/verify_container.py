@@ -3,7 +3,7 @@
 # This program is licensed under the Apache License 2.0.
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
-"""Exercise locked dependencies, native libraries and an unprivileged read-only runtime."""
+"""Exercise locked dependencies, native libraries and an isolated read-only runtime."""
 
 import errno
 import importlib.metadata as metadata
@@ -142,7 +142,7 @@ def check_camera():
 def main():
     mode = sys.argv[1]
     assert mode in {"engine", "camera"}
-    assert os.geteuid() != 0, "Runtime must not run as root"
+    assert os.geteuid() == 0, "Retain the deployment identity for root-owned station data"
     assert sys.prefix == "/opt/venv"
     assert sys.prefix != sys.base_prefix
     for command in ("git", "uv", "uvx", "pip", "pip3", "gcc", "g++", "make", "curl"):
@@ -168,7 +168,7 @@ def main():
         if error.errno not in {errno.EACCES, errno.EROFS}:
             raise
     else:
-        raise AssertionError("Application user can modify runtime dependencies")
+        raise AssertionError("Read-only runtime dependencies are writable")
     if mode == "engine":
         from pyroengine import SystemController
 
