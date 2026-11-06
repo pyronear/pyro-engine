@@ -1,4 +1,4 @@
-UV_QUALITY = uv run --locked --no-default-groups --group quality
+UV_QUALITY = uv run --locked --inexact --no-default-groups --group quality
 
 .PHONY: quality lint typecheck style test single-docs lock build-api build-app build-lib build-optional-lib run run_local log log-api stop
 

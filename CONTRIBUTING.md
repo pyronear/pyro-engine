@@ -66,10 +66,12 @@ Run `uv sync --locked` from the repository root to install the committed depende
 ```shell
 make style    # Ruff import sorting, lint fixes and formatting
 make quality  # Ruff formatting/lint checks and ty type checking
-make test     # Engine, camera API and calibration app tests
+make test     # Engine and camera API tests
 ```
 
 Ruff and ty are declared once in the root `quality` group. `make typecheck` installs the engine and camera API in separate uv environments and checks each against its own runtime dependencies. Their ONNX Runtime and NumPy constraints differ, so they must not share one environment.
+
+Use Ruff rule names and `# ruff: ignore[rule-name]` for inline exceptions, rather than numeric codes and `# noqa`. Keep each exception scoped to the affected line or test file.
 
 After changing dependency declarations, run `make lock` for the engine export and regenerate the corresponding nested lockfiles. CI uses `uv sync --locked` and runs commands with `uv run --no-sync` so that the selected dependency groups stay in effect.
 

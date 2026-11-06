@@ -106,8 +106,6 @@ select = [
 ignore = [
     "line-too-long", "function-call-in-default-argument", "raise-without-from-inside-except", "complex-structure", "undefined-local-with-import-star", "lambda-assignment", "unnecessary-comprehension",
     "missing-type-args", "missing-type-kwargs", "missing-trailing-comma", "single-line-implicit-string-concatenation",
-    # Exact comparisons are intentional for discrete camera values and zero-duration commands.
-    "float-equality-comparison"
 ]
 exclude = [".git", "pyro-predictor/**", "docs/**"]
 
@@ -124,9 +122,9 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 "setup_presets/**.py" = ["D", "print", "assert", "ANN", "blind-except", "hardcoded-password-func-arg", "request-without-timeout", "request-with-no-cert-validation"]
 "tools/**.py" = ["D", "print", "ANN", "blind-except", "hardcoded-temp-file", "try-except-pass", "request-with-no-cert-validation", "hardcoded-sql-expression", "mixed-case-variable-in-global-scope", "function-uses-loop-variable", "unused-method-argument", "ambiguous-unicode-character-string", "ambiguous-unicode-character-comment"]
 ".github/**.py" = ["D", "print", "ANN", "S", "collections-named-tuple"]
-"tests/**.py" = ["undocumented-public-function", "missing-copyright-notice", "assert", "print", "missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "unused-function-argument", "request-without-timeout"]
+"tests/**.py" = ["undocumented-public-function", "missing-copyright-notice", "assert", "print", "missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "unused-function-argument", "request-without-timeout", "float-equality-comparison"]
 "pyro_camera_api/**.py" = ["D", "print", "assert", "ANN", "blind-except", "request-without-timeout", "request-with-no-cert-validation", "suspicious-subprocess-import", "subprocess-without-shell-equals-true", "suspicious-xml-etree-import", "suspicious-xml-element-tree-usage", "module-import-not-at-top-of-file", "unused-async"]
-"pyro_camera_api/tests/**.py" = ["invalid-function-name", "hardcoded-password-string", "hardcoded-password-func-arg", "hardcoded-temp-file"]
+"pyro_camera_api/tests/**.py" = ["invalid-function-name", "hardcoded-password-string", "hardcoded-password-func-arg", "hardcoded-temp-file", "float-equality-comparison"]
 "pyroengine/core.py" = ["blind-except"]
 "pyroengine/sensors.py" = ["request-without-timeout", "request-with-no-cert-validation", "ANN"]
 "watchdog/**.py" = ["missing-copyright-notice", "hardcoded-temp-file", "suspicious-url-open-usage", "suspicious-subprocess-import", "subprocess-without-shell-equals-true", "start-process-with-partial-path", "blind-except", "root-logger-call"]

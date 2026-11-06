@@ -176,7 +176,9 @@ class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
             logger.error("Capture failed for %s: %s", self.camera_id, exc)
             return None  # never raise, the inference loop has to keep going
 
-    def move_camera(self, operation, speed=20, idx=0): ...  # translate the operation into the camera's own protocol
+    def move_camera(self, operation, speed=20, idx=0):
+        # Translate the operation into the camera's own protocol.
+        ...
 
     def get_azimuth(self):
         return self.current_azimuth  # None until a reference is known
