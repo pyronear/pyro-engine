@@ -53,7 +53,10 @@ class FakeTemporal:
         return f"job{self.n}"
 
     def result(self, _job_id):
-        return self.results.pop(0)
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
 
 
 def _engine(tmp_path, temporal, **kwargs):
@@ -320,3 +323,35 @@ def test_rejected_frames_of_an_ended_event_stay_dropped_when_a_new_event_starts(
     _fire(engine, mock_wildfire_image)  # job2 validates B
     assert len(engine._alerts) > 0
     assert not {a["ts"] for a in engine._alerts} & rejected_ts
+
+
+def test_fail_open_retries_and_resumes_scoring(tmp_path, mock_wildfire_image):
+    """Regression: one transient failure used to leave the rest of the event unscored, and pyro-api
+    keeps the last device verdict without scoring the sequence itself."""
+    temporal = FakeTemporal([RequestsConnectionError("down"), done((BOX, 0.9)), done((BOX, 0.9))])
+    engine = _engine(tmp_path, temporal)
+    state = _fire(engine, mock_wildfire_image)  # job1 submitted
+    _fire(engine, mock_wildfire_image)  # job1 poll fails: fail open, frames go out unscored
+    assert state["temporal_bypass"] is True
+    _fire(engine, mock_wildfire_image)  # still failing open, but job2 is submitted
+    assert state["temporal_job"][0] == "job2"
+    assert all(s is None for s in _scores(engine))
+    _fire(engine, mock_wildfire_image)  # job2 verdict: scoring resumed, job3 submitted
+    assert state["temporal_bypass"] is False
+    _fire(engine, mock_wildfire_image)  # job3 verdict scores the frame captured after job2
+    assert _scores(engine)[-1] == [0.9]
+
+
+def test_upload_keeps_at_most_five_boxes(tmp_path, mock_wildfire_image):
+    """Backfill at locations tracked over the widened window can push a frame past the 5 boxes
+    pyroclient accepts, which used to drop the whole frame, detections included."""
+    temporal = FakeTemporal([done(([0.0, 0.0, 1.0, 1.0], 0.9))] * 3)
+    engine = _engine(tmp_path, temporal)
+    backfilled = [[0.05 + 0.15 * i, 0.8, 0.1 + 0.15 * i, 0.85, 0.0] for i in range(5)]
+    engine._backfill_bboxes = lambda bboxes, _preds, _tracked: list(bboxes) + backfilled
+    _fire(engine, mock_wildfire_image, n=3)
+    assert engine._alerts
+    for alert in engine._alerts:
+        assert len(alert["bboxes"]) == 5
+        assert len(alert["temporal_scores"]) == 5
+        assert alert["bboxes"][0][:4] == BOX  # the real detection is kept, a backfilled box is left out

@@ -128,7 +128,7 @@ in `.env`, the stack also starts `pyro_temporal_api`. While an alert is ongoing,
 boxes of that camera pose to it every round and uploads each box with the smoke probability of the tube covering it
 (`temporal_model_scores`); boxes at or below 0.2 or outside every scored tube are dropped, and the API applies its own
 threshold instead of running the temporal model itself. If the service is unreachable the frames go out without
-scores and the API scores them. Leave both unset to send alerts as before. The service needs `data/model_onnx.zip`: the [temporal-model](https://github.com/pyronear/temporal-model)
+scores until it answers again, and the API scores the sequences the device never scored. Leave both unset to send alerts as before. The service needs `data/model_onnx.zip`: the [temporal-model](https://github.com/pyronear/temporal-model)
 release on Hugging Face (`pyronear/temporal-model`, revision `v0.6.1`, trained on pyro-dataset v4.7.0), whose
 package carries split backbone/head graphs. With those, the service embeds
 only real frames and keeps per-frame ViT embeddings across rounds, so re-scoring a window one frame longer only costs

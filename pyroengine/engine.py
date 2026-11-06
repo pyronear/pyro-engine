@@ -27,6 +27,8 @@ __all__ = ["ContextCrop", "Engine"]
 
 # Client errors worth retrying later; every other 4xx is a permanent rejection of the payload.
 RETRYABLE_STATUS = frozenset({408, 425, 429})
+# pyroclient refuses a detection with more boxes, so the whole frame would be dropped.
+MAX_UPLOAD_BBOXES = 5
 
 logger = logging.getLogger(__name__)
 
@@ -134,8 +136,9 @@ class Engine(Predictor):
         # pose are scored by the temporal service every round. Boxes covered by a tube scoring
         # above `temporal_min_score` are uploaded with that probability, the API applies its own
         # threshold; the other boxes are dropped. A job still pending after `temporal_job_timeout`
-        # seconds fails open: frames are sent without scores. The API then scores a sequence the
-        # device never scored; a sequence already scored keeps its last device verdict.
+        # seconds fails open: frames are sent without scores until the service answers again. The
+        # API then scores a sequence the device never scored; one already scored keeps its last
+        # device verdict.
         # Set before super().__init__, which already builds the per-camera states.
         self.temporal = TemporalClient(temporal_api_url) if temporal_api_url else None
         self.temporal_window = temporal_window
@@ -218,7 +221,7 @@ class Engine(Predictor):
         state["temporal_job_ended"] = False  # the event that submitted the pending job is over
         state["temporal_tubes"] = []  # [(xyxy box, probability)] of the last verdict, above temporal_min_score
         state["temporal_scored"] = frozenset()  # frame ids scored by that verdict: the only ones it may stage
-        state["temporal_bypass"] = False  # fail open: rest of the event goes out without scores
+        state["temporal_bypass"] = False  # fail open: frames go out unscored until a verdict is back
 
     @staticmethod
     def _frame_id(cam_key: str, ts: str) -> str:
@@ -289,23 +292,29 @@ class Engine(Predictor):
         score. Frames captured after a submission wait for the next verdict. A verdict with no tube
         above ``temporal_min_score`` stages nothing; once the event ended it drops the held frames. A
         transport error, a failed job or a job pending longer than ``temporal_job_timeout`` fails
-        open: the rest of the event goes out without scores. The API scores a sequence the device
+        open: frames go out without scores, and every round still submits the window, so the first
+        verdict once the service is back ends the fail-open. The API scores a sequence the device
         never scored; one already scored keeps its last device verdict, so a fail-open after a
-        score below the API threshold leaves it unvalidated until a higher score or the event's end.
+        score below the API threshold leaves it unvalidated until the service scores it higher.
         """
         state = self._states[cam_key]
-        if state["temporal_bypass"] or self.temporal is None:
+        if self.temporal is None:
             return True
+        bypass = state["temporal_bypass"]
+        # Failing open: one error line when it starts, not one per round while the service is down.
+        log_failure = logger.debug if bypass else logger.error
         try:
-            stage = False
+            stage = bypass
             if state["temporal_job"] is not None:
                 job_id, submitted_at, frame_ids = state["temporal_job"]
                 result = self.temporal.result(job_id)
                 if result["status"] == "pending":
                     if time.monotonic() - submitted_at < self.temporal_job_timeout:
+                        if bypass:
+                            return True  # still failing open: frames go out unscored meanwhile
                         logger.debug("[%s] Temporal verdict pending, alert held", cam_id)
                         return False
-                    logger.error(
+                    log_failure(
                         "[%s] Temporal job still pending after %.0fs, alert sent unscored",
                         cam_id,
                         self.temporal_job_timeout,
@@ -316,6 +325,10 @@ class Engine(Predictor):
                 state["temporal_job"] = None
                 job_ended = state["temporal_job_ended"]
                 if result["status"] == "done":
+                    if bypass:
+                        logger.info("[%s] Temporal service back, scoring resumed", cam_id)
+                    state["temporal_bypass"] = False
+                    stage = False
                     verdict = result["verdict"]
                     tubes = [
                         (tuple(t["box"]), float(t["probability"]))
@@ -347,11 +360,11 @@ class Engine(Predictor):
                             # its rejected frames must not go out under the new event's score.
                             self._consume_window(cam_key, frame_ids)
                 else:
-                    logger.error("[%s] Temporal job failed (%s), alert sent unscored", cam_id, result.get("error"))
+                    log_failure("[%s] Temporal job failed (%s), alert sent unscored", cam_id, result.get("error"))
                     state["temporal_bypass"] = True
                     return True
             elif not resubmit:
-                return False
+                return bypass
             if resubmit:
                 window = self._temporal_window(cam_key)
                 distinct = self._distinct_frames(window)
@@ -362,7 +375,7 @@ class Engine(Predictor):
                 logger.debug("[%s] Temporal scoring submitted (%d frames)", cam_id, len(distinct))
             return stage
         except (RequestException, KeyError, ValueError) as e:
-            logger.error("[%s] Temporal service unavailable (%s), alert sent unscored", cam_id, e)
+            log_failure("[%s] Temporal service unavailable (%s), alert sent unscored", cam_id, e)
             state["temporal_job"] = None  # a lost job must not keep the event alive forever
             state["temporal_bypass"] = True
             return True
@@ -594,6 +607,13 @@ class Engine(Predictor):
             if bboxes:
                 last_seen = bboxes
             sent_bboxes, scores = self._temporal_scores(cam_key, bboxes)
+            if len(sent_bboxes) > MAX_UPLOAD_BBOXES:
+                # Backfill over the widened window can add boxes: keep the most confident ones,
+                # in their original order so scores and crops stay aligned.
+                order = sorted(range(len(sent_bboxes)), key=lambda i: sent_bboxes[i][4], reverse=True)
+                keep = sorted(order[:MAX_UPLOAD_BBOXES])
+                sent_bboxes = [sent_bboxes[i] for i in keep]
+                scores = [scores[i] for i in keep] if scores is not None else None
             crop_boxes = (
                 self._assign_crop_boxes(sent_bboxes, cam_key, *full_size)
                 if sent_bboxes and full_size is not None
