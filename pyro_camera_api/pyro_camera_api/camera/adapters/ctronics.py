@@ -37,7 +37,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
         password: str,
         port: int = 80,
         protocol: str = "http",
-        snapshot_path: str = "/tmpfs/snap.jpg",  # noqa: S108
+        snapshot_path: str = "/tmpfs/snap.jpg",  # ruff: ignore[hardcoded-temp-file]
         snapshot_command: Optional[str] = None,
         timeout: float = 5.0,
         cam_type: str = "static",

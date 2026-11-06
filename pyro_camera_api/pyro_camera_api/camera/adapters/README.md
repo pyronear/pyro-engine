@@ -128,6 +128,7 @@ def reboot_camera(self) -> bool:
     response = requests.post(url, json=[{"cmd": "Reboot"}], verify=False)
     ...
 
+
 # linovision.py
 def reboot_camera(self) -> bool:
     resp = self._request("PUT", "/ISAPI/System/reboot")
@@ -156,8 +157,7 @@ API (see `setup_presets/`). The second is worth it as soon as you deploy more th
 
 ```python
 class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
-    def __init__(self, camera_id, ip_address, username, password,
-                 cam_type="static", cam_poses=None, cam_azimuths=None):
+    def __init__(self, camera_id, ip_address, username, password, cam_type="static", cam_poses=None, cam_azimuths=None):
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.ip_address = ip_address
         self.session = requests.Session()
@@ -176,8 +176,7 @@ class MyCamera(BaseCamera, PTZMixin):  # drop PTZMixin for a static camera
             logger.error("Capture failed for %s: %s", self.camera_id, exc)
             return None  # never raise, the inference loop has to keep going
 
-    def move_camera(self, operation, speed=20, idx=0):
-        ...  # translate the operation into the camera's own protocol
+    def move_camera(self, operation, speed=20, idx=0): ...  # translate the operation into the camera's own protocol
 
     def get_azimuth(self):
         return self.current_azimuth  # None until a reference is known

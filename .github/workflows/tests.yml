@@ -29,22 +29,22 @@ jobs:
         run: echo "__version__ = '0.0.0'" > pyroengine/version.py
 
       - name: Install test dependencies
-        run: uv sync --locked --group dev
+        run: uv sync --locked --no-default-groups --group test
 
       - name: Run unittests
         env:
           API_URL: ${{ secrets.API_URL }}
           API_TOKEN: ${{ secrets.API_TOKEN }}
         run: |
-          uv run coverage run -m pytest tests/
-          uv run coverage xml
+          uv run --no-sync coverage run -m pytest tests/
+          uv run --no-sync coverage xml
       - name: Run camera API tests
         working-directory: pyro_camera_api
         env:
           PYTHONPATH: .
         run: |
           uv sync --locked --group test
-          uv run pytest tests/
+          uv run --no-sync pytest tests/
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -89,10 +89,10 @@ jobs:
         run: echo "__version__ = '0.0.0'" > pyroengine/version.py
 
       - name: Install documentation dependencies
-        run: uv sync --locked --group docs
+        run: uv sync --locked --no-default-groups --group docs
 
       - name: Build documentation
-        run: uv run sphinx-build docs/source docs/build -a
+        run: uv run --no-sync sphinx-build docs/source docs/build -a
       - name: Documentation sanity check
         run: test -e docs/build/index.html || exit
 

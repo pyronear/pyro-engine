@@ -30,7 +30,7 @@ make log-api      # tail camera API logs
 
 Run a single test file:
 ```bash
-pytest tests/test_engine.py -v
+uv run --locked --group test pytest tests/test_engine.py -v
 ```
 
 ## Architecture
@@ -109,6 +109,6 @@ The engine container healthcheck reads the freshness of the heartbeat file (`--h
 ## Code Style
 
 - Python 3.11+, line length 120
-- Ruff for formatting and linting; ty for type checking
+- Ruff for formatting, import sorting and linting; ty for type checking
 - Test coverage enforced via `pytest-cov`
 - License headers are validated in CI (`style.yml`)

@@ -10,8 +10,8 @@
   <a href="https://codecov.io/gh/pyronear/pyro-engine">
     <img src="https://img.shields.io/codecov/c/github/pyronear/pyro-engine.svg?logo=codecov&style=flat-square" alt="Test coverage percentage">
   </a>
-  <a href="https://github.com/ambv/black">
-    <img src="https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square" alt="black">
+  <a href="https://github.com/astral-sh/ruff">
+    <img src="https://img.shields.io/badge/code%20style-ruff-D7FF64.svg?style=flat-square" alt="ruff">
   </a>
   <a href="https://www.codacy.com/gh/pyronear/pyro-engine/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=pyronear/pyro-engine&amp;utm_campaign=Badge_Grade"><img src="https://app.codacy.com/project/badge/Grade/108f5fe8a7ac4f40a7bbd1985e26d5f9"/></a>
 </p>
@@ -105,7 +105,7 @@ Python 3.11 or higher and [uv](https://docs.astral.sh/uv/) are required.
 ```bash
 git clone https://github.com/pyronear/pyro-engine.git
 cd pyro-engine
-uv sync
+uv sync --locked
 ```
 
 ### Environment variables

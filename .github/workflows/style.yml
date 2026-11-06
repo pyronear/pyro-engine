@@ -24,7 +24,7 @@ jobs:
         run: |
           uv run --no-sync ruff --version
           uv run --no-sync ruff format --check --diff .
-          uv run --no-sync ruff check --diff .
+          uv run --no-sync ruff check --output-format github .
 
   ty:
     runs-on: ubuntu-latest

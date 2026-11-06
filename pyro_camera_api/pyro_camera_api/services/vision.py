@@ -103,7 +103,7 @@ class Anonymizer:
                 logger.info(f"Downloading model from {model_url} ...")
                 pathlib.Path(model_folder).mkdir(exist_ok=True, parents=True)
                 with DownloadProgressBar(unit="B", unit_scale=True, miniters=1, desc=model_path) as t:
-                    urlretrieve(model_url, model_path, reporthook=t.update_to)  # noqa: S310
+                    urlretrieve(model_url, model_path, reporthook=t.update_to)  # ruff: ignore[suspicious-url-open-usage]
                 logger.info("Model downloaded!")
 
             # Extract .tar.gz archive
@@ -113,7 +113,7 @@ class Anonymizer:
                 if not pathlib.Path(extract_path).is_dir():
                     pathlib.Path(extract_path).mkdir(exist_ok=True, parents=True)
                     with tarfile.open(model_path, "r:gz") as tar:
-                        tar.extractall(extract_path)  # noqa: S202  # trusted source
+                        tar.extractall(extract_path)  # ruff: ignore[tarfile-unsafe-members]  # trusted source
                     logger.info(f"Extracted model to: {extract_path}")
                 model_path = extract_path
 

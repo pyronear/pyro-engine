@@ -148,7 +148,7 @@ def internet_check_ok() -> bool:
                 if resp.status in (200, 204):
                     logging.info("Internet HTTP check OK: %s", url)
                     return True
-        except Exception:  # noqa: S110
+        except Exception:  # ruff: ignore[try-except-pass]
             pass
 
     for ip in _INTERNET_PING_IPS:
