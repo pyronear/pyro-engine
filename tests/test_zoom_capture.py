@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 
 from pyroengine.core import SystemController
-from pyroengine.zoom_capture import ZoomCapture, crop_square
+from pyroengine.zoom_capture import ZoomCapture, crop_hd, resize_hd
 
 
 @pytest.fixture(autouse=True)
@@ -49,17 +49,16 @@ def _manifest(uploads):
     return key, json.loads(uploads[key])
 
 
-def test_crop_square_stays_inside_frame_near_corner():
+def test_crop_hd_is_native_and_stays_inside_frame_near_corner():
     frame = Image.new("RGB", (3840, 2160))
-    data = crop_square(frame, [0.0, 0.0, 0.02, 0.02, 0.9])
-    assert Image.open(io.BytesIO(data)).size == (1024, 1024)
+    frame.paste((255, 0, 0), (0, 0, 16, 16))
+    crop = Image.open(io.BytesIO(crop_hd(frame, 0.01, 0.01)))
+    assert crop.size == (1280, 720)
+    assert crop.getpixel((8, 8))[0] > 200  # shifted into the frame, not padded
 
 
-def test_crop_square_grows_with_large_bbox():
-    frame = Image.new("RGB", (3840, 2160))
-    data = crop_square(frame, [0.1, 0.1, 0.6, 0.3, 0.9])  # 1920 px wide bbox
-    w, h = Image.open(io.BytesIO(data)).size
-    assert w == h == 2160  # 1920 * 1.2 capped by the frame height
+def test_resize_hd_keeps_the_whole_frame():
+    assert Image.open(io.BytesIO(resize_hd(Image.new("RGB", (3840, 2160))))).size == (1280, 720)
 
 
 def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads, events):
@@ -69,7 +68,16 @@ def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads, eve
     capture.wait(5)
 
     names = [c[0] for c in client.method_calls]
-    assert names == ["stop_patrol", "goto_preset", "click_to_move", "zoom", "capture_image", "zoom", "start_patrol"]
+    assert names == [
+        "stop_patrol",
+        "goto_preset",
+        "click_to_move",
+        "capture_image",
+        "zoom",
+        "capture_image",
+        "zoom",
+        "start_patrol",
+    ]
     client.goto_preset.assert_called_once_with("10.0.0.1", 2)
     _, cx, cy = client.click_to_move.call_args.args
     assert (round(cx, 3), round(cy, 3)) == (0.65, 0.7)  # best bbox centre
@@ -81,9 +89,10 @@ def test_full_sequence_uploads_and_restores_patrol(capture, client, uploads, eve
     assert len(manifest["crops"]) == 2
     assert manifest["bboxes"][0][4] == 0.9
     assert manifest["zoom_crop"].endswith("_zoom10.jpg")
-    assert Image.open(io.BytesIO(uploads[manifest["zoom_crop"]])).size == (1024, 1024)
-    # The zoomed image is uploaded only once the camera is back on patrol
-    assert events.index("start_patrol") < events.index(manifest["zoom_crop"])
+    images = [manifest["full"], *manifest["crops"], manifest["centred"], manifest["zoom_crop"]]
+    assert {Image.open(io.BytesIO(uploads[k])).size for k in images} == {(1280, 720)}
+    # Nothing is uploaded while the job holds the camera
+    assert events.index("start_patrol") < min(events.index(k) for k in images)
     # The restarted patrol has not refreshed the pose images yet
     assert capture.images_stale("10.0.0.1")
     assert not capture.images_stale("10.0.0.9")
@@ -98,6 +107,9 @@ def test_deadline_passed_uploads_crops_only(capture, client, uploads):
     _, manifest = _manifest(uploads)
     assert manifest["status"] == "deadline before stop_patrol"
     assert len(manifest["crops"]) == 1
+    assert "full" in manifest
+    assert "centred" not in manifest
+    assert "zoom_crop" not in manifest
 
 
 def test_stream_aborts_sequence_and_restores(capture, client, uploads):
@@ -126,6 +138,9 @@ def test_error_mid_sequence_still_resets_zoom_and_patrol(capture, client, upload
     _, manifest = _manifest(uploads)
     assert manifest["status"] == "error"
     assert "409 busy" in manifest["errors"][0]
+    # Images taken before the error are still saved
+    assert manifest["full"] in uploads
+    assert manifest["crops"][0] in uploads
 
 
 def test_zoom_reset_is_retried_before_patrol_restart(capture, client, uploads):
