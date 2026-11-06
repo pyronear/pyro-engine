@@ -124,7 +124,11 @@ class Anonymizer:
 
         else:
             try:
-                onnx_file = model_path if model_path.endswith(".onnx") else str(pathlib.Path(model_path) / "model.onnx")
+                onnx_file = model_path
+                if not model_path.endswith(".onnx"):
+                    model_dir = pathlib.Path(model_path)
+                    filename = "best.onnx" if (model_dir / "best.onnx").is_file() else "model.onnx"
+                    onnx_file = str(model_dir / filename)
                 self.ort_session = onnxruntime.InferenceSession(onnx_file)
 
             except Exception as e:
