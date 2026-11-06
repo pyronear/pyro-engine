@@ -209,10 +209,13 @@ class Engine(Predictor):
     def _init_temporal_state(self, state: Dict[str, Any]) -> None:
         # One buffer for detection and temporal validation: the frames the temporal model scores
         # are the frames staged on a positive verdict. Detection still pools the last
-        # nb_consecutive_frames only.
-        if self.temporal is not None and self.temporal_window > (state["last_predictions"].maxlen or 0):
-            state["last_predictions"] = deque(state["last_predictions"], maxlen=self.temporal_window)
+        # nb_consecutive_frames only. One extra slot keeps the oldest scored frame while its verdict
+        # is read on the next round, after that round's frame was appended.
+        # ponytail: covers a verdict pending one round; a longer wait still evicts the oldest frames.
+        if self.temporal is not None and self.temporal_window + 1 > (state["last_predictions"].maxlen or 0):
+            state["last_predictions"] = deque(state["last_predictions"], maxlen=self.temporal_window + 1)
         state["temporal_job"] = None  # (job_id, submitted_at, frame ids) while a verdict is pending
+        state["temporal_job_ended"] = False  # the event that submitted the pending job is over
         state["temporal_tubes"] = []  # [(xyxy box, probability)] of the last verdict, above temporal_min_score
         state["temporal_scored"] = frozenset()  # frame ids scored by that verdict: the only ones it may stage
         state["temporal_bypass"] = False  # fail open: rest of the event goes out without scores
@@ -224,9 +227,9 @@ class Engine(Predictor):
         return f"{cam_key}_{ts.replace(':', '-')}"
 
     def _temporal_window(self, cam_key: str) -> List[WindowFrame]:
-        """The prediction window as (frame_id, jpeg, boxes) triples, oldest first."""
+        """The last `temporal_window` predictions as (frame_id, jpeg, boxes) triples, oldest first."""
         window = []
-        for _, preds, _, ts, _, jpeg in self._states[cam_key]["last_predictions"]:
+        for _, preds, _, ts, _, jpeg in list(self._states[cam_key]["last_predictions"])[-self.temporal_window :]:
             if jpeg is None:
                 continue
             boxes = np.round(preds[:, :5], 4).tolist()
@@ -249,12 +252,12 @@ class Engine(Predictor):
                 distinct.append(frame)
         return distinct
 
-    def _consume_window(self, cam_key: str) -> None:
-        """Mark every frame still waiting for a verdict as staged without upload: the event was rejected
-        for good, so a later event must not upload them under its own score."""
+    def _consume_window(self, cam_key: str, frame_ids: Optional[frozenset] = None) -> None:
+        """Mark the frames still waiting for a verdict (all, or only `frame_ids`) as staged without
+        upload: the event was rejected for good, so a later event must not upload them under its own score."""
         window = self._states[cam_key]["last_predictions"]
         for i, entry in enumerate(window):
-            if not entry[4]:
+            if not entry[4] and (frame_ids is None or self._frame_id(cam_key, entry[3]) in frame_ids):
                 window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
     def _end_event(self, cam_key: str) -> None:
@@ -268,6 +271,7 @@ class Engine(Predictor):
         state = self._states[cam_key]
         state["event_crop_boxes"] = []
         state["temporal_job"] = None
+        state["temporal_job_ended"] = False
         state["temporal_tubes"] = []
         state["temporal_scored"] = frozenset()
         state["temporal_bypass"] = False
@@ -310,6 +314,7 @@ class Engine(Predictor):
                     state["temporal_bypass"] = True
                     return True
                 state["temporal_job"] = None
+                job_ended = state["temporal_job_ended"]
                 if result["status"] == "done":
                     verdict = result["verdict"]
                     tubes = [
@@ -337,6 +342,10 @@ class Engine(Predictor):
                         if not resubmit:
                             self._consume_window(cam_key)
                             return False
+                        if job_ended:
+                            # The job's event ended and a new one started while it was pending:
+                            # its rejected frames must not go out under the new event's score.
+                            self._consume_window(cam_key, frame_ids)
                 else:
                     logger.error("[%s] Temporal job failed (%s), alert sent unscored", cam_id, result.get("error"))
                     state["temporal_bypass"] = True
@@ -349,6 +358,7 @@ class Engine(Predictor):
                 job_id = self.temporal.submit(cam_id, distinct)
                 # Every frame of the window is scored by this job, repeats included: tube scores apply by box.
                 state["temporal_job"] = (job_id, time.monotonic(), frozenset(f for f, _, _ in window))
+                state["temporal_job_ended"] = False
                 logger.debug("[%s] Temporal scoring submitted (%d frames)", cam_id, len(distinct))
             return stage
         except (RequestException, KeyError, ValueError) as e:
@@ -538,6 +548,8 @@ class Engine(Predictor):
         # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip).
         # An event that ended while its temporal verdict is pending keeps its state until the
         # verdict is in: a positive one still uploads the frames held while the smoke was scored.
+        if not state["ongoing"] and state["temporal_job"] is not None:
+            state["temporal_job_ended"] = True
         alerting = (state["ongoing"] or state["temporal_job"] is not None) and len(self.api_client) > 0
         if (
             alerting

@@ -83,7 +83,7 @@ def _scores(engine):
 def test_window_is_the_prediction_window(tmp_path, mock_wildfire_image):
     engine = _engine(tmp_path, FakeTemporal([PENDING] * 3), temporal_window=3)
     state = _fire(engine, mock_wildfire_image, n=4)
-    assert state["last_predictions"].maxlen == 3  # widened from nb_consecutive_frames=2
+    assert state["last_predictions"].maxlen == 4  # widened from nb_consecutive_frames=2, +1 while a verdict is read
     window = engine._temporal_window(CAM)
     assert len(window) == 3
     frame_id, jpeg, boxes = window[-1]
@@ -294,3 +294,29 @@ def test_event_ending_during_validation_dropped_on_negative(tmp_path, mock_wildf
     _fire(engine, mock_wildfire_image, n=3)
     assert len(engine._alerts) > 0
     assert not {a["ts"] for a in engine._alerts} & set(rejected_ts)
+
+
+def test_verdict_stages_its_oldest_frame_after_a_new_frame_arrived(tmp_path, mock_wildfire_image):
+    temporal = FakeTemporal([done((BOX, 0.1)), done((BOX, 0.1)), done((BOX, 0.9))])
+    engine = _engine(tmp_path, temporal, temporal_window=3)
+    _fire(engine, mock_wildfire_image, n=4)  # job3 scored frames 1-3, frame 4 arrived before its verdict
+    assert len(engine._alerts) == 3
+    assert len(temporal.submitted[3][1]) == 1  # job4 window is the last 3 frames, scored once (same image)
+
+
+def test_rejected_frames_of_an_ended_event_stay_dropped_when_a_new_event_starts(
+    tmp_path, mock_wildfire_image, mock_forest_image
+):
+    temporal = FakeTemporal([PENDING, PENDING, PENDING, done((BOX, 0.02)), done((BOX, 0.9))])
+    engine = _engine(tmp_path, temporal)
+    state = _fire(engine, mock_wildfire_image)  # event A submits job1
+    rejected_ts = {e[3] for e in state["last_predictions"]}
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
+    assert state["ongoing"] is False
+    assert state["temporal_job"][0] == "job1"
+    _fire(engine, mock_wildfire_image)  # event B starts, job1 still pending
+    _fire(engine, mock_wildfire_image)  # job1 rejects A while B is ongoing
+    _fire(engine, mock_wildfire_image)  # job2 validates B
+    assert len(engine._alerts) > 0
+    assert not {a["ts"] for a in engine._alerts} & rejected_ts
