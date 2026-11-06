@@ -192,7 +192,7 @@ class ZoomCapture:
         shots: Dict[str, bytes] = {}
         try:
             self._ptz_sequence(client, ip, pose, bboxes[0], deadline, should_abort, manifest, shots)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # ruff: ignore[blind-except]
             logger.error(f"[{ip}] zoom capture failed: {e}")
             manifest["status"] = "error"
             manifest["errors"].append(str(e))
@@ -204,12 +204,12 @@ class ZoomCapture:
                 manifest["centred"] = self._put(f"{base}_centred.jpg", shots["centred"], "image/jpeg")
             if "zoom" in shots:
                 manifest["zoom_crop"] = self._put(f"{base}_zoom{ZOOM_LEVEL}.jpg", shots["zoom"], "image/jpeg")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # ruff: ignore[blind-except]
             logger.error(f"[{ip}] zoom capture upload failed: {e}")
             manifest["errors"].append(f"upload: {e}")
         try:
             self._put(f"{base}_manifest.json", json.dumps(manifest, indent=1).encode(), "application/json")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:  # ruff: ignore[blind-except]
             logger.error(f"[{ip}] zoom capture manifest upload failed: {e}")
         logger.info(f"[{ip}] zoom capture pose {pose}: {manifest['status']} {manifest['timings']}")
 
@@ -227,7 +227,7 @@ class ZoomCapture:
         """Drive the camera onto the bbox, adding each HD centre crop to `shots` as soon as it is taken."""
         timings = manifest["timings"]
 
-        def step(label: str, fn: Callable[[], Any]) -> Any:  # noqa: ANN401
+        def step(label: str, fn: Callable[[], Any]) -> Any:  # ruff: ignore[any-type]
             if time.monotonic() > deadline:
                 raise _AbortError(f"deadline before {label}")
             if should_abort():
@@ -274,6 +274,6 @@ class ZoomCapture:
                 done.add(label)
                 if label == "start_patrol":
                     self._patrol_restarted_at[ip] = time.monotonic()
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:  # ruff: ignore[blind-except]
                 logger.error(f"[{ip}] zoom capture {label} failed: {e}")
                 manifest["errors"].append(f"{label}: {e}")
