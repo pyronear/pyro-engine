@@ -23,6 +23,9 @@ from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_FLAGS, PATRO
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# How long stop_patrol waits for the patrol thread to finish its in-flight camera call
+STOP_JOIN_TIMEOUT_S = 10.0
+
 
 @router.post("/start_patrol")
 def start_patrol(camera_ip: str, request: Request):
@@ -84,20 +87,28 @@ def start_patrol(camera_ip: str, request: Request):
 @router.post("/stop_patrol")
 def stop_patrol(camera_ip: str):
     """
-    Request termination of the patrol loop for a camera.
+    Stop the patrol loop for a camera and wait until it no longer drives the camera.
 
-    This does not forcibly kill the thread. The thread receives the stop flag and
-    finishes gracefully before exiting. If no patrol is running for the camera,
-    an HTTP 404 error is raised.
+    The thread is not killed: it sees the stop flag, finishes its in-flight camera call and
+    exits. Callers move the camera right after this returns, so it waits for the thread
+    (up to STOP_JOIN_TIMEOUT_S) instead of letting a late patrol move race theirs.
+    If no patrol is running for the camera, an HTTP 404 error is raised.
 
     Returns:
-        JSON object confirming that termination has been signaled.
+        JSON object with status "stopped", or "stopping" if the thread is still busy
+        after the timeout.
     """
     if camera_ip not in PATROL_FLAGS:
         raise HTTPException(status_code=404, detail="No patrol running for this camera")
 
     PATROL_FLAGS[camera_ip].set()
-    return {"status": "stopping", "camera_ip": camera_ip}
+    thread = PATROL_THREADS.get(camera_ip)
+    if thread is not None:
+        thread.join(STOP_JOIN_TIMEOUT_S)
+        if thread.is_alive():
+            logger.warning("[%s] Patrol thread still busy %.0fs after stop", camera_ip, STOP_JOIN_TIMEOUT_S)
+            return {"status": "stopping", "camera_ip": camera_ip}
+    return {"status": "stopped", "camera_ip": camera_ip}
 
 
 @router.get("/patrol_status")
