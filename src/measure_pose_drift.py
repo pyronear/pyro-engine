@@ -15,6 +15,9 @@ Measurement only (pyronear/vision-rd#89). On the Pi:
     cp src/measure_pose_drift.py data/
     docker compose exec -d engine python data/measure_pose_drift.py
 
+Frames are downscaled to 1280 px wide first, so offsets are in pixels of that width (1 px = FOV / 1280).
+The process runs at the lowest CPU priority with one OpenCV thread, to leave inference untouched.
+
 Outputs in data/pose_drift/: drift.csv, ref/<cam_id>.jpg (delete it and restart to reset a reference),
 anomalies/<cam_id>_<ts>.jpg. The process stops when the engine container restarts.
 """
@@ -24,6 +27,7 @@ import csv
 import hashlib
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,7 +44,14 @@ from pyroengine.logs import setup_logging
 logger = logging.getLogger("pose_drift")
 
 CROP_TOP = 0.45  # keep the terrain, drop most of the sky
+WIDTH = 1280  # 4K frames cost ~9x more and gain nothing for sub-pixel registration
 FIELDS = ["ts", "cam_id", "dx", "dy", "cc", "prev_dx", "prev_dy", "prev_cc"]
+
+
+def downscale(frame: Image.Image) -> Image.Image:
+    if frame.width <= WIDTH:
+        return frame
+    return frame.resize((WIDTH, round(frame.height * WIDTH / frame.width)), Image.Resampling.BILINEAR)
 
 
 def gradient(frame: Image.Image) -> np.ndarray:
@@ -84,6 +95,7 @@ class DriftLogger:
         self.last_hash: dict = {}
 
     def process(self, cam_id: str, frame: Image.Image) -> None:
+        frame = downscale(frame)
         digest = hashlib.sha256(frame.tobytes()).hexdigest()
         if self.last_hash.get(cam_id) == digest:
             return
@@ -119,6 +131,8 @@ def _fmt(res: Optional[Tuple[float, float, float]]) -> list:
 
 def main(args: argparse.Namespace) -> None:
     setup_logging()
+    os.nice(19)
+    cv2.setNumThreads(1)
     creds = json.loads(Path(args.creds).read_text())
     poses = [(ip, p) for ip, cam in creds.items() if cam.get("type") == "ptz" for p in cam.get("poses", [])]
     client = PyroCameraAPIClient(args.pyro_camera_api_url)

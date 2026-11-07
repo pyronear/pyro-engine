@@ -49,3 +49,9 @@ def test_register_keeps_inputs_intact():
     img, ref0 = ref.copy(), ref.copy()
     mpd.register(ref, img)
     assert np.array_equal(ref, ref0)
+
+
+def test_large_frames_are_downscaled_before_saving(tmp_path):
+    drift = mpd.DriftLogger(tmp_path, max_px=5.0, min_cc=0.5, max_saved=10)
+    drift.process("cam_4k", _scene().resize((3840, 2160)))
+    assert Image.open(tmp_path / "ref" / "cam_4k.jpg").size == (1280, 720)
