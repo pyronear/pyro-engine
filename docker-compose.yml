@@ -28,7 +28,40 @@ services:
     init: true
     restart: always
     network_mode: host
-    # The image healthcheck uses Python's HTTP client; curl is not required.
+    healthcheck:
+      # Docker never restarts an unhealthy container by itself: on a hung patrol (503) or an API
+      # that stopped answering, kill everything but PID 1 so `restart: always` brings it back.
+      # The kill runs on the first failed check, so `retries` gives no margin: the probe tries
+      # 9 times (5 s timeout, 10 s apart), 80 s (fast 503) to 125 s, so a saturated Pi does not
+      # restart the API, with every camera and live stream. `timeout` stays above that, or Docker
+      # kills the check before the kill runs. Connection refused only means uvicorn is still
+      # starting, as it binds after camera setup: killing on it would loop at startup (the kill
+      # runs during start_period too). A hang before the bind is bounded by the 10 s timeout on
+      # every camera call. The image ships no curl, so the probe uses Python's HTTP client.
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import os, sys, time
+          from http.client import HTTPConnection
+          for attempt in range(9):
+              if attempt:
+                  time.sleep(10)
+              try:
+                  conn = HTTPConnection("127.0.0.1", 8081, timeout=5)
+                  conn.request("GET", "/health/patrols")
+                  if conn.getresponse().status == 200:
+                      sys.exit(0)
+              except ConnectionRefusedError:
+                  sys.exit(1)
+              except OSError:
+                  pass
+          os.kill(-1, 9)
+      interval: 30s
+      retries: 3
+      start_period: 20s
+      timeout: 140s
     logging:
       driver: json-file
       options:

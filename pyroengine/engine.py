@@ -207,6 +207,25 @@ class Engine(Predictor):
         ip = cam_id.split("_")[0]
         return self.api_client[ip].heartbeat(timeout=timeout)
 
+    def maybe_heartbeat(self, cam_id: str) -> None:
+        """Send a heartbeat for the camera of cam_id unless one was sent less than heartbeat_period ago.
+
+        One heartbeat per camera, not per pose: liveness only needs minute-level resolution and
+        heartbeats were 89% of the API traffic.
+        """
+        ip = cam_id.split("_")[0]
+        if (
+            ip not in self.api_client
+            or time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) < self.heartbeat_period
+        ):
+            return
+        # Short per-request timeout so a slow API never holds the frame loop
+        try:
+            self.heartbeat(cam_id, timeout=1)
+        except RequestException as e:
+            logger.warning("[%s] Heartbeat failed: %s", cam_id, e)
+        self._last_heartbeat[ip] = time.monotonic()
+
     def predict(
         self,
         frame: Image.Image,
@@ -247,21 +266,8 @@ class Engine(Predictor):
         frame.save(buf, format="JPEG", quality=self.jpeg_quality)
         encoded_bytes = buf.getvalue()
 
-        # Heartbeat
         if len(self.api_client) > 0 and isinstance(cam_id, str):
-            # One heartbeat per camera, not per pose: liveness only needs minute-level resolution and
-            # heartbeats were 89% of the API traffic.
-            ip = cam_id.split("_")[0]
-            if (
-                ip in self.api_client
-                and time.monotonic() - self._last_heartbeat.get(ip, float("-inf")) >= self.heartbeat_period
-            ):
-                # Short per-request timeout so a slow API never holds the frame loop
-                try:
-                    self.heartbeat(cam_id, timeout=1)
-                except RequestException as e:
-                    logger.warning("[%s] Heartbeat failed: %s", cam_id, e)
-                self._last_heartbeat[ip] = time.monotonic()
+            self.maybe_heartbeat(cam_id)
             if (
                 self._states[cam_key]["last_image_sent"] is None
                 or time.time() - self._states[cam_key]["last_image_sent"] > self.send_last_image_period

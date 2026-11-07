@@ -7,6 +7,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from pyro_camera_api.camera.patrol import stalled_patrols
 
 router = APIRouter()
 
@@ -16,7 +19,20 @@ def health():
     """
     Return a basic heartbeat response to confirm that the API is running.
 
-    This endpoint does not perform any camera or service check.
-    It is intended for uptime monitoring and infrastructure-level health probes.
+    Kept free of camera checks: the Shelly watchdog reads it as Pi liveness and
+    power-cycles the Pi and the router when it fails.
     """
+    return {"status": "ok"}
+
+
+@router.get("/health/patrols")
+def health_patrols():
+    """
+    Return 200 while every running patrol makes progress, 503 with the hung cameras otherwise.
+
+    Used by the compose healthcheck, which restarts the container on a 503.
+    """
+    stalled = stalled_patrols()
+    if stalled:
+        return JSONResponse(status_code=503, content={"status": "patrol_stalled", "cameras": stalled})
     return {"status": "ok"}
