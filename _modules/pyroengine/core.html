@@ -267,7 +267,6 @@
 
 <span class="n">urllib3</span><span class="o">.</span><span class="n">disable_warnings</span><span class="p">(</span><span class="n">urllib3</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">InsecureRequestWarning</span><span class="p">)</span>
 
-<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> | </span><span class="si">%(levelname)s</span><span class="s2">: </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span> <span class="n">force</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 
@@ -318,23 +317,27 @@
         <span class="n">engine</span><span class="p">:</span> <span class="n">Engine</span><span class="p">,</span>
         <span class="n">camera_data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
         <span class="n">pyro_camera_api_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">heartbeat_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="n">engine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span> <span class="o">=</span> <span class="n">camera_data</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">datetime</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Touched on every loop so container liveness does not depend on log content.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_file</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">heartbeat_file</span><span class="p">)</span> <span class="k">if</span> <span class="n">heartbeat_file</span> <span class="k">else</span> <span class="kc">None</span>
 
         <span class="c1"># Wait for the camera API to be available</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for Pyro Camera API at </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">pyro_camera_api_url</span><span class="p">)</span>
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_INITIAL_WAIT</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for Pyro Camera API&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span> <span class="o">=</span> <span class="n">PyroCameraAPIClient</span><span class="p">(</span><span class="n">pyro_camera_api_url</span><span class="p">)</span>
                 <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_stream_status</span><span class="p">()</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Pyro Camera API client ready&quot;</span><span class="p">)</span>
                 <span class="k">break</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;API not ready: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="c1"># Expected while the camera API container is still booting.</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Camera API not ready yet, retrying in </span><span class="si">%d</span><span class="s2">s: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">)</span>
 
         <span class="c1"># Optional startup actions, do not fail hard</span>
@@ -342,17 +345,18 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not start patrol on </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> at startup, continuing: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Could not start patrol at startup, continuing: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 
         <span class="c1"># Wait and then loop until inference passes once</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for cameras (</span><span class="si">%d</span><span class="s2"> configured)&quot;</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="p">))</span>
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">POST_READY_WAIT</span><span class="p">)</span>
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Waiting for cameras&quot;</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">inference_loop</span><span class="p">()</span>
                 <span class="k">break</span>
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inference failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="c1"># Cameras may not have produced a first frame yet, keep waiting.</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;First inference pass failed, retrying in </span><span class="si">%d</span><span class="s2">s: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">API_RETRY_DELAY</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">focus_finder</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -372,15 +376,18 @@
                         <span class="k">continue</span>
                     <span class="n">pose</span> <span class="o">=</span> <span class="n">poses</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># The camera answers, so the 2 min per-camera optimization timeout</span>
+                        <span class="c1"># must not read as a dead engine.</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_write_heartbeat</span><span class="p">()</span>
                         <span class="k">try</span><span class="p">:</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">stop_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
                             <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">run_focus_optimization</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Autofocus completed for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Autofocus completed&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">)</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">last_autofocus</span> <span class="o">=</span> <span class="n">now</span>
-                        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[Failed to run hourly focus finder on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Failed to run hourly focus finder&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_any_stream_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -408,7 +415,7 @@
 
             <span class="k">return</span> <span class="kc">False</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not fetch stream status: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Could not fetch stream status: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">False</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_safe_get_latest_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ip</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">pose</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Image</span><span class="o">.</span><span class="n">Image</span><span class="p">]:</span>
@@ -417,7 +424,7 @@
         <span class="k">except</span> <span class="n">UnidentifiedImageError</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error getting image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Could not get image for pose </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">inference_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -426,48 +433,84 @@
 
 <span class="sd">        This skips processing entirely if a stream is currently active.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Liveness, not image flow: the healthcheck kills a stale engine, and restarting it</span>
+        <span class="c1"># would not bring back an offline camera (the camera API reports those instead).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_heartbeat</span><span class="p">()</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream detected, skipping inference on all cameras&quot;</span><span class="p">)</span>
             <span class="k">return</span>
 
+        <span class="n">start_ts</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">analyzed</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">failed</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">positive</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">max_conf</span> <span class="o">=</span> <span class="mf">0.0</span>
+
         <span class="k">for</span> <span class="n">ip</span><span class="p">,</span> <span class="n">cam</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">camera_name</span> <span class="o">=</span> <span class="n">cam</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+            <span class="n">is_ptz</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;ptz&quot;</span>
+            <span class="c1"># Static cameras expose a single frame under the conventional pose -1.</span>
+            <span class="n">poses</span> <span class="o">=</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;poses&quot;</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">is_ptz</span> <span class="k">else</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
 
-            <span class="k">if</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;ptz&quot;</span><span class="p">:</span>
-                <span class="k">for</span> <span class="n">pose</span> <span class="ow">in</span> <span class="n">cam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;poses&quot;</span><span class="p">,</span> <span class="p">[]):</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream turned on during loop, stopping inference immediately&quot;</span><span class="p">)</span>
-                        <span class="k">return</span>
-                    <span class="k">try</span><span class="p">:</span>
-                        <span class="n">cam_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span>
-                        <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Captured image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">)</span>
-                    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;HTTP error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
-                        <span class="p">)</span>
-                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">, pose </span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-            <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">pose</span> <span class="ow">in</span> <span class="n">poses</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_any_stream_active</span><span class="p">():</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Stream turned on during loop, stopping inference immediately&quot;</span><span class="p">)</span>
                     <span class="k">return</span>
+
+                <span class="n">cam_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pose</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">is_ptz</span> <span class="k">else</span> <span class="n">ip</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">cam_id</span> <span class="o">=</span> <span class="n">ip</span>
-                    <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Captured image for </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">)</span>
+                    <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_safe_get_latest_image</span><span class="p">(</span><span class="n">ip</span><span class="p">,</span> <span class="n">pose</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">frame</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">failed</span> <span class="o">+=</span> <span class="mi">1</span>
+                        <span class="k">continue</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Captured image from </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">,</span> <span class="n">camera_name</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
+                    <span class="n">conf</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">))</span>
+                    <span class="n">analyzed</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">max_conf</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_conf</span><span class="p">,</span> <span class="n">conf</span><span class="p">)</span>
+                    <span class="c1"># The predictor applies hysteresis (0.8x threshold while an event is</span>
+                    <span class="c1"># ongoing), so read its verdict instead of re-deriving the threshold:</span>
+                    <span class="c1"># the summary must not say &quot;quiet&quot; while alerts are being staged.</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_states</span><span class="p">[</span><span class="n">cam_id</span><span class="p">][</span><span class="s2">&quot;ongoing&quot;</span><span class="p">]:</span>
+                        <span class="n">positive</span> <span class="o">+=</span> <span class="mi">1</span>
                 <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;HTTP error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error for </span><span class="si">{</span><span class="n">camera_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">failed</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">body</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">response</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">e</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] HTTP error from </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">,</span> <span class="n">camera_name</span><span class="p">,</span> <span class="n">body</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                    <span class="n">failed</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Inference failed on </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">cam_id</span><span class="p">,</span> <span class="n">camera_name</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Inference round: analyzed=</span><span class="si">%d</span><span class="s2"> failed=</span><span class="si">%d</span><span class="s2"> positive=</span><span class="si">%d</span><span class="s2"> max_confidence=</span><span class="si">%.2f</span><span class="s2"> duration=</span><span class="si">%.1f</span><span class="s2">s&quot;</span><span class="p">,</span>
+            <span class="n">analyzed</span><span class="p">,</span>
+            <span class="n">failed</span><span class="p">,</span>
+            <span class="n">positive</span><span class="p">,</span>
+            <span class="n">max_conf</span><span class="p">,</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_ts</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write_heartbeat</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Refresh the heartbeat file used by the container healthcheck.</span>
+
+<span class="sd">        A failure here must not stop detection, so it is reported and execution continues.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_file</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_file</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">())</span>
+        <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Could not write heartbeat file </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">heartbeat_file</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sleep_with_heartbeat</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">step</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">60.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sleep in steps, refreshing the heartbeat, so the long night sleep stays healthy.&quot;&quot;&quot;</span>
+        <span class="n">remaining</span> <span class="o">=</span> <span class="n">duration</span>
+        <span class="k">while</span> <span class="n">remaining</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_heartbeat</span><span class="p">()</span>
+            <span class="n">chunk</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+            <span class="n">remaining</span> <span class="o">-=</span> <span class="n">chunk</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">check_and_restart_patrol</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -476,7 +519,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">stream_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_stream_status</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not check if stream is running: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Could not check if stream is running: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
             <span class="k">return</span>
 
         <span class="n">active_pipelines</span> <span class="o">=</span> <span class="n">stream_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active_pipelines&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">[]</span>
@@ -487,9 +530,9 @@
                     <span class="n">patrol_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_patrol_status</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
                     <span class="k">if</span> <span class="ow">not</span> <span class="n">patrol_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;patrol_running&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">start_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Patrol restarted on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Patrol restarted&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not check or restart patrol on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Could not check or restart patrol: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">main_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">period</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">send_alerts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -514,36 +557,34 @@
                         <span class="n">patrol_status</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">get_patrol_status</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
                         <span class="k">if</span> <span class="ow">not</span> <span class="n">patrol_status</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;patrol_running&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">stop_patrol</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
-                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stopped patrol for camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2"> due to night&quot;</span><span class="p">)</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Patrol stopped for the night&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">)</span>
                     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to stop patrol on camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Failed to stop patrol: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
 
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Nighttime detected by at least one camera, sleeping for 1 hour&quot;</span><span class="p">)</span>
-                <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3600</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sleep_with_heartbeat</span><span class="p">(</span><span class="mi">3600</span><span class="p">)</span>
 
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">ip</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">camera_data</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
                     <span class="n">frame</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">camera_api_client</span><span class="o">.</span><span class="n">capture_image</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="n">is_day_time</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="s2">&quot;ir&quot;</span><span class="p">)</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Re checked day and night using camera </span><span class="si">{</span><span class="n">ip</span><span class="si">}</span><span class="s2">, result is_day=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;[</span><span class="si">%s</span><span class="s2">] Re checked day and night, is_day=</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="p">)</span>
 
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span><span class="p">:</span>
                         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Day detected, restarting patrols&quot;</span><span class="p">)</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">check_and_restart_patrol</span><span class="p">()</span>
                         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Patrols restarted successfully, waiting 30 seconds before next check&quot;</span><span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to check day and night after sleep: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Failed to check day and night after sleep: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">is_day</span> <span class="o">=</span> <span class="kc">False</span>
 
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_alerts</span><span class="p">)</span> <span class="ow">and</span> <span class="n">send_alerts</span><span class="p">:</span>
                     <span class="k">try</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">_process_alerts</span><span class="p">()</span>
-                    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error processing alerts: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Error processing alerts&quot;</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Run focus finder&quot;</span><span class="p">)</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">focus_finder</span><span class="p">()</span>
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">check_and_restart_patrol</span><span class="p">()</span>
@@ -551,7 +592,9 @@
 
                 <span class="n">loop_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_ts</span>
                 <span class="n">sleep_time</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">period</span> <span class="o">-</span> <span class="n">loop_time</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Loop run under </span><span class="si">{</span><span class="n">loop_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds, sleeping for </span><span class="si">{</span><span class="n">sleep_time</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Loop ran in </span><span class="si">%.2f</span><span class="s2">s, sleeping for </span><span class="si">%.2f</span><span class="s2">s&quot;</span><span class="p">,</span> <span class="n">loop_time</span><span class="p">,</span> <span class="n">sleep_time</span><span class="p">)</span>
+                <span class="c1"># Plain sleep: liveness during the day comes from successful captures, so a</span>
+                <span class="c1"># blind engine must go stale here rather than keep the heartbeat fresh.</span>
                 <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_time</span><span class="p">)</span></div>
 
 </pre></div>

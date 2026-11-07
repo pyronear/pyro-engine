@@ -14,4 +14,4 @@ this repository. Install by cloning the repository and using
 
     git clone https://github.com/pyronear/pyro-engine.git
     cd pyro-engine
-    uv sync
+    uv sync --locked
