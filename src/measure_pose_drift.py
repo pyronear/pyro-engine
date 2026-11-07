@@ -5,10 +5,12 @@
 
 """Log PTZ pose misalignment over time, without changing engine behavior.
 
-Reads the frame the camera API already cached for each PTZ pose (no camera command),
-registers it against a fixed per-pose reference and against the previous frame, and
-appends the offset to a CSV. Images are kept only for large offsets or failed
-registrations, up to a cap.
+Reads the frame the camera API already cached for each PTZ pose (no camera command) and
+registers it against three per-pose images: the first reference (fixed anchor), the
+hourly reference (first day frame of the current UTC hour, closer in lighting) and the
+previous frame. Each new hourly reference is also registered once against the first
+reference, so hourly offsets can be chained back to the anchor without accumulating error.
+Other images are kept only for large offsets or failed registrations, up to a cap.
 
 Measurement only (pyronear/vision-rd#89). On the Pi:
 
@@ -18,8 +20,13 @@ Measurement only (pyronear/vision-rd#89). On the Pi:
 Frames are downscaled to 1280 px wide first, so offsets are in pixels of that width (1 px = FOV / 1280).
 The process runs at the lowest CPU priority with one OpenCV thread, to leave inference untouched.
 
-Outputs in data/pose_drift/: drift.csv, ref/<cam_id>.jpg (delete it and restart to reset a reference),
-anomalies/<cam_id>_<ts>.jpg. The process stops when the engine container restarts.
+Outputs in data/pose_drift/:
+- drift.csv: offsets of each frame vs the first reference, the hourly reference and the previous frame
+- hourly_refs.csv: offset of each hourly reference vs the first reference
+- ref/<cam_id>.jpg: first reference (delete it and restart to reset it)
+- hourly/<cam_id>_<YYYY-MM-DDTHH>.jpg: hourly references, 1280 px wide
+- anomalies/<cam_id>_<ts>.jpg
+The process stops when the engine container restarts.
 """
 
 import argparse
@@ -45,7 +52,8 @@ logger = logging.getLogger("pose_drift")
 
 CROP_TOP = 0.45  # keep the terrain, drop most of the sky
 WIDTH = 1280  # 4K frames cost ~9x more and gain nothing for sub-pixel registration
-FIELDS = ["ts", "cam_id", "dx", "dy", "cc", "prev_dx", "prev_dy", "prev_cc"]
+FIELDS = ["ts", "cam_id", "dx", "dy", "cc", "h_dx", "h_dy", "h_cc", "prev_dx", "prev_dy", "prev_cc"]
+HOURLY_FIELDS = ["ts", "cam_id", "file", "dx", "dy", "cc"]
 
 
 def downscale(frame: Image.Image) -> Image.Image:
@@ -81,20 +89,21 @@ def register(ref: np.ndarray, img: np.ndarray) -> Optional[Tuple[float, float, f
 class DriftLogger:
     def __init__(self, out_dir: Path, max_px: float, min_cc: float, max_saved: int) -> None:
         self.ref_dir = out_dir / "ref"
+        self.hourly_dir = out_dir / "hourly"
         self.anomaly_dir = out_dir / "anomalies"
-        self.ref_dir.mkdir(parents=True, exist_ok=True)
-        self.anomaly_dir.mkdir(parents=True, exist_ok=True)
-        self.csv_path = out_dir / "drift.csv"
-        if not self.csv_path.exists():
-            with self.csv_path.open("w", newline="") as f:
-                csv.writer(f).writerow(FIELDS)
+        for folder in (self.ref_dir, self.hourly_dir, self.anomaly_dir):
+            folder.mkdir(parents=True, exist_ok=True)
+        self.csv_path = _open_csv(out_dir / "drift.csv", FIELDS)
+        self.hourly_csv_path = _open_csv(out_dir / "hourly_refs.csv", HOURLY_FIELDS)
         self.max_px, self.min_cc, self.max_saved = max_px, min_cc, max_saved
         self.saved = len(list(self.anomaly_dir.glob("*.jpg")))
         self.refs: dict = {}
+        self.hourly: dict = {}  # cam_id -> (hour key, gradient)
         self.prev: dict = {}
         self.last_hash: dict = {}
 
-    def process(self, cam_id: str, frame: Image.Image) -> None:
+    def process(self, cam_id: str, frame: Image.Image, now: Optional[datetime] = None) -> None:
+        now = now or datetime.now(timezone.utc)
         frame = downscale(frame)
         digest = hashlib.sha256(frame.tobytes()).hexdigest()
         if self.last_hash.get(cam_id) == digest:
@@ -112,17 +121,41 @@ class DriftLogger:
             self.refs[cam_id] = gradient(Image.open(ref_path))
 
         res = register(self.refs[cam_id], img)
+        ts = now.isoformat(timespec="seconds")
+
+        hour = now.strftime("%Y-%m-%dT%H")
+        if self.hourly.get(cam_id, (None,))[0] != hour:
+            hourly_path = self.hourly_dir / f"{cam_id}_{hour}.jpg"
+            frame.save(hourly_path, quality=95)
+            self.hourly[cam_id] = (hour, img)
+            # This frame's offset vs the first reference links the new hourly reference to the anchor.
+            with self.hourly_csv_path.open("a", newline="") as f:
+                csv.writer(f).writerow([ts, cam_id, hourly_path.name, *_fmt(res)])
+            logger.info("[%s] Hourly reference saved to %s", cam_id, hourly_path)
+
+        hourly = register(self.hourly[cam_id][1], img)
         prev = register(self.prev[cam_id], img) if cam_id in self.prev else None
         self.prev[cam_id] = img
 
-        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with self.csv_path.open("a", newline="") as f:
-            csv.writer(f).writerow([ts, cam_id, *_fmt(res), *_fmt(prev)])
+            csv.writer(f).writerow([ts, cam_id, *_fmt(res), *_fmt(hourly), *_fmt(prev)])
 
         large = res is None or np.hypot(res[0], res[1]) > self.max_px or res[2] < self.min_cc
         if large and self.saved < self.max_saved:
             frame.save(self.anomaly_dir / f"{cam_id}_{ts.replace(':', '-')}.jpg", quality=90)
             self.saved += 1
+
+
+def _open_csv(path: Path, fields: list) -> Path:
+    """Create the CSV with its header; move aside a file written with older columns."""
+    if path.exists():
+        with path.open() as f:
+            if next(csv.reader(f), None) == fields:
+                return path
+        path.rename(path.with_name(f"{path.stem}_{int(time.time())}.csv"))
+    with path.open("w", newline="") as f:
+        csv.writer(f).writerow(fields)
+    return path
 
 
 def _fmt(res: Optional[Tuple[float, float, float]]) -> list:

@@ -55,3 +55,26 @@ def test_large_frames_are_downscaled_before_saving(tmp_path):
     drift = mpd.DriftLogger(tmp_path, max_px=5.0, min_cc=0.5, max_saved=10)
     drift.process("cam_4k", _scene().resize((3840, 2160)))
     assert Image.open(tmp_path / "ref" / "cam_4k.jpg").size == (1280, 720)
+
+
+def test_hourly_reference_is_saved_and_linked_to_first_reference(tmp_path):
+    from datetime import datetime, timezone
+
+    (tmp_path / "drift.csv").write_text("ts,cam_id,dx,dy,cc,prev_dx,prev_dy,prev_cc\n")  # older columns
+    drift = mpd.DriftLogger(tmp_path, max_px=5.0, min_cc=0.5, max_saved=10)
+    assert len(list(tmp_path.glob("drift_*.csv"))) == 1  # old file moved aside
+
+    t1 = datetime(2026, 11, 7, 12, 10, tzinfo=timezone.utc)
+    t2 = datetime(2026, 11, 7, 13, 5, tzinfo=timezone.utc)
+    drift.process("cam_1", _scene().resize((3840, 2160)), now=t1)  # first + hourly reference of 12h
+    drift.process("cam_1", _scene((8.0, 0.0)), now=t2)  # becomes the 13h hourly reference
+    drift.process("cam_1", _scene((8.5, 0.0)), now=t2)
+
+    hourly = sorted((tmp_path / "hourly").glob("*.jpg"))
+    assert [p.name for p in hourly] == ["cam_1_2026-11-07T12.jpg", "cam_1_2026-11-07T13.jpg"]
+    assert Image.open(hourly[0]).size == (1280, 720)
+    links = list(csv.DictReader((tmp_path / "hourly_refs.csv").open()))
+    assert abs(float(links[1]["dx"]) - 8.0) < 0.5  # 13h reference vs first reference
+    last = list(csv.DictReader((tmp_path / "drift.csv").open()))[-1]
+    assert abs(float(last["dx"]) - 8.5) < 0.5  # vs first reference
+    assert abs(float(last["h_dx"]) - 0.5) < 0.3  # vs 13h reference
