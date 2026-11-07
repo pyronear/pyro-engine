@@ -142,6 +142,7 @@ def main(args: argparse.Namespace) -> None:
     logger.info("Measuring drift on %d poses every %ds into %s", len(poses), args.period, args.out_dir)
 
     while True:
+        start = time.monotonic()
         for ip, pose in poses:
             cam_id = f"{ip}_{pose}"
             try:
@@ -150,7 +151,8 @@ def main(args: argparse.Namespace) -> None:
                     drift.process(cam_id, frame)
             except Exception:
                 logger.exception("[%s] Drift measurement failed", cam_id)
-        time.sleep(args.period)
+        # Sleep only the rest of the period, so one pass per patrol cycle is kept when processing is slow.
+        time.sleep(max(args.period - (time.monotonic() - start), 0))
 
 
 if __name__ == "__main__":
