@@ -41,3 +41,11 @@ def test_drift_logger_writes_rows_and_keeps_large_offsets(tmp_path):
     assert len(rows) == 3
     assert abs(float(rows[-1]["dx"]) - 8.0) < 0.5
     assert len(list((tmp_path / "anomalies").glob("*.jpg"))) == 1
+
+
+def test_register_keeps_inputs_intact():
+    # 432x768 crops have FFT-optimal sizes, where phaseCorrelate would window its inputs in place.
+    ref = np.random.default_rng(0).random((432, 768)).astype(np.float32)
+    img, ref0 = ref.copy(), ref.copy()
+    mpd.register(ref, img)
+    assert np.array_equal(ref, ref0)

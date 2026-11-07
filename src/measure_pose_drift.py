@@ -15,7 +15,7 @@ Measurement only (pyronear/vision-rd#89). On the Pi:
     cp src/measure_pose_drift.py data/
     docker compose exec -d engine python data/measure_pose_drift.py
 
-Outputs in data/pose_drift/: drift.csv, ref/<cam_id>.jpg (delete to reset a reference),
+Outputs in data/pose_drift/: drift.csv, ref/<cam_id>.jpg (delete it and restart to reset a reference),
 anomalies/<cam_id>_<ts>.jpg. The process stops when the engine container restarts.
 """
 
@@ -56,7 +56,8 @@ def register(ref: np.ndarray, img: np.ndarray) -> Optional[Tuple[float, float, f
     if ref.shape != img.shape:
         return None
     window = cv2.createHanningWindow(ref.shape[::-1], cv2.CV_32F)
-    (sx, sy), _ = cv2.phaseCorrelate(ref, img, window)
+    # phaseCorrelate windows its inputs in place when sizes are FFT-optimal: keep the cached arrays intact.
+    (sx, sy), _ = cv2.phaseCorrelate(ref.copy(), img.copy(), window)
     warp = np.array([[1, 0, sx], [0, 1, sy]], dtype=np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 300, 1e-6)
     try:
