@@ -135,6 +135,8 @@ def main(args: argparse.Namespace) -> None:
     cv2.setNumThreads(1)
     creds = json.loads(Path(args.creds).read_text())
     poses = [(ip, p) for ip, cam in creds.items() if cam.get("type") == "ptz" for p in cam.get("poses", [])]
+    if args.poses:
+        poses = [(ip, p) for ip, p in poses if p in args.poses]
     client = PyroCameraAPIClient(args.pyro_camera_api_url)
     drift = DriftLogger(Path(args.out_dir), args.max_px, args.min_cc, args.max_saved)
     logger.info("Measuring drift on %d poses every %ds into %s", len(poses), args.period, args.out_dir)
@@ -160,4 +162,5 @@ if __name__ == "__main__":
     parser.add_argument("--max_px", type=float, default=5.0, help="Keep the frame above this offset (px)")
     parser.add_argument("--min_cc", type=float, default=0.5, help="Keep the frame below this ECC correlation")
     parser.add_argument("--max_saved", type=int, default=500, help="Maximum number of kept frames")
+    parser.add_argument("--poses", type=int, nargs="+", default=None, help="Only measure these pose ids")
     main(parser.parse_args())
