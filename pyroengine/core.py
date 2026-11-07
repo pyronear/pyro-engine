@@ -30,6 +30,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
+# Cameras flicker between colour and infrared at dusk, and one frame must not restart an ongoing
+# event or put a site to sleep in daylight: both need this many night frames or passes in a row.
+NIGHT_FRAMES_BEFORE_RESET = 3
+NIGHT_PASSES_BEFORE_SLEEP = 3
+
 
 def is_day_time(cache: Optional[Path], frame: Image.Image, strategy: str, delta: int = 0) -> bool:
     """
@@ -82,9 +87,11 @@ class SystemController:
         self.camera_data = camera_data
         self.is_day = True
         self.last_autofocus: Optional[datetime] = None
+        self._last_frame_digest: Dict[str, bytes] = {}
+        self._night_frames: Dict[str, int] = {}  # consecutive new night frames per cam_id
+        self._night_passes = 0  # consecutive passes where every fresh frame was a night one
         # Touched on every loop so container liveness does not depend on log content.
         self.heartbeat_file = Path(heartbeat_file) if heartbeat_file else None
-        self._last_frame_digest: Dict[str, bytes] = {}
 
         # Wait for the camera API to be available
         logger.info("Waiting for Pyro Camera API at %s", pyro_camera_api_url)
@@ -203,11 +210,13 @@ class SystemController:
 
         start_ts = time.time()
         analyzed = 0
+        unchanged = 0
+        night = 0
         failed = 0
         positive = 0
         max_conf = 0.0
         day_frames: List[bool] = []
-        expected = 0
+        reset_cams: List[str] = []
 
         for ip, cam in self.camera_data.items():
             camera_name = cam["name"]
@@ -221,7 +230,6 @@ class SystemController:
                     return
 
                 cam_id = f"{ip}_{pose}" if is_ptz else ip
-                expected += 1
                 try:
                     frame = self._safe_get_latest_image(ip, pose)
                     if frame is None:
@@ -230,8 +238,15 @@ class SystemController:
                     logger.debug("[%s] Captured image from %s", cam_id, camera_name)
                     frame_is_day = is_day_time(None, frame, "ir")
                     day_frames.append(frame_is_day)
+                    night_frames_before = self._night_frames.get(cam_id, 0)
                     conf = self._analyze(frame, cam_id, frame_is_day)
+                    if not frame_is_day:
+                        night += 1
+                        if night_frames_before < NIGHT_FRAMES_BEFORE_RESET == self._night_frames.get(cam_id, 0):
+                            reset_cams.append(cam_id)
+                        continue
                     if conf is None:
+                        unchanged += 1
                         continue
                     analyzed += 1
                     max_conf = max(max_conf, conf)
@@ -249,16 +264,27 @@ class SystemController:
                     logger.exception("[%s] Inference failed on %s", cam_id, camera_name)
 
         # One day frame keeps the site awake, so one camera in infrared (fog, a dark area) does
-        # not blind the others. It sleeps only when every expected frame came back and all are
-        # night: a camera without a fresh image (204, error) says nothing about the light.
+        # not blind the others. Only cameras with a fresh frame count: a camera down says nothing
+        # about the light, and a frozen frame is already dropped by the API after max_age_s. The
+        # site sleeps once every fresh frame has been a night one for several passes in a row.
         if any(day_frames):
             self.is_day = True
-        elif day_frames and len(day_frames) == expected:
-            self.is_day = False
+            self._night_passes = 0
+            # A camera in infrared while the site sees daylight is blind (stuck IR cut, dark
+            # area) and its frames are not analyzed. Warned once per episode.
+            if reset_cams:
+                logger.warning("Cameras in infrared while others see daylight: %s", reset_cams)
+        elif day_frames:
+            self._night_passes += 1
+            if self._night_passes >= NIGHT_PASSES_BEFORE_SLEEP:
+                self.is_day = False
 
         logger.info(
-            "Inference round: analyzed=%d failed=%d positive=%d max_confidence=%.2f duration=%.1fs",
+            "Inference round: analyzed=%d unchanged=%d night=%d failed=%d positive=%d max_confidence=%.2f "
+            "duration=%.1fs",
             analyzed,
+            unchanged,
+            night,
             failed,
             positive,
             max_conf,
@@ -287,31 +313,42 @@ class SystemController:
             remaining -= chunk
 
     def _analyze(self, frame: Image.Image, cam_id: str, frame_is_day: bool) -> Optional[float]:
-        """Run inference on a day frame and return its confidence, None when the frame is skipped."""
-        if not frame_is_day:
-            # The model is trained on day images, infrared frames only give false positives.
-            # Drop the camera's detection history so evening frames are not combined with the
-            # next morning's ones.
-            logger.debug("[%s] Night frame, skipping inference", cam_id)
-            self.engine._states.pop(cam_id, None)
-            return None
-        # A live camera never returns the exact same pixels twice: an identical frame is frozen,
-        # and analyzing it again would re-upload the same detection every pass.
+        """Run inference on a new day frame and return its confidence, None when the frame is skipped."""
+        # The engine reads the API cache, which the patrol refreshes slower than the loop runs:
+        # the same frame read twice is normal, not a frozen camera (the API detects those). It
+        # is skipped so a detection is not scored and uploaded again, and an isolated infrared
+        # frame is not counted once per read.
         digest = hashlib.md5(frame.tobytes(), usedforsecurity=False).digest()
         if self._last_frame_digest.get(cam_id) == digest:
-            logger.warning("[%s] Frame identical to the previous one, skipping inference", cam_id)
+            logger.debug("[%s] Frame unchanged since the last pass, skipping inference", cam_id)
+            # The camera still answers: a slow-refreshing URL camera must not look offline.
+            self.engine.maybe_heartbeat(cam_id)
             return None
+        if not frame_is_day:
+            self._last_frame_digest[cam_id] = digest
+            # The model is trained on day images, infrared frames only give false positives.
+            logger.debug("[%s] Night frame, skipping inference", cam_id)
+            self._night_frames[cam_id] = self._night_frames.get(cam_id, 0) + 1
+            if self._night_frames[cam_id] == NIGHT_FRAMES_BEFORE_RESET:
+                # Drop the camera's detection history so evening frames are not combined with
+                # the next morning's ones. Not on the first frame: it would also drop an ongoing
+                # event and its crop boxes on one isolated infrared frame.
+                self.engine._states.pop(cam_id, None)
+            return None
+        self._night_frames[cam_id] = 0
         conf = float(self.engine.predict(frame, cam_id))
+        # Stored after predict, so a failed prediction is retried on the next pass.
         self._last_frame_digest[cam_id] = digest
         return conf
 
     def _probe_day(self) -> bool:
         """Capture one frame per camera until one shows daylight.
 
-        Stays night only when every camera answered with a night frame: a camera that
-        fails to answer says nothing, so the site wakes up and lets the inference loop
-        decide from the next fresh frames.
+        Only cameras that answer count: one down says nothing about the light and must not
+        keep the site awake all night. When none answers, the site wakes up and lets the
+        inference loop decide from the next fresh frames.
         """
+        day = False
         night = 0
         for ip in self.camera_data:
             try:
@@ -322,9 +359,16 @@ class SystemController:
             if frame is None:
                 continue
             if is_day_time(None, frame, "ir"):
-                return True
+                day = True
+                break
             night += 1
-        return night < len(self.camera_data)
+        if day or night == 0:
+            # Wake up with a clean count: the night streak must not put the site back to sleep
+            # on the first pass, and a camera still in infrared at dawn must be warned again.
+            self._night_frames.clear()
+            self._night_passes = 0
+            return True
+        return False
 
     def check_and_restart_patrol(self) -> None:
         """
@@ -375,7 +419,7 @@ class SystemController:
                     except Exception as e:
                         logger.error("[%s] Failed to stop patrol: %s", ip, e)
 
-                logger.info("Nighttime detected by every camera, sleeping for 1 hour")
+                logger.info("Nighttime detected by every camera with a fresh image, sleeping for 1 hour")
                 self._sleep_with_heartbeat(3600)
 
                 try:
