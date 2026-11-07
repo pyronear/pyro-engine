@@ -99,7 +99,9 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             try:
                 cast(PTZMixin, cam).move_camera("ToPos", idx=pose, speed=50)
                 logger.debug("[%s] Moved to pose %s", camera_ip, pose)
-                time.sleep(1.5)
+                # stop_patrol waits for this thread, so leave at once instead of finishing the pose
+                if stop_flag.wait(1.5):
+                    break
 
                 image = cam.capture()
                 if image:
@@ -115,9 +117,10 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                 logger.error("[%s] Error at pose %s: %s", camera_ip, pose, exc)
                 continue
 
-        if is_camera_streaming(camera_ip):
-            # Skip the return-to-pose-0 move and focus restore during a
-            # stream, the pause at the top of the loop takes over
+        if stop_flag.is_set() or is_camera_streaming(camera_ip):
+            # Skip the return-to-pose-0 move and focus restore: a stream pauses the patrol at the
+            # top of the loop, and whoever stopped it now drives the camera (a late ToPos would
+            # move it away from under them)
             continue
 
         try:
