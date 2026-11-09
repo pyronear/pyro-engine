@@ -39,8 +39,8 @@ In order to contribute to  project, we will first **set up the development envir
 * [Project Setup](#project-setup)
 
     _How to set up a forked project and install its dependencies in a well-encapsulated development environment_
-    1. [Create a virtual environment](#create-a-virtual-environment)
-    2. [Fork the project](#fork-the-repository)
+    1. [Create a virtual environment](#1-create-a-virtual-environment)
+    2. [Fork the project](#2-fork-the-repository)
 * [Contributing workflow](#contributing-workflow)
 
    _How to pull remote changes/new contributions and push your contributions to the original project_
