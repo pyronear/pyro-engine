@@ -13,6 +13,8 @@ with the ones seen at the previous check:
 - no_fresh_image: no pose got a new image, snapshots are failing.
 - frozen: every pose that got a new image has the exact same pixels as before.
   A live sensor never returns the same bytes twice, a frozen camera does.
+  Ignored for adapters that cannot reboot (URL, REST, RTSP): a URL source may
+  serve the same cached picture for minutes.
 - not_moving: all PTZ poses look alike, the turret is stuck on one view.
   Thresholds were calibrated on real sdis-77 captures: stuck-episode max
   pairwise Hamming <= 6, working-patrol min pairwise Hamming >= 17.
@@ -228,6 +230,9 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         if problem in ("frozen", "not_moving") and ALLOW_STILL_CAMERA:
             logger.warning("[%s] Camera looks %s, ignored because ALLOW_STILL_CAMERA is on", camera_ip, problem)
             problem = None
+        if problem == "frozen" and not can_reboot:
+            # URL and REST sources can serve the same cached picture for minutes, and could not be rebooted anyway
+            problem = None
 
         state["status"] = problem or "ok"
         if problem is None:
@@ -241,7 +246,9 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
         if hits < CONSECUTIVE_HITS_BEFORE_REBOOT:
             continue
         if not can_reboot:
-            logger.error("[%s] Camera %s and its adapter cannot reboot it", camera_ip, problem)
+            # Logged once per episode, hits never reset as no reboot happens
+            if hits == CONSECUTIVE_HITS_BEFORE_REBOOT:
+                logger.error("[%s] Camera %s and its adapter cannot reboot it", camera_ip, problem)
             continue
         with _LOCK:
             allowed = reboot_allowed(state["attempts"], time.time())

@@ -75,9 +75,10 @@ def test_attempts_survive_a_restart(state_file):
     assert sd.load_attempts("cam") == deque()
 
 
-def _run_frozen_camera(monkeypatch, cam_id, reboot, allow_still=False, seconds=0.5):
+def _run_frozen_camera(monkeypatch, cam_id, reboot, allow_still=False, seconds=0.5, store=True):
     cam = MockCamera(camera_id=cam_id, cam_type="static")
-    cam.reboot_camera = reboot
+    if reboot is not None:
+        cam.reboot_camera = reboot
     CAMERA_REGISTRY[cam_id] = cam
     monkeypatch.setattr(sd, "CHECK_INTERVAL", 0.02)
     monkeypatch.setattr(sd, "ALLOW_STILL_CAMERA", allow_still)
@@ -88,7 +89,7 @@ def _run_frozen_camera(monkeypatch, cam_id, reboot, allow_still=False, seconds=0
     frozen = _noise(0)
 
     def frozen_patrol():
-        while not stop.wait(0.005):
+        while store and not stop.wait(0.005):
             cam.store_image(-1, frozen)
 
     threads = [
@@ -113,6 +114,17 @@ def test_reboot_error_does_not_log_the_camera_password(monkeypatch, caplog):
     assert reboot.called
     assert "Reboot raised ConnectionError" in caplog.text
     assert "s3cret" not in caplog.text
+
+
+def test_camera_without_reboot_ignores_frozen_and_logs_once(monkeypatch, caplog):
+    # A URL source serving the same cached picture is not frozen
+    _run_frozen_camera(monkeypatch, "url-cached", None)
+    assert sd.recovery_status("url-cached")["status"] == "ok"
+    assert "cannot reboot" not in caplog.text
+    # Missing images are still reported, with a single error per episode
+    _run_frozen_camera(monkeypatch, "url-down", None, store=False)
+    assert sd.recovery_status("url-down")["status"] == "no_fresh_image"
+    assert caplog.text.count("cannot reboot it") == 1
 
 
 def test_rebooted_camera_gets_a_grace_before_the_skip_window(monkeypatch):
