@@ -86,6 +86,7 @@ def main(args):
         day_time_strategy=args.day_time_strategy,
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
+        backup_folder=args.backup_dir,
     )
 
     sys_controller = SystemController(
@@ -96,6 +97,10 @@ def main(args):
     )
 
     sys_controller.main_loop(args.period, args.send_alerts)
+
+
+def str2bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes"}
 
 
 if __name__ == "__main__":
@@ -156,19 +161,25 @@ if __name__ == "__main__":
         "--backup-size",
         type=int,
         default=10000,
-        help="Local backup can't be bigger than 10Go",
+        help="Total size cap of the backup folder in MB, oldest days are deleted first",
+    )
+    parser.add_argument(
+        "--backup-dir",
+        type=str,
+        default=None,
+        help="Folder for saved frames (default: <cache>/backup), frames are not saved when it is missing",
     )
 
     # Debug
     parser.add_argument(
         "--save_captured_frames",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Save all captured frames locally",
     )
     parser.add_argument(
         "--save_detections_frames",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Save all locally detection frames locally",
     )

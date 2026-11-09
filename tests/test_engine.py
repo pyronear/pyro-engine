@@ -229,6 +229,65 @@ def test_process_alerts_respects_save_detections_flag(tmp_path, save_detections_
     assert len(engine._alerts) == 0
 
 
+def test_local_backup_folder(tmp_path):
+    """Frames go to the backup folder, never recreate it when missing, and write errors do not raise."""
+    backup = tmp_path / "usb" / "frames"
+    engine = Engine(cache_folder=str(tmp_path), backup_folder=str(backup))
+
+    # Missing root (unmounted key): nothing saved, nothing created
+    engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+    assert not backup.exists()
+
+    # Root present: frame saved under save/<day>/<cam_id>/
+    backup.mkdir(parents=True)
+    engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+    saved = list(backup.glob("save/*/cam/*.jpg"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == b"jpg"
+
+    # Cleanup runs at most once per hour per folder
+    with patch.object(engine, "_clean_local_backup") as mock_clean:
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+        assert mock_clean.call_count == 0
+        engine._local_backup(None, "cam", is_alert=True, encoded_bytes=b"jpg")
+        assert mock_clean.call_count == 1
+
+    # PIL image without encoded bytes is saved as JPEG (other cam id: same-second names would collide)
+    engine._local_backup(Image.new("RGB", (8, 8)), "cam2", is_alert=False)
+    (pil_saved,) = backup.glob("save/*/cam2/*.jpg")
+    assert Image.open(pil_saved).format == "JPEG"
+
+    # Dying key: write error is logged, not raised, and no truncated jpg is left behind
+    with patch.object(Path, "replace", side_effect=OSError("I/O error")):
+        engine._local_backup(None, "cam3", is_alert=False, encoded_bytes=b"jpg")
+    assert not list(backup.glob("save/*/cam3/*.jpg"))
+    with patch.object(Path, "is_dir", side_effect=OSError("I/O error")):
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+
+    # A failed cleanup is retried on the next frame instead of being throttled for an hour
+    engine._last_backup_clean.clear()
+    with patch.object(engine, "_clean_local_backup", side_effect=[OSError("I/O error"), None]) as mock_clean:
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+        engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
+        assert mock_clean.call_count == 2
+
+
+def test_clean_local_backup_total_cap(tmp_path):
+    """The size cap covers the whole backup root, not each of save/ and alerts/ separately."""
+    backup = tmp_path / "frames"
+    engine = Engine(cache_folder=str(tmp_path), backup_folder=str(backup), backup_size=3)
+    for folder, day in (("save", "20240101"), ("save", "20240102"), ("alerts", "20240101")):
+        f = backup / folder / day / "cam" / "a.jpg"
+        f.parent.mkdir(parents=True)
+        f.write_bytes(b"\0" * 2 * 1024**2)
+
+    engine._clean_local_backup(backup / "save")
+
+    # 6 MB total > 3 MB cap: oldest save day dropped, then 4 MB > 3 MB: second one too; alerts untouched
+    assert list((backup / "save").iterdir()) == []
+    assert (backup / "alerts" / "20240101" / "cam" / "a.jpg").exists()
+
+
 def test_build_context_crop(tmp_path):
     """_build_context_crop keeps a compact JPEG region covering all raw preds, or None without preds."""
     engine = Engine(cache_folder=str(tmp_path))
