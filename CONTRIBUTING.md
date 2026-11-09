@@ -7,11 +7,11 @@ Whatever the way you wish to contribute to the project, please respect the [code
 
 ## Codebase structure
 
-- [pyroengine](https://github.com/pyronear/pyro-engine/blob/main/pyroengine) - The actual pyroengine library
-- [docs](https://github.com/pyronear/pyro-engine/blob/main/docs) - Sphinx documentation building
-- [tests](https://github.com/pyronear/pyro-engine/blob/main/tests) - Python unit tests
-- [scripts](https://github.com/pyronear/pyro-engine/blob/main/scripts) - Scripts for Raspberry Pi
-- [src](https://github.com/pyronear/pyro-engine/blob/main/src) - code running on Raspberry Pi
+- [pyroengine](pyroengine/) - The actual pyroengine library
+- [docs](docs/) - Sphinx documentation building
+- [tests](tests/) - Python unit tests
+- [scripts](scripts/) - Scripts for Raspberry Pi
+- [src](src/) - code running on Raspberry Pi
 
 
 
