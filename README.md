@@ -128,6 +128,8 @@ round is one summary line per camera cycle and one per inference round; detectio
 failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
 predictions, ffmpeg output and HTTP access logs.
 
+Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to upload a 4K crop and a zoomed capture of every validated detection on Reolink PTZ cameras, with a JSON manifest per trigger. The patrol of that camera is interrupted for the capture and restarted right after.
+
 ### Docker builds and runtime isolation
 
 Both images install only locked runtime dependencies into `/opt/venv` with uv. Dependency layers are built before application code, and BuildKit cache mounts reuse downloaded wheels. Git, uv, Python package installers and build caches stay outside the final runtime. The engine uses headless OpenCV without an FFmpeg/GUI installation; FFmpeg remains in the camera service for RTSP/SRT streaming.
