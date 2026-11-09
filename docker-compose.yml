@@ -14,6 +14,8 @@ services:
       MEDIAMTX_SERVER_IP: ${MEDIAMTX_SERVER_IP}
       ENABLE_STUCK_DETECTOR: ${ENABLE_STUCK_DETECTOR:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Testing only: never reboot a camera that looks frozen or does not move
+      ALLOW_STILL_CAMERA: ${ALLOW_STILL_CAMERA:-false}
     volumes:
       - ./data:/usr/src/app/data
     read_only: true
