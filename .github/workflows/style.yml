@@ -35,5 +35,5 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: x64
       - uses: ./.github/actions/setup-uv
-      - name: Type check engine and camera API in their own environments
+      - name: Type check engine, camera API and temporal API in their own environments
         run: make typecheck
