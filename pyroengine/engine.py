@@ -5,6 +5,7 @@
 
 import io
 import logging
+import math
 import shutil
 import time
 from collections import deque
@@ -21,7 +22,7 @@ from pyroclient import client
 from requests.exceptions import RequestException
 from requests.models import Response
 
-from pyroengine.temporal_client import TemporalClient, WindowFrame
+from pyroengine.temporal_client import TemporalClient
 
 __all__ = ["ContextCrop", "Engine"]
 
@@ -136,15 +137,14 @@ class Engine(Predictor):
         **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
-        # Temporal validation: when set, an alerting camera pose is scored like pyro-api scores a
-        # sequence: the frames with a detection only, from the `temporal_min_frames`-th detection of
-        # the event to the `temporal_window`-th, after which the last verdict holds until the event
-        # ends. Each new detection in that range submits the event's detection frames again. Boxes
-        # covered by a tube scoring above `temporal_min_score` are uploaded with that probability, the API applies its own
-        # threshold; the other boxes are dropped. A job still pending after `temporal_job_timeout`
-        # seconds fails open: frames are sent without scores until the service answers again. The
-        # API then scores a sequence the device never scored; one already scored keeps its last
-        # device verdict.
+        # Temporal validation: when set, each alert event of a camera pose is scored the way pyro-api
+        # scores a sequence: its first `temporal_window` frames with a detection, from the
+        # `temporal_min_frames`-th on, then the verdict on the full window holds for the rest of the
+        # event. Boxes covered by a tube scoring above `temporal_min_score` are uploaded with that
+        # probability, the API applies its own threshold; the other boxes are dropped. A job still
+        # pending after `temporal_job_timeout` seconds fails open: frames are sent without scores
+        # until the service answers again. The API then scores a sequence the device never scored;
+        # one already scored keeps its last device verdict.
         # Set before super().__init__, which already builds the per-camera states.
         self.temporal = TemporalClient(temporal_api_url) if temporal_api_url else None
         self.temporal_window = temporal_window
@@ -217,21 +217,12 @@ class Engine(Predictor):
         return state
 
     def _init_temporal_state(self, state: Dict[str, Any]) -> None:
-        # One buffer for detection and temporal validation: the frames the temporal model scores
-        # are the frames staged on a positive verdict. Detection still pools the last
-        # nb_consecutive_frames only. One extra slot keeps the oldest scored frame while its verdict
-        # is read on the next round, after that round's frame was appended.
-        # ponytail: covers a verdict pending one round; a longer wait still evicts the oldest frames.
-        if self.temporal is not None and self.temporal_window + 1 > (state["last_predictions"].maxlen or 0):
-            state["last_predictions"] = deque(state["last_predictions"], maxlen=self.temporal_window + 1)
-        state["temporal_job"] = None  # (job_id, submitted_at, frame ids) while a verdict is pending
-        state["temporal_job_ended"] = False  # the event that submitted the pending job is over
-        state["temporal_tubes"] = []  # [(xyxy box, probability)] of the last verdict, above temporal_min_score
-        state["temporal_scored"] = frozenset()  # frame ids scored by that verdict: the only ones it may stage
-        state["temporal_bypass"] = False  # fail open: frames go out unscored until a verdict is back
-        state["temporal_detections"] = 0  # frames with a detection in the event so far
-        state["temporal_submitted"] = 0  # temporal_detections at the last submission
-        state["temporal_frozen"] = False  # window exhausted on a positive verdict: it holds to the end
+        # Events being scored or uploaded, oldest first: the ongoing one last, after those that ended
+        # while their verdict was pending. Each event keeps its own frames, outside the detection
+        # window, so none is evicted before its verdict and no frame counts in another event.
+        state["temporal_events"] = []
+        # Capture timestamps an event already took: the lead-up of the next event skips them.
+        state["temporal_seen"] = deque(maxlen=state["last_predictions"].maxlen)
 
     @staticmethod
     def _frame_id(cam_key: str, ts: str) -> str:
@@ -239,203 +230,248 @@ class Engine(Predictor):
         resubmitted frame keeps its id and the service can reuse its cached embedding."""
         return f"{cam_key}_{ts.replace(':', '-')}"
 
-    def _temporal_window(self, cam_key: str) -> List[WindowFrame]:
-        """The first `temporal_window` frames of the event with a detection, as (frame_id, jpeg, boxes)
-        triples, oldest first: the frames pyro-api would score. Frames without a detection carried
-        weak boxes (confidence 0.05) that pushed the score up, and so did a longer window."""
-        # ponytail: the buffer keeps the last temporal_window + 1 captures, so an event with frames
-        # without detection loses its first detections before the window is full; keep a per-event
-        # list of detection frames if that shows up in the replays.
-        window = []
-        for _, preds, bboxes, ts, _, jpeg in self._states[cam_key]["last_predictions"]:
-            if jpeg is None or not bboxes:
-                continue
-            boxes = np.round(preds[preds[:, 4] >= TEMPORAL_BOX_CONF, :5], 4).tolist()
-            # The service rejects degenerate boxes (rounded/clipped to zero width or height at the image edge)
-            boxes = [b for b in boxes if b[0] < b[2] and b[1] < b[3]]
-            window.append((self._frame_id(cam_key, ts), jpeg, boxes))
-        return window[: self.temporal_window]
+    def _new_event(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        event = {
+            "frames": [],  # prediction entries in capture order, lead-up frames first, oldest sent ones pruned
+            "base": 0,  # frames pruned from the front: frame indexes below count them
+            "window": [],  # (frame_id, jpeg, boxes) of the first temporal_window distinct detection frames
+            "crop_boxes": [],  # frozen crop boxes of this event
+            "submitted": 0,  # window length of the last submission
+            "job": None,  # (job_id, submitted_at, window length, frame count) while a verdict is pending
+            "scored": 0,  # frames up to this index are covered by the last verdict
+            "scored_window": 0,  # window length of the last verdict, 0 before the first one
+            "tubes": [],  # [(xyxy box, probability)] of the last verdict, above temporal_min_score
+            "bypass": False,  # fail open: frames go out unscored until a verdict is back
+            "ended": False,
+        }
+        state["event_crop_boxes"] = event["crop_boxes"]  # the ongoing event's, for the context crops
+        return event
+
+    def _track_event(self, cam_key: str) -> None:
+        """Add the frame just predicted to the ongoing event, or mark that event ended.
+
+        A new event also takes the lead-up frames still in the detection window. A frame with a
+        detection (predictor output) joins the scoring window when it is captured, with its raw
+        boxes from TEMPORAL_BOX_CONF: what pyro-api scores. Frames without a detection carried weak
+        0.05 boxes that pushed the score up, and so did a longer window. A frame whose JPEG repeats
+        one already in the window (the camera API served the last capture again) is not scored twice.
+        """
+        state = self._states[cam_key]
+        events = state["temporal_events"]
+        event = events[-1] if events and not events[-1]["ended"] else None
+        if not state["ongoing"]:
+            if event is not None:
+                event["ended"] = True
+            return
+        entries = list(state["last_predictions"])
+        if event is None:
+            event = self._new_event(state)
+            events.append(event)
+            entries = [e for e in entries if e[3] not in state["temporal_seen"]]
+        else:
+            entries = entries[-1:]
+        window = event["window"]
+        for entry in entries:
+            context_crop, preds, bboxes, ts, _, jpeg = entry
+            state["temporal_seen"].append(ts)
+            event["frames"].append(entry)
+            if bboxes and context_crop is not None:
+                # Freeze the fire locations on capture, not when the frames go out (an event held
+                # behind an earlier one): the next context crops must cover them.
+                self._update_event_crop_boxes(
+                    cam_key, [b[:4] for b in bboxes], context_crop.full_w, context_crop.full_h
+                )
+            if bboxes and jpeg is not None and len(window) < self.temporal_window and all(jpeg != f[1] for f in window):
+                boxes = np.round(preds[preds[:, 4] >= TEMPORAL_BOX_CONF, :5], 4).tolist()
+                # The service rejects degenerate boxes (rounded/clipped to zero width or height at the image edge)
+                window.append((self._frame_id(cam_key, ts), jpeg, [b for b in boxes if b[0] < b[2] and b[1] < b[3]]))
+
+    def _advance_event(self, cam_key: str, cam_id: str, event: Dict[str, Any], stage: bool = True) -> bool:
+        """Read the event's verdict, submit its grown window, stage or drop what the verdict covers
+        (with `stage`: an earlier event still unresolved holds the uploads of the later ones).
+
+        Nothing is submitted before the window holds ``temporal_min_frames`` frames; then a window
+        that grew is submitted as soon as no verdict is pending, the event ended or not. A verdict
+        covers the frames captured up to its submission. One with a tube above
+        ``temporal_min_score`` stages them with the tube probabilities; one without holds them for
+        the next verdict. The verdict on the full window (``temporal_window`` frames), or on the
+        last window of an ended event, is final: it applies to every frame of the event, later ones
+        included, and a negative one drops them. An event that ended before it could be scored is
+        dropped. Failing open (transport error, failed job, job pending longer than
+        ``temporal_job_timeout``) sends the frames unscored; an ongoing event still submits its
+        window every round, so the first verdict once the service is back resumes scoring.
+
+        Returns True once the event ended and every frame of it was staged or dropped.
+        """
+        self._poll_verdict(cam_id, event)
+        self._submit_window(cam_id, event)
+        frames = event["frames"]
+        if stage:
+            if event["bypass"]:
+                self._stage_event_frames(cam_key, cam_id, event, len(frames), None)
+            elif event["scored_window"]:
+                final = event["scored_window"] >= self.temporal_window or (
+                    event["ended"] and event["job"] is None and event["submitted"] == len(event["window"])
+                )
+                stop = len(frames) if final else max(0, event["scored"] - event["base"])
+                if event["tubes"]:
+                    self._stage_event_frames(cam_key, cam_id, event, stop, event["tubes"])
+                elif final:
+                    self._stage_event_frames(cam_key, cam_id, event, stop, None, drop=True)
+            elif event["ended"] and event["job"] is None:
+                self._stage_event_frames(cam_key, cam_id, event, len(frames), None, drop=True)
+        self._prune_event(event)
+        return event["ended"] and event["job"] is None and all(e[4] for e in frames)
+
+    def _prune_event(self, event: Dict[str, Any]) -> None:
+        """Bound the event's memory: forget the sent frames beyond the tracked-boxes lookback, and drop
+        the oldest held frames past 3 windows (a verdict that never comes, or a camera API serving the
+        same capture over and over, which never grows the window)."""
+        frames = event["frames"]
+        held = [i for i, e in enumerate(frames) if not e[4]]
+        # ponytail: oldest held frames are lost past the cap; spool them to disk if real events hit it
+        for i in held[: max(0, len(held) - 3 * self.temporal_window)]:
+            frames[i] = (None, frames[i][1], [], frames[i][3], True, None)
+        first_held = next((i for i, e in enumerate(frames) if not e[4]), len(frames))
+        cut = max(0, first_held - self.temporal_window - 1)
+        del frames[:cut]
+        event["base"] += cut
+
+    def _poll_verdict(self, cam_id: str, event: Dict[str, Any]) -> None:
+        if event["job"] is None or self.temporal is None:
+            return
+        job_id, submitted_at, window_len, frame_count = event["job"]
+        verdict: Dict[str, Any] = {}
+        tubes: list = []
+        try:
+            result = self.temporal.result(job_id)
+            status = result["status"]
+            if status == "pending" and time.monotonic() - submitted_at < self.temporal_job_timeout:
+                logger.debug("[%s] Temporal verdict pending, alert held", cam_id)
+                return
+            if status == "done":
+                verdict = result["verdict"]
+                tubes = [
+                    tube
+                    for tube in map(self._parse_tube, verdict.get("tubes", []))
+                    if tube[1] > self.temporal_min_score
+                ]
+        except (RequestException, AttributeError, KeyError, TypeError, ValueError) as e:
+            # A malformed reply fails open too: raising here would block the pose on every round.
+            self._fail_open(cam_id, event, f"service unavailable or malformed reply ({e!r})")
+            return
+        event["job"] = None
+        if status != "done":
+            reason = f"job still pending after {self.temporal_job_timeout:.0f}s" if status == "pending" else None
+            self._fail_open(cam_id, event, reason or f"job failed ({result.get('error')})")
+            return
+        if event["bypass"]:
+            logger.info("[%s] Temporal service back, scoring resumed", cam_id)
+            event["bypass"] = False
+        event["tubes"] = tubes
+        event["scored"] = frame_count
+        event["scored_window"] = window_len
+        if tubes:
+            logger.info(
+                "[%s] Temporal model scored %d tube(s) on %d frames (max probability: %.2f%%)",
+                cam_id,
+                len(tubes),
+                window_len,
+                100 * max(p for _, p in tubes),
+            )
+        else:
+            logger.info(
+                "[%s] Temporal model rejected the alert on %d frames (tubes: %s)",
+                cam_id,
+                window_len,
+                verdict.get("n_tubes"),
+            )
 
     @staticmethod
-    def _distinct_frames(window: List[WindowFrame]) -> List[WindowFrame]:
-        """The window without the frames whose JPEG repeats an earlier one, as pyro-api scores distinct
-        frames only. The camera API serves the last capture again when a pose is read before the patrol
-        refreshed it, and repeated frames push the temporal score up (a false positive went from 0.003
-        to 0.75 with one frame read three times)."""
-        seen = set()
-        distinct = []
-        for frame in window:
-            if frame[1] not in seen:
-                seen.add(frame[1])
-                distinct.append(frame)
-        return distinct
+    def _parse_tube(tube: Dict[str, Any]) -> Tuple[Tuple[float, ...], float]:
+        """(xyxy box, probability) of a verdict tube; ValueError when it is not 4 finite coordinates."""
+        box = tuple(float(v) for v in tube["box"])
+        probability = float(tube["probability"])
+        if len(box) != 4 or not all(math.isfinite(v) for v in (*box, probability)):
+            raise ValueError(f"invalid tube {tube!r}")
+        return box, probability
 
-    def _consume_window(self, cam_key: str, frame_ids: Optional[frozenset] = None) -> None:
-        """Mark the frames still waiting for a verdict (all, or only `frame_ids`) as staged without
-        upload: the event was rejected for good, so a later event must not upload them under its own score."""
-        window = self._states[cam_key]["last_predictions"]
-        for i, entry in enumerate(window):
-            if not entry[4] and (frame_ids is None or self._frame_id(cam_key, entry[3]) in frame_ids):
-                window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
-
-    def _end_event(self, cam_key: str) -> None:
-        """Reset per-event staging state when an alert ends.
-
-        Drops the frozen crop boxes so the next event re-centers, and clears the bboxes of
-        already-staged frames still lingering in the window so a previous event's fire location
-        cannot seed the next event's carry-forward / tracked set. Unstaged frames (the lead-up to
-        the next event) keep their bboxes, except, with temporal scoring, the detections of an event
-        that ended before it was scored: they are dropped, not counted in the next event's window.
-        """
-        state = self._states[cam_key]
-        state["event_crop_boxes"] = []
-        state["temporal_job"] = None
-        state["temporal_job_ended"] = False
-        state["temporal_tubes"] = []
-        state["temporal_scored"] = frozenset()
-        state["temporal_bypass"] = False
-        state["temporal_detections"] = 0
-        state["temporal_submitted"] = 0
-        state["temporal_frozen"] = False
-        window = state["last_predictions"]
-        for i, entry in enumerate(window):
-            if entry[4] or (self.temporal is not None and entry[2]):  # belongs to the event that just ended
-                window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
-
-    def _temporal_gate(self, cam_key: str, cam_id: str, resubmit: bool = True) -> bool:
-        """Return True when the frames not yet staged may be staged now.
-
-        Frames are held until the event has ``temporal_min_frames`` detections. Round N submits the
-        window; round N+1 reads the verdict, stages the frames captured up to that submission with
-        the per-tube probabilities (``state["temporal_tubes"]``) and, while the event is ongoing
-        (``resubmit``) and a new detection came in, submits the grown window again. Frames captured
-        after a submission wait for the next verdict. A verdict with no tube above
-        ``temporal_min_score`` stages nothing; once the event ended it drops the held frames. Past
-        ``temporal_window`` detections nothing is submitted any more, as pyro-api stops scoring a
-        sequence after ``MAX_FRAMES``: a positive last verdict stages the rest of the event with its
-        tubes, a negative one drops it. A transport error, a failed job or a job pending longer
-        than ``temporal_job_timeout`` fails open: frames go out without scores, and the next
-        detection in range still submits the window, so the first verdict once the service is back
-        ends the fail-open. The API scores a sequence the device never scored; one already scored
-        keeps its last device verdict, so a fail-open after a score below the API threshold leaves
-        it unvalidated until the service scores it higher.
-        """
-        state = self._states[cam_key]
-        if self.temporal is None:
-            return True
-        bypass = state["temporal_bypass"]
-        # Failing open: one error line when it starts, not one per round while the service is down.
-        log_failure = logger.debug if bypass else logger.error
+    def _submit_window(self, cam_id: str, event: Dict[str, Any]) -> None:
+        window = event["window"]
+        if event["job"] is not None or self.temporal is None or len(window) < self.temporal_min_frames:
+            return
+        if event["bypass"] and event["ended"]:
+            return  # its frames already went out unscored
+        if not event["bypass"] and len(window) <= event["submitted"]:
+            return  # nothing new to score (failing open, an ongoing event retries every round)
         try:
-            stage = bypass
-            if state["temporal_job"] is not None:
-                job_id, submitted_at, frame_ids = state["temporal_job"]
-                result = self.temporal.result(job_id)
-                if result["status"] == "pending":
-                    if time.monotonic() - submitted_at < self.temporal_job_timeout:
-                        if bypass:
-                            return True  # still failing open: frames go out unscored meanwhile
-                        logger.debug("[%s] Temporal verdict pending, alert held", cam_id)
-                        return False
-                    log_failure(
-                        "[%s] Temporal job still pending after %.0fs, alert sent unscored",
-                        cam_id,
-                        self.temporal_job_timeout,
-                    )
-                    state["temporal_job"] = None
-                    state["temporal_bypass"] = True
-                    return True
-                state["temporal_job"] = None
-                job_ended = state["temporal_job_ended"]
-                if result["status"] == "done":
-                    if bypass:
-                        logger.info("[%s] Temporal service back, scoring resumed", cam_id)
-                    state["temporal_bypass"] = False
-                    stage = False
-                    verdict = result["verdict"]
-                    tubes = [
-                        (tuple(t["box"]), float(t["probability"]))
-                        for t in verdict.get("tubes", [])
-                        if t["probability"] > self.temporal_min_score
-                    ]
-                    state["temporal_tubes"] = tubes
-                    state["temporal_scored"] = frame_ids
-                    if tubes:
-                        logger.info(
-                            "[%s] Temporal model scored %d tube(s) (max probability: %.2f%%)",
-                            cam_id,
-                            len(tubes),
-                            100 * max(p for _, p in tubes),
-                        )
-                        stage = True
-                    else:
-                        logger.info(
-                            "[%s] Temporal model rejected the alert (tubes: %s), %s",
-                            cam_id,
-                            verdict.get("n_tubes"),
-                            "resubmitting" if resubmit else "event over, dropped",
-                        )
-                        if not resubmit:
-                            self._consume_window(cam_key)
-                            return False
-                        if job_ended:
-                            # The job's event ended and a new one started while it was pending:
-                            # its rejected frames must not go out under the new event's score,
-                            # nor count in the new event's window.
-                            self._consume_window(cam_key, frame_ids)
-                            state["temporal_detections"] = sum(1 for e in state["last_predictions"] if e[2])
-                            state["temporal_submitted"] = 0
-                else:
-                    log_failure("[%s] Temporal job failed (%s), alert sent unscored", cam_id, result.get("error"))
-                    state["temporal_bypass"] = True
-                    return True
-            elif not resubmit:
-                return bypass
-            n = state["temporal_detections"]
-            if resubmit and state["temporal_submitted"] < n and self.temporal_min_frames <= n <= self.temporal_window:
-                window = self._temporal_window(cam_key)
-                distinct = self._distinct_frames(window)
-                job_id = self.temporal.submit(cam_id, distinct)
-                # The verdict stages every frame captured so far, those without a detection included
-                # (continuity of the sequence); repeats are scored too: tube scores apply by box.
-                scored = frozenset(self._frame_id(cam_key, e[3]) for e in state["last_predictions"])
-                state["temporal_job"] = (job_id, time.monotonic(), scored)
-                state["temporal_job_ended"] = False
-                state["temporal_submitted"] = n
-                logger.debug("[%s] Temporal scoring submitted (%d frames)", cam_id, len(distinct))
-            elif (
-                resubmit and n > self.temporal_window and state["temporal_job"] is None and not state["temporal_bypass"]
-            ):
-                # Window exhausted: the last verdict holds for the rest of the event.
-                if state["temporal_tubes"]:
-                    state["temporal_frozen"] = True
-                    return True
-                self._consume_window(cam_key)
-                return False
-            return stage
-        except (RequestException, KeyError, ValueError) as e:
-            log_failure("[%s] Temporal service unavailable (%s), alert sent unscored", cam_id, e)
-            state["temporal_job"] = None  # a lost job must not keep the event alive forever
-            state["temporal_bypass"] = True
-            return True
+            job_id = self.temporal.submit(cam_id, window)
+        except (RequestException, KeyError, TypeError, ValueError) as e:
+            self._fail_open(cam_id, event, f"service unavailable or malformed reply ({e!r})")
+            return
+        event["job"] = (job_id, time.monotonic(), len(window), event["base"] + len(event["frames"]))
+        event["submitted"] = len(window)
+        logger.debug("[%s] Temporal scoring submitted (%d frames)", cam_id, len(window))
 
-    def _temporal_scores(self, cam_key: str, bboxes: list) -> Tuple[list, Optional[List[float]]]:
+    @staticmethod
+    def _fail_open(cam_id: str, event: Dict[str, Any], reason: str) -> None:
+        # One error line when it starts, not one per round while the service is down.
+        (logger.debug if event["bypass"] else logger.error)("[%s] Temporal %s, alert sent unscored", cam_id, reason)
+        event["job"] = None  # a lost job must not keep the event alive forever
+        event["bypass"] = True
+
+    def _stage_event_frames(
+        self,
+        cam_key: str,
+        cam_id: str,
+        event: Dict[str, Any],
+        stop: int,
+        tubes: Optional[list],
+        drop: bool = False,
+    ) -> None:
+        """`_stage_frames` on the event's frames, with its own crop boxes (an ended event can be
+        staged while the next one is ongoing)."""
+        state = self._states[cam_key]
+        ongoing_boxes = state["event_crop_boxes"]
+        state["event_crop_boxes"] = event["crop_boxes"]
+        try:
+            self._stage_frames(cam_key, cam_id, event["frames"], stop, tubes, drop)
+        finally:
+            state["event_crop_boxes"] = ongoing_boxes
+
+    @staticmethod
+    def _temporal_scores(bboxes: list, tubes: Optional[list]) -> Tuple[list, Optional[List[float]]]:
         """Keep the boxes covered by a scored tube and return them with one probability each.
 
         Without temporal scoring (disabled or failed open) every box is kept and no score is sent:
         the API scores a sequence it never got a device score for, and keeps the last device
         verdict of one it did.
         """
-        state = self._states[cam_key]
-        if self.temporal is None or state["temporal_bypass"]:
+        if tubes is None:
             return bboxes, None
         kept, scores = [], []
         for box in bboxes:
-            probs = [p for tube, p in state["temporal_tubes"] if self._coverage(box, tube) >= 0.5]
+            probs = [p for tube, p in tubes if Engine._coverage(box, tube) >= 0.5]
             if probs:
                 kept.append(box)
                 scores.append(round(max(probs), 3))
         return kept, scores
+
+    def _end_event(self, cam_key: str) -> None:
+        """Reset per-event staging state when an alert ends (without temporal scoring: events carry
+        their own state otherwise).
+
+        Drops the frozen crop boxes so the next event re-centers, and clears the bboxes of
+        already-staged frames still lingering in the window so a previous event's fire location
+        cannot seed the next event's carry-forward / tracked set. Unstaged frames (the lead-up to
+        the next event) keep their bboxes.
+        """
+        state = self._states[cam_key]
+        state["event_crop_boxes"] = []
+        window = state["last_predictions"]
+        for i, entry in enumerate(window):
+            if entry[4]:  # is_staged: belongs to the event that just ended
+                window[i] = (entry[0], entry[1], [], entry[3], True, entry[5])
 
     @staticmethod
     def _coverage(box: Sequence[float], tube: Sequence[float]) -> float:
@@ -585,8 +621,6 @@ class Engine(Predictor):
         extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
         conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
-        if self.temporal is not None and state["last_predictions"][-1][2]:
-            state["temporal_detections"] += 1
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
@@ -600,55 +634,80 @@ class Engine(Predictor):
             logger.debug("[%s] No wildfire (confidence: %.2f%%)", cam_key, conf * 100)
 
         # Alert (use ongoing so hysteresis-relaxed threshold keeps staging frames during a dip).
-        # An event that ended while its temporal verdict is pending keeps its state until the
-        # verdict is in: a positive one still uploads the frames held while the smoke was scored.
-        if not state["ongoing"] and state["temporal_job"] is not None:
-            state["temporal_job_ended"] = True
-        alerting = (state["ongoing"] or state["temporal_job"] is not None) and len(self.api_client) > 0
-        if (
-            alerting
-            and isinstance(cam_id, str)
-            and (self.temporal is None or self._temporal_gate(cam_key, cam_id, resubmit=state["ongoing"]))
-        ):
-            self._stage_event(cam_key, cam_id)
-        if not state["ongoing"] and state["temporal_job"] is None:
+        if len(self.api_client) > 0 and isinstance(cam_id, str):
+            if self.temporal is None:
+                if state["ongoing"]:
+                    self._stage_event(cam_key, cam_id)
+            else:
+                self._track_event(cam_key)
+                # Oldest first: a later event is scored meanwhile, but goes out after the earlier ones
+                pending: list = []
+                for event in state["temporal_events"]:
+                    if not self._advance_event(cam_key, cam_id, event, stage=not pending):
+                        pending.append(event)
+                state["temporal_events"] = pending
+        if self.temporal is None and not state["ongoing"]:
             self._end_event(cam_key)
 
         return float(conf)
 
     def _stage_event(self, cam_key: str, cam_id: str) -> None:
         """Stage every not-yet-staged frame of the window as an alert, cropped at the event's fire locations."""
-        state = self._states[cam_key]
-        # Collect every bbox the predictor emitted across the window; treat these as
-        # tracked locations and backfill missing per-frame bboxes from raw preds with conf=0.
-        tracked = [b[:4] for _, _, bbs, _, _, _ in state["last_predictions"] for b in bbs]
+        self._stage_frames(cam_key, cam_id, self._states[cam_key]["last_predictions"])
+
+    def _stage_frames(
+        self,
+        cam_key: str,
+        cam_id: str,
+        frames: Any,  # ruff: ignore[any-type]
+        stop: Optional[int] = None,
+        tubes: Optional[list] = None,
+        drop: bool = False,
+    ) -> None:
+        """Stage the not-yet-staged frames of `frames[:stop]` as alerts.
+
+        `frames` is the detection window, or with temporal scoring the frames of one event. `tubes`
+        (a temporal verdict) keeps the boxes a tube covers, with its probability; without, every box
+        goes out unscored. `drop` marks the frames staged without uploading them. With temporal
+        scoring a staged frame keeps only its boxes (for the carry-forward and tracked locations):
+        its JPEG and context crop are released.
+        """
+        stop = len(frames) if stop is None else stop
+        temporal = self.temporal is not None
+        if drop:
+            for idx in range(stop):
+                if not frames[idx][4]:
+                    frames[idx] = (None, frames[idx][1], [], frames[idx][3], True, None)
+            return
+        # Collect every bbox the predictor emitted across the window (with temporal scoring, the
+        # last temporal_window + 1 frames up to `stop`: a later capture must not change what goes out
+        # under an earlier verdict); treat these as tracked locations and backfill missing per-frame
+        # bboxes from raw preds with conf=0.
+        lookback = [frames[i] for i in range(max(0, stop - self.temporal_window - 1), stop)] if temporal else frames
+        tracked = [b[:4] for _, _, bbs, _, _, _ in lookback for b in bbs]
         tracked_arr = np.array(tracked, dtype=np.float64) if tracked else np.empty((0, 4))
 
         # Freeze one square crop box per cluster of tracked bboxes so every frame of the
         # event is cropped at the same location, even when individual bboxes move.
-        full_size = next(((cc.full_w, cc.full_h) for cc, *_ in state["last_predictions"] if cc is not None), None)
+        full_size = next(((cc.full_w, cc.full_h) for cc, *_ in frames if cc is not None), None)
         if tracked and full_size is not None:
             self._update_event_crop_boxes(cam_key, tracked, *full_size)
 
         # Carry the last seen bbox forward onto frames with no detection so the alert keeps a
         # crop at the same location instead of a blank/placeholder frame (conf 0 flags the carry).
-        # With temporal scoring, only the frames the verdict actually scored go out; later ones wait,
-        # unless the window is exhausted and its last verdict holds.
-        scored_only = self.temporal is not None and not state["temporal_bypass"] and not state["temporal_frozen"]
         last_seen: list = []
-        for idx, (crop_, preds_, bboxes, ts, is_staged, jpeg_bytes) in enumerate(state["last_predictions"]):
+        for idx in range(stop):
+            crop_, preds_, bboxes, ts, is_staged, jpeg_bytes = frames[idx]
             if is_staged:
                 if bboxes:
                     last_seen = bboxes
-                continue
-            if scored_only and self._frame_id(cam_key, ts) not in state["temporal_scored"]:
                 continue
             bboxes = self._backfill_bboxes(bboxes, preds_, tracked_arr)
             if not bboxes and last_seen:
                 bboxes = [[b[0], b[1], b[2], b[3], 0.0] for b in last_seen]
             if bboxes:
                 last_seen = bboxes
-            sent_bboxes, scores = self._temporal_scores(cam_key, bboxes)
+            sent_bboxes, scores = self._temporal_scores(bboxes, tubes)
             if len(sent_bboxes) > MAX_UPLOAD_BBOXES:
                 # Backfill over the widened window can add boxes: keep the most confident ones,
                 # in their original order so scores and crops stay aligned.
@@ -662,7 +721,9 @@ class Engine(Predictor):
                 else None
             )
             self._stage_alert(crop_, cam_id, ts, sent_bboxes, jpeg_bytes, crop_boxes, scores)
-            state["last_predictions"][idx] = (crop_, preds_, bboxes, ts, True, jpeg_bytes)
+            frames[idx] = (
+                (None, preds_, bboxes, ts, True, None) if temporal else (crop_, preds_, bboxes, ts, True, jpeg_bytes)
+            )
 
     @staticmethod
     def _fit_box(
