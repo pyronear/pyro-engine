@@ -60,6 +60,8 @@ class FakeTemporal:
 
 
 def _engine(tmp_path, temporal, **kwargs):
+    # Scored from the first detection unless a test checks the pyro-api minimum (4 frames)
+    kwargs.setdefault("temporal_min_frames", 1)
     engine = Engine(
         cache_folder=str(tmp_path),
         conf_thresh=0.1,
@@ -155,10 +157,11 @@ def test_only_frames_of_the_scored_job_are_staged(tmp_path, mock_wildfire_image)
     for _ in range(4):
         state = _fire(engine, mock_wildfire_image)
         ts.append(state["last_predictions"][-1][3])
-    # job1 = {f1}, job2 = {f1, f2, f3}; f4 arrived after job2 and f1 left the window before its verdict
-    assert [a["ts"] for a in engine._alerts] == ts[:3]
-    assert _scores(engine) == [[0.5], [0.6], [0.6]]
-    assert state["last_predictions"][-1][4] is False  # f4 waits for job3
+    # job1 = {f1}, job2 = {f1, f2, f3}; f4 arrived after job2 and f1 left the window before its verdict.
+    # f4 is the 4th detection with temporal_window=3: nothing is scored any more, job2's verdict holds.
+    assert [a["ts"] for a in engine._alerts] == ts
+    assert _scores(engine) == [[0.5], [0.6], [0.6], [0.6]]
+    assert len(temporal.submitted) == 2
 
 
 def test_boxes_outside_scored_tubes_are_dropped(tmp_path, mock_wildfire_image):
@@ -302,9 +305,10 @@ def test_event_ending_during_validation_dropped_on_negative(tmp_path, mock_wildf
 def test_verdict_stages_its_oldest_frame_after_a_new_frame_arrived(tmp_path, mock_wildfire_image):
     temporal = FakeTemporal([done((BOX, 0.1)), done((BOX, 0.1)), done((BOX, 0.9))])
     engine = _engine(tmp_path, temporal, temporal_window=3)
-    _fire(engine, mock_wildfire_image, n=4)  # job3 scored frames 1-3, frame 4 arrived before its verdict
-    assert len(engine._alerts) == 3
-    assert len(temporal.submitted[3][1]) == 1  # job4 window is the last 3 frames, scored once (same image)
+    state = _fire(engine, mock_wildfire_image, n=4)  # job3 scored frames 1-3, frame 4 arrived before its verdict
+    assert engine._alerts[0]["ts"] == state["last_predictions"][0][3]  # frame 1 was still there for the verdict
+    assert len(engine._alerts) == 4  # frame 4 is past the window: job3's verdict holds for it
+    assert len(temporal.submitted) == 3  # no job4
 
 
 def test_rejected_frames_of_an_ended_event_stay_dropped_when_a_new_event_starts(
@@ -355,3 +359,61 @@ def test_upload_keeps_at_most_five_boxes(tmp_path, mock_wildfire_image):
         assert len(alert["bboxes"]) == 5
         assert len(alert["temporal_scores"]) == 5
         assert alert["bboxes"][0][:4] == BOX  # the real detection is kept, a backfilled box is left out
+
+
+def test_window_is_the_detection_frames_with_boxes_from_0_1(tmp_path, mock_wildfire_image, mock_forest_image):
+    """As pyro-api scores a sequence: frames without a detection stay out of the window (they carried
+    weak boxes that inflated the score), and boxes below the service's detection threshold are dropped."""
+    engine = _engine(tmp_path, FakeTemporal([PENDING] * 3))
+    weak = np.array([[460.8, 460.8, 102.4, 102.4, 0.6], [870.4, 870.4, 102.4, 102.4, 0.07]])  # + FAR_BOX at 0.07
+    engine.predict(mock_wildfire_image, CAM, fake_pred=weak.T.copy())
+    state = engine._states[CAM]
+    engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)  # still ongoing (hysteresis), no detection
+    assert state["ongoing"]
+    engine.predict(mock_wildfire_image, CAM, fake_pred=weak.T.copy())
+    window = engine._temporal_window(CAM)
+    frames = list(state["last_predictions"])
+    assert [f for f, _, _ in window] == [engine._frame_id(CAM, frames[i][3]) for i in (0, 2)]
+    assert all(boxes == [[0.4, 0.4, 0.5, 0.5, 0.6]] for _, _, boxes in window)
+
+
+def test_scored_from_the_4th_to_the_window_th_detection_then_last_verdict_holds(tmp_path, mock_wildfire_image):
+    temporal = FakeTemporal([done((BOX, 0.9)), done((BOX, 0.9))])
+    engine = _engine(tmp_path, temporal, temporal_min_frames=4, temporal_window=5)
+    _fire(engine, mock_wildfire_image, n=3)
+    assert not temporal.submitted  # held until the 4th detection
+    assert not engine._alerts
+    _fire(engine, mock_wildfire_image)
+    assert len(temporal.submitted) == 1
+    _fire(engine, mock_wildfire_image)  # job1 verdict: frames 1-4 go out, job2 (5 detections) submitted
+    assert len(engine._alerts) == 4
+    _fire(engine, mock_wildfire_image, n=2)  # job2 verdict; 6th and 7th detections: not scored, sent under it
+    assert len(temporal.submitted) == 2
+    assert len(engine._alerts) == 7
+    assert _scores(engine) == [[0.9]] * 7
+
+
+def test_negative_verdict_at_the_end_of_the_window_drops_the_event(tmp_path, mock_wildfire_image):
+    temporal = FakeTemporal([done((BOX, 0.1)), done((BOX, 0.1))])
+    engine = _engine(tmp_path, temporal, temporal_min_frames=4, temporal_window=5)
+    state = _fire(engine, mock_wildfire_image, n=8)
+    assert len(temporal.submitted) == 2  # 4th and 5th detections only
+    assert not engine._alerts
+    assert all(e[4] for e in state["last_predictions"])  # consumed, never uploaded
+
+
+def test_detections_of_an_event_too_short_to_score_do_not_count_in_the_next(
+    tmp_path, mock_wildfire_image, mock_forest_image
+):
+    temporal = FakeTemporal([PENDING])
+    engine = _engine(tmp_path, temporal, temporal_min_frames=4)
+    state = _fire(engine, mock_wildfire_image, n=2)
+    for _ in range(3):
+        engine.predict(mock_forest_image, CAM, fake_pred=EMPTY)
+    assert not state["ongoing"]
+    _fire(engine, mock_wildfire_image, n=3)
+    assert not temporal.submitted  # 3 detections in this event, not 5
+    _fire(engine, mock_wildfire_image)
+    assert len(temporal.submitted) == 1
+    assert len(engine._temporal_window(CAM)) == 4
+    assert not engine._alerts
