@@ -163,7 +163,7 @@ class Engine(Predictor):
         # Local backup
         self._backup_size = backup_size
         self._backup_folder = Path(backup_folder) if backup_folder else Path(cache_folder) / "backup"
-        self._last_backup_clean: Dict[str, float] = {}
+        self._last_backup_clean = -3600.0
         self._backup_unavailable = False  # already warned, do not log on every frame
 
         # Augment states with API-specific fields. Anchor the daily pose timestamp at
@@ -771,12 +771,12 @@ class Engine(Predictor):
                 return
             backup_cache = self._backup_folder / folder
             backup_cache.mkdir(exist_ok=True)
-            # Size scan walks the whole backup root, so only run it once per hour per folder.
-            # The timestamp is set after a successful scan, so a failure (key unplugged) is retried next frame.
+            # Cleanup runs once per hour; the timestamp is set after it succeeds, so a failure
+            # (key unplugged) is retried on the next frame.
             now = time.monotonic()
-            if now - self._last_backup_clean.get(folder, -3600) >= 3600:
-                self._clean_local_backup(backup_cache)
-                self._last_backup_clean[folder] = now
+            if now - self._last_backup_clean >= 3600:
+                self._clean_local_backup()
+                self._last_backup_clean = now
             day_cache = backup_cache / time.strftime("%Y%m%d")
             day_cache.mkdir(exist_ok=True)
             cam_cache = day_cache / str(cam_id)
@@ -795,19 +795,20 @@ class Engine(Predictor):
                 logger.warning(f"Unable to save frame in {self._backup_folder}: {e}")
             self._backup_unavailable = True
 
-    def _clean_local_backup(self, backup_cache: Path) -> None:
-        """Delete the oldest days of backup_cache until the whole backup root is under _backup_size MB
+    def _clean_local_backup(self) -> None:
+        """Delete the oldest days of the backup, save/ first then alerts/, while the filesystem holding
+        it is over _backup_size MB used or under 10% free.
 
-        Args:
-            backup_cache (Path): backup to clean
+        shutil.disk_usage is one statvfs call, so this never walks the key. Cleanup runs hourly, so the
+        10% free margin is the headroom for one hour of frames (a few hundred MB).
         """
 
-        def size_mb(path: Path) -> int:
-            return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) // 1024**2
+        def over() -> bool:
+            usage = shutil.disk_usage(self._backup_folder)
+            return usage.free < usage.total // 10 or (usage.total - usage.free) // 1024**2 > self._backup_size
 
-        total = size_mb(self._backup_folder)
-        for folder in sorted(backup_cache.glob("*")):
-            if total <= self._backup_size:
-                break
-            total -= size_mb(folder)
-            shutil.rmtree(folder)
+        for folder in ("save", "alerts"):
+            for day in sorted((self._backup_folder / folder).glob("*")):
+                if not over():
+                    return
+                shutil.rmtree(day)

@@ -161,7 +161,7 @@ if __name__ == "__main__":
         "--backup-size",
         type=int,
         default=10000,
-        help="Total size cap of the backup folder in MB, oldest days are deleted first",
+        help="Max MB used on the filesystem holding the backup (10%% is always kept free), oldest days are deleted first",
     )
     parser.add_argument(
         "--backup-dir",

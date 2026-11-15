@@ -159,7 +159,8 @@ With `SAVE_CAPTURED_FRAMES=true` in `.env` (or `--save_detections_frames`), fram
 the host, so they do not fill the SD card. Saving on the SD card instead is an explicit choice:
 `FRAMES_DIR=/usr/src/app/data/backup`. The engine never creates that folder: if the key is missing or fails, it keeps running and
 just does not save frames. Never create `/mnt/usb/frames` while the key is unplugged, or frames would land on the SD
-card. `--backup-size` is a total cap in MB over the whole folder, oldest days are deleted first. To set up the key
+card. `BACKUP_SIZE_MB` caps the space used on the key, and 10% of it is always kept free, so a small key works
+with the default: the oldest days are deleted first, `save/` before `alerts/`. To set up the key
 (this erases it):
 
 ```bash

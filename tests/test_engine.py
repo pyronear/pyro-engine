@@ -1,8 +1,10 @@
 import io
 import os
+import shutil
 import tempfile
 import time
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -245,12 +247,11 @@ def test_local_backup_folder(tmp_path):
     assert len(saved) == 1
     assert saved[0].read_bytes() == b"jpg"
 
-    # Cleanup runs at most once per hour per folder
+    # Cleanup runs at most once per hour, whatever the folder
     with patch.object(engine, "_clean_local_backup") as mock_clean:
         engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
-        assert mock_clean.call_count == 0
         engine._local_backup(None, "cam", is_alert=True, encoded_bytes=b"jpg")
-        assert mock_clean.call_count == 1
+        assert mock_clean.call_count == 0
 
     # PIL image without encoded bytes is saved as JPEG (other cam id: same-second names would collide)
     engine._local_backup(Image.new("RGB", (8, 8)), "cam2", is_alert=False)
@@ -265,7 +266,7 @@ def test_local_backup_folder(tmp_path):
         engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
 
     # A failed cleanup is retried on the next frame instead of being throttled for an hour
-    engine._last_backup_clean.clear()
+    engine._last_backup_clean = -3600.0
     with patch.object(engine, "_clean_local_backup", side_effect=[OSError("I/O error"), None]) as mock_clean:
         engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
         engine._local_backup(None, "cam", is_alert=False, encoded_bytes=b"jpg")
@@ -273,7 +274,7 @@ def test_local_backup_folder(tmp_path):
 
 
 def test_clean_local_backup_total_cap(tmp_path):
-    """The size cap covers the whole backup root, not each of save/ and alerts/ separately."""
+    """Oldest save/ days go first, then alerts/, until the disk is under the cap and 10% free."""
     backup = tmp_path / "frames"
     engine = Engine(cache_folder=str(tmp_path), backup_folder=str(backup), backup_size=3)
     for folder, day in (("save", "20240101"), ("save", "20240102"), ("alerts", "20240101")):
@@ -281,11 +282,20 @@ def test_clean_local_backup_total_cap(tmp_path):
         f.parent.mkdir(parents=True)
         f.write_bytes(b"\0" * 2 * 1024**2)
 
-    engine._clean_local_backup(backup / "save")
+    def fake_usage(path, total=100 * 1024**2):
+        used = sum(f.stat().st_size for f in backup.rglob("*") if f.is_file())
+        return shutil._ntuple_diskusage(total, used, total - used)
 
-    # 6 MB total > 3 MB cap: oldest save day dropped, then 4 MB > 3 MB: second one too; alerts untouched
+    # 6 MB used > 3 MB cap: both save days dropped, 2 MB left; alerts untouched
+    with patch("pyroengine.engine.shutil.disk_usage", fake_usage):
+        engine._clean_local_backup()
     assert list((backup / "save").iterdir()) == []
     assert (backup / "alerts" / "20240101" / "cam" / "a.jpg").exists()
+
+    # Under the cap but under 10% free (2 MB used on a 2.2 MB disk): alerts go too
+    with patch("pyroengine.engine.shutil.disk_usage", partial(fake_usage, total=int(2.2 * 1024**2))):
+        engine._clean_local_backup()
+    assert list((backup / "alerts").iterdir()) == []
 
 
 def test_build_context_crop(tmp_path):
