@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any, Dict, List, cast
 
+from pyro_camera_api.camera.adapters.folder import FolderCamera
 from pyro_camera_api.camera.base import PTZMixin
 from pyro_camera_api.camera.protocols import FocusControl
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_PROGRESS, PATROL_THREADS
@@ -249,7 +250,7 @@ def folder_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     A pose with no new frame is not a failure here, frames simply arrive at the
     pace of whoever deposits them.
     """
-    cam = CAMERA_REGISTRY[camera_ip]
+    cam = cast(FolderCamera, CAMERA_REGISTRY[camera_ip])
     logger.info("[%s] Starting folder loop", camera_ip)
 
     while not stop_flag.is_set():
