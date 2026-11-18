@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-PyroEngine is a wildfire detection system for edge devices (Raspberry Pi, etc.). It has two main packages:
+PyroEngine is a wildfire detection system for edge devices (Raspberry Pi, etc.). It has three packages:
 
 - **`pyroengine/`** — Core detection engine: runs YOLO model inference on camera images, manages alert states, communicates with the PyroNear API.
 - **`pyro_camera_api/`** — FastAPI service: unified REST interface for controlling heterogeneous cameras (Reolink, Linovision/Hikvision, RTSP, HTTP URL, generic REST/JSON snapshot API).
+- **`pyro_temporal_api/`** — Optional FastAPI service: validates ongoing alerts with the temporal smoke model (`pyronear/temporal-model`, ONNX runtime, no torch) before the engine sends them to the PyroNear API.
 
-These two services run as separate Docker containers and communicate over localhost (host network mode). The engine calls the camera API to capture frames and manage PTZ patrols.
+These services run as separate Docker containers and communicate over localhost (host network mode). The engine calls the camera API to capture frames and manage PTZ patrols.
 
 ## Common Commands
 
@@ -82,6 +83,10 @@ uv run --locked --group test pytest tests/test_engine.py -v
 
 For each `cam_id`, the engine periodically fetches a JSON file at `{bbox_mask_url}_{pose_id}.json` from a remote URL to get a dict of bounding boxes marking permanently occluded regions. Predictions with IoU > 0.1 against any occlusion box are dropped before confidence scoring.
 
+### Temporal validation (optional)
+
+The service is behind the compose profile `temporal` (`COMPOSE_PROFILES=temporal` in `.env`). When `TEMPORAL_API_URL` is set, each alert event of a `cam_id` is scored the way pyro-api scores a sequence. `Engine._track_event` opens an event when `ongoing` turns on, with the lead-up frames still in the detection window (`nb_consecutive_frames`, not widened), and keeps its own frames in `state["temporal_events"]`, outside that window: none is evicted before its verdict, and an event that ended while its verdict is pending is settled on its own while the next one runs, so no frame or count leaks between events. A frame with a detection (predictor output) joins the event's scoring window when it is captured, up to `temporal_window` (10) distinct JPEGs, with its raw boxes of confidence >= 0.1 (`TEMPORAL_BOX_CONF`, the server's detection threshold; the classifier already removes overlapping boxes, so the server's NMS is not repeated); boxes carried onto a frame when it is staged never make it a detection. `Engine._advance_event` runs every round for each event, oldest first: it reads the pending verdict (`GET /jobs/{id}`), then submits the window to `pyro_temporal_api` (`POST /jobs`, returns immediately, at most `MAX_FRAMES` = 11 frames) once it holds `temporal_min_frames` (4) frames and whenever it grew since the last submission, even after the event ended. The verdict on the full window, or on the last window of an ended event, is final and applies to every frame of the event; an event that ended before it could be scored is dropped. Without these rules (11 last captures, boxes from 0.05, re-scored every round) the device validated about 2.4x more alerts than pyro-api on the same October events. The verdict lists the scored tubes (union box + probability); boxes at least half covered by a tube scoring above `temporal_min_score` (0.2) are uploaded with that probability as `temporal_model_scores` (pyro-api PR 723 applies its own threshold instead of scoring the sequence), boxes outside every scored tube are dropped. A verdict covers the frames captured up to its submission: later frames wait for the next one; a verdict without such tube stages nothing (frames wait for the next one, a final one drops them); a pending job holds the alert. Staged frames release their JPEG and context crop; an event keeps only its last `temporal_window` + 1 sent frames (the tracked-boxes lookback, which ends at the verdict's frames so a later capture cannot change what goes out under it) and at most 3 windows of held frames. A later event is scored while an earlier one waits for its verdict, but goes out after it. Service errors, a malformed reply (a tube box is not 4 finite coordinates, a verdict that is not an object), a lost job and a job pending longer than `temporal_job_timeout` (120 s) fail open: frames are sent without scores, an ongoing event still submits its window every round, and the first verdict once the service is back resumes scoring. The API scores a sequence the device never scored; a sequence already scored keeps its last device verdict (pyro-api keeps the highest score and never falls back), so a fail-open after a score below the API threshold leaves it unvalidated until the service scores it higher. At most 5 boxes go out per frame (pyroclient limit), the most confident ones. `/health` exits the process when the scoring worker died or is stuck (`restart: always` does not act on an unhealthy container, so docker restarts it on exit). The service loads `data/model_onnx.zip` (`TEMPORAL_MODEL_PATH`), exported from a temporal-model release with `temporal-export-onnx`. A format 2 package (split `backbone.onnx` + `head.onnx`) lets the service embed only real frames and cache per-slot ViT embeddings across jobs (`EMBEDDING_CACHE_SIZE` in `main.py`, keyed by frame id + crop box); the verdict reports `embeddings_cached` / `embeddings_new` per job.
+
 ### Stream-awareness
 
 `SystemController.inference_loop` calls `_any_stream_active()` before and during every camera loop. If an active RTSP/SRT pipeline is detected (via `/stream/status`), the entire inference pass is skipped to avoid interfering with live streaming.
@@ -92,11 +97,11 @@ Day is determined by IR-channel analysis (`is_day_time(strategy="ir")`): if `max
 
 ### Environment Variables (`.env`)
 
-Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `LOG_LEVEL`.
+Key vars used at runtime: `LAT`, `LON`, `API_URL`, `API_TOKEN`, `CAM_USER`, `CAM_PWD`, `MEDIAMTX_SERVER_IP`, `ROUTER_IP`, `ROUTER_USER`, `ROUTER_PASSWORD`, `ENABLE_ROUTER_REBOOT`, `COMPOSE_PROFILES=temporal` + `TEMPORAL_API_URL` (e.g. `http://localhost:8082`; both unset = no temporal validation), `TEMPORAL_MODEL_PATH`, `LOG_LEVEL`.
 
 ### Logging
 
-Both services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/pyro_camera_api/main.py` calls `core.logging.setup_logging`), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
+All three services configure logging only from their entrypoint (`src/run.py` calls `pyroengine.logs.setup_logging`, `pyro_camera_api/pyro_camera_api/main.py` calls `core.logging.setup_logging`, `pyro_temporal_api/pyro_temporal_api/main.py` configures it at import), sharing the format `%(asctime)s [%(levelname)s] %(name)s: %(message)s` and reading `LOG_LEVEL`. Library modules must never call `logging.basicConfig`.
 
 Convention: camera-scoped messages start with `[cam_id]`, use `%`-style lazy args, and INFO is reserved for events an operator should see (one summary per inference round and per patrol cycle, detections, alerts, failures). Per-pose and per-frame detail belongs at DEBUG.
 
