@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 HD = (1280, 720)
 THRESH = 0.25
-QUEUE_SIZE = 16
+# Crops waiting for the worker; each HD RGB crop holds 2.7 MB, so this caps the backlog near 90 MB.
+MAX_PENDING_CROPS = 32
 FLUSH_PERIOD_S = 600.0
 # Records kept in memory while S3 is unreachable; the oldest are dropped beyond this.
 MAX_PENDING_RECORDS = 20_000
@@ -102,21 +103,30 @@ class CropCheck:
         upload: Uploader,
         prefix: str = "",
         names: Optional[Dict[str, str]] = None,
-        queue_size: int = QUEUE_SIZE,
+        max_pending_crops: int = MAX_PENDING_CROPS,
     ) -> None:
         self.model = model
         self.upload = upload
         self.prefix = f"{prefix}/" if prefix else ""
         self.names = names or {}
         self.dropped = 0  # checks skipped because the worker was behind
-        self._queue: queue.Queue = queue.Queue(maxsize=queue_size)
+        self.max_pending_crops = max_pending_crops
+        self._pending_crops = 0
+        self._lock = threading.Lock()
+        self._queue: queue.Queue = queue.Queue()
         self._records: List[str] = []
         self._last_flush = time.monotonic()
         threading.Thread(target=self._worker, name="crop-check", daemon=True).start()
 
     def submit(self, cam_id: str, frame: Image.Image, hd_jpeg: bytes, preds: np.ndarray) -> None:
-        """Queue a check of every box in `preds` (normalized to `frame`). Never blocks."""
+        """Queue a check of every box in `preds` (normalized to `frame`); skip it when the backlog is full."""
         boxes = np.reshape(preds, (-1, 5)).copy()
+        with self._lock:
+            if self._pending_crops + len(boxes) > self.max_pending_crops:
+                self.dropped += 1
+                logger.debug("[%s] Crop check skipped, worker busy (%d skipped)", cam_id, self.dropped)
+                return
+            self._pending_crops += len(boxes)
         windows = [hd_window(frame.size, b[:4]) for b in boxes]
         # Cut the crops now so the 4K frame is not kept alive in the queue.
         item = {
@@ -128,11 +138,7 @@ class CropCheck:
             "windows": windows,
             "crops": [frame.crop(win).convert("RGB") for win in windows],
         }
-        try:
-            self._queue.put_nowait(item)
-        except queue.Full:
-            self.dropped += 1
-            logger.debug("[%s] Crop check skipped, worker busy (%d skipped)", cam_id, self.dropped)
+        self._queue.put_nowait(item)
 
     def _worker(self) -> None:
         while True:
@@ -147,6 +153,8 @@ class CropCheck:
                 except Exception:
                     logger.exception("[%s] Crop check failed", item["cam_id"])
                 finally:
+                    with self._lock:
+                        self._pending_crops -= len(item["boxes"])
                     self._queue.task_done()
             if time.monotonic() - self._last_flush >= FLUSH_PERIOD_S:
                 self.flush()

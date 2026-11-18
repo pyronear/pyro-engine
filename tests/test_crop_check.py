@@ -86,12 +86,15 @@ def test_full_queue_drops_without_blocking():
         release.wait(5)
         return np.zeros((0, 5))
 
-    cc = CropCheck(slow_model, FakeUpload(), queue_size=1)
+    cc = CropCheck(slow_model, FakeUpload(), max_pending_crops=2)
     frame = Image.new("RGB", (1280, 720))
     preds = np.array([[0.4, 0.4, 0.6, 0.6, 0.3]])
     for _ in range(4):
         cc.submit("10.0.0.1", frame, b"hd", preds)
-    assert cc.dropped >= 2
+    assert cc.dropped == 2
+    # A frame with more boxes than the budget is skipped too
+    cc.submit("10.0.0.1", frame, b"hd", np.repeat(preds, 3, axis=0))
+    assert cc.dropped == 3
     release.set()
     cc._queue.join()
 

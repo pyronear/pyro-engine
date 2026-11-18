@@ -91,17 +91,21 @@ def main(args):
     )
 
     # Temporary R&D: shadow check of every detection on a native HD crop, enabled by S3_BUCKET in .env
-    s3 = s3_uploader_from_env()
-    if s3 is not None:
-        upload, prefix = s3
-        # Own model instance: crops are scored off the inference thread. No size filter, since a box
-        # looks about 3x wider in a native crop than in the HD frame the engine scores.
-        crop_model = Classifier(
-            model_path=args.model_path, conf=engine.model_conf_thresh, max_bbox_size=1.01, verbose=False
-        )
-        names = {ip: cam.get("name", ip) for ip, cam in camera_data.items()}
-        engine.crop_check = CropCheck(crop_model, upload, prefix, names)
-        logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
+    # A setup failure only disables the experiment, never detection.
+    try:
+        s3 = s3_uploader_from_env()
+        if s3 is not None:
+            upload, prefix = s3
+            # Own model instance: crops are scored off the inference thread. No size filter, since a box
+            # looks about 3x wider in a native crop than in the HD frame the engine scores.
+            crop_model = Classifier(
+                model_path=args.model_path, conf=engine.model_conf_thresh, max_bbox_size=1.01, verbose=False
+            )
+            names = {ip: cam.get("name", ip) for ip, cam in camera_data.items()}
+            engine.crop_check = CropCheck(crop_model, upload, prefix, names)
+            logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
+    except Exception:
+        logger.exception("Crop check setup failed, running without it")
 
     sys_controller = SystemController(
         engine,
