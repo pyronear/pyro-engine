@@ -29,7 +29,7 @@ from pyro_camera_api.camera.registry import (
     STUCK_CHECK_FLAGS,
     STUCK_CHECK_THREADS,
 )
-from pyro_camera_api.camera.stuck_detector import stuck_check_loop
+from pyro_camera_api.camera.stuck_detector import ALLOW_STILL_CAMERA, stuck_check_loop
 from pyro_camera_api.core.logging import setup_logging
 from pyro_camera_api.services.anonymizer_rtsp import AnonymizerWorker, BoxStore, LastFrameStore
 from pyro_camera_api.services.stream import set_app_for_stream, stop_stream_if_idle
@@ -81,15 +81,20 @@ async def lifespan(app: FastAPI):
             "yes",
             "on",
         )
-        if stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz" and hasattr(cam, "reboot_camera"):
+        if stuck_detector_enabled:
             stuck_flag = threading.Event()
             stuck_thread = threading.Thread(target=stuck_check_loop, args=(cam_id, stuck_flag), daemon=True)
             STUCK_CHECK_THREADS[cam_id] = stuck_thread
             STUCK_CHECK_FLAGS[cam_id] = stuck_flag
             stuck_thread.start()
-            logger.info("Starting stuck detector for PTZ camera %s", cam_id)
-        elif not stuck_detector_enabled and getattr(cam, "cam_type", "static") == "ptz":
+            logger.info("Starting stuck detector for camera %s", cam_id)
+        else:
             logger.info("Stuck detector disabled by ENABLE_STUCK_DETECTOR for %s", cam_id)
+
+    if ALLOW_STILL_CAMERA:
+        logger.warning(
+            "ALLOW_STILL_CAMERA is on: frozen or not moving cameras are never rebooted. Do not use on a station."
+        )
 
     threading.Thread(target=stop_stream_if_idle, daemon=True).start()
 
