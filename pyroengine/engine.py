@@ -11,7 +11,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -20,6 +20,9 @@ from pyro_predictor.utils import box_iou
 from pyroclient import client
 from requests.exceptions import RequestException
 from requests.models import Response
+
+if TYPE_CHECKING:
+    from .crop_check import CropCheck
 
 __all__ = ["ContextCrop", "Engine"]
 
@@ -169,6 +172,9 @@ class Engine(Predictor):
             state["last_bbox_mask_fetch"] = None
             state["last_pose_image_sent"] = init_now
             state["event_crop_boxes"] = []
+
+        # Temporary R&D shadow check of every detection on a native HD crop (see crop_check.py)
+        self.crop_check: Optional[CropCheck] = None
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -325,6 +331,8 @@ class Engine(Predictor):
             bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
             rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
             preds = self.model(rgb_frame, bbox_mask_dict)
+            if self.crop_check is not None and len(preds):
+                self.crop_check.submit(cam_key, original_frame, encoded_bytes, preds)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
