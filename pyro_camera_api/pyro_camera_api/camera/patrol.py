@@ -9,11 +9,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from typing import Any, Dict, cast
+from typing import Any, Dict, List, cast
 
 from pyro_camera_api.camera.base import PTZMixin
 from pyro_camera_api.camera.protocols import FocusControl
-from pyro_camera_api.camera.registry import CAMERA_REGISTRY
+from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_PROGRESS, PATROL_THREADS
 from pyro_camera_api.services.stream import is_camera_streaming
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,10 @@ SKIP_DURATION = 30 * 60.0  # skip for 30 minutes
 
 # seconds between stream re-checks while the patrol is paused by a live stream
 STREAM_CHECK_INTERVAL = 5.0
+
+# A loop iteration takes a few minutes at worst, when every camera call times
+# out, so this much silence from a live patrol thread means it is hung.
+STALL_LIMIT = 10 * 60.0
 
 # per camera state for the static loop
 FAILURE_COUNT: Dict[str, int] = {}
@@ -70,7 +74,17 @@ def is_stream_running_for(app: Any, camera_ip: str) -> bool:
     return False
 
 
+def stalled_patrols() -> List[str]:
+    now = time.monotonic()
+    return [
+        ip
+        for ip, thread in PATROL_THREADS.items()
+        if thread.is_alive() and now - PATROL_PROGRESS.get(ip, now) > STALL_LIMIT
+    ]
+
+
 def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
+    PATROL_PROGRESS[camera_ip] = time.monotonic()
     cam = CAMERA_REGISTRY[camera_ip]
     poses = getattr(cam, "cam_poses", []) or []
 
@@ -81,6 +95,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     logger.info("[%s] Starting patrol cycle with %d poses", camera_ip, len(poses))
 
     while not stop_flag.is_set():
+        PATROL_PROGRESS[camera_ip] = time.monotonic()
         # Live stream has priority: hold the patrol while a stream is active
         # so the camera never moves under the viewer, and resume automatically
         # once the stream stops (the thread keeps running, patrol stays "on").
@@ -103,7 +118,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
                 image = cam.capture()
                 if image:
-                    cam.last_images[pose] = image
+                    cam.store_image(pose, image)
                     captured += 1
                     logger.debug("[%s] Stored image for pose %s", camera_ip, pose)
                 else:
@@ -151,6 +166,7 @@ def patrol_loop(camera_ip: str, stop_flag: threading.Event) -> None:
 
 
 def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
+    PATROL_PROGRESS[camera_ip] = time.monotonic()
     cam = CAMERA_REGISTRY[camera_ip]
     logger.info("[%s] Starting static camera loop", camera_ip)
 
@@ -161,6 +177,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
     settle_until = 0.0
 
     while not stop_flag.is_set():
+        PATROL_PROGRESS[camera_ip] = time.monotonic()
         now = time.time()
 
         # skip window: entering it is already logged once, so stay quiet while it lasts
@@ -183,7 +200,7 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
                     # trust: discard it without counting a failure.
                     logger.debug("[%s] Discarding frame captured during settle window", camera_ip)
                 elif image:
-                    cam.last_images[-1] = image
+                    cam.store_image(-1, image)
                     # Steady state is silent, only the recovery is worth an INFO line.
                     if FAILURE_COUNT[camera_ip]:
                         logger.info("[%s] Capture recovered after %d failures", camera_ip, FAILURE_COUNT[camera_ip])

@@ -29,7 +29,7 @@ classifiers = [
 dependencies = [
     "requests>=2.33.0,<3",
     "python-dotenv==1.2.2",
-    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@main#subdirectory=client",
+    "pyroclient @ git+https://github.com/pyronear/pyro-api.git@f2c16044c14a22c12cb5df871a38987c78fe3dbd#subdirectory=client",
     "pyro_camera_api_client",
     "pyro_predictor",
     "onvif-zeep>=0.2.12",
@@ -120,7 +120,7 @@ exclude = [".git", "pyro-predictor/**", "docs/**"]
 docstring-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ["pyroengine", "pyro_camera_api"]
+known-first-party = ["pyroengine", "pyro_camera_api", "pyro_temporal_api"]
 known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -131,6 +131,7 @@ known-third-party = ["pillow", "tqdm", "onnxruntime", "huggingface_hub"]
 ".github/**.py" = ["D", "print", "ANN", "S", "collections-named-tuple"]
 "tests/**.py" = ["undocumented-public-function", "missing-copyright-notice", "assert", "print", "missing-type-function-argument", "missing-return-type-undocumented-public-function", "missing-return-type-private-function", "unused-function-argument", "request-without-timeout", "float-equality-comparison"]
 "pyro_camera_api/**.py" = ["D", "print", "assert", "ANN", "blind-except", "request-without-timeout", "request-with-no-cert-validation", "suspicious-subprocess-import", "subprocess-without-shell-equals-true", "suspicious-xml-etree-import", "suspicious-xml-element-tree-usage", "module-import-not-at-top-of-file", "unused-async"]
+"pyro_temporal_api/**.py" = ["D", "print", "assert", "ANN", "blind-except", "request-without-timeout", "request-with-no-cert-validation", "module-import-not-at-top-of-file", "unused-async"]
 "pyro_camera_api/tests/**.py" = ["invalid-function-name", "hardcoded-password-string", "hardcoded-password-func-arg", "hardcoded-temp-file", "float-equality-comparison"]
 "pyroengine/core.py" = ["blind-except"]
 "pyroengine/sensors.py" = ["request-without-timeout", "request-with-no-cert-validation", "ANN"]

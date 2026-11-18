@@ -7,11 +7,11 @@ Whatever the way you wish to contribute to the project, please respect the [code
 
 ## Codebase structure
 
-- [pyroengine](https://github.com/pyronear/pyro-engine/blob/main/pyroengine) - The actual pyroengine library
-- [docs](https://github.com/pyronear/pyro-engine/blob/main/docs) - Sphinx documentation building
-- [tests](https://github.com/pyronear/pyro-engine/blob/main/tests) - Python unit tests
-- [scripts](https://github.com/pyronear/pyro-engine/blob/main/scripts) - Scripts for Raspberry Pi
-- [src](https://github.com/pyronear/pyro-engine/blob/main/src) - code running on Raspberry Pi
+- [pyroengine](pyroengine/) - The actual pyroengine library
+- [docs](docs/) - Sphinx documentation building
+- [tests](tests/) - Python unit tests
+- [scripts](scripts/) - Scripts for Raspberry Pi
+- [src](src/) - code running on Raspberry Pi
 
 
 
@@ -39,8 +39,8 @@ In order to contribute to  project, we will first **set up the development envir
 * [Project Setup](#project-setup)
 
     _How to set up a forked project and install its dependencies in a well-encapsulated development environment_
-    1. [Create a virtual environment](#create-a-virtual-environment)
-    2. [Fork the project](#fork-the-repository)
+    1. [Create a virtual environment](#1-create-a-virtual-environment)
+    2. [Fork the project](#2-fork-the-repository)
 * [Contributing workflow](#contributing-workflow)
 
    _How to pull remote changes/new contributions and push your contributions to the original project_

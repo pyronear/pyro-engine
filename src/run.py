@@ -39,6 +39,8 @@ def main(args):
     cam_pwd = os.environ.get("CAM_PWD")
     assert isinstance(cam_user, str)
     assert isinstance(cam_pwd, str)
+    # Optional temporal validation service (pyro_temporal_api); unset = alerts sent as before
+    temporal_api_url = os.environ.get("TEMPORAL_API_URL") or None
 
     # Loading camera creds
     with pathlib.Path(args.creds).open("rb") as json_file:
@@ -87,6 +89,7 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
         backup_folder=args.backup_dir,
+        temporal_api_url=temporal_api_url,
     )
 
     sys_controller = SystemController(

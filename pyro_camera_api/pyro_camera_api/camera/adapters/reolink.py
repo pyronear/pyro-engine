@@ -30,7 +30,19 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
 
-class _LegacyTLSAdapter(HTTPAdapter):
+# A PTZ call without timeout once hung a patrol thread forever (pyro-engine#422):
+# every request gets this unless the call site passes its own.
+_DEFAULT_TIMEOUT = 10
+
+
+class _TimeoutAdapter(HTTPAdapter):
+    def send(self, request: Any, *args: Any, **kwargs: Any) -> Any:
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = _DEFAULT_TIMEOUT
+        return super().send(request, *args, **kwargs)
+
+
+class _LegacyTLSAdapter(_TimeoutAdapter):
     """Old Reolink firmwares only offer RSA-key-exchange TLS ciphers, which
     Python 3.10+ dropped from its default cipher list: restore OpenSSL's own."""
 
@@ -51,6 +63,7 @@ _session.trust_env = False
 # hands back a stale socket (matches the per-call behaviour of requests.get).
 _session.headers["Connection"] = "close"
 _session.mount("https://", _LegacyTLSAdapter())
+_session.mount("http://", _TimeoutAdapter())
 
 # Zoom/focus reads and the zoom restore run under the stream lock in
 # routes_stream, so a camera that stops answering must not hang them forever.
