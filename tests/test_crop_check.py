@@ -139,3 +139,57 @@ def test_engine_submits_original_frame_and_boxes(tmpdir_factory):
     engine.model.return_value = np.zeros((0, 5))
     engine.predict(frame, "10.0.0.1_0")
     engine.crop_check.submit.assert_not_called()
+
+
+def test_s3_uploader_from_env(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    from pyroengine.crop_check import s3_uploader_from_env
+
+    monkeypatch.delenv("S3_BUCKET", raising=False)
+    assert s3_uploader_from_env() is None
+
+    monkeypatch.setenv("S3_BUCKET", "bucket")
+    monkeypatch.setenv("S3_PREFIX", "/crop-check/")
+    client = MagicMock()
+    with patch("boto3.client", return_value=client):
+        upload, prefix = s3_uploader_from_env()
+    assert prefix == "crop-check"
+    upload("k", b"x", "image/jpeg")
+    client.put_object.assert_called_once_with(Bucket="bucket", Key="k", Body=b"x", ContentType="image/jpeg")
+
+
+def test_worker_survives_failures_and_flushes_on_its_own(monkeypatch):
+    import time
+
+    import pyroengine.crop_check as crop_check
+
+    monkeypatch.setattr(crop_check, "FLUSH_PERIOD_S", 0.2)
+    uploads = []
+
+    def upload(key, data, content_type):
+        if key.endswith(".jpg"):
+            raise OSError("offline")
+        uploads.append(key)
+
+    calls = []
+
+    def model(_img):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("model crashed")
+        return np.zeros((0, 5))
+
+    cc = CropCheck(model, upload)
+    cc.flush()  # nothing pending: no upload
+    assert uploads == []
+    preds = np.array([[0.4, 0.4, 0.6, 0.6, 0.4]])  # crop scores 0: disagreement, image uploads fail
+    cc.submit("10.0.0.1", Image.new("RGB", FRAME_4K), b"hd", preds)
+    cc.submit("10.0.0.1", Image.new("RGB", FRAME_4K), b"hd", preds)
+    cc._queue.join()
+    deadline = time.monotonic() + 5
+    while not uploads and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert uploads  # flushed by the worker, no explicit flush call
+    assert all(k.startswith("records/") for k in uploads)
+    assert cc._pending_crops == 0
