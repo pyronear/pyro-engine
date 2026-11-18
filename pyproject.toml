@@ -33,6 +33,7 @@ dependencies = [
     "pyro_camera_api_client",
     "pyro_predictor",
     "onvif-zeep>=0.2.12",
+    "boto3>=1.35,<2",
 ]
 
 [project.urls]
