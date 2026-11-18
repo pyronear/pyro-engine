@@ -37,7 +37,7 @@ class FolderCamera(BaseCamera):
 
     Each frame is handed over once: poll_frames() fills an empty pose slot with the
     oldest unread frame, and /latest_image empties the slot when it serves it. The
-    read position is kept in memory, so a restart reads again what is under max_age_s.
+    read position is kept in memory, so a restart reads again what is under ignore_frames_older_than_s.
     """
 
     consume_on_read = True
@@ -50,10 +50,10 @@ class FolderCamera(BaseCamera):
         pose_ids: List[int],
         cam_type: str = "static",
         cam_poses: Optional[List[int]] = None,
-        max_age_s: float = 1200.0,
+        ignore_frames_older_than_s: float = 1200.0,
     ) -> None:
         super().__init__(camera_id=camera_id, cam_type=cam_type)
-        self.max_age_s = max_age_s
+        self.ignore_frames_older_than_s = ignore_frames_older_than_s
         self.cam_poses = cam_poses or []
 
         root = Path(folder_path) / str(platform_id)
@@ -97,7 +97,7 @@ class FolderCamera(BaseCamera):
         return image
 
     def _oldest_allowed(self) -> datetime:
-        return datetime.now(timezone.utc) - timedelta(seconds=self.max_age_s)
+        return datetime.now(timezone.utc) - timedelta(seconds=self.ignore_frames_older_than_s)
 
     def poll_frames(self) -> None:
         """Fill each empty pose slot with the oldest frame that was not read yet."""
@@ -130,5 +130,5 @@ class FolderCamera(BaseCamera):
             if image is not None:
                 return image
 
-        logger.warning("[%s] No frame under %ss in %s", self.camera_id, self.max_age_s, directory)
+        logger.warning("[%s] No frame under %ss in %s", self.camera_id, self.ignore_frames_older_than_s, directory)
         return None

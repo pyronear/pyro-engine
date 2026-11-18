@@ -99,7 +99,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         Header/URL values may reference environment variables as ${VAR}.
       username, password, port, protocol, snapshot_path, snapshot_command
         (if adapter=ctronics)
-      folder_path, id, pose_ids, max_age_s (if adapter=folder)
+      folder_path, id, pose_ids, ignore_frames_older_than_s (if adapter=folder)
       poses, azimuths, focus_position (PTZ adapters)
     """
     adapter = conf.get("adapter", "").lower()
@@ -280,7 +280,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             pose_ids=pose_ids,
             cam_type=cam_type,
             cam_poses=poses,
-            max_age_s=conf.get("max_age_s", 1200.0),
+            ignore_frames_older_than_s=conf.get("ignore_frames_older_than_s", 1200.0),
         )
         logger.info("Registered folder camera %s", key)
         return cam

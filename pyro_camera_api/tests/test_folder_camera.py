@@ -26,9 +26,15 @@ def _write_frame(tmp_path, pose_id, age_s, color=(10, 20, 30), platform_id=42):
     return captured_at
 
 
-def _ptz_camera(tmp_path, max_age_s=1200.0):
+def _ptz_camera(tmp_path, ignore_frames_older_than_s=1200.0):
     return FolderCamera(
-        "cam", str(tmp_path), platform_id=42, pose_ids=[317, 318], cam_type="ptz", cam_poses=[8, 9], max_age_s=max_age_s
+        "cam",
+        str(tmp_path),
+        platform_id=42,
+        pose_ids=[317, 318],
+        cam_type="ptz",
+        cam_poses=[8, 9],
+        ignore_frames_older_than_s=ignore_frames_older_than_s,
     )
 
 
@@ -80,7 +86,7 @@ def test_poll_ignores_other_files(tmp_path, name):
     directory = tmp_path / "42" / "317"
     directory.mkdir(parents=True)
     (directory / name).write_bytes(b"partial")
-    cam = _ptz_camera(tmp_path, max_age_s=10**10)
+    cam = _ptz_camera(tmp_path, ignore_frames_older_than_s=10**10)
 
     cam.poll_frames()
 
@@ -143,12 +149,12 @@ def test_registry_builds_folder_camera(tmp_path):
         "poses": [8],
         "pose_ids": [317],
         "folder_path": str(tmp_path),
-        "max_age_s": 60,
+        "ignore_frames_older_than_s": 60,
     }
     cam = build_camera_object("cam", conf)
 
     assert isinstance(cam, FolderCamera)
-    assert cam.max_age_s == 60
+    assert cam.ignore_frames_older_than_s == 60
     assert cam.pose_dirs == {8: tmp_path / "42" / "317"}
 
 

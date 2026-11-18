@@ -32,7 +32,7 @@ contract is `camera/base.py`, the dispatch `camera/registry.py`, the implementat
 | `rtsp`                             | `RTSPCamera`         | yes     | no  | no    | `rtsp_url` (**required**)                                             |
 | `url` (alias `http`, `https`)      | `URLCamera`          | yes     | no  | no    | `url` (**required**) with embedded credentials                        |
 | `rest` (alias `api`)               | `RestSnapshotCamera` | yes     | no  | no    | `url` (**required**), `headers`, `response`, `json_path`, `encoding`  |
-| `folder`                           | `FolderCamera`       | yes     | no  | no    | `type`, `id`, `pose_ids`, `folder_path` (**required**), `poses`, `max_age_s` |
+| `folder`                           | `FolderCamera`       | yes     | no  | no    | `type`, `id`, `pose_ids`, `folder_path` (**required**), `poses`, `ignore_frames_older_than_s` |
 | `mock`                             | `MockCamera`         | yes     | yes | yes   | optional `url`, for tests and demos                                   |
 
 Only the fields marked **required** block registration; the others have fallbacks (`ip_address`
@@ -80,7 +80,7 @@ without `_` instead of an IP, and set `CAM_USER` and `CAM_PWD` even if unused, `
 "cam-01": {
   "adapter": "folder", "type": "ptz", "name": "cam-01", "id": 42, "token": "...",
   "poses": [8], "pose_ids": [317],
-  "folder_path": "/srv/pyro/frames", "max_age_s": 1200
+  "folder_path": "/srv/pyro/frames", "ignore_frames_older_than_s": 1200
 }
 ```
 
@@ -89,10 +89,13 @@ with no new image is normal here. Each pose holds one frame at a time, the oldes
 `/latest_image` serves it once, then answers 204 until the next one. The engine therefore skips a
 camera with nothing new, without inference or heartbeat, and never counts one image twice.
 
-- `max_age_s` (default 1200) is the age above which frames are skipped. To catch up after an outage,
-  raise it, restart, wait for the backlog to drain, then lower it and restart.
-- The read position is kept in memory. A restart reads again everything under `max_age_s`, so a
-  restart during a catch-up starts it over and sends its detections again.
+- `ignore_frames_older_than_s` (default 1200) skips frames captured longer ago than this, going by
+  the time in their file name. It is unrelated to the `max_age_s` query parameter of
+  `/latest_image`. To catch up after an outage, raise it, restart, wait for the backlog to drain,
+  then lower it and restart.
+- The read position is kept in memory. A restart reads again everything under
+  `ignore_frames_older_than_s`, so a restart during a catch-up starts it over and sends its
+  detections again.
 - Caught-up detections carry their real `recorded_at`, but the platform treats them as new: they
   appear in the recent feed and can notify.
 
