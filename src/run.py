@@ -12,9 +12,11 @@ import sys
 
 import urllib3
 from dotenv import load_dotenv
+from pyro_predictor.vision import Classifier
 from pyroclient import client
 
 from pyroengine import SystemController
+from pyroengine.crop_check import CropCheck, s3_uploader_from_env
 from pyroengine.engine import Engine
 from pyroengine.logs import setup_logging
 
@@ -87,6 +89,19 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
     )
+
+    # Temporary R&D: shadow check of every detection on a native HD crop, enabled by S3_BUCKET in .env
+    s3 = s3_uploader_from_env()
+    if s3 is not None:
+        upload, prefix = s3
+        # Own model instance: crops are scored off the inference thread. No size filter, since a box
+        # looks about 3x wider in a native crop than in the HD frame the engine scores.
+        crop_model = Classifier(
+            model_path=args.model_path, conf=engine.model_conf_thresh, max_bbox_size=1.01, verbose=False
+        )
+        names = {ip: cam.get("name", ip) for ip, cam in camera_data.items()}
+        engine.crop_check = CropCheck(crop_model, upload, prefix, names)
+        logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
 
     sys_controller = SystemController(
         engine,
