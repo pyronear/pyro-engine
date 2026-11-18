@@ -1,4 +1,5 @@
 import io
+import itertools
 import json
 import threading
 import time
@@ -170,7 +171,9 @@ def test_trigger_skipped_while_previous_job_runs(capture, client, uploads):
 @patch("pyroengine.core.PyroCameraAPIClient")
 def test_inference_loop_triggers_zoom_capture_for_reolink_only(mock_client_class):
     mock_client = mock_client_class.return_value
-    mock_client.get_latest_image.return_value = Image.new("RGB", (100, 100), (255, 200, 200))
+    # A new frame on every read: the controller skips frames it already analyzed
+    blue = itertools.count()
+    mock_client.get_latest_image.side_effect = lambda *_a, **_k: Image.new("RGB", (100, 100), (255, 200, next(blue)))
     mock_client.get_stream_status.return_value = {"active_streams": 0}
 
     engine = MagicMock()
