@@ -2,7 +2,7 @@ import itertools
 import logging
 import pathlib
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,6 +67,37 @@ def test_focus_finder_runs_hourly(mock_client_class, mock_engine, mock_camera_da
     assert mock_client.run_focus_optimization.called
     assert mock_client.stop_patrol.called
     assert mock_client.start_patrol.called
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_focus_finder_ignores_static_only_site(mock_client_class, mock_engine, caplog):
+    mock_client = mock_client_class.return_value
+    camera_data = {"10.0.0.1": {"name": "cam1", "type": "static", "poses": [-1]}}
+    controller = SystemController(mock_engine, camera_data, "http://fake.url")
+    controller.is_day = True
+
+    with caplog.at_level(logging.INFO, logger="pyroengine.core"):
+        controller.focus_finder()
+
+    assert not mock_client.stop_patrol.called
+    assert not mock_client.run_focus_optimization.called
+    assert "autofocus" not in caplog.text.lower()
+
+
+@patch("pyroengine.core.PyroCameraAPIClient")
+def test_focus_finder_failure_waits_an_hour(mock_client_class, mock_engine, mock_camera_data):
+    mock_client = mock_client_class.return_value
+    mock_client.run_focus_optimization.side_effect = RuntimeError("focus failed")
+    controller = SystemController(mock_engine, mock_camera_data, "http://fake.url")
+    controller.is_day = True
+
+    controller.focus_finder()
+    controller.focus_finder()
+    assert mock_client.run_focus_optimization.call_count == 1
+
+    controller.last_autofocus -= timedelta(hours=2)
+    controller.focus_finder()
+    assert mock_client.run_focus_optimization.call_count == 2
 
 
 @patch("pyroengine.core.PyroCameraAPIClient")
