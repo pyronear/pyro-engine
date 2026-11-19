@@ -402,6 +402,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "huggingface-hub" },
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "temporal-model-core", extra = ["onnx"] },
@@ -417,6 +418,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.110.0,<0.111" },
+    { name = "huggingface-hub", specifier = ">=1.30.0" },
     { name = "python-multipart", specifier = ">=0.0.9,<0.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "temporal-model-core", extras = ["onnx"], git = "https://github.com/pyronear/temporal-model.git?subdirectory=core&rev=0c84a4174e558da4cadc60342bc819b69db02988" },

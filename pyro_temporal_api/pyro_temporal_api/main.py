@@ -18,10 +18,12 @@ import json
 import logging
 import math
 import os
+import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from temporal_model.core.onnx_model import OnnxTemporalModel
 
@@ -41,7 +43,13 @@ logging.getLogger("uvicorn.access").setLevel(
 )
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = Path(os.environ.get("TEMPORAL_MODEL_PATH", "data/model_onnx.zip"))
+MODEL_REPO_ID = "pyronear/temporal-model"
+# Releases are git tags on the HF repo; pin one so devices never follow `main`.
+MODEL_REVISION = "v0.6.1"
+MODEL_NAME = "model_onnx.zip"
+MODEL_SLUG = f"{MODEL_REPO_ID.split('/', 1)[1]}_{MODEL_REVISION}"
+# Not data/models: the engine's classifier deletes every entry there but its own model.
+MODEL_CACHE_ROOT = Path("data/temporal_models")
 # The engine submits its 11-frame prediction window; the model scores at most that many slots per tube.
 MAX_FRAMES = 11
 MAX_BOXES_PER_FRAME = 50
@@ -53,20 +61,44 @@ EMBEDDING_CACHE_SIZE = 4096
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 
+def resolve_model_path() -> Path:
+    """Return the model package to load, downloading the pinned release when it is not on disk.
+
+    TEMPORAL_MODEL_PATH points at a custom package, used as is and never downloaded.
+    """
+    custom = os.environ.get("TEMPORAL_MODEL_PATH")
+    if custom:
+        return Path(custom)
+    model_cache = MODEL_CACHE_ROOT / MODEL_SLUG
+    model_path = model_cache / MODEL_NAME
+    if not model_path.is_file():
+        # Drop previous releases first: a package is about 100 MB on a device's SD card.
+        if MODEL_CACHE_ROOT.is_dir():
+            for entry in MODEL_CACHE_ROOT.iterdir():
+                if entry.name != MODEL_SLUG:
+                    shutil.rmtree(entry, ignore_errors=True)
+                    logger.info("Removed stale temporal model: %s", entry)
+        logger.info("Downloading temporal model %s@%s/%s ...", MODEL_REPO_ID, MODEL_REVISION, MODEL_NAME)
+        model_cache.mkdir(parents=True, exist_ok=True)
+        hf_hub_download(repo_id=MODEL_REPO_ID, filename=MODEL_NAME, revision=MODEL_REVISION, local_dir=str(model_cache))
+    return model_path
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    manifest = read_manifest(MODEL_PATH)
+    model_path = resolve_model_path()
+    manifest = read_manifest(model_path)
     split = manifest.get("format_version", 1) >= 2
     if not split:
         logger.warning(
             "%s is a format 1 package (fused classifier.onnx): every slot is embedded on every job. "
             "Re-export it with temporal-export-onnx to skip padded slots and cache embeddings.",
-            MODEL_PATH,
+            model_path,
         )
-    model = OnnxTemporalModel.from_package(MODEL_PATH, embedding_cache_size=EMBEDDING_CACHE_SIZE if split else 0)
+    model = OnnxTemporalModel.from_package(model_path, embedding_cache_size=EMBEDDING_CACHE_SIZE if split else 0)
     app.state.jobs = JobStore(model)
     app.state.model_version = manifest.get("model_version")
-    logger.info("Loaded temporal model %s (version %s)", MODEL_PATH, app.state.model_version)
+    logger.info("Loaded temporal model %s (version %s)", model_path, app.state.model_version)
     yield
 
 

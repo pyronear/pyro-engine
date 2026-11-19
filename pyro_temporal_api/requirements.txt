@@ -40,7 +40,9 @@ httptools==0.8.0
 httpx==0.28.1
     # via huggingface-hub
 huggingface-hub==1.30.0
-    # via temporal-model-core
+    # via
+    #   pyro-temporal-api
+    #   temporal-model-core
 idna==3.19
     # via
     #   anyio
