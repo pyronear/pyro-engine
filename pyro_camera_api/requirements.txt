@@ -6,6 +6,7 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.14.2
     # via
+    #   fastapi
     #   starlette
     #   watchfiles
 attrs==26.1.0
@@ -23,7 +24,7 @@ colorama==0.4.6 ; sys_platform == 'win32'
     #   uvicorn
 coloredlogs==15.0.1
     # via onnxruntime
-fastapi==0.133.1
+fastapi==0.163.2
     # via pyro-camera-api
 flatbuffers==25.12.19
     # via onnxruntime
@@ -59,6 +60,8 @@ onvif-zeep==0.2.12
     # via ncnn
 opencv-python-headless==4.11.0.86
     # via pyro-camera-api
+opentelemetry-api==1.45.2
+    # via fastapi
 packaging==26.1
     # via onnxruntime
 pillow==13.0.0
@@ -104,6 +107,7 @@ typing-extensions==4.15.0
     # via
     #   anyio
     #   fastapi
+    #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   starlette

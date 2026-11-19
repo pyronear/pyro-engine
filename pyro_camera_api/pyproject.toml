@@ -6,7 +6,7 @@ authors = [{ name = "Pyronear", email = "contact@pyronear.org" }]
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "fastapi>=0.133.1,<0.134",
+    "fastapi>=0.163.2,<0.164",
     "uvicorn[standard]>=0.30.0,<0.31",
     "python-dotenv>=1.0.1,<2",
     "opencv-python-headless>=4.9.0,<5",
