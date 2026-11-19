@@ -132,9 +132,15 @@ class SystemController:
 
         This stops patrol, runs the server side focus optimization, then restarts patrol.
         """
+        if all(cam.get("type") == "static" for cam in self.camera_data.values()):
+            return
+
         now = datetime.now()
         if self.is_day and (self.last_autofocus is None or (now - self.last_autofocus).total_seconds() > 3600):
             logger.info("Hourly autofocus triggered after idle period")
+            # Stamp the attempt, not the success: a camera that fails is retried in an hour,
+            # not on every loop.
+            self.last_autofocus = now
 
             for ip, cam in self.camera_data.items():
                 if cam.get("type") != "static":
@@ -152,7 +158,6 @@ class SystemController:
                             self.camera_api_client.run_focus_optimization(ip)
                             logger.info("[%s] Autofocus completed", ip)
                             self.camera_api_client.start_patrol(ip)
-                            self.last_autofocus = now
                         except Exception:
                             logger.exception("[%s] Failed to run hourly focus finder", ip)
 
