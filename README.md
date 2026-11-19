@@ -141,6 +141,8 @@ round is one summary line per camera cycle and one per inference round; detectio
 failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
 predictions, ffmpeg output and HTTP access logs.
 
+Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to score a native 1280x720 crop of the 4K frame around every detection with a second model instance. Alerting is unchanged. Both scores are uploaded as JSON lines every 10 minutes, and the HD frame plus the crop are uploaded when the two scores fall on different sides of 0.25.
+
 ### Docker builds and runtime isolation
 
 Both images install only locked runtime dependencies into `/opt/venv` with uv. Dependency layers are built before application code, and BuildKit cache mounts reuse downloaded wheels. Git, uv, Python package installers and build caches stay outside the final runtime. The engine uses headless OpenCV without an FFmpeg/GUI installation; FFmpeg remains in the camera service for RTSP/SRT streaming.
