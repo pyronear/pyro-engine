@@ -17,6 +17,7 @@ from pyroclient import client
 from pyroengine import SystemController
 from pyroengine.engine import Engine
 from pyroengine.logs import setup_logging
+from pyroengine.zoom_capture import ZoomCapture, s3_uploader_from_env
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -91,11 +92,20 @@ def main(args):
         temporal_api_url=temporal_api_url,
     )
 
+    # Temporary R&D: zoom capture to S3, enabled by S3_BUCKET in .env
+    zoom_capture = None
+    s3 = s3_uploader_from_env()
+    if s3 is not None:
+        upload, prefix = s3
+        zoom_capture = ZoomCapture(upload, prefix)
+        logger.info(f"Zoom capture enabled, uploading to s3://{os.environ['S3_BUCKET']}/{prefix}")
+
     sys_controller = SystemController(
         engine,
         camera_data,
         args.pyro_camera_api_url,
         heartbeat_file=args.heartbeat_file,
+        zoom_capture=zoom_capture,
     )
 
     sys_controller.main_loop(args.period, args.send_alerts)
