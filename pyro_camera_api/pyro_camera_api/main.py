@@ -20,7 +20,8 @@ from pyro_camera_api.api.routes_focus import router as focus_router
 from pyro_camera_api.api.routes_health import router as health_router
 from pyro_camera_api.api.routes_patrol import router as patrol_router
 from pyro_camera_api.api.routes_stream import router as stream_router
-from pyro_camera_api.camera.patrol import patrol_loop, static_loop
+from pyro_camera_api.camera.adapters.folder import FolderCamera
+from pyro_camera_api.camera.patrol import folder_loop, patrol_loop, static_loop
 from pyro_camera_api.camera.pose_azimuths import azimuth_sync_loop
 from pyro_camera_api.camera.registry import (
     CAMERA_REGISTRY,
@@ -64,7 +65,10 @@ async def lifespan(app: FastAPI):
             continue
 
         stop_flag = threading.Event()
-        if getattr(cam, "cam_type", "static") == "ptz":
+        if isinstance(cam, FolderCamera):
+            thread = threading.Thread(target=folder_loop, args=(cam_id, stop_flag), daemon=True)
+            logger.info("Starting folder loop for camera %s", cam_id)
+        elif getattr(cam, "cam_type", "static") == "ptz":
             thread = threading.Thread(target=patrol_loop, args=(cam_id, stop_flag), daemon=True)
             logger.info("Starting patrol loop for PTZ camera %s", cam_id)
         else:

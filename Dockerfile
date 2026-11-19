@@ -64,5 +64,5 @@ RUN --mount=type=cache,id=apt-cache-${TARGETARCH},target=/var/cache/apt,sharing=
 # Only installed runtime packages cross the stage boundary; they remain root-owned.
 COPY --from=builder /opt/venv /opt/venv
 WORKDIR /usr/src/app
-COPY --chmod=0444 src/run.py src/control_reolink_cam.py ./
+COPY --chmod=0444 src/run.py src/control_reolink_cam.py src/replay_folder_cam.py ./
 CMD ["python", "run.py"]

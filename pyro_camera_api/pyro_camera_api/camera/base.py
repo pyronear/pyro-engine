@@ -24,6 +24,10 @@ class BaseCamera(ABC):
     Every concrete camera must implement capture.
     """
 
+    # True when /latest_image must serve a stored frame only once, for adapters
+    # whose loop does not replace it with a new frame on every pass.
+    consume_on_read: bool = False
+
     def __init__(self, camera_id: str, cam_type: str = "static") -> None:
         """
         Args:

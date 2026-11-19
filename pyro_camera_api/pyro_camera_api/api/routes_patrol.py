@@ -11,9 +11,11 @@ import threading
 
 from fastapi import APIRouter, HTTPException, Request
 
+from pyro_camera_api.camera.adapters.folder import FolderCamera
 from pyro_camera_api.camera.patrol import (
     FAILURE_COUNT,
     SKIP_UNTIL,
+    folder_loop,
     is_stream_running_for,
     patrol_loop,
     static_loop,
@@ -62,7 +64,10 @@ def start_patrol(camera_ip: str, request: Request):
 
     stop_flag = threading.Event()
 
-    if getattr(cam, "cam_type", "static") == "ptz":
+    if isinstance(cam, FolderCamera):
+        target_fn = folder_loop
+        loop_type = "folder"
+    elif getattr(cam, "cam_type", "static") == "ptz":
         target_fn = patrol_loop
         loop_type = "patrol"
     else:
@@ -126,6 +131,8 @@ def patrol_status(camera_ip: str):
             loop_type = "patrol"
         elif target_fn == "static_loop":
             loop_type = "static"
+        elif target_fn == "folder_loop":
+            loop_type = "folder"
 
     return {
         "camera_ip": camera_ip,

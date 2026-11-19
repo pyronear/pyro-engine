@@ -164,7 +164,11 @@ class PyroCameraAPIClient:
         if resp.status_code == 204 or not resp.content:
             return None
 
-        return Image.open(io.BytesIO(resp.content)).convert("RGB")
+        image = Image.open(io.BytesIO(resp.content)).convert("RGB")
+        captured_at = resp.headers.get("X-Captured-At")
+        if captured_at:
+            image.info["captured_at"] = captured_at
+        return image
 
     # ------------------------------------------------------------------
     # PTZ control

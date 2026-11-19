@@ -252,16 +252,27 @@ def get_latest_image(
     no image for the requested pose, or it is older than max_age_s (for
     example a hung patrol thread), the endpoint returns HTTP 204 with
     an empty body.
+
+    Adapters with consume_on_read serve each frame once. When the adapter
+    knows the capture time, it is returned in the X-Captured-At header.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")
 
-    image = cam.last_images.get(pose)
-    stored_at = cam.last_image_at.get(pose)
+    if cam.consume_on_read:
+        # Served once; a stale frame is dropped too, so the adapter can store the next one.
+        image = cam.last_images.pop(pose, None)
+        stored_at = cam.last_image_at.pop(pose, None)
+    else:
+        image = cam.last_images.get(pose)
+        stored_at = cam.last_image_at.get(pose)
     if image is None or stored_at is None or time.monotonic() - stored_at > max_age_s:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    captured_at = image.info.get("captured_at")
+    headers = {"X-Captured-At": captured_at} if captured_at else None
+
     buffer = BytesIO()
     image.save(buffer, format="JPEG", quality=quality)
-    return Response(buffer.getvalue(), media_type="image/jpeg")
+    return Response(buffer.getvalue(), media_type="image/jpeg", headers=headers)

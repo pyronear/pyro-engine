@@ -11,6 +11,7 @@ import threading
 import time
 from typing import Any, Dict, List, cast
 
+from pyro_camera_api.camera.adapters.folder import FolderCamera
 from pyro_camera_api.camera.base import PTZMixin
 from pyro_camera_api.camera.protocols import FocusControl
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY, PATROL_PROGRESS, PATROL_THREADS
@@ -28,6 +29,9 @@ STREAM_CHECK_INTERVAL = 5.0
 # A loop iteration takes a few minutes at worst, when every camera call times
 # out, so this much silence from a live patrol thread means it is hung.
 STALL_LIMIT = 10 * 60.0
+
+# seconds between two reads of the folder of a folder camera
+FOLDER_POLL_INTERVAL = 5.0
 
 # per camera state for the static loop
 FAILURE_COUNT: Dict[str, int] = {}
@@ -237,3 +241,23 @@ def static_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             break
 
     logger.info("[%s] Static camera loop exited cleanly", camera_ip)
+
+
+def folder_loop(camera_ip: str, stop_flag: threading.Event) -> None:
+    """
+    Store new frames of a folder camera as they appear on disk.
+
+    A pose with no new frame is not a failure here, frames simply arrive at the
+    pace of whoever deposits them.
+    """
+    cam = cast(FolderCamera, CAMERA_REGISTRY[camera_ip])
+    logger.info("[%s] Starting folder loop", camera_ip)
+
+    while not stop_flag.is_set():
+        try:
+            cam.poll_frames()
+        except Exception as exc:
+            logger.error("[%s] Error reading folder: %s", camera_ip, exc)
+        stop_flag.wait(FOLDER_POLL_INTERVAL)
+
+    logger.info("[%s] Folder loop exited cleanly", camera_ip)

@@ -14,6 +14,7 @@ from collections import defaultdict
 from typing import Dict, Optional
 
 from pyro_camera_api.camera.adapters.ctronics import CTronicsCamera
+from pyro_camera_api.camera.adapters.folder import FolderCamera
 from pyro_camera_api.camera.adapters.hikvision import HikvisionCamera
 from pyro_camera_api.camera.adapters.linovision import LinovisionCamera
 from pyro_camera_api.camera.adapters.mock import MockCamera
@@ -85,7 +86,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
     Expected keys in conf:
       adapter:  "reolink-823S2", "reolink-823A16", "linovision", "hikvision",
                 "rtsp", "url", "rest" (alias "api"), "ctronics" (alias "ctronic"),
-                "mock".
+                "folder", "mock".
                 Generic "reolink" is still accepted by the registry (it builds
                 a ReolinkCamera from any string containing "reolink"), but the
                 PTZ routes require a specific model for the calibrated speed
@@ -98,6 +99,7 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
         Header/URL values may reference environment variables as ${VAR}.
       username, password, port, protocol, snapshot_path, snapshot_command
         (if adapter=ctronics)
+      folder_path, id, pose_ids, ignore_frames_older_than_s (if adapter=folder)
       poses, azimuths, focus_position (PTZ adapters)
     """
     adapter = conf.get("adapter", "").lower()
@@ -256,6 +258,31 @@ def build_camera_object(key: str, conf: dict) -> Optional[BaseCamera]:
             cam_type="static",
         )
         logger.info("Registered REST snapshot camera %s", key)
+        return cam
+
+    # Images deposited on disk (capture only)
+    if adapter == "folder":
+        folder_path = conf.get("folder_path")
+        platform_id = conf.get("id")
+        pose_ids = conf.get("pose_ids", [])
+        poses = conf.get("poses", [])
+        if not folder_path or platform_id is None or not pose_ids:
+            logger.error("Camera %s declared as folder adapter but missing 'folder_path', 'id' or 'pose_ids'", key)
+            return None
+        if cam_type == "ptz" and len(poses) != len(pose_ids):
+            logger.error("Camera %s declared as folder adapter with mismatched 'poses' and 'pose_ids'", key)
+            return None
+
+        cam = FolderCamera(
+            camera_id=key,
+            folder_path=folder_path,
+            platform_id=platform_id,
+            pose_ids=pose_ids,
+            cam_type=cam_type,
+            cam_poses=poses,
+            ignore_frames_older_than_s=conf.get("ignore_frames_older_than_s", 1200.0),
+        )
+        logger.info("Registered folder camera %s", key)
         return cam
 
     # Mock camera adapter for tests and demos

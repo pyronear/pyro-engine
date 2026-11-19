@@ -497,6 +497,40 @@ def test_process_alerts_sends_one_crop_per_bbox(tmp_path):
     assert len(engine._alerts) == 0
 
 
+def test_predict_uses_capture_time_when_given(tmp_path):
+    engine = Engine(cache_folder=str(tmp_path))
+    frame = Image.new("RGB", (640, 480))
+    captured_at = "2026-10-27T14:00:00+00:00"
+
+    engine.predict(frame, "cam", fake_pred=np.empty((0, 5)), captured_at=captured_at)
+    engine.predict(frame, "cam", fake_pred=np.empty((0, 5)))
+
+    timestamps = [entry[3] for entry in engine._states["cam"]["last_predictions"]]
+    assert timestamps[0] == captured_at
+    assert timestamps[1] != captured_at
+
+
+@pytest.mark.parametrize(
+    ("second", "ongoing", "kept"),
+    [
+        ("2026-10-27T14:20:00+00:00", False, 2),  # 20 min later: same history
+        ("2026-10-28T08:00:00+00:00", False, 1),  # next morning: history dropped
+        ("2026-10-28T08:00:00+00:00", True, 2),  # an open event is never cut
+    ],
+)
+def test_predict_drops_history_after_capture_gap(tmp_path, second, ongoing, kept):
+    engine = Engine(cache_folder=str(tmp_path))
+    frame = Image.new("RGB", (640, 480))
+
+    engine.predict(frame, "cam", fake_pred=np.empty((0, 5)), captured_at="2026-10-27T14:00:00+00:00")
+    engine._states["cam"]["ongoing"] = ongoing
+    engine.predict(frame, "cam", fake_pred=np.empty((0, 5)), captured_at=second)
+
+    timestamps = [entry[3] for entry in engine._states["cam"]["last_predictions"]]
+    assert len(timestamps) == kept
+    assert timestamps[-1] == second
+
+
 def test_process_alerts_empty_bboxes_uploaded_as_is(tmp_path):
     """A frame with no detection is uploaded with an empty bbox list and no crop."""
     engine, fake_client, cam_id = _build_engine_with_fake_client(tmp_path)

@@ -96,6 +96,8 @@ class Engine(Predictor):
         day_time_strategy: strategy to define if it's daytime
         save_captured_frames: save all captured frames for debugging
         save_detections_frames: Save all locally detection frames locally
+        history_reset_gap: seconds between the capture times of two frames above which the detection
+            history of the pose is dropped, when no event is open
         kwargs: keyword args of Classifier
 
     Examples:
@@ -134,6 +136,7 @@ class Engine(Predictor):
         temporal_min_frames: int = 4,
         temporal_job_timeout: float = 120.0,
         temporal_min_score: float = 0.2,
+        history_reset_gap: float = 1800.0,
         **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
@@ -151,6 +154,7 @@ class Engine(Predictor):
         self.temporal_min_frames = temporal_min_frames
         self.temporal_job_timeout = temporal_job_timeout
         self.temporal_min_score = temporal_min_score
+        self.history_reset_gap = history_reset_gap
         super().__init__(
             model_path=model_path,
             conf_thresh=conf_thresh,
@@ -485,6 +489,27 @@ class Engine(Predictor):
         area = (box[2] - box[0]) * (box[3] - box[1])
         return max(w, 0.0) * max(h, 0.0) / area if area > 0 else 0.0
 
+    def _capture_gap_exceeded(self, cam_key: str, captured_at: Optional[str]) -> bool:
+        """Whether the history of a pose must be dropped before a frame captured at captured_at.
+
+        A camera that sends nothing at night (no infrared frame to reset the history) would
+        otherwise combine the next morning's first frames with the previous evening's ones. Only
+        frames with a capture time are checked, and never while an event is open or awaiting its
+        temporal verdict.
+        """
+        state = self._states[cam_key]
+        history = state["last_predictions"]
+        if captured_at is None or not history or state["ongoing"] or state.get("temporal_events"):
+            return False
+        try:
+            gap = datetime.fromisoformat(captured_at) - datetime.fromisoformat(history[-1][3])
+        except (TypeError, ValueError):
+            return False
+        if gap.total_seconds() <= self.history_reset_gap:
+            return False
+        logger.info("[%s] %s since the previous frame, detection history dropped", cam_key, gap)
+        return True
+
     def heartbeat(self, cam_id: str, timeout: Optional[float] = None) -> Response:
         """Updates last ping of device"""
         ip = cam_id.split("_")[0]
@@ -515,6 +540,7 @@ class Engine(Predictor):
         cam_id: Optional[str] = None,
         occlusion_bboxes: Optional[Dict[Any, Any]] = None,  # ruff: ignore[unused-method-argument]
         fake_pred: Optional[np.ndarray] = None,
+        captured_at: Optional[str] = None,
     ) -> float:
         """Computes the confidence that the image contains wildfire cues
 
@@ -528,11 +554,12 @@ class Engine(Predictor):
                             [w1, w2]
                             [h1, h2]
                             [conf1, conf2]]
+            captured_at: capture time of the frame (ISO 8601) when it differs from now, sent as recorded_at
         Returns:
             the predicted confidence
         """
         cam_key = cam_id or "-1"
-        if cam_key not in self._states:
+        if cam_key not in self._states or self._capture_gap_exceeded(cam_key, captured_at):
             self._states[cam_key] = self._new_state()
 
         # Keep the pre-resize frame so detection crops can be taken at original resolution.
@@ -626,7 +653,7 @@ class Engine(Predictor):
         state = self._states[cam_key]
         extra_boxes = state["event_crop_boxes"] if state["ongoing"] else None
         context_crop = self._build_context_crop(original_frame, preds, extra_boxes)
-        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes)
+        conf = self._update_states(context_crop, preds, cam_key, encoded_bytes=encoded_bytes, captured_at=captured_at)
 
         if self.save_captured_frames:
             self._local_backup(frame, cam_id, is_alert=False, encoded_bytes=encoded_bytes)
