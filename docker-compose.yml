@@ -71,7 +71,7 @@ services:
         max-file: "5"
 
 
-  # Optional: started only with COMPOSE_PROFILES=temporal (needs data/model_onnx.zip)
+  # Optional: started only with COMPOSE_PROFILES=temporal (downloads its model on first start)
   pyro-temporal-api:
     profiles: ["temporal"]
     build:
@@ -79,7 +79,8 @@ services:
     image: pyronear/pyro-temporal-api:${PYRO_ENGINE_VERSION:-latest}
     container_name: pyro-temporal-api
     environment:
-      TEMPORAL_MODEL_PATH: ${TEMPORAL_MODEL_PATH:-data/model_onnx.zip}
+      # Empty: the pinned release, downloaded to data/temporal_models. Set it to load a custom package.
+      TEMPORAL_MODEL_PATH: ${TEMPORAL_MODEL_PATH:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
