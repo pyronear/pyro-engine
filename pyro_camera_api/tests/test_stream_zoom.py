@@ -4,43 +4,61 @@
 # See LICENSE or go to <https://opensource.org/licenses/Apache-2.0> for full license details.
 
 
+import threading
 from unittest.mock import MagicMock, patch
 
-from pyro_camera_api.api import routes_stream
+from pyro_camera_api.services import stream
 
-STOP = "pyro_camera_api.api.routes_stream.stop_any_running_stream"
-REGISTRY = "pyro_camera_api.api.routes_stream.CAMERA_REGISTRY"
+STOP = "pyro_camera_api.services.stream._stop_first_running_stream"
+REGISTRY = "pyro_camera_api.services.stream.CAMERA_REGISTRY"
 
 
-def test_stop_stream_restores_the_pre_stream_zoom():
-    """A static varifocal camera at a hand-set zoom must get it back, not 0."""
+def _camera(zoom):
     cam = MagicMock()
-    cam.get_focus_level.return_value = {"focus": 336, "zoom": 7}
+    if isinstance(zoom, Exception):
+        cam.get_focus_level.side_effect = zoom
+    else:
+        cam.get_focus_level.return_value = {"focus": 336, "zoom": zoom}
+    return cam
+
+
+def test_every_stop_path_restores_the_pre_stream_zoom():
+    """/stop_stream, replacement in start_stream and the idle stopper all go
+    through stop_any_running_stream, so a hand-set zoom survives each of them."""
+    cam = _camera(7)
     with patch.dict(REGISTRY, {"cam": cam}, clear=True), patch(STOP, return_value="cam"):
-        routes_stream._pre_stream_zoom["cam"] = routes_stream._read_zoom("cam")
-        routes_stream.stop_stream(MagicMock())
+        stream.save_pre_stream_zoom("cam")
+        assert stream.stop_any_running_stream(app=None) == "cam"
     cam.start_zoom_focus.assert_called_once_with(position=7)
+    assert "cam" not in stream._pre_stream_zoom
 
 
-def test_stop_stream_falls_back_to_zero():
-    """Unknown pre-stream zoom keeps the historical reset to 0."""
-    cam = MagicMock()
-    cam.get_focus_level.side_effect = OSError("unreachable")
+def test_unknown_pre_stream_zoom_falls_back_to_zero():
+    cam = _camera(OSError("unreachable"))
     with patch.dict(REGISTRY, {"cam": cam}, clear=True), patch(STOP, return_value="cam"):
-        routes_stream._pre_stream_zoom["cam"] = routes_stream._read_zoom("cam")
-        routes_stream.stop_stream(MagicMock())
+        stream.save_pre_stream_zoom("cam")
+        stream.stop_any_running_stream(app=None)
     cam.start_zoom_focus.assert_called_once_with(position=0)
 
 
-def test_stop_stream_holds_the_startup_lock():
+def test_nothing_stopped_means_no_zoom_command():
+    cam = _camera(7)
+    with patch.dict(REGISTRY, {"cam": cam}, clear=True), patch(STOP, return_value=None):
+        assert stream.stop_any_running_stream(app=None) is None
+    cam.start_zoom_focus.assert_not_called()
+
+
+def test_stop_and_restore_hold_the_stream_lock():
     """Otherwise a concurrent start_stream could save a zoom this stop pops."""
     held = []
 
-    def stop(_app):
-        held.append(routes_stream._START_STREAM_LOCK.locked())
-        return "cam"
+    def probe_lock(**_):
+        t = threading.Thread(target=lambda: held.append(not stream.STREAM_LOCK.acquire(blocking=False)))
+        t.start()
+        t.join()
 
-    with patch.dict(REGISTRY, {"cam": MagicMock()}, clear=True), patch(STOP, side_effect=stop):
-        routes_stream.stop_stream(MagicMock())
+    cam = MagicMock()
+    cam.start_zoom_focus.side_effect = probe_lock
+    with patch.dict(REGISTRY, {"cam": cam}, clear=True), patch(STOP, return_value="cam"):
+        stream.stop_any_running_stream(app=None)
     assert held == [True]
-    assert not routes_stream._START_STREAM_LOCK.locked()
