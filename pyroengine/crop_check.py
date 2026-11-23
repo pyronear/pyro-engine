@@ -166,31 +166,32 @@ class CropCheck:
         name = self.names.get(ip, ip)
         ts: datetime = item["ts"]
         frame: Image.Image = item["frame"]
-        windows = [crop_window(frame.size, b[:4]) for b in item["boxes"]]
-        crops = [frame.crop(win).convert("RGB") for win in windows]
         results = []
-        for box, win, crop in zip(item["boxes"], windows, crops, strict=True):
+        crop_jpegs: Dict[str, bytes] = {}  # only the disagreeing crops, encoded, so one RGB crop is alive at a time
+        for i, box in enumerate(item["boxes"]):
+            win = crop_window(frame.size, box[:4])
+            crop = frame.crop(win).convert("RGB")
             full = float(box[4])
             crop_conf = crop_score(self.model(crop), box[:4], win, frame.size)
+            disagree = (full >= THRESH) != (crop_conf >= THRESH)
+            if disagree:
+                crop_jpegs[f"crop{i}"] = _jpeg(crop)
             results.append({
                 "bbox": [round(float(v), 4) for v in box[:4]],
                 "full": round(full, 3),
                 "crop": round(crop_conf, 3),
                 "window": list(win),
-                "disagree": (full >= THRESH) != (crop_conf >= THRESH),
+                "disagree": disagree,
             })
 
         keys: Dict[str, str] = {}
         capped = False
-        if any(r["disagree"] for r in results):
+        if crop_jpegs:
             logger.info("[%s] Crop check disagreement: %s", cam_id, [(r["full"], r["crop"]) for r in results])
             capped = not self._take_upload_slot(cam_id)
-        if any(r["disagree"] for r in results) and not capped:
+        if crop_jpegs and not capped:
             base = f"{self.prefix}{name}/{ts:%Y-%m-%d}/{ts:%Y%m%dT%H%M%S}Z" + (f"_pose{pose}" if pose else "")
-            images = {"full": _jpeg(frame.convert("RGB"))}
-            for i, (r, crop) in enumerate(zip(results, crops, strict=True)):
-                if r["disagree"]:
-                    images[f"crop{i}"] = _jpeg(crop)
+            images = {"full": _jpeg(frame.convert("RGB")), **crop_jpegs}
             for label, data in images.items():
                 key = f"{base}_{label}.jpg"
                 try:
