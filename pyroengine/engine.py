@@ -201,7 +201,7 @@ class Engine(Predictor):
             state["event_crop_boxes"] = []
             self._init_temporal_state(state)
 
-        # Temporary R&D shadow check of every detection on a native HD crop (see crop_check.py)
+        # Temporary R&D shadow check of every detection on a native 4K crop (see crop_check.py)
         self.crop_check: Optional[CropCheck] = None
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
@@ -615,7 +615,7 @@ class Engine(Predictor):
             rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
             preds = self.model(rgb_frame, bbox_mask_dict)
             if self.crop_check is not None and len(preds):
-                self.crop_check.submit(cam_key, original_frame, encoded_bytes, preds)
+                self.crop_check.submit(cam_key, original_frame, preds)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))

@@ -141,7 +141,7 @@ round is one summary line per camera cycle and one per inference round; detectio
 failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
 predictions, ffmpeg output and HTTP access logs.
 
-Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to score a native 1280x720 crop of the 4K frame around every detection with a second model instance. Alerting is unchanged. Both scores are uploaded as JSON lines every 10 minutes, and the HD frame plus the crop are uploaded when the two scores fall on different sides of 0.25.
+Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to score a native 1024x1024 crop of the 4K frame around every detection at 0.1 or more with a second model instance. Alerting is unchanged. Both scores are uploaded as JSON lines every 10 minutes. When the two scores fall on different sides of 0.25, the original 4K frame and the crop are uploaded too, at most twice per camera pose and per hour.
 
 ### Docker builds and runtime isolation
 

@@ -93,7 +93,7 @@ def main(args):
         temporal_api_url=temporal_api_url,
     )
 
-    # Temporary R&D: shadow check of every detection on a native HD crop, enabled by S3_BUCKET in .env
+    # Temporary R&D: shadow check of every detection on a native 4K crop, enabled by S3_BUCKET in .env
     # A setup failure only disables the experiment, never detection.
     try:
         s3 = s3_uploader_from_env()
