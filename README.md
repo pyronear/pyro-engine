@@ -141,7 +141,9 @@ round is one summary line per camera cycle and one per inference round; detectio
 failures are always reported. Set `LOG_LEVEL=DEBUG` to also get per-pose captures, raw model
 predictions, ffmpeg output and HTTP access logs.
 
-Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to score a native 1024x1024 crop of the 4K frame around every detection at 0.1 or more with a second model instance. Alerting is unchanged. Both scores are uploaded as JSON lines every 10 minutes. When the two scores fall on different sides of 0.25, the original 4K frame and the crop are uploaded too, at most twice per camera pose and per hour.
+Optional, R&D only: set `S3_BUCKET` (plus `S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) to score a native 1024x1024 crop of the 4K frame around every detection at 0.1 or more with a second model instance. Alerting is unchanged. Both scores are uploaded as JSON lines every 10 minutes. When the two scores fall on different sides of 0.25, the original 4K frame and the crop are uploaded too, at most twice per camera pose and per hour. Set `CROP_CHECK=false` to turn this check off.
+
+Optional, R&D only: with `S3_BUCKET` set, `SEQUENCE_CAPTURE=true` uploads the 4K frames of every detection sequence that can reach the temporal model, under `sequence-capture/` (whatever `S3_PREFIX` is), to replay the whole pipeline offline. A box at 0.05 or more on a camera pose with no box for 10 minutes starts a sequence: the next 20 frames of that pose are written as JPEG under the cache folder, frames without boxes included. The sequence is uploaded with a manifest of the boxes seen on each frame only when some `nb_consecutive_frames` consecutive frames have a box on at least half of them, the engine's own condition before the temporal model; otherwise it is deleted. At most 30 uploads per camera pose and per day. Alerting is unchanged.
 
 ### Docker builds and runtime isolation
 

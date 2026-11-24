@@ -19,6 +19,8 @@ from pyroengine import SystemController
 from pyroengine.crop_check import CropCheck, s3_uploader_from_env
 from pyroengine.engine import Engine
 from pyroengine.logs import setup_logging
+from pyroengine.sequence_capture import PREFIX as SEQ_PREFIX
+from pyroengine.sequence_capture import SequenceCapture
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -93,22 +95,29 @@ def main(args):
         temporal_api_url=temporal_api_url,
     )
 
-    # Temporary R&D: shadow check of every detection on a native 4K crop, enabled by S3_BUCKET in .env
-    # A setup failure only disables the experiment, never detection.
+    # Temporary R&D experiments, enabled by S3_BUCKET in .env: a shadow check of every detection on a native
+    # 4K crop (CROP_CHECK, on by default) and a capture of the 4K frames of every new detection sequence
+    # (SEQUENCE_CAPTURE, off by default). A setup failure only disables them, never detection.
     try:
         s3 = s3_uploader_from_env()
         if s3 is not None:
             upload, prefix = s3
-            # Own model instance: crops are scored off the inference thread. No size filter, since a box
-            # looks about 3x wider in a native crop than in the HD frame the engine scores.
-            crop_model = Classifier(
-                model_path=args.model_path, conf=engine.model_conf_thresh, max_bbox_size=1.01, verbose=False
-            )
             names = {ip: cam.get("name", ip) for ip, cam in camera_data.items()}
-            engine.crop_check = CropCheck(crop_model, upload, prefix, names)
-            logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
+            if os.environ.get("CROP_CHECK", "true").lower() in {"1", "true", "yes"}:
+                # Own model instance: crops are scored off the inference thread. No size filter, since a box
+                # looks about 3x wider in a native crop than in the HD frame the engine scores.
+                crop_model = Classifier(
+                    model_path=args.model_path, conf=engine.model_conf_thresh, max_bbox_size=1.01, verbose=False
+                )
+                engine.crop_check = CropCheck(crop_model, upload, prefix, names)
+                logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
+            if os.environ.get("SEQUENCE_CAPTURE", "").lower() in {"1", "true", "yes"}:
+                engine.sequence_capture = SequenceCapture(
+                    upload, pathlib.Path(args.cache) / "sequence_capture", names, engine.nb_consecutive_frames
+                )
+                logger.info("Sequence capture enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], SEQ_PREFIX)
     except Exception:
-        logger.exception("Crop check setup failed, running without it")
+        logger.exception("S3 experiments setup failed, running without them")
 
     sys_controller = SystemController(
         engine,
