@@ -8,9 +8,9 @@
 When a camera pose gets a box at MIN_CONF or more after IDLE_S without any, the next FRAMES frames of that
 pose are written to a local folder as JPEG, the triggering one and the ones without boxes included. Once the
 sequence is complete, it is uploaded with a manifest of the boxes the engine saw on each frame only when it
-could have reached the temporal model: in some `window` consecutive frames, at least half have a box (the
-engine's own rule, see Predictor._update_states, without its overlap and score conditions, so a sequence the
-crop refinement would raise is kept too). Otherwise it is deleted. Offline, each sequence can be replayed
+could have reached the temporal model: some `window` consecutive frames hold at least half as many boxes
+(the engine's own count, see Predictor._update_states, without its overlap and score conditions, so a
+sequence the crop refinement would raise is kept too). Otherwise it is deleted. Offline, each sequence can be replayed
 through the whole pipeline (HD detection, crop refinement, temporal model) to measure which variant raises
 an alert. Nothing here changes alerting: frames are encoded, written and uploaded in one background thread.
 """
@@ -134,9 +134,7 @@ class SequenceCapture:
     def _finish(self, seq: Dict[str, Any]) -> None:
         """Upload a complete sequence when it could reach the temporal model, then delete its local frames."""
         try:
-            if not can_reach_temporal([bool(f["boxes"]) for f in seq["frames"]], self.window):
-                logger.debug("[%s] Sequence dropped, too few boxes: %s", seq["cam_id"], seq["base"])
-            elif not self._take_slot(seq["cam_id"], datetime.now(timezone.utc).date()):
+            if not self._take_slot(seq["cam_id"], datetime.now(timezone.utc).date()):
                 logger.info("[%s] Sequence dropped, daily upload quota used: %s", seq["cam_id"], seq["base"])
             else:
                 for f in seq["frames"]:
@@ -156,7 +154,10 @@ class SequenceCapture:
         while True:
             item, frame = self._queue.get()
             try:
-                if frame is None and self._uploads.qsize() >= MAX_PENDING_UPLOADS:
+                if frame is None and not can_reach_temporal([len(f["boxes"]) for f in item["frames"]], self.window):
+                    logger.debug("[%s] Sequence dropped, too few boxes: %s", item["cam_id"], item["base"])
+                    shutil.rmtree(self.local_dir / item["base"], ignore_errors=True)
+                elif frame is None and self._uploads.qsize() >= MAX_PENDING_UPLOADS:
                     logger.warning("[%s] Sequence dropped, upload backlog full: %s", item["cam_id"], item["base"])
                     shutil.rmtree(self.local_dir / item["base"], ignore_errors=True)
                 elif frame is None:
@@ -186,7 +187,7 @@ class SequenceCapture:
                 self._uploads.task_done()
 
 
-def can_reach_temporal(has_box: List[bool], window: int) -> bool:
-    """True when some `window` consecutive frames have a box on at least half of them, like the engine requires."""
+def can_reach_temporal(box_counts: List[int], window: int) -> bool:
+    """True when some `window` consecutive frames hold at least half as many boxes, like the engine requires."""
     need = (window + 1) // 2
-    return any(sum(has_box[i : i + window]) >= need for i in range(max(1, len(has_box) - window + 1)))
+    return any(sum(box_counts[i : i + window]) >= need for i in range(max(1, len(box_counts) - window + 1)))

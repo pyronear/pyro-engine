@@ -56,11 +56,12 @@ def manifests(upload):
     return upload.manifests
 
 
-def test_can_reach_temporal_needs_half_of_some_window():
-    assert not sc.can_reach_temporal([True, True, False, False, False, False, False, True], 6)
-    assert sc.can_reach_temporal([False, True, False, True, False, False, True], 6)  # 3 in frames 2-7
-    assert sc.can_reach_temporal([True, True, True], 6)  # shorter than the window
-    assert not sc.can_reach_temporal([True, False, False, False, False, False, True], 6)
+def test_can_reach_temporal_needs_half_as_many_boxes_in_some_window():
+    assert not sc.can_reach_temporal([1, 1, 0, 0, 0, 0, 0, 1], 6)
+    assert sc.can_reach_temporal([0, 1, 0, 1, 0, 0, 1], 6)  # 3 boxes in frames 2-7
+    assert sc.can_reach_temporal([2, 0, 0, 0, 0, 1], 6)  # boxes are counted, not frames
+    assert sc.can_reach_temporal([1, 1, 1], 6)  # shorter than the window
+    assert not sc.can_reach_temporal([1, 0, 0, 0, 0, 0, 1], 6)
 
 
 def test_sequence_keeps_the_next_frames_and_ignores_weak_boxes(monkeypatch, tmp_path):
