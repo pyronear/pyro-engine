@@ -40,7 +40,7 @@ def make(monkeypatch, frames=3, upload=None, **kwargs):
     clock = Clock()
     monkeypatch.setattr(sc.time, "monotonic", clock)
     upload = upload or FakeUpload()
-    return SequenceCapture(upload, "pfx", {"10.0.0.1": "cam-a"}, **kwargs), upload, clock
+    return SequenceCapture(upload, {"10.0.0.1": "cam-a"}, **kwargs), upload, clock
 
 
 def feed(cap, clock, preds_list):
@@ -60,7 +60,7 @@ def test_sequence_keeps_the_next_frames_and_ignores_weak_boxes(monkeypatch):
     feed(cap, clock, [NO_BOX, weak, BOX, NO_BOX, BOX, NO_BOX])
     jpgs = sorted(k for k in upload.calls if k.endswith(".jpg"))
     assert len(jpgs) == 3  # the triggering frame, a frame without box, then one more
-    assert all(k.startswith("pfx/sequences/cam-a/") and "_pose2/" in k for k in jpgs)
+    assert all(k.startswith("sequence-capture/cam-a/") and "_pose2/" in k for k in jpgs)
     assert upload.calls[jpgs[0]][0][:2] == b"\xff\xd8"
     (man,) = manifests(upload)
     assert man["camera"] == "cam-a"

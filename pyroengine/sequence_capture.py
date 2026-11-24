@@ -31,6 +31,8 @@ __all__ = ["SequenceCapture"]
 
 logger = logging.getLogger(__name__)
 
+# Own top-level folder, apart from the crop check data whatever S3_PREFIX is
+PREFIX = "sequence-capture"
 MIN_CONF = 0.05  # the engine's own confidence threshold: any box it outputs starts a sequence
 FRAMES = 20  # frames per sequence, the triggering one included
 IDLE_S = 600.0  # a box starts a new sequence only after this long without any box on the pose
@@ -45,12 +47,10 @@ class SequenceCapture:
     def __init__(
         self,
         upload: Uploader,
-        prefix: str = "",
         names: Optional[Dict[str, str]] = None,
         max_pending_frames: int = MAX_PENDING_FRAMES,
     ) -> None:
         self.upload = upload
-        self.prefix = f"{prefix}/" if prefix else ""
         self.names = names or {}
         self.max_pending_frames = max_pending_frames
         self.dropped = 0  # frames skipped because the worker was behind
@@ -103,7 +103,7 @@ class SequenceCapture:
     def _new_sequence(self, cam_id: str, ts: datetime) -> Dict[str, Any]:
         ip, _, pose = cam_id.partition("_")
         name = self.names.get(ip, ip)
-        base = f"{self.prefix}sequences/{name}/{ts:%Y-%m-%d}/{ts:%Y%m%dT%H%M%S}Z" + (f"_pose{pose}" if pose else "")
+        base = f"{PREFIX}/{name}/{ts:%Y-%m-%d}/{ts:%Y%m%dT%H%M%S}Z" + (f"_pose{pose}" if pose else "")
         logger.info("[%s] Sequence capture started: %s", cam_id, base)
         return {"camera": name, "cam_id": cam_id, "base": base, "frames": []}
 

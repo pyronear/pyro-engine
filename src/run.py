@@ -19,6 +19,7 @@ from pyroengine import SystemController
 from pyroengine.crop_check import CropCheck, s3_uploader_from_env
 from pyroengine.engine import Engine
 from pyroengine.logs import setup_logging
+from pyroengine.sequence_capture import PREFIX as SEQ_PREFIX
 from pyroengine.sequence_capture import SequenceCapture
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -111,8 +112,8 @@ def main(args):
                 engine.crop_check = CropCheck(crop_model, upload, prefix, names)
                 logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
             if os.environ.get("SEQUENCE_CAPTURE", "").lower() in {"1", "true", "yes"}:
-                engine.sequence_capture = SequenceCapture(upload, prefix, names)
-                logger.info("Sequence capture enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
+                engine.sequence_capture = SequenceCapture(upload, names)
+                logger.info("Sequence capture enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], SEQ_PREFIX)
     except Exception:
         logger.exception("S3 experiments setup failed, running without them")
 
