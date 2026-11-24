@@ -109,6 +109,7 @@ services:
       CAM_USER: ${CAM_USER}
       CAM_PWD: ${CAM_PWD}
       TEMPORAL_API_URL: ${TEMPORAL_API_URL:-}
+      CROP_REFINE: ${CROP_REFINE:-false}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/usr/src/app/data
