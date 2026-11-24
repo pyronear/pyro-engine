@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from PIL import Image
 from pyro_predictor import Predictor
-from pyro_predictor.utils import box_iou
+from pyro_predictor.utils import box_iou, nms
 from pyroclient import client
 from requests.exceptions import RequestException
 from requests.models import Response
@@ -617,7 +617,7 @@ class Engine(Predictor):
             rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
             preds = self.model(rgb_frame, bbox_mask_dict)
             if self.crop_refine and original_frame.width > frame.width:
-                preds = self._refine_on_crops(original_frame, preds)
+                preds = self._refine_on_crops(original_frame, preds, bbox_mask_dict)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
@@ -784,11 +784,15 @@ class Engine(Predictor):
         left, top, right, bottom = Engine._fit_box((cx - half, cy - half, cx + half, cy + half), img_w, img_h)
         return round(left), round(top), round(right), round(bottom)
 
-    def _refine_on_crops(self, frame: Image.Image, preds: np.ndarray) -> np.ndarray:
+    def _refine_on_crops(
+        self, frame: Image.Image, preds: np.ndarray, occlusion_bboxes: Optional[Dict[Any, Any]] = None
+    ) -> np.ndarray:
         """Re-detect the top small boxes on a native REFINE_CROP crop of `frame`.
 
         Each refined box is replaced by the best crop detection overlapping it (position and score), or
-        dropped when none does. Large boxes and boxes beyond REFINE_MAX_BOXES are kept unchanged.
+        dropped when none does. Large boxes and boxes beyond REFINE_MAX_BOXES are kept unchanged. The
+        result keeps the classifier's guarantees: no overlapping boxes, none on an occlusion mask, most
+        confident first.
         """
         w, h = frame.size
         out = []
@@ -814,7 +818,15 @@ class Engine(Predictor):
             logger.debug("Crop refine: %s -> %s", np.round(box, 3), None if best is None else np.round(best, 3))
             if best is not None:
                 out.append(best)
-        return np.reshape(np.array(out, dtype=np.float32), (-1, 5))
+        refined = np.reshape(np.array(out, dtype=np.float32), (-1, 5))
+        if not len(refined):
+            return refined
+        # Two nearby boxes can resolve to the same crop detection
+        refined = np.reshape(nms(refined), (-1, 5))[::-1]
+        if occlusion_bboxes:
+            masks = np.array([b[:4] for b in occlusion_bboxes.values()], dtype=refined.dtype)
+            refined = refined[box_iou(refined[:, :4], masks).max(axis=0) <= 0.1]
+        return refined
 
     def _build_context_crop(
         self, frame: Image.Image, preds: np.ndarray, extra_boxes: Optional[list] = None
