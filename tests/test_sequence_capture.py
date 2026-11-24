@@ -35,12 +35,13 @@ class Clock:
         return self.t
 
 
-def make(monkeypatch, frames=3, upload=None, **kwargs):
+def make(monkeypatch, tmp_path, frames=3, upload=None, window=2, **kwargs):
     monkeypatch.setattr(sc, "FRAMES", frames)
     clock = Clock()
     monkeypatch.setattr(sc.time, "monotonic", clock)
     upload = upload or FakeUpload()
-    return SequenceCapture(upload, {"10.0.0.1": "cam-a"}, **kwargs), upload, clock
+    cap = SequenceCapture(upload, tmp_path / "seq", {"10.0.0.1": "cam-a"}, window=window, **kwargs)
+    return cap, upload, clock
 
 
 def feed(cap, clock, preds_list):
@@ -48,14 +49,22 @@ def feed(cap, clock, preds_list):
         cap.submit(CAM, FRAME, preds)
         clock.t += 30
     cap._queue.join()
+    cap._uploads.join()
 
 
 def manifests(upload):
     return upload.manifests
 
 
-def test_sequence_keeps_the_next_frames_and_ignores_weak_boxes(monkeypatch):
-    cap, upload, clock = make(monkeypatch)
+def test_can_reach_temporal_needs_half_of_some_window():
+    assert not sc.can_reach_temporal([True, True, False, False, False, False, False, True], 6)
+    assert sc.can_reach_temporal([False, True, False, True, False, False, True], 6)  # 3 in frames 2-7
+    assert sc.can_reach_temporal([True, True, True], 6)  # shorter than the window
+    assert not sc.can_reach_temporal([True, False, False, False, False, False, True], 6)
+
+
+def test_sequence_keeps_the_next_frames_and_ignores_weak_boxes(monkeypatch, tmp_path):
+    cap, upload, clock = make(monkeypatch, tmp_path)
     weak = np.array([[0.45, 0.45, 0.55, 0.55, 0.04]])
     feed(cap, clock, [NO_BOX, weak, BOX, NO_BOX, BOX, NO_BOX])
     jpgs = sorted(k for k in upload.calls if k.endswith(".jpg"))
@@ -66,10 +75,21 @@ def test_sequence_keeps_the_next_frames_and_ignores_weak_boxes(monkeypatch):
     assert man["camera"] == "cam-a"
     assert [f["key"] for f in man["frames"]] == jpgs
     assert [len(f["boxes"]) for f in man["frames"]] == [1, 0, 1]
+    assert not any((tmp_path / "seq").rglob("*.jpg"))  # local frames deleted after upload
 
 
-def test_new_sequence_only_after_idle_time(monkeypatch):
-    cap, upload, clock = make(monkeypatch)
+def test_sequence_with_too_few_boxes_is_deleted_without_upload(monkeypatch, tmp_path):
+    cap, upload, clock = make(monkeypatch, tmp_path, frames=6, window=6)
+    feed(cap, clock, [BOX, NO_BOX, BOX, NO_BOX, NO_BOX, NO_BOX])  # 2 boxes in 6 frames
+    assert upload.calls == {}
+    assert not any((tmp_path / "seq").rglob("*.jpg"))
+    clock.t += sc.IDLE_S
+    feed(cap, clock, [BOX, NO_BOX, BOX, NO_BOX, BOX, NO_BOX])  # 3 boxes in 6 frames
+    assert len(manifests(upload)) == 1
+
+
+def test_new_sequence_only_after_idle_time(monkeypatch, tmp_path):
+    cap, upload, clock = make(monkeypatch, tmp_path)
     feed(cap, clock, [BOX] * 10)  # one long detection: one sequence
     assert len(manifests(upload)) == 1
     clock.t += sc.IDLE_S - 31  # last box less than IDLE_S ago
@@ -81,26 +101,35 @@ def test_new_sequence_only_after_idle_time(monkeypatch):
     assert len(manifests(upload)) == 2
 
 
-def test_daily_quota_per_pose(monkeypatch):
+def test_daily_upload_quota_per_pose(monkeypatch, tmp_path):
     monkeypatch.setattr(sc, "MAX_SEQUENCES_PER_DAY", 2)
-    cap, upload, clock = make(monkeypatch, frames=1)
+    cap, upload, clock = make(monkeypatch, tmp_path, frames=1)
     for _ in range(3):
         feed(cap, clock, [BOX])
         clock.t += sc.IDLE_S
     assert len(manifests(upload)) == 2
+    assert not any((tmp_path / "seq").rglob("*.jpg"))
 
 
-def test_busy_worker_or_failed_upload_marks_the_frame(monkeypatch):
-    cap, upload, clock = make(monkeypatch, upload=FakeUpload(fail_on="/01.jpg"), max_pending_frames=0)
+def test_busy_worker_or_failed_upload_marks_the_frame(monkeypatch, tmp_path):
+    cap, upload, clock = make(monkeypatch, tmp_path, upload=FakeUpload(fail_on="/01.jpg"), max_pending_frames=0)
     feed(cap, clock, [BOX, NO_BOX, NO_BOX])
     (man,) = manifests(upload)
     assert [f["key"] for f in man["frames"]] == [None, None, None]
     assert cap.dropped == 3
 
-    cap, upload, clock = make(monkeypatch, upload=FakeUpload(fail_on="/01.jpg"))
+    cap, upload, clock = make(monkeypatch, tmp_path, upload=FakeUpload(fail_on="/01.jpg"))
     feed(cap, clock, [BOX, NO_BOX, NO_BOX])
     (man,) = manifests(upload)
     assert [f["key"] is None for f in man["frames"]] == [False, True, False]
+
+
+def test_leftover_local_frames_are_cleared_at_start(tmp_path):
+    old = tmp_path / "seq" / "sequence-capture" / "cam-a" / "00.jpg"
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"x")
+    SequenceCapture(FakeUpload(), tmp_path / "seq")
+    assert not old.exists()
 
 
 def test_engine_feeds_every_frame_and_survives_capture_errors(tmp_path):

@@ -112,7 +112,9 @@ def main(args):
                 engine.crop_check = CropCheck(crop_model, upload, prefix, names)
                 logger.info("Crop check enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], prefix)
             if os.environ.get("SEQUENCE_CAPTURE", "").lower() in {"1", "true", "yes"}:
-                engine.sequence_capture = SequenceCapture(upload, names)
+                engine.sequence_capture = SequenceCapture(
+                    upload, pathlib.Path(args.cache) / "sequence_capture", names, engine.nb_consecutive_frames
+                )
                 logger.info("Sequence capture enabled, uploading to s3://%s/%s", os.environ["S3_BUCKET"], SEQ_PREFIX)
     except Exception:
         logger.exception("S3 experiments setup failed, running without them")
