@@ -26,6 +26,7 @@ from pyroengine.temporal_client import TemporalClient
 
 if TYPE_CHECKING:
     from .crop_check import CropCheck
+    from .sequence_capture import SequenceCapture
 
 __all__ = ["ContextCrop", "Engine"]
 
@@ -203,6 +204,8 @@ class Engine(Predictor):
 
         # Temporary R&D shadow check of every detection on a native 4K crop (see crop_check.py)
         self.crop_check: Optional[CropCheck] = None
+        # Temporary R&D capture of the 4K frames of every new detection sequence (see sequence_capture.py)
+        self.sequence_capture: Optional[SequenceCapture] = None
 
         # Occlusion masks: cam_id -> dict of bboxes (keyed by mask id)
         self.occlusion_masks: Dict[str, Dict[Any, Any]] = {}
@@ -625,6 +628,11 @@ class Engine(Predictor):
                 # Filter predictions larger than max_bbox_size
                 preds = preds[(preds[:, 2] - preds[:, 0]) < self.max_bbox_size, :]
                 preds = np.reshape(preds, (-1, 5))
+        if self.sequence_capture is not None:
+            try:  # R&D only: never let it break detection
+                self.sequence_capture.submit(cam_key, original_frame, preds)
+            except Exception:
+                logger.exception("[%s] Sequence capture failed", cam_key)
 
         logger.debug("[%s] Raw predictions: %s", cam_key, preds)
         # Store only a compact JPEG region around the detections so _process_alerts can crop at
