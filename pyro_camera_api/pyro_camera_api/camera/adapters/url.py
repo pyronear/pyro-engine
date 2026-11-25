@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import logging
-from io import BytesIO
 from typing import Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
@@ -15,7 +14,7 @@ import requests
 from PIL import Image
 from requests.auth import HTTPDigestAuth
 
-from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.camera.base import BaseCamera, open_snapshot
 from pyro_camera_api.utils.redact import redact_url
 
 logger = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ class URLCamera(BaseCamera):
             return None
 
         try:
-            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            img = open_snapshot(resp.content)
         except Exception as exc:
             logger.error("Error decoding image from %s, %s", redacted, exc)
             return None

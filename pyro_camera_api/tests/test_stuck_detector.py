@@ -40,9 +40,9 @@ def test_detect_healthy_and_not_moving():
     prev = sd.snapshot({0: _noise(0), 1: _noise(1)}, {0: 1.0, 1: 1.0})
     images = {0: _noise(2), 1: _noise(3)}
     snap = sd.snapshot(images, {0: 2.0, 1: 2.0})
-    assert sd.detect(prev, snap, list(images.values())) is None
+    assert sd.detect(prev, snap, [sd.describe(im) for im in images.values()]) is None
     # Live pixels but every pose shows the same view: the turret does not move
-    same_view = [_noise(2), _noise(2)]
+    same_view = [sd.describe(_noise(2)), sd.describe(_noise(2))]
     assert sd.detect(prev, snap, same_view) == "not_moving"
 
 

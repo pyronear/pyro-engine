@@ -96,14 +96,10 @@ def _hamming(a: np.ndarray, b: np.ndarray) -> int:
     return int(np.count_nonzero(a != b))
 
 
-def _mean_gray_variance(images: List[Image.Image]) -> float:
-    return float(np.mean([np.asarray(im.convert("L"), dtype=np.float32).var() for im in images]))
-
-
-def _max_pairwise_hamming(images: List[Image.Image]) -> int:
-    hashes = [_phash(im) for im in images]
-    n = len(hashes)
-    return max(_hamming(hashes[i], hashes[j]) for i in range(n) for j in range(i + 1, n))
+def describe(image: Image.Image) -> Tuple[float, np.ndarray]:
+    """Gray variance and pHash of one image, all the "not moving" check needs from it."""
+    gray = image.convert("L")
+    return float(np.asarray(gray, dtype=np.float32).var()), _phash(gray)
 
 
 def _patrol_is_running(camera_ip: str) -> bool:
@@ -120,19 +116,20 @@ def snapshot(images: Dict[int, Optional[Image.Image]], stored_at: Dict[int, floa
     }
 
 
-def detect(prev: Snapshot, snap: Snapshot, ptz_images: List[Image.Image]) -> Optional[str]:
-    """Return the problem seen since the previous check, or None when the camera looks fine."""
+def detect(prev: Snapshot, snap: Snapshot, ptz_views: List[Tuple[float, np.ndarray]]) -> Optional[str]:
+    """Return the problem seen since the previous check, or None when the camera looks fine.
+
+    ``ptz_views`` is ``describe`` of the last image of each PTZ pose.
+    """
     advanced = [pose for pose, (ts, _) in snap.items() if pose not in prev or prev[pose][0] != ts]
     if not advanced:
         return "no_fresh_image"
     if all(pose in prev and prev[pose][1] == snap[pose][1] for pose in advanced):
         return "frozen"
-    if (
-        len(ptz_images) >= MIN_POSES_FOR_CHECK
-        and _mean_gray_variance(ptz_images) >= MIN_MEAN_VARIANCE_FOR_CHECK
-        and _max_pairwise_hamming(ptz_images) < STUCK_MAX_HAMMING
-    ):
-        return "not_moving"
+    if len(ptz_views) >= MIN_POSES_FOR_CHECK and np.mean([v for v, _ in ptz_views]) >= MIN_MEAN_VARIANCE_FOR_CHECK:
+        hashes = [h for _, h in ptz_views]
+        if max(_hamming(a, b) for i, a in enumerate(hashes) for b in hashes[i + 1 :]) < STUCK_MAX_HAMMING:
+            return "not_moving"
     return None
 
 
@@ -211,17 +208,26 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             state["status"] = "idle"
             continue
 
-        # One copy, the patrol thread keeps storing images while we read them
-        images = dict(cam.last_images)
-        snap = snapshot(images, dict(cam.last_image_at))
+        # One image decoded at a time, and none kept through the wait: a 4K frame takes about 33 MB
+        snap: Snapshot = {}
+        ptz_views: List[Tuple[float, np.ndarray]] = []
+        try:
+            for pose, frame in cam.latest_frames().items():
+                image = frame.decode()
+                snap.update(snapshot({pose: image}, {pose: frame.stored_at}))
+                if is_ptz and pose != -1:
+                    ptz_views.append(describe(image))
+                del image
+        except Exception as exc:
+            logger.warning("[%s] Stuck check failed: %s", camera_ip, exc)
+            continue
         if prev is None:
             prev = snap
             state["status"] = "ok"
             continue
 
-        ptz_images = [img for pose, img in images.items() if is_ptz and pose != -1 and img is not None]
         try:
-            problem = detect(prev, snap, ptz_images)
+            problem = detect(prev, snap, ptz_views)
         except Exception as exc:
             logger.warning("[%s] Stuck check failed: %s", camera_ip, exc)
             continue
@@ -276,8 +282,7 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             # The exception text carries the request URL, with the camera password in it
             logger.error("[%s] Reboot raised %s", camera_ip, type(exc).__name__)
         if ok:
-            for pose in list(cam.last_images):
-                cam.last_images[pose] = None
+            cam.clear_frames()
             # Let the camera boot before its failed captures count towards the 30 min skip
             patrol.FAILURE_COUNT[camera_ip] = 0
             patrol.SKIP_UNTIL[camera_ip] = time.time() + REBOOT_GRACE

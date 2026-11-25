@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import base64
 import logging
-from io import BytesIO
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import BaseCamera
+from pyro_camera_api.camera.base import BaseCamera, open_snapshot
 from pyro_camera_api.utils.redact import redact_url
 
 logger = logging.getLogger(__name__)
@@ -135,7 +134,7 @@ class RestSnapshotCamera(BaseCamera):
             try:
                 resp = self._session.get(self.url, headers=self.headers, timeout=self.timeout)
                 resp.raise_for_status()
-                img = Image.open(BytesIO(self._decode_bytes(resp))).convert("RGB")
+                img = open_snapshot(self._decode_bytes(resp))
                 logger.info("REST capture OK from %s, size=%s", redacted_url, img.size)
                 return img
             except Exception as exc:
