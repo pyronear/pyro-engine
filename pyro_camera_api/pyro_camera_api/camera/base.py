@@ -52,7 +52,7 @@ def open_snapshot(raw: bytes) -> Image.Image:
     if image.format != "JPEG" or image.mode != "RGB":
         return image.convert("RGB")
     check = Image.open(BytesIO(raw))
-    check.draft("RGB", (check.width // 8, check.height // 8))
+    check.draft("RGB", (max(1, check.width // 8), max(1, check.height // 8)))
     check.load()  # raises on a truncated or corrupt file, as the full decode did
     image.original_jpeg = raw  # ty: ignore[unresolved-attribute]
     return image

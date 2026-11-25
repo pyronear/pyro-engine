@@ -52,6 +52,7 @@ def test_other_images_are_encoded_once(cam):
 
 
 def test_truncated_jpeg_is_refused():
+    assert base.open_snapshot(_jpeg(size=(4, 4))).size == (4, 4)  # smaller than the reduced decode
     with pytest.raises(OSError, match="truncated"):
         base.open_snapshot(_jpeg(size=(640, 480))[:-2000])
 
