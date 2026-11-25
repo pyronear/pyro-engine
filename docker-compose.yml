@@ -16,6 +16,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       # Testing only: never reboot a camera that looks frozen or does not move
       ALLOW_STILL_CAMERA: ${ALLOW_STILL_CAMERA:-false}
+      FRAME_BUFFER_SIZE: ${FRAME_BUFFER_SIZE:-16}
     volumes:
       - ./data:/usr/src/app/data
     read_only: true
