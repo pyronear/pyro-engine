@@ -51,7 +51,7 @@ uv run --locked --group test pytest tests/test_engine.py -v
 - `camera/registry.py` tracks live camera instances and background threads
 - Background patrol loops run in `camera/patrol.py`
 - Routes under `api/`: cameras, control (PTZ), focus, patrol, stream, health
-- Captured frames are kept compressed, never decoded: `BaseCamera` holds the last `FRAME_BUFFER_SIZE` (16) captures of each pose as JPEG (the camera's own bytes when it sends a JPEG, else one encoding at quality 95), each with an id. `/cameras/latest_image` serves the last one as stored, `/cameras/frames` lists a pose's captures and `/cameras/frame` returns one by id, optionally cropped at native resolution or resized (decoded on the fly). Adapters open camera answers with `open_snapshot`, which does not decode at full size.
+- Captured frames are kept compressed, never decoded: `BaseCamera` holds the last `FRAME_BUFFER_SIZE` (16) captures of each pose as JPEG (the camera's own bytes when it sends a JPEG, else one encoding at quality 95), each with an id. `/cameras/latest_image` serves the last one as stored, `/cameras/frames` lists a pose's captures and `/cameras/frame` returns one by id or by position from the end (`index=-1` is the last one), optionally cropped at native resolution or resized (decoded on the fly). Adapters open camera answers with `open_snapshot`, which does not decode at full size.
 
 ### Data / Config (mounted at `./data/`)
 

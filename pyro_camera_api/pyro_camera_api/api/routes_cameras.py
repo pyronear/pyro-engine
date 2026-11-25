@@ -287,7 +287,12 @@ def list_frames(camera_ip: str, pose: int):
 def get_frame(
     camera_ip: str,
     pose: int,
-    frame_id: str,
+    frame_id: Optional[str] = Query(default=None, description="Id of the capture, as listed by /frames."),
+    index: int = Query(
+        default=-1,
+        le=-1,
+        description="Without frame_id: position from the end, -1 for the last capture, -2 for the one before.",
+    ),
     crop: Optional[str] = Query(
         default=None,
         pattern=r"^\d+,\d+,\d+,\d+$",
@@ -297,13 +302,18 @@ def get_frame(
     quality: int = Query(default=90, ge=1, le=100, description="JPEG quality of a cropped or resized image."),
 ):
     """
-    Return one stored capture by id: as stored, or decoded on the fly to cut a native crop
-    and/or resize it. HTTP 404 once the capture left the buffer.
+    Return one stored capture, by id or by position from the end (index=-1 is the last one):
+    as stored, or decoded on the fly to cut a native crop and/or resize it. HTTP 404 once the
+    capture left the buffer, or when the pose has fewer captures than asked.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")
-    frame = next((f for f in cam.frames(pose) if f.id == frame_id), None)
+    frames = cam.frames(pose)
+    if frame_id is None:
+        frame = frames[index] if len(frames) >= -index else None
+    else:
+        frame = next((f for f in frames if f.id == frame_id), None)
     if frame is None:
         raise HTTPException(status_code=404, detail="Unknown or expired frame")
     if crop is None and width is None:
