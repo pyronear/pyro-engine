@@ -27,6 +27,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 Box = Tuple[int, int, int, int]
+# /frame serves HD by default: enough to look at a capture, a tenth of the pixels of a 4K one
+DEFAULT_FRAME_WIDTH = 1280
 
 
 @router.get("/cameras_list")
@@ -293,18 +295,26 @@ def get_frame(
         le=-1,
         description="Without frame_id: position from the end, -1 for the last capture, -2 for the one before.",
     ),
+    original: bool = Query(default=False, description="Return the capture as stored, at its full resolution."),
     crop: Optional[str] = Query(
         default=None,
         pattern=r"^\d+,\d+,\d+,\d+$",
-        description="left,top,right,bottom in pixels of the stored image, cut before any resize.",
+        description="left,top,right,bottom in pixels of the stored image, cut at native resolution.",
     ),
-    width: Optional[int] = Query(default=None, ge=1, description="Resize to this width, keeping the aspect ratio."),
-    quality: int = Query(default=90, ge=1, le=100, description="JPEG quality of a cropped or resized image."),
+    width: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description=f"Resize to this width, keeping the aspect ratio. Default {DEFAULT_FRAME_WIDTH}, or no resize for a crop.",
+    ),
+    quality: int = Query(default=90, ge=1, le=100, description="JPEG quality of a resized or cropped image."),
 ):
     """
-    Return one stored capture, by id or by position from the end (index=-1 is the last one):
-    as stored, or decoded on the fly to cut a native crop and/or resize it. HTTP 404 once the
-    capture left the buffer, or when the pose has fewer captures than asked.
+    Return one stored capture, by id or by position from the end (index=-1 is the last one).
+
+    By default the image is resized to HD (1280 wide), decoded on the fly: a 4K capture is about
+    1 MB. Use `width` and `quality` for another size or compression, `crop` for a native resolution
+    region, `original=true` for the capture as stored. An image is never enlarged. HTTP 404 once
+    the capture left the buffer, or when the pose has fewer captures than asked.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
@@ -316,19 +326,23 @@ def get_frame(
         frame = next((f for f in frames if f.id == frame_id), None)
     if frame is None:
         raise HTTPException(status_code=404, detail="Unknown or expired frame")
-    if crop is None and width is None:
+    if original:
         return _frame_response(frame)
 
     image = Image.open(BytesIO(frame.jpeg))
-    if crop is None and width is not None:
+    if crop is None:
+        width = min(width or DEFAULT_FRAME_WIDTH, image.width)
+        if width == image.width:
+            return _frame_response(frame)
         # A reduced-size decode is enough for a resize
         image.draft("RGB", (width, max(1, round(image.height * width / image.width))))
-    elif crop is not None:
+    else:
         left, top, right, bottom = (int(v) for v in crop.split(","))
         if not (left < right <= image.width and top < bottom <= image.height):
             raise HTTPException(status_code=422, detail=f"crop outside the {image.width}x{image.height} image")
         image = image.crop((left, top, right, bottom))
+        width = min(width or image.width, image.width)
     image = image.convert("RGB")
-    if width is not None and width != image.width:
+    if width != image.width:
         image = image.resize((width, max(1, round(image.height * width / image.width))), LANCZOS)
     return _frame_response(frame, _encode(image, quality))

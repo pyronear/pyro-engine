@@ -64,31 +64,41 @@ def test_buffer_keeps_the_last_captures_of_each_pose(cam, monkeypatch):
     assert [f["id"] for f in list_frames("store-cam", 0)["frames"]] == [f.id for f in frames[-3:]]
     assert cam.latest_frames()[0] is frames[-1]
     with pytest.raises(HTTPException) as expired:
-        get_frame("store-cam", 0, frames[0].id, index=-1, crop=None, width=None, quality=90)
+        get_frame("store-cam", 0, frames[0].id, index=-1, original=False, crop=None, width=None, quality=90)
     assert expired.value.status_code == 404
     # By position from the end: -1 is the last capture, -3 the oldest one kept
-    by_index = {i: get_frame("store-cam", 0, None, index=i, crop=None, width=None, quality=90) for i in (-1, -3)}
+    by_index = {
+        i: get_frame("store-cam", 0, None, index=i, original=False, crop=None, width=None, quality=90) for i in (-1, -3)
+    }
     assert by_index[-1].headers["x-frame-id"] == frames[-1].id
     assert by_index[-3].headers["x-frame-id"] == frames[-3].id
     with pytest.raises(HTTPException) as too_far:
-        get_frame("store-cam", 0, None, index=-4, crop=None, width=None, quality=90)
+        get_frame("store-cam", 0, None, index=-4, original=False, crop=None, width=None, quality=90)
     assert too_far.value.status_code == 404
     cam.clear_frames()
     assert cam.frames(0) == []
 
 
-def test_frame_by_id_as_stored_cropped_or_resized(cam):
-    raw = _jpeg(size=(640, 480))
+def test_frame_is_hd_by_default_original_cropped_or_resized(cam):
+    raw = _jpeg(size=(1600, 900))
     frame = cam.store_image(0, base.open_snapshot(raw))
 
-    def size(**kwargs):
-        params = {"index": -1, "crop": None, "width": None, "quality": 90, **kwargs}
-        return Image.open(BytesIO(get_frame("store-cam", 0, frame.id, **params).body)).size
+    def get(**kwargs):
+        params = {"index": -1, "original": False, "crop": None, "width": None, "quality": 90, **kwargs}
+        return get_frame("store-cam", 0, frame.id, **params).body
 
-    assert get_frame("store-cam", 0, frame.id, index=-1, crop=None, width=None, quality=90).body == raw
-    assert size(width=320) == (320, 240)
+    def size(**kwargs):
+        return Image.open(BytesIO(get(**kwargs))).size
+
+    assert size() == (1280, 720)
+    assert get(original=True) == raw
+    assert size(width=320) == (320, 180)
+    assert len(get(width=320, quality=30)) < len(get(width=320, quality=90))
+    # Never enlarged: asking for more than the stored size returns it as it is
+    assert get(width=4000) == raw
+    # A crop keeps the native resolution unless a width is given
     assert size(crop="100,50,300,150") == (200, 100)
     assert size(crop="100,50,300,150", width=100) == (100, 50)
     with pytest.raises(HTTPException) as outside:
-        size(crop="600,0,700,100")
+        size(crop="1500,0,1700,100")
     assert outside.value.status_code == 422
