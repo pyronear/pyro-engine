@@ -266,7 +266,7 @@ For the full list of adapters with their required fields, and for adding support
 
 The full package documentation is available here:
 
-[https://pyronear.org/pyro-engine/](https://pyronear.org/pyro-engine/)
+[https://pyronear.github.io/pyro-engine/](https://pyronear.github.io/pyro-engine/)
 
 It covers engine usage, configuration and deployment details.
 
