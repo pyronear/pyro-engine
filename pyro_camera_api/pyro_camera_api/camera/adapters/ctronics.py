@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import pathlib
 import time
-from io import BytesIO
 from operator import itemgetter
 from typing import Any, Callable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
@@ -19,7 +18,14 @@ import numpy as np
 import requests
 from PIL import Image
 
-from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import (
+    PAN_OPERATIONS,
+    BaseCamera,
+    FocusAbortedError,
+    FocusMixin,
+    PTZMixin,
+    open_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +111,7 @@ class CTronicsCamera(BaseCamera, PTZMixin, FocusMixin):
             response.raise_for_status()
             if not response.content:
                 raise ValueError("empty response")
-            image = Image.open(BytesIO(response.content)).convert("RGB")
+            image = open_snapshot(response.content)
         except Exception as exc:
             logger.error("CTronics capture failed for %s: %s", redacted_url, exc)
             return None

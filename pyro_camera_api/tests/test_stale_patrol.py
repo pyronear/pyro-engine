@@ -27,7 +27,8 @@ def test_latest_image_refuses_stale_frame(monkeypatch):
         cam.store_image(0, Image.new("RGB", (8, 8)))
         assert get_latest_image(cam_id, 0, quality=95, max_age_s=300).media_type == "image/jpeg"
 
-        monkeypatch.setattr("time.monotonic", lambda: cam.last_image_at[0] + 301)
+        stored_at = cam.latest_frames()[0].stored_at
+        monkeypatch.setattr("time.monotonic", lambda: stored_at + 301)
         assert get_latest_image(cam_id, 0, quality=95, max_age_s=300).status_code == 204
     finally:
         CAMERA_REGISTRY.pop(cam_id, None)

@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from PIL import Image
 from PIL.Image import Resampling
 
+from pyro_camera_api.camera.base import Frame
 from pyro_camera_api.camera.registry import CAMERA_REGISTRY
 from pyro_camera_api.core.config import RAW_CONFIG
 from pyro_camera_api.services.anonymizer import paint_boxes_black, scale_and_clip_boxes
@@ -26,6 +27,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 Box = Tuple[int, int, int, int]
+# /frame serves HD by default: enough to look at a capture, a tenth of the pixels of a 4K one
+DEFAULT_FRAME_WIDTH = 1280
 
 
 @router.get("/cameras_list")
@@ -228,40 +231,118 @@ def capture(
     )
 
 
+def _encode(image: Image.Image, quality: int) -> bytes:
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", quality=quality)
+    return buffer.getvalue()
+
+
+def _frame_response(frame: Frame, body: Optional[bytes] = None) -> Response:
+    headers = {"X-Frame-Id": frame.id, "X-Captured-At": frame.captured_at}
+    return Response(frame.jpeg if body is None else body, media_type="image/jpeg", headers=headers)
+
+
 @router.get("/latest_image")
 def get_latest_image(
     camera_ip: str,
     pose: int,
-    quality: int = Query(
-        default=95,
+    quality: Optional[int] = Query(
+        default=None,
         ge=1,
         le=100,
-        description="JPEG quality that controls compression level. Higher means better quality and larger file size.",
+        description="Re-encode the image at this JPEG quality. By default the stored JPEG is returned as it is.",
     ),
-    max_age_s: int = Query(
-        default=300,
-        ge=1,
+    max_age_s: float = Query(
+        default=300.0,
+        gt=0,
         description="Images stored longer ago than this are treated as missing.",
     ),
 ):
     """
     Return the last stored image for a given camera and pose.
 
-    The camera adapter may cache captured frames per preset pose in its
-    last_images mapping. This endpoint exposes that cache. If there is
-    no image for the requested pose, or it is older than max_age_s (for
-    example a hung patrol thread), the endpoint returns HTTP 204 with
-    an empty body.
+    Each pose keeps its last captures as JPEG: the bytes the camera sent when it sent a JPEG,
+    else one encoding at quality 95. If there is no image for the requested pose, or it is older
+    than max_age_s (for example a hung patrol thread), the endpoint returns HTTP 204 with an
+    empty body. X-Frame-Id identifies the capture for /frame.
     """
     cam = CAMERA_REGISTRY.get(camera_ip)
     if cam is None:
         raise HTTPException(status_code=404, detail="Unknown camera")
 
-    image = cam.last_images.get(pose)
-    stored_at = cam.last_image_at.get(pose)
-    if image is None or stored_at is None or time.monotonic() - stored_at > max_age_s:
+    frame = cam.latest_frames().get(pose)
+    if frame is None or time.monotonic() - frame.stored_at > max_age_s:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return _frame_response(frame, None if quality is None else _encode(frame.decode(), quality))
 
-    buffer = BytesIO()
-    image.save(buffer, format="JPEG", quality=quality)
-    return Response(buffer.getvalue(), media_type="image/jpeg")
+
+@router.get("/frames")
+def list_frames(camera_ip: str, pose: int):
+    """List the stored captures of a pose, oldest first."""
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail="Unknown camera")
+    return {"frames": [{"id": f.id, "captured_at": f.captured_at, "size": len(f.jpeg)} for f in cam.frames(pose)]}
+
+
+@router.get("/frame")
+def get_frame(
+    camera_ip: str,
+    pose: int,
+    frame_id: Optional[str] = Query(default=None, description="Id of the capture, as listed by /frames."),
+    index: int = Query(
+        default=-1,
+        le=-1,
+        description="Without frame_id: position from the end, -1 for the last capture, -2 for the one before.",
+    ),
+    original: bool = Query(default=False, description="Return the capture as stored, at its full resolution."),
+    crop: Optional[str] = Query(
+        default=None,
+        pattern=r"^\d+,\d+,\d+,\d+$",
+        description="left,top,right,bottom in pixels of the stored image, cut at native resolution.",
+    ),
+    width: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description=f"Resize to this width, keeping the aspect ratio. Default {DEFAULT_FRAME_WIDTH}, or no resize for a crop.",
+    ),
+    quality: int = Query(default=90, ge=1, le=100, description="JPEG quality of a resized or cropped image."),
+):
+    """
+    Return one stored capture, by id or by position from the end (index=-1 is the last one).
+
+    By default the image is resized to HD (1280 wide), decoded on the fly: a 4K capture is about
+    1 MB. Use `width` and `quality` for another size or compression, `crop` for a native resolution
+    region, `original=true` for the capture as stored. An image is never enlarged. HTTP 404 once
+    the capture left the buffer, or when the pose has fewer captures than asked.
+    """
+    cam = CAMERA_REGISTRY.get(camera_ip)
+    if cam is None:
+        raise HTTPException(status_code=404, detail="Unknown camera")
+    frames = cam.frames(pose)
+    if frame_id is None:
+        frame = frames[index] if len(frames) >= -index else None
+    else:
+        frame = next((f for f in frames if f.id == frame_id), None)
+    if frame is None:
+        raise HTTPException(status_code=404, detail="Unknown or expired frame")
+    if original:
+        return _frame_response(frame)
+
+    image = Image.open(BytesIO(frame.jpeg))
+    if crop is None:
+        width = min(width or DEFAULT_FRAME_WIDTH, image.width)
+        if width == image.width:
+            return _frame_response(frame)
+        # A reduced-size decode is enough for a resize
+        image.draft("RGB", (width, max(1, round(image.height * width / image.width))))
+    else:
+        left, top, right, bottom = (int(v) for v in crop.split(","))
+        if not (left < right <= image.width and top < bottom <= image.height):
+            raise HTTPException(status_code=422, detail=f"crop outside the {image.width}x{image.height} image")
+        image = image.crop((left, top, right, bottom))
+        width = min(width or image.width, image.width)
+    image = image.convert("RGB")
+    if width != image.width:
+        image = image.resize((width, max(1, round(image.height * width / image.width))), LANCZOS)
+    return _frame_response(frame, _encode(image, quality))

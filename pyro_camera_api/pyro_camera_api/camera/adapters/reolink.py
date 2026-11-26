@@ -11,7 +11,6 @@ import operator
 import pathlib
 import ssl
 import time
-from io import BytesIO
 from typing import Any, Callable, List, Optional
 
 import cv2
@@ -21,7 +20,14 @@ import urllib3
 from PIL import Image
 from requests.adapters import HTTPAdapter
 
-from pyro_camera_api.camera.base import PAN_OPERATIONS, BaseCamera, FocusAbortedError, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import (
+    PAN_OPERATIONS,
+    BaseCamera,
+    FocusAbortedError,
+    FocusMixin,
+    PTZMixin,
+    open_snapshot,
+)
 
 __all__ = ["ReolinkCamera"]
 
@@ -91,7 +97,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         protocol: str = "https",
         focus_position: Optional[int] = None,
     ):
-        # BaseCamera stores camera_id, cam_type and last_images
+        # BaseCamera stores camera_id, cam_type and the captured frames
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.ip_address = ip_address
         self.username = username
@@ -205,8 +211,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         try:
             response = _session.get(url, verify=False, timeout=timeout)  # nosec: B501
             if response.status_code == 200:
-                image_data = BytesIO(response.content)
-                return Image.open(image_data).convert("RGB")
+                return open_snapshot(response.content)
             logger.error("Failed to capture image: %s, %s", response.status_code, response.text)
         except requests.RequestException as e:
             logger.error("Request failed: %s", e)

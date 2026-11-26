@@ -6,6 +6,7 @@
 import threading
 import time
 from collections import deque
+from io import BytesIO
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -22,8 +23,14 @@ def _noise(seed):
     return Image.fromarray(np.random.default_rng(seed).integers(0, 255, (64, 64, 3), dtype=np.uint8))
 
 
+def _jpeg(seed, comment=b""):
+    buffer = BytesIO()
+    _noise(seed).save(buffer, format="JPEG", comment=comment)
+    return buffer.getvalue()
+
+
 def test_detect_no_fresh_image():
-    prev = sd.snapshot({0: _noise(0)}, {0: 1.0})
+    prev = sd.snapshot({0: _jpeg(0)}, {0: 1.0})
     assert sd.detect(prev, prev, []) == "no_fresh_image"
     # A camera that never produced an image is caught too
     assert sd.detect({}, {}, []) == "no_fresh_image"
@@ -31,18 +38,19 @@ def test_detect_no_fresh_image():
 
 def test_detect_frozen_same_pixels_stored_again():
     # Each pose keeps its own frozen image: the Epinay August case, not seen by pHash
-    prev = sd.snapshot({0: _noise(0), 1: _noise(1)}, {0: 1.0, 1: 1.0})
-    snap = sd.snapshot({0: _noise(0), 1: _noise(1)}, {0: 2.0, 1: 1.0})
+    prev = sd.snapshot({0: _jpeg(0), 1: _jpeg(1)}, {0: 1.0, 1: 1.0})
+    # A field that changes in the header (EXIF time, comment) does not hide the frozen image
+    snap = sd.snapshot({0: _jpeg(0, comment=b"12:05"), 1: _jpeg(1)}, {0: 2.0, 1: 1.0})
     assert sd.detect(prev, snap, []) == "frozen"
 
 
 def test_detect_healthy_and_not_moving():
-    prev = sd.snapshot({0: _noise(0), 1: _noise(1)}, {0: 1.0, 1: 1.0})
+    prev = sd.snapshot({0: _jpeg(0), 1: _jpeg(1)}, {0: 1.0, 1: 1.0})
     images = {0: _noise(2), 1: _noise(3)}
-    snap = sd.snapshot(images, {0: 2.0, 1: 2.0})
-    assert sd.detect(prev, snap, list(images.values())) is None
+    snap = sd.snapshot({0: _jpeg(2), 1: _jpeg(3)}, {0: 2.0, 1: 2.0})
+    assert sd.detect(prev, snap, [sd.describe(im) for im in images.values()]) is None
     # Live pixels but every pose shows the same view: the turret does not move
-    same_view = [_noise(2), _noise(2)]
+    same_view = [sd.describe(_noise(2)), sd.describe(_noise(2))]
     assert sd.detect(prev, snap, same_view) == "not_moving"
 
 

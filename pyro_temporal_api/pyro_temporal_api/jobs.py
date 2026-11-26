@@ -9,16 +9,15 @@ from __future__ import annotations
 
 import logging
 import queue
-import tempfile
 import threading
 import time
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-from temporal_model.core import Detection, FrameDetections
+from temporal_model.core import Detection, Frame, FrameDetections
+from temporal_model.core.protocol import parse_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -90,16 +89,13 @@ def _tube_summary(tube: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def score(model: Any, job: Job) -> dict[str, Any]:
-    """Run the temporal model on a job's window; frames live on disk only for the call."""
+    """Run the temporal model on a job's window, straight from the JPEG bytes it holds: no file is written."""
     hits, misses = getattr(model, "cache_hits", 0), getattr(model, "cache_misses", 0)
-    with tempfile.TemporaryDirectory(prefix="temporal_job_") as td:
-        paths = []
-        for frame_id, data in job.frames:
-            p = Path(td) / f"{frame_id}.jpg"
-            p.write_bytes(data)
-            paths.append(p)
-        frames = model.load_sequence(paths)
-        out = model.predict(frames, frame_detections=_to_frame_detections(frames, job.boxes))
+    # The frames load_sequence would build from files named after the frame ids
+    frames = [
+        Frame(frame_id=frame_id, image_bytes=data, timestamp=parse_timestamp(frame_id)) for frame_id, data in job.frames
+    ]
+    out = model.predict(frames, frame_detections=_to_frame_detections(frames, job.boxes))
     kept = out.details["tubes"]["kept"]
     tubes: list[dict[str, Any]] = []
     for t in kept:
