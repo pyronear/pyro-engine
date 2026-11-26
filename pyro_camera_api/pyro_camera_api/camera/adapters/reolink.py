@@ -97,7 +97,7 @@ class ReolinkCamera(BaseCamera, PTZMixin, FocusMixin):
         protocol: str = "https",
         focus_position: Optional[int] = None,
     ):
-        # BaseCamera stores camera_id, cam_type and last_images
+        # BaseCamera stores camera_id, cam_type and the captured frames
         super().__init__(camera_id=camera_id, cam_type=cam_type)
         self.ip_address = ip_address
         self.username = username

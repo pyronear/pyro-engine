@@ -19,7 +19,7 @@ from typing import Deque, Dict, List, Optional
 
 from PIL import Image
 
-# Captures kept per pose, as compressed JPEG. A decoded 4K frame takes about 33 MB, its JPEG about 1 MB.
+# Captures kept per pose, as compressed JPEG. A decoded 4K frame takes about 32 MB, its JPEG about 1 MB.
 FRAME_BUFFER_SIZE = max(1, int(os.getenv("FRAME_BUFFER_SIZE", "16")))
 # Frame ids stay unique and ordered across restarts: start time of this process, then a counter.
 _BOOT = int(time.time())

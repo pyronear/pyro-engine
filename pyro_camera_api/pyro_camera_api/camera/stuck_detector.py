@@ -11,8 +11,9 @@ Every CHECK_INTERVAL seconds, compare the images the patrol stored for a camera
 with the ones seen at the previous check:
 
 - no_fresh_image: no pose got a new image, snapshots are failing.
-- frozen: every pose that got a new image has the exact same pixels as before.
-  A live sensor never returns the same bytes twice, a frozen camera does.
+- frozen: every pose that got a new image has the exact same compressed image data
+  as before. A live sensor never returns the same bytes twice, a frozen camera does.
+  The JPEG header is left out, as a camera may write a changing field there (EXIF time).
   Ignored for adapters that cannot reboot (URL, REST, RTSP): a URL source may
   serve the same cached picture for minutes.
 - not_moving: all PTZ poses look alike, the turret is stuck on one view.
@@ -77,7 +78,7 @@ ALLOW_STILL_CAMERA = os.getenv("ALLOW_STILL_CAMERA", "false").strip().lower() in
 RECOVERY_STATE: Dict[str, Dict[str, Any]] = {}
 _LOCK = threading.Lock()
 
-# pose -> (time the image was stored, md5 of its pixels)
+# pose -> (time the image was stored, md5 of its compressed image data)
 Snapshot = Dict[int, Tuple[float, bytes]]
 
 
@@ -108,11 +109,12 @@ def _patrol_is_running(camera_ip: str) -> bool:
     return bool(thr and thr.is_alive() and flag and not flag.is_set())
 
 
-def snapshot(images: Dict[int, Optional[Image.Image]], stored_at: Dict[int, float]) -> Snapshot:
+def snapshot(jpegs: Dict[int, bytes], stored_at: Dict[int, float]) -> Snapshot:
+    """Hash each JPEG from its last scan marker (FFDA, never found inside the image data): nothing is decoded."""
     return {
-        pose: (stored_at[pose], hashlib.md5(image.tobytes(), usedforsecurity=False).digest())
-        for pose, image in images.items()
-        if image is not None and pose in stored_at
+        pose: (stored_at[pose], hashlib.md5(jpeg[max(jpeg.rfind(b"\xff\xda"), 0) :], usedforsecurity=False).digest())
+        for pose, jpeg in jpegs.items()
+        if pose in stored_at
     }
 
 
@@ -208,16 +210,17 @@ def stuck_check_loop(camera_ip: str, stop_flag: threading.Event) -> None:
             state["status"] = "idle"
             continue
 
-        # One image decoded at a time, and none kept through the wait: a 4K frame takes about 33 MB
-        snap: Snapshot = {}
+        # Only PTZ poses are decoded, one at a time and none kept through the wait: a 4K frame takes about 32 MB
         ptz_views: List[Tuple[float, np.ndarray]] = []
         try:
-            for pose, frame in cam.latest_frames().items():
-                image = frame.decode()
-                snap.update(snapshot({pose: image}, {pose: frame.stored_at}))
+            frames = cam.latest_frames()
+            snap = snapshot(
+                {pose: frame.jpeg for pose, frame in frames.items()},
+                {pose: frame.stored_at for pose, frame in frames.items()},
+            )
+            for pose, frame in frames.items():
                 if is_ptz and pose != -1:
-                    ptz_views.append(describe(image))
-                del image
+                    ptz_views.append(describe(frame.decode()))
         except Exception as exc:
             logger.warning("[%s] Stuck check failed: %s", camera_ip, exc)
             continue

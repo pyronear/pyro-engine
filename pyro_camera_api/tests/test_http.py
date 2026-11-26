@@ -19,5 +19,10 @@ def test_http_dependency_compatibility():
         assert response.json() == {"status": "ok"}
         assert response.headers["access-control-allow-origin"] == "*"
         assert client.get("/cameras/capture").status_code == 422
+        # Query validation of /cameras/frame: index counts from the end, crop is four integers
+        frame = {"camera_ip": "unknown", "pose": 0}
+        assert client.get("/cameras/frame", params={**frame, "index": 0}).status_code == 422
+        assert client.get("/cameras/frame", params={**frame, "crop": "0,0,10"}).status_code == 422
+        assert client.get("/cameras/frame", params={**frame, "crop": "0,0,10,10"}).status_code == 404
     finally:
         client.close()
