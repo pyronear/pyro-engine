@@ -10,7 +10,6 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
-from io import BytesIO
 from typing import Callable, List, Optional, Tuple, cast
 
 import requests
@@ -18,7 +17,7 @@ import urllib3
 from PIL import Image
 from requests.auth import HTTPDigestAuth
 
-from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin
+from pyro_camera_api.camera.base import BaseCamera, FocusMixin, PTZMixin, open_snapshot
 
 __all__ = ["HikvisionCamera"]
 
@@ -405,7 +404,7 @@ class HikvisionCamera(BaseCamera, PTZMixin, FocusMixin):
             path = f"/ISAPI/Streaming/channels/{self.snapshot_channel}/picture"
             resp = self._request("GET", path, headers={"Accept": "image/jpeg"})
             if resp.status_code == 200 and resp.content:
-                return Image.open(BytesIO(resp.content)).convert("RGB")
+                return open_snapshot(resp.content)
             self._handle_response(resp)
             return None
         except requests.RequestException as exc:

@@ -24,9 +24,6 @@ class FakeModel:
         self.positive, self.probability, self.fail = positive, probability, fail
         self.calls = []
 
-    def load_sequence(self, paths):
-        return [SimpleNamespace(frame_id=p.stem, image_path=p, timestamp=None) for p in paths]
-
     def predict(self, frames, frame_detections):
         if self.fail:
             raise RuntimeError("boom")
@@ -107,6 +104,9 @@ def test_job_lifecycle_and_conversion(client):
 
     frames, dets = model.calls[0]
     assert [f.frame_id for f in frames] == [f"192.168.1.10_1_2026-09-08T10-00-0{i}" for i in range(3)]
+    # Frames reach the model as bytes held in memory, with the capture time read from their id
+    assert all(f.image_bytes == _jpeg() and f.image_path is None for f in frames)
+    assert [f.timestamp.second for f in frames] == [0, 1, 2]
     d = dets[frames[0].frame_id].detections[0]
     assert (d.cx, d.cy, d.w, d.h, d.confidence) == pytest.approx((0.45, 0.45, 0.1, 0.1, 0.3))
     assert dets[frames[2].frame_id].frame_idx == 2

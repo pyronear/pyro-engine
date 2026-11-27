@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from PIL import Image
 from pyro_predictor import Predictor
-from pyro_predictor.utils import box_iou
+from pyro_predictor.utils import box_iou, nms
 from pyroclient import client
 from requests.exceptions import RequestException
 from requests.models import Response
@@ -33,6 +33,12 @@ MAX_UPLOAD_BBOXES = 5
 # Boxes sent to the temporal model, as pyro-api's temporal service detects them (confidence 0.1).
 # Its NMS at IoU 0.2 is not repeated: the classifier already drops every overlapping box.
 TEMPORAL_BOX_CONF = 0.1
+# Crop refinement: small boxes are re-detected on a native crop of the original frame, at the model input
+# size so the crop is not resized. Larger boxes are already well seen on the resized frame, and a box above
+# a third of the crop could be dropped by the model's max_bbox_size filter on the crop.
+REFINE_CROP = 1024
+REFINE_MAX_BOX = REFINE_CROP / 3
+REFINE_MAX_BOXES = 5  # ~0.5 s per crop on a Raspberry Pi 5
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +140,7 @@ class Engine(Predictor):
         temporal_min_frames: int = 4,
         temporal_job_timeout: float = 120.0,
         temporal_min_score: float = 0.2,
+        crop_refine: bool = False,
         **kwargs: Any,  # ruff: ignore[any-type]
     ) -> None:
         cam_ids = list(cam_creds.keys()) if isinstance(cam_creds, dict) else None
@@ -151,6 +158,7 @@ class Engine(Predictor):
         self.temporal_min_frames = temporal_min_frames
         self.temporal_job_timeout = temporal_job_timeout
         self.temporal_min_score = temporal_min_score
+        self.crop_refine = crop_refine
         super().__init__(
             model_path=model_path,
             conf_thresh=conf_thresh,
@@ -608,6 +616,8 @@ class Engine(Predictor):
             bbox_mask_dict = self.occlusion_masks.get(cam_key, {})
             rgb_frame = frame if frame.mode == "RGB" else frame.convert("RGB")
             preds = self.model(rgb_frame, bbox_mask_dict)
+            if self.crop_refine and original_frame.width > frame.width:
+                preds = self._refine_on_crops(original_frame, preds, bbox_mask_dict)
         else:
             if fake_pred.size == 0:
                 preds = np.empty((0, 5))
@@ -773,6 +783,50 @@ class Engine(Predictor):
         half = side / 2.0
         left, top, right, bottom = Engine._fit_box((cx - half, cy - half, cx + half, cy + half), img_w, img_h)
         return round(left), round(top), round(right), round(bottom)
+
+    def _refine_on_crops(
+        self, frame: Image.Image, preds: np.ndarray, occlusion_bboxes: Optional[Dict[Any, Any]] = None
+    ) -> np.ndarray:
+        """Re-detect the top small boxes on a native REFINE_CROP crop of `frame`.
+
+        Each refined box is replaced by the best crop detection overlapping it (position and score), or
+        dropped when none does. Large boxes and boxes beyond REFINE_MAX_BOXES are kept unchanged. The
+        result keeps the classifier's guarantees: no overlapping boxes, none on an occlusion mask, most
+        confident first.
+        """
+        w, h = frame.size
+        out = []
+        for i, box in enumerate(np.reshape(preds, (-1, 5))):
+            x1, y1, x2, y2 = box[0] * w, box[1] * h, box[2] * w, box[3] * h
+            if i >= REFINE_MAX_BOXES or max(x2 - x1, y2 - y1) > REFINE_MAX_BOX:
+                out.append(box)
+                continue
+            # Window centred on the box, shifted inside the frame
+            left = max(0, min(round((x1 + x2 - REFINE_CROP) / 2), w - REFINE_CROP))
+            top = max(0, min(round((y1 + y2 - REFINE_CROP) / 2), h - REFINE_CROP))
+            right, bottom = min(w, left + REFINE_CROP), min(h, top + REFINE_CROP)
+            crop = frame.crop((left, top, right, bottom))
+            crop_preds = np.reshape(self.model(crop if crop.mode == "RGB" else crop.convert("RGB")), (-1, 5))
+            # Back to normalized full-frame coordinates
+            mapped = crop_preds.copy()
+            mapped[:, [0, 2]] = (left + crop_preds[:, [0, 2]] * (right - left)) / w
+            mapped[:, [1, 3]] = (top + crop_preds[:, [1, 3]] * (bottom - top)) / h
+            overlap = (np.minimum(mapped[:, 2], box[2]) > np.maximum(mapped[:, 0], box[0])) & (
+                np.minimum(mapped[:, 3], box[3]) > np.maximum(mapped[:, 1], box[1])
+            )
+            best = mapped[overlap][mapped[overlap][:, 4].argmax()] if overlap.any() else None
+            logger.debug("Crop refine: %s -> %s", np.round(box, 3), None if best is None else np.round(best, 3))
+            if best is not None:
+                out.append(best)
+        refined = np.reshape(np.array(out, dtype=np.float32), (-1, 5))
+        if not len(refined):
+            return refined
+        # Two nearby boxes can resolve to the same crop detection
+        refined = np.reshape(nms(refined), (-1, 5))[::-1]
+        if occlusion_bboxes:
+            masks = np.array([b[:4] for b in occlusion_bboxes.values()], dtype=refined.dtype)
+            refined = refined[box_iou(refined[:, :4], masks).max(axis=0) <= 0.1]
+        return refined
 
     def _build_context_crop(
         self, frame: Image.Image, preds: np.ndarray, extra_boxes: Optional[list] = None

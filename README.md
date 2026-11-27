@@ -123,6 +123,11 @@ LOG_LEVEL=INFO
 
 `PYRO_ENGINE_VERSION` controls which Docker image tag is pulled for the services (defaults to `latest` if unset).
 
+Optional crop refinement: with `CROP_REFINE=true` in `.env`, each small box found on the resized frame (up to 5 per
+frame, under 341 native pixels) is detected again on a native 1024x1024 crop of the camera frame. The box takes the
+position and score of the best crop detection overlapping it, or is dropped when there is none. Larger boxes, and
+cameras whose frame is not larger than the resized one, are left unchanged.
+
 Optional temporal validation of alerts: with `COMPOSE_PROFILES=temporal` and `TEMPORAL_API_URL=http://localhost:8082`
 in `.env`, the stack also starts `pyro_temporal_api`. While an alert is ongoing, the engine sends the last frames and
 boxes of that camera pose to it every round and uploads each box with the smoke probability of the tube covering it
@@ -266,7 +271,7 @@ For the full list of adapters with their required fields, and for adding support
 
 The full package documentation is available here:
 
-[https://pyronear.org/pyro-engine/](https://pyronear.org/pyro-engine/)
+[https://pyronear.github.io/pyro-engine/](https://pyronear.github.io/pyro-engine/)
 
 It covers engine usage, configuration and deployment details.
 

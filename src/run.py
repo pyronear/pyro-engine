@@ -89,6 +89,7 @@ def main(args):
         save_captured_frames=args.save_captured_frames,
         save_detections_frames=args.save_detections_frames,
         temporal_api_url=temporal_api_url,
+        crop_refine=os.environ.get("CROP_REFINE", "").lower() in {"1", "true", "yes"},
     )
 
     sys_controller = SystemController(
